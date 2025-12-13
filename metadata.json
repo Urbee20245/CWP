@@ -1,0 +1,7 @@
+{
+  "name": "Custom Websites Plus",
+  "description": "Modern web design and AI automation agency website featuring a live AI voice agent demo.",
+  "requestFramePermissions": [
+    "microphone"
+  ]
+}
