@@ -3,14 +3,6 @@ import { ArrowRight, Phone, CheckCircle2, Play } from 'lucide-react';
 import { NavigationLink } from '../types';
 
 const Hero: React.FC = () => {
-    const scrollToContact = () => {
-        document.getElementById(NavigationLink.Contact)?.scrollIntoView({ behavior: 'smooth' });
-    };
-
-    const scrollToServices = () => {
-        document.getElementById(NavigationLink.Services)?.scrollIntoView({ behavior: 'smooth' });
-    };
-
   return (
     <section className="relative min-h-[90vh] flex items-center justify-center pt-32 pb-20 overflow-hidden bg-slate-50">
       {/* Structural Background Grid - Precision Engineering Feel */}
@@ -47,21 +39,21 @@ const Hero: React.FC = () => {
                 </p>
 
                 <div className="flex flex-col sm:flex-row items-center gap-4 w-full">
-                  <button 
-                    onClick={scrollToContact}
+                  <a 
+                    href="#optimizer"
                     className="w-full sm:w-auto px-8 py-4 bg-slate-900 text-white rounded-xl font-semibold transition-all hover:bg-slate-800 hover:shadow-xl hover:shadow-slate-900/10 active:scale-95 flex items-center justify-center gap-2"
                   >
                     Get A Free Site Audit
                     <ArrowRight className="w-4 h-4" />
-                  </button>
+                  </a>
                   
-                  <button 
-                    onClick={scrollToServices}
+                  <a 
+                    href={`#${NavigationLink.Services}`}
                     className="w-full sm:w-auto px-8 py-4 bg-white text-slate-700 border border-slate-200 rounded-xl font-semibold hover:border-indigo-200 hover:text-indigo-600 transition-all shadow-sm flex items-center justify-center gap-2"
                   >
                     <Play className="w-4 h-4 fill-current" />
                     See How It Works
-                  </button>
+                  </a>
                 </div>
 
                 {/* Positioning / Credibility Line */}

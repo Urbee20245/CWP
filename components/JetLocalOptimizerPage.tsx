@@ -10,13 +10,10 @@ import {
   ShieldCheck, 
   BarChart3, 
   Cpu, 
-  ArrowRight, 
-  CheckCircle2, 
-  AlertTriangle, 
-  Globe, 
-  Lock,
-  Terminal
+  Terminal,
+  Lock
 } from 'lucide-react';
+import { Link } from 'react-router-dom';
 
 const JetLocalOptimizerPage: React.FC = () => {
   const [url, setUrl] = useState('');
@@ -49,9 +46,9 @@ const JetLocalOptimizerPage: React.FC = () => {
                     <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse"></span>
                     SYSTEM ONLINE
                 </div>
-                <a href="/" className="text-xs text-slate-400 hover:text-white transition-colors font-mono uppercase tracking-wider">
+                <Link to="/" className="text-xs text-slate-400 hover:text-white transition-colors font-mono uppercase tracking-wider">
                     [ Return_Home ]
-                </a>
+                </Link>
             </div>
         </div>
       </nav>

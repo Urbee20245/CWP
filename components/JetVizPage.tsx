@@ -15,6 +15,7 @@ import {
   Sparkles,
   Layers
 } from 'lucide-react';
+import { Link } from 'react-router-dom';
 
 const JetVizPage: React.FC = () => {
   const [url, setUrl] = useState('');
@@ -75,9 +76,9 @@ const JetVizPage: React.FC = () => {
                 </div>
             </div>
             <div className="flex items-center gap-6 text-sm font-medium">
-                <a href="/" className="px-5 py-2.5 bg-white/5 hover:bg-white/10 rounded-full border border-white/10 transition-all text-xs font-bold tracking-wide text-slate-300 hover:text-white hover:border-indigo-500/30">
+                <Link to="/" className="px-5 py-2.5 bg-white/5 hover:bg-white/10 rounded-full border border-white/10 transition-all text-xs font-bold tracking-wide text-slate-300 hover:text-white hover:border-indigo-500/30">
                     Exit Studio
-                </a>
+                </Link>
             </div>
         </div>
       </nav>

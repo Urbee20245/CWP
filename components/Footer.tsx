@@ -3,10 +3,6 @@ import { Facebook, Instagram, Twitter, Linkedin, MapPin, Mail, Phone } from 'luc
 import { NavigationLink } from '../types';
 
 const Footer: React.FC = () => {
-  const scrollTo = (id: string) => {
-    document.getElementById(id)?.scrollIntoView({ behavior: 'smooth' });
-  };
-
   return (
     <footer className="bg-slate-900 text-slate-300 pt-20 pb-10 border-t border-slate-800">
       <div className="max-w-7xl mx-auto px-6">
@@ -33,10 +29,10 @@ const Footer: React.FC = () => {
             <div>
                 <h4 className="text-white font-bold mb-6">Services</h4>
                 <ul className="space-y-3 text-sm">
-                    <li><button onClick={() => scrollTo(NavigationLink.Services)} className="hover:text-indigo-400 transition-colors text-left">Website Rebuilds</button></li>
-                    <li><button onClick={() => scrollTo(NavigationLink.Services)} className="hover:text-indigo-400 transition-colors text-left">Local SEO Audits</button></li>
-                    <li><button onClick={() => scrollTo(NavigationLink.Services)} className="hover:text-indigo-400 transition-colors text-left">AI Voice Agents</button></li>
-                    <li><button onClick={() => scrollTo(NavigationLink.Services)} className="hover:text-indigo-400 transition-colors text-left">Google Maps Optimization</button></li>
+                    <li><a href={`#${NavigationLink.Services}`} className="hover:text-indigo-400 transition-colors text-left">Website Rebuilds</a></li>
+                    <li><a href="#optimizer" className="hover:text-indigo-400 transition-colors text-left">Local SEO Audits</a></li>
+                    <li><a href={`#${NavigationLink.Services}`} className="hover:text-indigo-400 transition-colors text-left">AI Voice Agents</a></li>
+                    <li><a href={`#${NavigationLink.Services}`} className="hover:text-indigo-400 transition-colors text-left">Google Maps Optimization</a></li>
                 </ul>
             </div>
 

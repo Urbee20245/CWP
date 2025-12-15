@@ -2,8 +2,8 @@ import React from 'react';
 import Header from './components/Header';
 import Hero from './components/Hero';
 import ProblemSolution from './components/ProblemSolution';
-import JetViz from './components/JetViz';
 import JetOptimizer from './components/JetOptimizer';
+import JetViz from './components/JetViz';
 import Services from './components/Services';
 import TrustAuthority from './components/TrustAuthority';
 import Stats from './components/Stats';
@@ -19,8 +19,9 @@ const App: React.FC = () => {
       <main>
         <Hero />
         <ProblemSolution />
-        <JetViz />
+        {/* Tools Section */}
         <JetOptimizer />
+        <JetViz />
         <Services />
         <TrustAuthority />
         <Stats />

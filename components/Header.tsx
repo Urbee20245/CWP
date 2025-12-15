@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { Menu, X, ChevronDown, Gauge, Eye, Phone } from 'lucide-react';
+import { Menu, X, ChevronDown, Gauge, Eye, Phone, ArrowRight } from 'lucide-react';
 import { NavigationLink } from '../types';
 
 const Header: React.FC = () => {
@@ -137,13 +137,14 @@ const Header: React.FC = () => {
                 className="text-sm font-bold text-slate-700 hover:text-indigo-600 transition-colors flex items-center gap-2"
              >
                 <Phone className="w-4 h-4" />
-                (404) 552-0926
+                <span className="hidden lg:inline">(404) 552-0926</span>
              </a>
              <button
-                onClick={() => scrollToSection(NavigationLink.Contact)} 
-                className="bg-slate-900 text-white px-6 py-2.5 rounded-full text-sm font-semibold hover:bg-slate-800 transition-all shadow-lg hover:shadow-xl active:scale-95"
+                onClick={() => scrollToSection('optimizer')} 
+                className="bg-indigo-600 text-white px-6 py-2.5 rounded-full text-sm font-bold hover:bg-indigo-500 transition-all shadow-lg shadow-indigo-200 hover:shadow-indigo-300 active:scale-95 flex items-center gap-2"
              >
-                Get Started
+                Run Website Audit
+                <ArrowRight className="w-4 h-4" />
              </button>
         </div>
 
@@ -211,10 +212,11 @@ const Header: React.FC = () => {
 
                 <div className="p-2">
                     <button
-                      onClick={() => scrollToSection(NavigationLink.Contact)}
-                      className="w-full bg-slate-900 text-white px-4 py-4 rounded-2xl font-bold shadow-lg flex justify-center items-center gap-2"
+                      onClick={() => scrollToSection('optimizer')}
+                      className="w-full bg-indigo-600 text-white px-4 py-4 rounded-2xl font-bold shadow-lg flex justify-center items-center gap-2"
                     >
-                      Get Started
+                      Run Website Audit
+                      <ArrowRight className="w-4 h-4" />
                     </button>
                 </div>
             </div>
