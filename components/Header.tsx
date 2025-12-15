@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { Menu, X, ChevronDown, Gauge, Eye, Phone, ArrowRight } from 'lucide-react';
+import { Link } from 'react-router-dom';
 import { NavigationLink } from '../types';
 
 const Header: React.FC = () => {
@@ -16,16 +17,6 @@ const Header: React.FC = () => {
     return () => window.removeEventListener('scroll', handleScroll);
   }, []);
 
-  // Smooth scroll handler
-  const scrollToSection = (id: string) => {
-    setIsMobileMenuOpen(false);
-    setIsToolsOpen(false);
-    const element = document.getElementById(id);
-    if (element) {
-      element.scrollIntoView({ behavior: 'smooth' });
-    }
-  };
-
   return (
     <header className="fixed top-0 left-0 right-0 z-50 flex justify-center px-4 pt-4 md:pt-6">
       <div 
@@ -39,25 +30,33 @@ const Header: React.FC = () => {
         `}
       >
         {/* Logo Area */}
-        <div 
-            className="flex items-center gap-2 cursor-pointer" 
-            onClick={() => window.scrollTo({ top: 0, behavior: 'smooth' })}
+        <Link
+          to="/"
+          className="flex items-center gap-2 cursor-pointer"
+          onClick={() => {
+            setIsMobileMenuOpen(false);
+            setIsToolsOpen(false);
+          }}
         >
            <img 
             src="https://customwebsitesplus.com/wp-content/uploads/2019/01/CWPtrans.png" 
             alt="Custom Websites Plus" 
             className="h-8 md:h-10 w-auto object-contain"
           />
-        </div>
+        </Link>
 
         {/* Desktop Navigation */}
         <nav className="hidden md:flex items-center gap-1">
-          <button
-            onClick={() => scrollToSection(NavigationLink.Services)}
+          <Link
+            to="/"
             className="px-5 py-2.5 text-sm font-medium text-slate-600 hover:text-slate-900 hover:bg-white/50 rounded-full transition-all"
+            onClick={() => {
+              setIsMobileMenuOpen(false);
+              setIsToolsOpen(false);
+            }}
           >
             Services
-          </button>
+          </Link>
 
           {/* Tools Dropdown Container */}
           <div 
@@ -87,9 +86,13 @@ const Header: React.FC = () => {
                     <div className="px-3 py-2 text-[10px] font-bold text-slate-400 uppercase tracking-widest border-b border-slate-50 mb-1">
                         Free Utilities
                     </div>
-                    <button 
-                        onClick={() => scrollToSection('optimizer')}
-                        className="w-full flex items-start gap-3 p-3 rounded-xl hover:bg-slate-50 transition-colors text-left group/item"
+                    <Link
+                      to="/jet-local-optimizer"
+                      className="w-full flex items-start gap-3 p-3 rounded-xl hover:bg-slate-50 transition-colors text-left group/item"
+                      onClick={() => {
+                        setIsMobileMenuOpen(false);
+                        setIsToolsOpen(false);
+                      }}
                     >
                         <div className="mt-1 bg-indigo-50 p-2 rounded-lg text-indigo-600 group-hover/item:bg-indigo-100 transition-colors">
                             <Gauge className="w-5 h-5" />
@@ -98,10 +101,14 @@ const Header: React.FC = () => {
                             <div className="text-sm font-bold text-slate-900 group-hover/item:text-indigo-700 transition-colors">Jet Optimizer</div>
                             <div className="text-xs text-slate-500 leading-tight mt-0.5">Technical website audit & health check.</div>
                         </div>
-                    </button>
-                    <button 
-                        onClick={() => scrollToSection('jetviz')}
-                        className="w-full flex items-start gap-3 p-3 rounded-xl hover:bg-slate-50 transition-colors text-left group/item"
+                    </Link>
+                    <Link
+                      to="/jetviz"
+                      className="w-full flex items-start gap-3 p-3 rounded-xl hover:bg-slate-50 transition-colors text-left group/item"
+                      onClick={() => {
+                        setIsMobileMenuOpen(false);
+                        setIsToolsOpen(false);
+                      }}
                     >
                         <div className="mt-1 bg-purple-50 p-2 rounded-lg text-purple-600 group-hover/item:bg-purple-100 transition-colors">
                             <Eye className="w-5 h-5" />
@@ -110,24 +117,32 @@ const Header: React.FC = () => {
                             <div className="text-sm font-bold text-slate-900 group-hover/item:text-purple-700 transition-colors">JetViz</div>
                             <div className="text-xs text-slate-500 leading-tight mt-0.5">Instant visual design comparison.</div>
                         </div>
-                    </button>
+                    </Link>
                 </div>
             </div>
           </div>
 
-          <button
-            onClick={() => scrollToSection(NavigationLink.Process)}
+          <Link
+            to="/"
             className="px-5 py-2.5 text-sm font-medium text-slate-600 hover:text-slate-900 hover:bg-white/50 rounded-full transition-all"
+            onClick={() => {
+              setIsMobileMenuOpen(false);
+              setIsToolsOpen(false);
+            }}
           >
             Process
-          </button>
+          </Link>
           
-          <button
-            onClick={() => scrollToSection(NavigationLink.Contact)}
+          <Link
+            to="/"
             className="px-5 py-2.5 text-sm font-medium text-slate-600 hover:text-slate-900 hover:bg-white/50 rounded-full transition-all"
+            onClick={() => {
+              setIsMobileMenuOpen(false);
+              setIsToolsOpen(false);
+            }}
           >
             Contact
-          </button>
+          </Link>
         </nav>
 
         {/* Right Side Actions */}
@@ -139,13 +154,17 @@ const Header: React.FC = () => {
                 <Phone className="w-4 h-4" />
                 <span className="hidden lg:inline">(404) 552-0926</span>
              </a>
-             <button
-                onClick={() => scrollToSection('optimizer')} 
-                className="bg-indigo-600 text-white px-6 py-2.5 rounded-full text-sm font-bold hover:bg-indigo-500 transition-all shadow-lg shadow-indigo-200 hover:shadow-indigo-300 active:scale-95 flex items-center gap-2"
+             <Link
+               to="/jet-local-optimizer"
+               className="bg-indigo-600 text-white px-6 py-2.5 rounded-full text-sm font-bold hover:bg-indigo-500 transition-all shadow-lg shadow-indigo-200 hover:shadow-indigo-300 active:scale-95 flex items-center gap-2"
+               onClick={() => {
+                 setIsMobileMenuOpen(false);
+                 setIsToolsOpen(false);
+               }}
              >
                 Run Website Audit
                 <ArrowRight className="w-4 h-4" />
-             </button>
+             </Link>
         </div>
 
         {/* Mobile Toggle */}
@@ -163,61 +182,85 @@ const Header: React.FC = () => {
         <div className="absolute top-24 left-4 right-4 z-40 md:hidden">
             <div className="bg-white/95 backdrop-blur-2xl rounded-3xl p-2 shadow-2xl border border-white/20 animate-fade-in-up ring-1 ring-black/5">
                 <div className="p-4 space-y-1">
-                    <button
-                      onClick={() => scrollToSection(NavigationLink.Services)}
-                      className="w-full text-left px-4 py-3 rounded-xl hover:bg-slate-50 text-slate-700 font-semibold"
+                    <Link
+                      to="/"
+                      className="w-full text-left px-4 py-3 rounded-xl hover:bg-slate-50 text-slate-700 font-semibold block"
+                      onClick={() => {
+                        setIsMobileMenuOpen(false);
+                        setIsToolsOpen(false);
+                      }}
                     >
                       Services
-                    </button>
-                    <button
-                      onClick={() => scrollToSection(NavigationLink.Process)}
-                      className="w-full text-left px-4 py-3 rounded-xl hover:bg-slate-50 text-slate-700 font-semibold"
+                    </Link>
+                    <Link
+                      to="/"
+                      className="w-full text-left px-4 py-3 rounded-xl hover:bg-slate-50 text-slate-700 font-semibold block"
+                      onClick={() => {
+                        setIsMobileMenuOpen(false);
+                        setIsToolsOpen(false);
+                      }}
                     >
                       Process
-                    </button>
-                    <button
-                      onClick={() => scrollToSection(NavigationLink.Contact)}
-                      className="w-full text-left px-4 py-3 rounded-xl hover:bg-slate-50 text-slate-700 font-semibold"
+                    </Link>
+                    <Link
+                      to="/"
+                      className="w-full text-left px-4 py-3 rounded-xl hover:bg-slate-50 text-slate-700 font-semibold block"
+                      onClick={() => {
+                        setIsMobileMenuOpen(false);
+                        setIsToolsOpen(false);
+                      }}
                     >
                       Contact
-                    </button>
+                    </Link>
                 </div>
                 
                 {/* Mobile Tools Block */}
                 <div className="mx-2 bg-slate-50 rounded-2xl p-4 mb-2 border border-slate-100">
                    <div className="text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-3 pl-1">Free Tools</div>
                    <div className="space-y-2">
-                       <button 
-                           onClick={() => scrollToSection('optimizer')} 
-                           className="w-full text-left p-3 rounded-xl bg-white border border-slate-100 flex items-center gap-3 active:scale-[0.98] transition-transform"
+                       <Link
+                         to="/jet-local-optimizer"
+                         className="w-full text-left p-3 rounded-xl bg-white border border-slate-100 flex items-center gap-3 active:scale-[0.98] transition-transform"
+                         onClick={() => {
+                           setIsMobileMenuOpen(false);
+                           setIsToolsOpen(false);
+                         }}
                        >
                           <div className="bg-indigo-50 p-2 rounded-lg text-indigo-600"><Gauge className="w-5 h-5" /></div>
                           <div>
                               <div className="text-sm font-bold text-slate-900">Jet Local Optimizer</div>
                               <div className="text-xs text-slate-500">Technical Website Audit</div>
                           </div>
-                       </button>
-                       <button 
-                           onClick={() => scrollToSection('jetviz')} 
-                           className="w-full text-left p-3 rounded-xl bg-white border border-slate-100 flex items-center gap-3 active:scale-[0.98] transition-transform"
+                       </Link>
+                       <Link
+                         to="/jetviz"
+                         className="w-full text-left p-3 rounded-xl bg-white border border-slate-100 flex items-center gap-3 active:scale-[0.98] transition-transform"
+                         onClick={() => {
+                           setIsMobileMenuOpen(false);
+                           setIsToolsOpen(false);
+                         }}
                        >
                           <div className="bg-purple-50 p-2 rounded-lg text-purple-600"><Eye className="w-5 h-5" /></div>
                           <div>
                               <div className="text-sm font-bold text-slate-900">JetViz</div>
                               <div className="text-xs text-slate-500">Visual Website Check</div>
                           </div>
-                       </button>
+                       </Link>
                    </div>
                 </div>
 
                 <div className="p-2">
-                    <button
-                      onClick={() => scrollToSection('optimizer')}
+                    <Link
+                      to="/jet-local-optimizer"
                       className="w-full bg-indigo-600 text-white px-4 py-4 rounded-2xl font-bold shadow-lg flex justify-center items-center gap-2"
+                      onClick={() => {
+                        setIsMobileMenuOpen(false);
+                        setIsToolsOpen(false);
+                      }}
                     >
                       Run Website Audit
                       <ArrowRight className="w-4 h-4" />
-                    </button>
+                    </Link>
                 </div>
             </div>
         </div>
