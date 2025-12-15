@@ -14,6 +14,7 @@ import Footer from './components/Footer';
 import VoiceAgent from './components/VoiceAgent';
 import JetLocalOptimizerPage from './components/JetLocalOptimizerPage';
 import JetVizPage from './components/JetVizPage';
+import ServicesPage from './src/pages/services';
 
 const Home = () => (
   <main>
@@ -39,6 +40,7 @@ const App: React.FC = () => {
           <Route path="/" element={<Home />} />
           <Route path="/jetviz" element={<JetVizPage />} />
           <Route path="/jet-local-optimizer" element={<JetLocalOptimizerPage />} />
+          <Route path="/services" element={<ServicesPage />} />
         </Routes>
         <Footer />
         <VoiceAgent />
