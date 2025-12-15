@@ -48,7 +48,7 @@ const Header: React.FC = () => {
         {/* Desktop Navigation */}
         <nav className="hidden md:flex items-center gap-1">
           <Link
-            to="/"
+            to="/process"
             className="px-5 py-2.5 text-sm font-medium text-slate-600 hover:text-slate-900 hover:bg-white/50 rounded-full transition-all"
             onClick={() => {
               setIsMobileMenuOpen(false);
@@ -183,7 +183,7 @@ const Header: React.FC = () => {
             <div className="bg-white/95 backdrop-blur-2xl rounded-3xl p-2 shadow-2xl border border-white/20 animate-fade-in-up ring-1 ring-black/5">
                 <div className="p-4 space-y-1">
                     <Link
-                      to="/"
+                      to="/process"
                       className="w-full text-left px-4 py-3 rounded-xl hover:bg-slate-50 text-slate-700 font-semibold block"
                       onClick={() => {
                         setIsMobileMenuOpen(false);
