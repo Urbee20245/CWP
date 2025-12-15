@@ -1,5 +1,5 @@
 import React from 'react';
-import { Activity, Smartphone, MapPin, Gauge, FileSearch, ArrowRight, ShieldCheck } from 'lucide-react';
+import { Activity, Smartphone, MapPin, Gauge, FileSearch, ArrowRight, ShieldCheck, CheckCircle2, Loader2 } from 'lucide-react';
 import { Link } from 'react-router-dom';
 
 const JetOptimizer: React.FC = () => {
@@ -98,36 +98,58 @@ const JetOptimizer: React.FC = () => {
                     <div className="flex items-center justify-between p-4 bg-slate-50 rounded-xl border border-slate-100">
                         <div>
                             <div className="text-xs text-slate-400 uppercase tracking-wider font-bold">Overall Health Score</div>
-                            <div className="text-3xl font-bold text-slate-900 mt-1">-- / 100</div>
+                            <div className="text-3xl font-bold text-slate-900 mt-1">72 / 100</div>
                         </div>
                         <div className="h-12 w-12 rounded-full border-4 border-slate-200 border-t-indigo-500 animate-spin"></div>
                     </div>
 
-                    {/* Loading Lines */}
-                    <div className="space-y-3">
-                        <div className="flex justify-between text-xs font-medium text-slate-500">
-                            <span>Analyzing Site Structure...</span>
-                            <span className="text-emerald-600">Complete</span>
-                        </div>
-                        <div className="w-full bg-slate-100 rounded-full h-2">
-                            <div className="bg-emerald-500 h-2 rounded-full w-full"></div>
+                    {/* Loading Lines - Enhanced Visuals */}
+                    <div className="space-y-5">
+                        
+                        {/* 1. Complete */}
+                        <div>
+                            <div className="flex justify-between text-xs font-medium text-slate-700 mb-1.5">
+                                <span className="flex items-center gap-2">
+                                    <CheckCircle2 className="w-3.5 h-3.5 text-emerald-500" />
+                                    Analyzing Site Structure...
+                                </span>
+                                <span className="text-emerald-600 font-bold bg-emerald-50 px-2 py-0.5 rounded text-[10px] uppercase tracking-wide">Complete</span>
+                            </div>
+                            <div className="w-full bg-slate-100 rounded-full h-2 overflow-hidden ring-1 ring-slate-200/50">
+                                <div className="bg-gradient-to-r from-emerald-500 to-teal-400 h-2 rounded-full w-full shadow-[0_0_12px_rgba(16,185,129,0.4)]"></div>
+                            </div>
                         </div>
 
-                        <div className="flex justify-between text-xs font-medium text-slate-500 pt-2">
-                            <span>Testing Mobile Viewport...</span>
-                            <span className="text-indigo-600 animate-pulse">Running...</span>
-                        </div>
-                        <div className="w-full bg-slate-100 rounded-full h-2">
-                            <div className="bg-indigo-500 h-2 rounded-full w-[60%] animate-pulse"></div>
+                        {/* 2. Running */}
+                        <div>
+                            <div className="flex justify-between text-xs font-medium text-slate-700 mb-1.5">
+                                <span className="flex items-center gap-2">
+                                    <Loader2 className="w-3.5 h-3.5 text-indigo-600 animate-spin" />
+                                    Testing Mobile Viewport...
+                                </span>
+                                <span className="text-indigo-600 font-bold bg-indigo-50 px-2 py-0.5 rounded text-[10px] uppercase tracking-wide animate-pulse">Running</span>
+                            </div>
+                            <div className="w-full bg-slate-100 rounded-full h-2 overflow-hidden ring-1 ring-slate-200/50">
+                                <div className="h-2 rounded-full w-[65%] bg-gradient-to-r from-indigo-500 via-violet-500 to-indigo-500 animate-[pulse_1.5s_cubic-bezier(0.4,0,0.6,1)_infinite] shadow-[0_0_15px_rgba(99,102,241,0.5)] relative">
+                                     <div className="absolute top-0 left-0 bottom-0 right-0 bg-white/20"></div>
+                                </div>
+                            </div>
                         </div>
 
-                        <div className="flex justify-between text-xs font-medium text-slate-500 pt-2">
-                            <span>Checking Local Schema...</span>
-                            <span className="text-slate-400">Pending</span>
+                        {/* 3. Pending */}
+                        <div className="opacity-60 grayscale">
+                            <div className="flex justify-between text-xs font-medium text-slate-500 mb-1.5">
+                                <span className="flex items-center gap-2">
+                                    <div className="w-3.5 h-3.5 rounded-full border-2 border-slate-300 border-t-slate-500 animate-[spin_3s_linear_infinite]" />
+                                    Checking Local Schema...
+                                </span>
+                                <span className="text-slate-500 font-bold bg-slate-100 px-2 py-0.5 rounded text-[10px] uppercase tracking-wide">Pending</span>
+                            </div>
+                            <div className="w-full bg-slate-100 rounded-full h-2">
+                                <div className="bg-slate-300 h-2 rounded-full w-[5%]"></div>
+                            </div>
                         </div>
-                        <div className="w-full bg-slate-100 rounded-full h-2">
-                            <div className="bg-slate-300 h-2 rounded-full w-0"></div>
-                        </div>
+
                     </div>
 
                     <div className="p-4 bg-indigo-50 rounded-lg border border-indigo-100">

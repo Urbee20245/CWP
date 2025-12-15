@@ -1,5 +1,5 @@
 import React from 'react';
-import { Globe, Cpu, BarChart3, Search, ArrowRight, Zap, Database } from 'lucide-react';
+import { Code, Bot, Search, Zap, Database } from 'lucide-react';
 import { Service, NavigationLink } from '../types';
 
 const Services: React.FC = () => {
@@ -8,7 +8,7 @@ const Services: React.FC = () => {
       id: 'rebuild',
       title: 'Website Rebuilds',
       description: 'We replace clunky DIY builders with custom-coded sites. No bloat, just clean code that Google prefers.',
-      icon: Globe,
+      icon: Code,
     },
     {
       id: 'seo',
@@ -26,7 +26,7 @@ const Services: React.FC = () => {
       id: 'ai',
       title: 'AI Voice Agents (Upgrade)',
       description: 'Optional 24/7 phone answering. Capture missed calls and book appointments automatically.',
-      icon: Cpu,
+      icon: Bot,
     },
   ];
 

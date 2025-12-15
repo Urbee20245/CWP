@@ -107,7 +107,7 @@ const JetViz: React.FC = () => {
               RIGHT SIDE (OLD / BAD) 
               Forcing 'Times New Roman' to bypass Inter override for visual contrast
              ======================= */}
-          <div className="absolute inset-0 bg-[#eae8e4] flex flex-col" style={{ fontFamily: '"Times New Roman", Times, serif' }}>
+          <div className="absolute inset-0 bg-[#d4d1cb] flex flex-col" style={{ fontFamily: '"Times New Roman", Times, serif' }}>
              {/* Header */}
              <div className="bg-[#8b0000] text-white p-4 text-center">
                 <h3 className="text-xl font-bold tracking-wide">GWINNETT PLUMBING INC.</h3>
@@ -120,11 +120,6 @@ const JetViz: React.FC = () => {
              {/* Hero */}
              <div className="bg-slate-300 h-64 flex items-center justify-center relative border-b-4 border-[#8b0000]">
                  <div className="absolute inset-0 opacity-10 bg-[url('https://images.unsplash.com/photo-1585747644393-25319727187b?auto=format&fit=crop&q=80')] bg-cover bg-center grayscale"></div>
-                 <div className="bg-white/90 p-6 border-2 border-black text-center shadow-lg max-w-xs relative z-10">
-                     <h4 className="text-black font-bold text-lg mb-2 text-red-900">Reliable Plumbing Services</h4>
-                     <p className="text-xs text-black mb-4 leading-tight">We handle all your plumbing needs. No job is too big or too small. Call us for a quote.</p>
-                     <button className="bg-[#ccc] border border-black px-2 py-1 text-xs text-black shadow-[2px_2px_0px_black] active:translate-y-[2px] active:shadow-none">More Info</button>
-                 </div>
              </div>
              {/* Content Wall */}
              <div className="p-8 text-black bg-[#f4f4f4] flex-1 border-t border-white">
@@ -139,9 +134,9 @@ const JetViz: React.FC = () => {
              </div>
              
              {/* Warning Overlay */}
-             <div className="absolute top-6 right-6 bg-red-600 text-white px-4 py-2 rounded shadow-lg flex items-center gap-2 z-20 font-sans">
+             <div className="absolute top-6 right-6 bg-red-600 text-white px-5 py-3 rounded-lg shadow-2xl shadow-red-900/50 ring-2 ring-red-500/50 flex items-center gap-2 z-20 font-sans backdrop-blur-sm">
                 <AlertCircle className="w-5 h-5" />
-                <span className="font-bold text-sm">Outdated Design</span>
+                <span className="font-bold text-sm uppercase tracking-wider">Outdated Design</span>
              </div>
           </div>
 
@@ -150,70 +145,71 @@ const JetViz: React.FC = () => {
               (Clipped by slider)
              ======================= */}
           <div 
-            className="absolute inset-0 bg-white flex flex-col font-sans"
+            className="absolute inset-0 bg-slate-900 flex flex-col font-sans"
             style={{ clipPath: `polygon(0 0, ${sliderPosition}% 0, ${sliderPosition}% 100%, 0 100%)` }}
           >
-             {/* Modern Header */}
-             <div className="bg-white px-6 py-4 flex justify-between items-center shadow-sm z-20 relative">
+             {/* Background Image with Gradient */}
+             <div className="absolute inset-0 bg-[url('https://images.unsplash.com/photo-1584622050111-993a426fbf0a?auto=format&fit=crop&q=80')] bg-cover bg-center">
+                <div className="absolute inset-0 bg-gradient-to-r from-slate-950/95 via-indigo-950/80 to-slate-900/60 mix-blend-multiply"></div>
+             </div>
+
+             {/* Modern Transparent Header */}
+             <div className="relative z-20 px-6 py-4 flex justify-between items-center border-b border-white/5 backdrop-blur-sm">
                 <div className="flex items-center gap-2">
-                    <div className="w-8 h-8 bg-indigo-600 rounded-lg flex items-center justify-center text-white font-bold shadow-indigo-200 shadow-md">GP</div>
-                    <span className="font-bold text-slate-900 tracking-tight">Gwinnett Plumbing</span>
+                    <div className="w-8 h-8 bg-indigo-600 rounded-lg flex items-center justify-center text-white font-bold shadow-lg shadow-indigo-500/20">GP</div>
+                    <span className="font-bold text-white tracking-tight">Gwinnett Plumbing</span>
                 </div>
-                <div className="hidden md:flex gap-6 text-sm font-medium text-slate-600">
-                    <span className="text-indigo-600 cursor-pointer">Home</span>
-                    <span className="hover:text-indigo-600 cursor-pointer transition-colors">Emergency Service</span>
-                    <span className="hover:text-indigo-600 cursor-pointer transition-colors">Reviews</span>
+                <div className="hidden md:flex gap-6 text-sm font-medium text-slate-300">
+                    <span className="text-white cursor-pointer font-semibold">Home</span>
+                    <span className="hover:text-white cursor-pointer transition-colors">Emergency Service</span>
+                    <span className="hover:text-white cursor-pointer transition-colors">Reviews</span>
                 </div>
-                <button className="bg-indigo-600 text-white px-4 py-2 rounded-full text-sm font-bold shadow-lg shadow-indigo-200 flex items-center gap-2 hover:bg-indigo-500 transition-colors">
+                <button className="bg-white/10 backdrop-blur-md text-white border border-white/10 px-4 py-2 rounded-full text-sm font-bold shadow-lg flex items-center gap-2 hover:bg-white/20 transition-all">
                     <Phone className="w-4 h-4" />
                     (404) 555-0123
                 </button>
              </div>
 
-             {/* Modern Hero */}
-             <div className="flex-1 relative bg-slate-50 flex items-center">
-                 <div className="absolute inset-0 bg-[url('https://images.unsplash.com/photo-1584622050111-993a426fbf0a?auto=format&fit=crop&q=80')] bg-cover bg-center">
-                    <div className="absolute inset-0 bg-gradient-to-r from-slate-900/95 via-slate-900/80 to-slate-900/20"></div>
-                 </div>
-                 
-                 <div className="relative z-10 px-8 md:px-12 w-full max-w-2xl">
+             {/* Modern Hero Content - Glass Card */}
+             <div className="flex-1 relative flex items-center px-8 md:px-12 z-10">
+                 <div className="max-w-xl bg-slate-900/40 backdrop-blur-xl p-8 rounded-3xl border border-white/10 shadow-2xl">
                      <div className="flex gap-1 mb-4">
                         {[1,2,3,4,5].map(i => <Star key={i} className="w-4 h-4 text-yellow-400 fill-yellow-400" />)}
-                        <span className="text-white text-xs ml-2 font-medium bg-white/10 px-2 py-0.5 rounded backdrop-blur-sm">500+ 5-Star Reviews on Google</span>
+                        <span className="text-white text-xs ml-2 font-medium bg-white/10 px-2 py-0.5 rounded backdrop-blur-sm">500+ 5-Star Reviews</span>
                      </div>
-                     <h1 className="text-3xl md:text-5xl font-bold text-white mb-4 leading-tight tracking-tight">
+                     <h1 className="text-3xl md:text-5xl font-extrabold text-white mb-4 leading-tight tracking-tight drop-shadow-sm">
                          24/7 Emergency Plumbing<br/>
-                         <span className="text-indigo-400">in Gwinnett County.</span>
+                         <span className="text-transparent bg-clip-text bg-gradient-to-r from-indigo-400 to-cyan-400">in Gwinnett County.</span>
                      </h1>
-                     <p className="text-slate-300 text-sm md:text-base mb-8 max-w-md leading-relaxed font-medium">
+                     <p className="text-slate-200 text-sm md:text-base mb-8 leading-relaxed font-medium">
                          Technicians at your door in 60 minutes. Upfront pricing, no hidden fees, and 100% satisfaction guaranteed.
                      </p>
                      <div className="flex gap-3">
-                         <button className="bg-emerald-500 text-white px-6 py-3 rounded-xl font-bold text-sm shadow-lg shadow-emerald-900/20 hover:bg-emerald-400 transition-colors hover:translate-y-[-1px]">
+                         <button className="bg-gradient-to-r from-emerald-500 to-teal-500 text-white px-6 py-3 rounded-xl font-bold text-sm shadow-lg shadow-emerald-900/40 hover:scale-105 transition-transform">
                              Get Help Now
                          </button>
-                         <button className="bg-white/10 backdrop-blur text-white border border-white/20 px-6 py-3 rounded-xl font-bold text-sm hover:bg-white/20 transition-colors">
+                         <button className="bg-white/5 backdrop-blur text-white border border-white/10 px-6 py-3 rounded-xl font-bold text-sm hover:bg-white/10 transition-colors">
                              See Pricing
                          </button>
                      </div>
                  </div>
 
-                 {/* Trust Badge Overlay */}
-                 <div className="absolute bottom-8 right-8 bg-white/95 backdrop-blur p-4 rounded-xl shadow-xl hidden md:flex items-center gap-3 animate-fade-in-up">
-                     <div className="w-10 h-10 rounded-full bg-green-100 flex items-center justify-center">
-                         <CheckCircle2 className="w-6 h-6 text-green-600" />
+                 {/* Trust Badge Overlay - Floating */}
+                 <div className="absolute bottom-8 right-8 bg-white/10 backdrop-blur-xl border border-white/10 p-4 rounded-xl shadow-xl hidden md:flex items-center gap-3 animate-fade-in-up">
+                     <div className="w-10 h-10 rounded-full bg-emerald-500/20 flex items-center justify-center border border-emerald-500/30">
+                         <CheckCircle2 className="w-6 h-6 text-emerald-400" />
                      </div>
                      <div>
-                         <div className="text-xs text-slate-500 font-bold uppercase tracking-wide">Next Available Tech</div>
-                         <div className="text-sm font-bold text-slate-900">14 Minutes Away</div>
+                         <div className="text-xs text-emerald-200 font-bold uppercase tracking-wide">Next Available Tech</div>
+                         <div className="text-sm font-bold text-white">14 Minutes Away</div>
                      </div>
                  </div>
              </div>
 
              {/* Success Overlay */}
-             <div className="absolute top-6 left-6 bg-emerald-500 text-white px-4 py-2 rounded-full shadow-lg flex items-center gap-2 z-20 shadow-emerald-900/20">
-                <CheckCircle2 className="w-5 h-5" />
-                <span className="font-bold text-sm">Conversion Optimized</span>
+             <div className="absolute top-6 left-6 bg-emerald-600 text-white px-5 py-3 rounded-full shadow-[0_0_25px_rgba(5,150,105,0.6)] border border-emerald-400/30 flex items-center gap-2 z-20">
+                <CheckCircle2 className="w-5 h-5 text-white drop-shadow-md" />
+                <span className="font-bold text-sm tracking-wide drop-shadow-[0_0_8px_rgba(255,255,255,0.5)]">Conversion Optimized</span>
              </div>
           </div>
 
