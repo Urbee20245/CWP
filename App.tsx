@@ -1,7 +1,11 @@
 import React from 'react';
 import Header from './components/Header';
 import Hero from './components/Hero';
+import ProblemSolution from './components/ProblemSolution';
+import JetViz from './components/JetViz';
+import JetOptimizer from './components/JetOptimizer';
 import Services from './components/Services';
+import TrustAuthority from './components/TrustAuthority';
 import Stats from './components/Stats';
 import Process from './components/Process';
 import Contact from './components/Contact';
@@ -14,7 +18,11 @@ const App: React.FC = () => {
       <Header />
       <main>
         <Hero />
+        <ProblemSolution />
+        <JetViz />
+        <JetOptimizer />
         <Services />
+        <TrustAuthority />
         <Stats />
         <Process />
         <Contact />

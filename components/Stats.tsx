@@ -1,36 +1,42 @@
 import React from 'react';
-import { Award, Users, Star } from 'lucide-react';
 
 const Stats: React.FC = () => {
   return (
     <section className="py-12 px-4 md:px-6">
-        <div className="max-w-7xl mx-auto rounded-[3rem] bg-[#0A0A0A] text-white relative overflow-hidden p-16 md:p-24 shadow-2xl">
+        <div className="max-w-7xl mx-auto rounded-[2rem] bg-slate-900 text-white relative overflow-hidden p-12 md:p-20 shadow-2xl">
             
-            {/* Subtle Gradient Mesh */}
-            <div className="absolute top-0 right-0 w-[600px] h-[600px] bg-indigo-900/20 rounded-full blur-[120px] -translate-y-1/2 translate-x-1/2 opacity-50"></div>
-            <div className="absolute bottom-0 left-0 w-[400px] h-[400px] bg-blue-900/20 rounded-full blur-[100px] translate-y-1/2 -translate-x-1/2 opacity-30"></div>
+            {/* Architectural Grid Background */}
+            <div className="absolute inset-0 bg-[linear-gradient(rgba(255,255,255,0.03)_1px,transparent_1px),linear-gradient(90deg,rgba(255,255,255,0.03)_1px,transparent_1px)] bg-[size:40px_40px] opacity-20"></div>
             
-            {/* Grid Overlay */}
-            <div className="absolute inset-0 bg-[url('https://grainy-gradients.vercel.app/noise.svg')] opacity-20 mix-blend-overlay"></div>
+            <div className="relative z-10 flex flex-col md:flex-row items-center justify-between gap-12 md:gap-8">
+                <div className="max-w-sm text-center md:text-left">
+                    <h3 className="text-2xl font-serif mb-2">Results Driven.</h3>
+                    <p className="text-slate-400 text-sm leading-relaxed">
+                        We don't just build pretty pages. We focus on the metrics that actually pay your bills.
+                    </p>
+                </div>
 
-            <div className="relative z-10 grid grid-cols-1 md:grid-cols-3 gap-16 md:gap-8 text-center divide-y md:divide-y-0 md:divide-x divide-white/10">
-                <div className="flex flex-col items-center group pt-8 md:pt-0">
-                    <div className="text-6xl md:text-7xl font-bold mb-4 tracking-tighter bg-clip-text text-transparent bg-gradient-to-b from-white to-white/60">
-                        2017
+                <div className="w-full md:w-auto h-px md:h-20 bg-white/10"></div>
+
+                <div className="grid grid-cols-3 gap-8 md:gap-16 text-center">
+                    <div className="flex flex-col items-center">
+                        <div className="text-4xl md:text-5xl font-bold mb-2 tracking-tight text-white">
+                            300<span className="text-indigo-400">%</span>
+                        </div>
+                        <div className="text-slate-500 font-bold uppercase tracking-widest text-[10px]">Avg. Traffic Growth</div>
                     </div>
-                    <div className="text-slate-400 font-medium tracking-widest uppercase text-xs">Established</div>
-                </div>
-                <div className="flex flex-col items-center group pt-8 md:pt-0">
-                    <div className="text-6xl md:text-7xl font-bold mb-4 tracking-tighter bg-clip-text text-transparent bg-gradient-to-b from-white to-white/60">
-                        5.0
+                    <div className="flex flex-col items-center">
+                        <div className="text-4xl md:text-5xl font-bold mb-2 tracking-tight text-white">
+                            24<span className="text-emerald-400">/7</span>
+                        </div>
+                        <div className="text-slate-500 font-bold uppercase tracking-widest text-[10px]">Lead Capture</div>
                     </div>
-                    <div className="text-slate-400 font-medium tracking-widest uppercase text-xs">Google Rating</div>
-                </div>
-                <div className="flex flex-col items-center group pt-8 md:pt-0">
-                    <div className="text-6xl md:text-7xl font-bold mb-4 tracking-tighter bg-clip-text text-transparent bg-gradient-to-b from-white to-white/60">
-                        100+
+                    <div className="flex flex-col items-center">
+                        <div className="text-4xl md:text-5xl font-bold mb-2 tracking-tight text-white">
+                            5.0
+                        </div>
+                        <div className="text-slate-500 font-bold uppercase tracking-widest text-[10px]">Star Rating</div>
                     </div>
-                    <div className="text-slate-400 font-medium tracking-widest uppercase text-xs">Clients Served</div>
                 </div>
             </div>
         </div>

@@ -1,72 +1,147 @@
 import React, { useState, useEffect } from 'react';
-import { Menu, X, Phone } from 'lucide-react';
+import { Menu, X, ChevronDown, Gauge, Eye, Phone } from 'lucide-react';
 import { NavigationLink } from '../types';
 
 const Header: React.FC = () => {
   const [isScrolled, setIsScrolled] = useState(false);
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
+  const [isToolsOpen, setIsToolsOpen] = useState(false);
 
+  // Handle scroll effect for background
   useEffect(() => {
     const handleScroll = () => {
-      setIsScrolled(window.scrollY > 20);
+      setIsScrolled(window.scrollY > 10);
     };
     window.addEventListener('scroll', handleScroll);
     return () => window.removeEventListener('scroll', handleScroll);
   }, []);
 
+  // Smooth scroll handler
   const scrollToSection = (id: string) => {
     setIsMobileMenuOpen(false);
+    setIsToolsOpen(false);
     const element = document.getElementById(id);
     if (element) {
       element.scrollIntoView({ behavior: 'smooth' });
     }
   };
 
-  const navLinks = [
-    { label: 'Services', id: NavigationLink.Services },
-    { label: 'Process', id: NavigationLink.Process },
-    { label: 'Contact', id: NavigationLink.Contact },
-  ];
-
   return (
-    <header className="fixed top-0 left-0 right-0 z-50 flex justify-center px-4 pt-4">
+    <header className="fixed top-0 left-0 right-0 z-50 flex justify-center px-4 pt-4 md:pt-6">
       <div 
-        className={`w-full max-w-5xl transition-all duration-300 rounded-full px-6 py-3 flex justify-between items-center ${
-            isScrolled 
-            ? 'bg-white/70 backdrop-blur-xl border border-white/20 shadow-lg shadow-black/5 mt-2' 
-            : 'bg-transparent border border-transparent'
-        }`}
+        className={`
+          w-full max-w-6xl transition-all duration-300 ease-in-out rounded-full px-6 py-3 
+          flex justify-between items-center
+          ${isScrolled 
+            ? 'bg-white/80 backdrop-blur-xl border border-white/20 shadow-lg shadow-black/5' 
+            : 'bg-white/40 backdrop-blur-sm border border-white/10'
+          }
+        `}
       >
-        {/* Logo */}
-        <div className="flex items-center gap-2">
-          <img 
+        {/* Logo Area */}
+        <div 
+            className="flex items-center gap-2 cursor-pointer" 
+            onClick={() => window.scrollTo({ top: 0, behavior: 'smooth' })}
+        >
+           <img 
             src="https://customwebsitesplus.com/wp-content/uploads/2019/01/CWPtrans.png" 
             alt="Custom Websites Plus" 
             className="h-8 md:h-10 w-auto object-contain"
           />
         </div>
 
-        {/* Desktop Nav */}
+        {/* Desktop Navigation */}
         <nav className="hidden md:flex items-center gap-1">
-          {navLinks.map((link) => (
-            <button
-              key={link.id}
-              onClick={() => scrollToSection(link.id)}
-              className="px-4 py-2 text-sm font-medium text-slate-600 hover:text-slate-900 hover:bg-slate-100/50 rounded-full transition-all"
+          <button
+            onClick={() => scrollToSection(NavigationLink.Services)}
+            className="px-5 py-2.5 text-sm font-medium text-slate-600 hover:text-slate-900 hover:bg-white/50 rounded-full transition-all"
+          >
+            Services
+          </button>
+
+          {/* Tools Dropdown Container */}
+          <div 
+            className="relative"
+            onMouseEnter={() => setIsToolsOpen(true)}
+            onMouseLeave={() => setIsToolsOpen(false)}
+          >
+            <button 
+                className={`
+                    px-5 py-2.5 text-sm font-medium rounded-full transition-all flex items-center gap-1.5
+                    ${isToolsOpen ? 'text-slate-900 bg-white/50' : 'text-slate-600 hover:text-slate-900 hover:bg-white/50'}
+                `}
             >
-              {link.label}
+                Tools 
+                <ChevronDown className={`w-3.5 h-3.5 transition-transform duration-200 ${isToolsOpen ? 'rotate-180' : ''}`} />
             </button>
-          ))}
+            
+            {/* Dropdown Menu */}
+            <div 
+                className={`
+                    absolute top-full left-1/2 -translate-x-1/2 pt-4 w-80 
+                    transition-all duration-200 origin-top
+                    ${isToolsOpen ? 'opacity-100 translate-y-0 visible' : 'opacity-0 translate-y-2 invisible'}
+                `}
+            >
+                <div className="bg-white rounded-2xl shadow-xl border border-slate-100 p-2 overflow-hidden ring-1 ring-black/5">
+                    <div className="px-3 py-2 text-[10px] font-bold text-slate-400 uppercase tracking-widest border-b border-slate-50 mb-1">
+                        Free Utilities
+                    </div>
+                    <button 
+                        onClick={() => scrollToSection('optimizer')}
+                        className="w-full flex items-start gap-3 p-3 rounded-xl hover:bg-slate-50 transition-colors text-left group/item"
+                    >
+                        <div className="mt-1 bg-indigo-50 p-2 rounded-lg text-indigo-600 group-hover/item:bg-indigo-100 transition-colors">
+                            <Gauge className="w-5 h-5" />
+                        </div>
+                        <div>
+                            <div className="text-sm font-bold text-slate-900 group-hover/item:text-indigo-700 transition-colors">Jet Optimizer</div>
+                            <div className="text-xs text-slate-500 leading-tight mt-0.5">Technical website audit & health check.</div>
+                        </div>
+                    </button>
+                    <button 
+                        onClick={() => scrollToSection('jetviz')}
+                        className="w-full flex items-start gap-3 p-3 rounded-xl hover:bg-slate-50 transition-colors text-left group/item"
+                    >
+                        <div className="mt-1 bg-purple-50 p-2 rounded-lg text-purple-600 group-hover/item:bg-purple-100 transition-colors">
+                            <Eye className="w-5 h-5" />
+                        </div>
+                        <div>
+                            <div className="text-sm font-bold text-slate-900 group-hover/item:text-purple-700 transition-colors">JetViz</div>
+                            <div className="text-xs text-slate-500 leading-tight mt-0.5">Instant visual design comparison.</div>
+                        </div>
+                    </button>
+                </div>
+            </div>
+          </div>
+
+          <button
+            onClick={() => scrollToSection(NavigationLink.Process)}
+            className="px-5 py-2.5 text-sm font-medium text-slate-600 hover:text-slate-900 hover:bg-white/50 rounded-full transition-all"
+          >
+            Process
+          </button>
+          
+          <button
+            onClick={() => scrollToSection(NavigationLink.Contact)}
+            className="px-5 py-2.5 text-sm font-medium text-slate-600 hover:text-slate-900 hover:bg-white/50 rounded-full transition-all"
+          >
+            Contact
+          </button>
         </nav>
 
-        {/* CTA */}
-        <div className="hidden md:flex items-center gap-3">
-             <a href="tel:4045520926" className="text-xs font-semibold text-slate-600 hover:text-blue-600 transition-colors">
+        {/* Right Side Actions */}
+        <div className="hidden md:flex items-center gap-4 pl-4 border-l border-slate-200 ml-2">
+             <a 
+                href="tel:4045520926" 
+                className="text-sm font-bold text-slate-700 hover:text-indigo-600 transition-colors flex items-center gap-2"
+             >
+                <Phone className="w-4 h-4" />
                 (404) 552-0926
              </a>
              <button
                 onClick={() => scrollToSection(NavigationLink.Contact)} 
-                className="bg-slate-900 text-white px-5 py-2 rounded-full text-sm font-semibold hover:bg-slate-800 transition-all hover:shadow-lg hover:shadow-blue-500/20 active:scale-95"
+                className="bg-slate-900 text-white px-6 py-2.5 rounded-full text-sm font-semibold hover:bg-slate-800 transition-all shadow-lg hover:shadow-xl active:scale-95"
              >
                 Get Started
              </button>
@@ -74,31 +149,75 @@ const Header: React.FC = () => {
 
         {/* Mobile Toggle */}
         <button
-          className="md:hidden p-2 text-slate-900"
+          className="md:hidden p-2 text-slate-900 hover:bg-white/50 rounded-full transition-colors"
           onClick={() => setIsMobileMenuOpen(!isMobileMenuOpen)}
+          aria-label="Toggle menu"
         >
-          {isMobileMenuOpen ? <X className="w-5 h-5" /> : <Menu className="w-5 h-5" />}
+          {isMobileMenuOpen ? <X className="w-6 h-6" /> : <Menu className="w-6 h-6" />}
         </button>
       </div>
 
       {/* Mobile Menu Overlay */}
       {isMobileMenuOpen && (
-        <div className="absolute top-20 left-4 right-4 bg-white/95 backdrop-blur-2xl rounded-3xl p-6 shadow-2xl border border-white/20 flex flex-col gap-4 animate-fade-in-up md:hidden">
-            {navLinks.map((link) => (
-            <button
-              key={link.id}
-              onClick={() => scrollToSection(link.id)}
-              className="text-lg font-semibold text-slate-800 text-left py-2 border-b border-slate-100 last:border-0"
-            >
-              {link.label}
-            </button>
-          ))}
-            <button
-              onClick={() => scrollToSection(NavigationLink.Contact)}
-              className="mt-2 bg-blue-600 text-white px-4 py-3 rounded-xl font-bold"
-            >
-              Get Started
-            </button>
+        <div className="absolute top-24 left-4 right-4 z-40 md:hidden">
+            <div className="bg-white/95 backdrop-blur-2xl rounded-3xl p-2 shadow-2xl border border-white/20 animate-fade-in-up ring-1 ring-black/5">
+                <div className="p-4 space-y-1">
+                    <button
+                      onClick={() => scrollToSection(NavigationLink.Services)}
+                      className="w-full text-left px-4 py-3 rounded-xl hover:bg-slate-50 text-slate-700 font-semibold"
+                    >
+                      Services
+                    </button>
+                    <button
+                      onClick={() => scrollToSection(NavigationLink.Process)}
+                      className="w-full text-left px-4 py-3 rounded-xl hover:bg-slate-50 text-slate-700 font-semibold"
+                    >
+                      Process
+                    </button>
+                    <button
+                      onClick={() => scrollToSection(NavigationLink.Contact)}
+                      className="w-full text-left px-4 py-3 rounded-xl hover:bg-slate-50 text-slate-700 font-semibold"
+                    >
+                      Contact
+                    </button>
+                </div>
+                
+                {/* Mobile Tools Block */}
+                <div className="mx-2 bg-slate-50 rounded-2xl p-4 mb-2 border border-slate-100">
+                   <div className="text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-3 pl-1">Free Tools</div>
+                   <div className="space-y-2">
+                       <button 
+                           onClick={() => scrollToSection('optimizer')} 
+                           className="w-full text-left p-3 rounded-xl bg-white border border-slate-100 flex items-center gap-3 active:scale-[0.98] transition-transform"
+                       >
+                          <div className="bg-indigo-50 p-2 rounded-lg text-indigo-600"><Gauge className="w-5 h-5" /></div>
+                          <div>
+                              <div className="text-sm font-bold text-slate-900">Jet Local Optimizer</div>
+                              <div className="text-xs text-slate-500">Technical Website Audit</div>
+                          </div>
+                       </button>
+                       <button 
+                           onClick={() => scrollToSection('jetviz')} 
+                           className="w-full text-left p-3 rounded-xl bg-white border border-slate-100 flex items-center gap-3 active:scale-[0.98] transition-transform"
+                       >
+                          <div className="bg-purple-50 p-2 rounded-lg text-purple-600"><Eye className="w-5 h-5" /></div>
+                          <div>
+                              <div className="text-sm font-bold text-slate-900">JetViz</div>
+                              <div className="text-xs text-slate-500">Visual Website Check</div>
+                          </div>
+                       </button>
+                   </div>
+                </div>
+
+                <div className="p-2">
+                    <button
+                      onClick={() => scrollToSection(NavigationLink.Contact)}
+                      className="w-full bg-slate-900 text-white px-4 py-4 rounded-2xl font-bold shadow-lg flex justify-center items-center gap-2"
+                    >
+                      Get Started
+                    </button>
+                </div>
+            </div>
         </div>
       )}
     </header>

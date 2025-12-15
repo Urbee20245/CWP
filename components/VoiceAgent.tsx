@@ -1,11 +1,12 @@
 import React, { useState, useRef, useEffect, useCallback } from 'react';
-import { Mic, MicOff, X, Activity, Loader2, Sparkles, MessageSquare, Send, User, Bot } from 'lucide-react';
+import { Mic, MicOff, X, Activity, Loader2, Sparkles, MessageSquare, User, Bot, Smartphone } from 'lucide-react';
 import { GoogleGenAI, LiveServerMessage, Modality } from '@google/genai';
 
 interface ChatMessage {
   id: string;
   role: 'user' | 'assistant';
   text: string;
+  isFinal?: boolean;
 }
 
 function resampleTo16kHZ(audioData: Float32Array, origSampleRate: number): Float32Array {
@@ -93,14 +94,18 @@ const VoiceAgent: React.FC = () => {
   const nextStartTimeRef = useRef<number>(0);
   const sessionRef = useRef<any>(null);
   
-  // Buffers for accumulating transcriptions
+  // Buffers for accumulating transcriptions during a turn
   const currentInputTranscriptRef = useRef('');
   const currentOutputTranscriptRef = useRef('');
 
-  useEffect(() => {
+  const scrollToBottom = () => {
     if (messagesEndRef.current) {
       messagesEndRef.current.scrollIntoView({ behavior: 'smooth' });
     }
+  };
+
+  useEffect(() => {
+    scrollToBottom();
   }, [messages, isOpen]);
 
   const stopSession = useCallback(() => {
@@ -132,27 +137,49 @@ const VoiceAgent: React.FC = () => {
     currentOutputTranscriptRef.current = '';
   }, []);
 
-  const updateTranscript = (role: 'user' | 'assistant', text: string, isFinal: boolean = false) => {
+  // Helper to update the last message or add a new one if role switched
+  const updateTranscriptState = (role: 'user' | 'assistant', textDelta: string) => {
       setMessages(prev => {
-          const lastMsg = prev[prev.length - 1];
-          // If the last message is from the same role, update it
-          if (lastMsg && lastMsg.role === role) {
-              const updated = [...prev];
-              updated[updated.length - 1] = { ...lastMsg, text: text };
-              return updated;
+          const newMsgs = [...prev];
+          const lastMsg = newMsgs[newMsgs.length - 1];
+          
+          // If the last message is from the same role and not "finalized" (logic simplified here), append
+          // Note: The API sends chunks. We append to the current turn.
+          if (lastMsg && lastMsg.role === role && !lastMsg.isFinal) {
+              const updatedMsg = { ...lastMsg, text: lastMsg.text + textDelta };
+              newMsgs[newMsgs.length - 1] = updatedMsg;
+              return newMsgs;
           } else {
-              // Otherwise add a new message
-              return [...prev, { id: Date.now().toString(), role, text }];
+              // New turn
+              return [...prev, { id: Date.now().toString(), role, text: textDelta }];
           }
       });
+  };
+
+  const markTurnComplete = () => {
+      setMessages(prev => {
+          if (prev.length === 0) return prev;
+          const newMsgs = [...prev];
+          const lastMsg = newMsgs[newMsgs.length - 1];
+          newMsgs[newMsgs.length - 1] = { ...lastMsg, isFinal: true };
+          return newMsgs;
+      });
+      currentInputTranscriptRef.current = '';
+      currentOutputTranscriptRef.current = '';
   };
 
   const startSession = async () => {
     setError(null);
     setIsConnecting(true);
-    // Reset messages on new session? Optional. Let's keep history for now or reset.
+    
+    // Initial Greeting in Chat
     if (messages.length === 0) {
-        setMessages([{ id: 'intro', role: 'assistant', text: "Hi! I'm Luna. Ask me anything about our web design or AI services." }]);
+        setMessages([{ 
+            id: 'intro', 
+            role: 'assistant', 
+            text: "Hi! I'm Luna. I can help with web design questions, pricing, or booking a consultation. How can I help you today?",
+            isFinal: true
+        }]);
     }
 
     try {
@@ -174,12 +201,12 @@ const VoiceAgent: React.FC = () => {
         model: 'gemini-2.5-flash-native-audio-preview-09-2025',
         config: {
           responseModalities: [Modality.AUDIO],
-          inputAudioTranscription: {}, // Enable user transcription
-          outputAudioTranscription: {}, // Enable model transcription
+          inputAudioTranscription: { model: 'google_default' }, // Enable user speech-to-text
+          outputAudioTranscription: { model: 'google_default' }, // Enable model speech-to-text
           speechConfig: {
             voiceConfig: { prebuiltVoiceConfig: { voiceName: 'Kore' } },
           },
-          systemInstruction: "You are a friendly, professional AI receptionist for 'Custom Websites Plus' in Loganville, GA. Your name is 'Luna'. You briefly answer questions about web design, SEO, and AI automation. Keep responses short and conversational. If asked about pricing, mention plans start at $299/mo. If asked to book, say you'll forward the request.",
+          systemInstruction: "You are Luna, a friendly and professional AI receptionist for 'Custom Websites Plus' in Loganville, GA. Your goal is to be helpful, concise, and warm. You answer questions about web design, SEO, and AI automation services. Pricing starts at $299/mo. You can schedule consultations. Keep your responses short (under 2-3 sentences) and conversational, suitable for a voice call.",
         },
         callbacks: {
           onopen: () => {
@@ -194,6 +221,7 @@ const VoiceAgent: React.FC = () => {
 
             scriptProcessor.onaudioprocess = (e) => {
               const inputData = e.inputBuffer.getChannelData(0);
+              // Simple volume meter logic
               let sum = 0;
               for(let i=0; i<inputData.length; i+=100) sum += Math.abs(inputData[i]);
               setVolume(Math.min(100, (sum / (inputData.length/100)) * 500));
@@ -210,7 +238,7 @@ const VoiceAgent: React.FC = () => {
             scriptProcessor.connect(inputAudioContextRef.current.destination);
           },
           onmessage: async (message: LiveServerMessage) => {
-            // Handle Audio Output
+            // 1. Handle Audio Output
             const base64Audio = message.serverContent?.modelTurn?.parts?.[0]?.inlineData?.data;
             if (base64Audio && outputAudioContextRef.current) {
               const ctx = outputAudioContextRef.current;
@@ -224,35 +252,32 @@ const VoiceAgent: React.FC = () => {
               nextStartTimeRef.current += audioBuffer.duration;
             }
 
-            // Handle Transcriptions
-            if (message.serverContent?.outputTranscription?.text) {
-                currentOutputTranscriptRef.current += message.serverContent.outputTranscription.text;
-                updateTranscript('assistant', currentOutputTranscriptRef.current);
+            // 2. Handle Transcription (Chat UI)
+            const inputTrans = message.serverContent?.inputTranscription?.text;
+            const outputTrans = message.serverContent?.outputTranscription?.text;
+
+            if (inputTrans) {
+                updateTranscriptState('user', inputTrans);
             }
-            if (message.serverContent?.inputTranscription?.text) {
-                currentInputTranscriptRef.current += message.serverContent.inputTranscription.text;
-                updateTranscript('user', currentInputTranscriptRef.current);
+            if (outputTrans) {
+                updateTranscriptState('assistant', outputTrans);
             }
 
-            // Handle Turn Completion (Reset buffers)
+            // 3. Handle Turn Completion
             if (message.serverContent?.turnComplete) {
-                if (currentInputTranscriptRef.current) {
-                    currentInputTranscriptRef.current = '';
-                }
-                if (currentOutputTranscriptRef.current) {
-                    currentOutputTranscriptRef.current = '';
-                }
+                markTurnComplete();
             }
 
+            // 4. Handle Interruption
             if (message.serverContent?.interrupted) {
                nextStartTimeRef.current = 0;
-               currentOutputTranscriptRef.current = ''; // Clear potentially cut-off text logic if needed
+               markTurnComplete(); 
             }
           },
           onclose: () => stopSession(),
           onerror: (e) => {
             console.error(e);
-            setError("Connection error.");
+            setError("Connection disrupted. Please try again.");
             stopSession();
           }
         }
@@ -271,40 +296,47 @@ const VoiceAgent: React.FC = () => {
 
   return (
     <>
+      {/* Floating Launcher */}
       <button
         onClick={() => setIsOpen(true)}
         className={`fixed bottom-8 right-8 z-40 group ${
           isOpen ? 'translate-y-24 opacity-0 pointer-events-none' : 'translate-y-0 opacity-100'
         } transition-all duration-500`}
       >
-        <div className="absolute inset-0 bg-blue-500 rounded-full blur opacity-40 group-hover:opacity-60 transition-opacity animate-pulse"></div>
+        <div className="absolute inset-0 bg-indigo-500 rounded-full blur opacity-40 group-hover:opacity-60 transition-opacity animate-pulse"></div>
         <div className="relative bg-slate-900 text-white p-4 rounded-full shadow-2xl border border-slate-700 flex items-center gap-3 hover:scale-105 transition-transform">
             <div className="relative">
-                <Sparkles className="w-5 h-5 text-blue-400" />
-                <span className="absolute -top-1 -right-1 flex h-2.5 w-2.5">
+                <Sparkles className="w-5 h-5 text-indigo-400" />
+                {/* Available Status Dot */}
+                <span className="absolute -top-1 -right-1 flex h-3 w-3">
                   <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-green-400 opacity-75"></span>
-                  <span className="relative inline-flex rounded-full h-2.5 w-2.5 bg-green-500 border border-slate-900"></span>
+                  <span className="relative inline-flex rounded-full h-3 w-3 bg-green-500 border-2 border-slate-900"></span>
                 </span>
             </div>
-            <span className="font-semibold pr-2">Chat with Luna</span>
+            <span className="font-semibold pr-2 font-sans">Chat with Luna</span>
         </div>
       </button>
 
+      {/* Chat Window */}
       {isOpen && (
-        <div className="fixed bottom-8 right-8 z-50 w-[90vw] md:w-[24rem] h-[32rem] rounded-[2rem] overflow-hidden shadow-2xl glass-dark border border-white/10 animate-fade-in-up ring-1 ring-white/10 flex flex-col">
+        <div className="fixed bottom-4 right-4 md:bottom-8 md:right-8 z-50 w-[95vw] md:w-[24rem] h-[36rem] max-h-[85vh] rounded-[2rem] overflow-hidden shadow-2xl glass-dark border border-white/10 animate-fade-in-up ring-1 ring-white/10 flex flex-col font-sans">
           
           {/* Header */}
-          <div className="p-5 border-b border-white/5 flex justify-between items-center bg-slate-900/50 backdrop-blur-md z-10">
+          <div className="p-5 border-b border-white/5 flex justify-between items-center bg-slate-900/50 backdrop-blur-md z-10 shrink-0">
             <div className="flex items-center gap-3">
                 <div className="relative">
-                    <div className="w-10 h-10 rounded-full bg-gradient-to-tr from-blue-500 to-purple-600 flex items-center justify-center border border-white/10 shadow-inner">
+                    <div className="w-10 h-10 rounded-full bg-gradient-to-tr from-indigo-500 to-violet-600 flex items-center justify-center border border-white/10 shadow-inner">
                         <Bot className="w-6 h-6 text-white" />
                     </div>
-                    <span className="absolute bottom-0 right-0 w-3 h-3 bg-green-500 border-2 border-slate-900 rounded-full"></span>
+                    {/* Header Available Status */}
+                    <span className="absolute bottom-0 right-0 w-3 h-3 bg-green-500 border-2 border-slate-900 rounded-full shadow-[0_0_8px_rgba(34,197,94,0.6)]"></span>
                 </div>
                 <div>
                     <h3 className="text-white font-bold text-base leading-none">Luna AI</h3>
-                    <span className="text-slate-400 text-xs font-medium">Available Now</span>
+                    <div className="flex items-center gap-1.5 mt-1">
+                        <span className="block w-1.5 h-1.5 rounded-full bg-green-500 animate-pulse"></span>
+                        <span className="text-slate-400 text-xs font-medium uppercase tracking-wide">Online Now</span>
+                    </div>
                 </div>
             </div>
             <button 
@@ -318,25 +350,32 @@ const VoiceAgent: React.FC = () => {
             </button>
           </div>
 
-          {/* Chat Body */}
-          <div className="flex-1 overflow-y-auto p-4 space-y-4 scrollbar-thin scrollbar-thumb-slate-700 scrollbar-track-transparent">
+          {/* Chat Messages Body */}
+          <div className="flex-1 overflow-y-auto p-4 space-y-6 scrollbar-thin scrollbar-thumb-slate-700 scrollbar-track-transparent">
              {messages.length === 0 && !isConnecting && (
                  <div className="h-full flex flex-col items-center justify-center text-center p-6 opacity-60">
-                     <div className="w-16 h-16 rounded-full bg-slate-800/50 flex items-center justify-center mb-4">
-                        <Sparkles className="w-8 h-8 text-blue-400" />
+                     <div className="w-16 h-16 rounded-full bg-slate-800/50 flex items-center justify-center mb-4 border border-slate-700">
+                        <Sparkles className="w-8 h-8 text-indigo-400" />
                      </div>
-                     <p className="text-slate-400 text-sm">Tap the microphone to start a voice conversation with Luna.</p>
+                     <p className="text-slate-400 text-sm">Tap the microphone below to start a voice conversation.</p>
                  </div>
              )}
              
              {messages.map((msg, idx) => (
-                 <div key={idx} className={`flex ${msg.role === 'user' ? 'justify-end' : 'justify-start'}`}>
-                     <div className={`max-w-[85%] rounded-2xl px-4 py-3 text-sm leading-relaxed ${
-                         msg.role === 'user' 
-                         ? 'bg-blue-600 text-white rounded-br-none' 
-                         : 'bg-slate-800 text-slate-200 border border-slate-700 rounded-bl-none'
-                     }`}>
-                         {msg.text}
+                 <div key={idx} className={`flex ${msg.role === 'user' ? 'justify-end' : 'justify-start'} animate-fade-in`}>
+                     <div className={`flex flex-col gap-1 max-w-[85%]`}>
+                        <div className={`flex items-center gap-2 text-xs text-slate-500 ${msg.role === 'user' ? 'flex-row-reverse' : 'flex-row'} px-1`}>
+                            {msg.role === 'user' ? 'You' : 'Luna'}
+                        </div>
+                        <div className={`px-4 py-3 text-sm leading-relaxed shadow-sm ${
+                            msg.role === 'user' 
+                            ? 'bg-indigo-600 text-white rounded-2xl rounded-tr-sm' 
+                            : 'bg-slate-800 text-slate-200 border border-slate-700 rounded-2xl rounded-tl-sm'
+                        }`}>
+                            {msg.text}
+                            {/* Typing cursor effect for assistant if it's the last message and streaming? */}
+                            {/* We can add a simple blinking cursor logic if needed, but simple text update is usually fine */}
+                        </div>
                      </div>
                  </div>
              ))}
@@ -344,37 +383,43 @@ const VoiceAgent: React.FC = () => {
              {/* Loading / Connecting State */}
              {isConnecting && (
                  <div className="flex justify-start">
-                     <div className="bg-slate-800/50 rounded-2xl px-4 py-3 border border-slate-700/50 flex items-center gap-2">
-                        <Loader2 className="w-4 h-4 animate-spin text-blue-400" />
-                        <span className="text-xs text-slate-400">Connecting...</span>
+                     <div className="bg-slate-800/50 rounded-2xl px-4 py-3 border border-slate-700/50 flex items-center gap-3">
+                        <Loader2 className="w-4 h-4 animate-spin text-indigo-400" />
+                        <span className="text-xs text-slate-400 font-medium">Connecting to secure line...</span>
                      </div>
                  </div>
              )}
              
-             <div ref={messagesEndRef} />
+             <div ref={messagesEndRef} className="h-4" />
           </div>
 
-          {/* Footer Control */}
-          <div className="p-4 bg-slate-900/80 backdrop-blur-md border-t border-white/5">
-             <div className="flex items-center gap-3">
+          {/* Footer Controls */}
+          <div className="p-4 bg-slate-900/80 backdrop-blur-md border-t border-white/5 shrink-0">
+             <div className="flex flex-col gap-3">
+                 {error && (
+                     <div className="bg-red-500/10 border border-red-500/20 text-red-400 px-3 py-2 rounded-lg text-xs text-center">
+                        {error}
+                     </div>
+                 )}
+                 
                  <button
                     onClick={isConnected ? stopSession : startSession}
-                    className={`flex-1 py-3 rounded-xl font-bold transition-all flex items-center justify-center gap-2 ${
+                    className={`w-full py-4 rounded-xl font-bold transition-all flex items-center justify-center gap-2 shadow-lg ${
                         isConnected 
                         ? 'bg-red-500/10 text-red-400 border border-red-500/20 hover:bg-red-500/20' 
-                        : 'bg-gradient-to-r from-blue-600 to-indigo-600 text-white hover:shadow-lg hover:shadow-blue-500/20 active:scale-95'
+                        : 'bg-gradient-to-r from-indigo-600 to-violet-600 text-white hover:shadow-indigo-500/25 active:scale-95'
                     }`}
                  >
                     {isConnected ? (
                         <>
                             <div className="relative flex items-center justify-center w-6 h-6">
                                 <span className="absolute inline-flex h-full w-full rounded-full bg-red-400 opacity-20 animate-ping"></span>
-                                <MicOff className="w-4 h-4 relative z-10" />
+                                <MicOff className="w-5 h-5 relative z-10" />
                             </div>
-                            <span className="mr-1">End Chat</span>
-                            {/* Simple Visualizer */}
-                            <div className="flex items-end gap-[2px] h-4 ml-2">
-                                {[1,2,3,4].map(i => (
+                            <span className="mr-1">End Voice Chat</span>
+                            {/* Audio Visualizer */}
+                            <div className="flex items-center gap-[3px] h-4 ml-2">
+                                {[1,2,3,4,5].map(i => (
                                     <div 
                                         key={i} 
                                         className="w-1 bg-current rounded-full transition-all duration-75"
@@ -386,14 +431,11 @@ const VoiceAgent: React.FC = () => {
                     ) : (
                         <>
                             <Mic className="w-5 h-5" />
-                            <span>Start Voice Chat</span>
+                            <span>Start Conversation</span>
                         </>
                     )}
                  </button>
              </div>
-             {error && (
-                 <p className="text-red-400 text-xs text-center mt-2">{error}</p>
-             )}
           </div>
         </div>
       )}
