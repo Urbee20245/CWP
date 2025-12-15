@@ -1,5 +1,6 @@
 import React, { useState, useRef, useEffect } from 'react';
 import { ArrowLeftRight, Phone, Star, CheckCircle2, AlertCircle, Smartphone, ShieldCheck, Layout, TrendingUp, Globe, ArrowRight } from 'lucide-react';
+import { Link } from 'react-router-dom';
 
 const JetViz: React.FC = () => {
   const [sliderPosition, setSliderPosition] = useState(50);
@@ -109,31 +110,31 @@ const JetViz: React.FC = () => {
           <div className="absolute inset-0 bg-[#eae8e4] flex flex-col" style={{ fontFamily: '"Times New Roman", Times, serif' }}>
              {/* Header */}
              <div className="bg-[#8b0000] text-white p-4 text-center">
-                <h3 className="text-xl font-bold tracking-wide">A-1 PLUMBING SERVICE</h3>
-                <p className="text-xs mt-1">Serving the area since 1998</p>
+                <h3 className="text-xl font-bold tracking-wide">GWINNETT PLUMBING INC.</h3>
+                <p className="text-xs mt-1">Family Owned & Operated Since 1998</p>
              </div>
              {/* Navigation */}
              <div className="bg-[#333] text-white text-xs flex justify-center gap-4 py-2">
-                <span className="underline">Home</span> | <span className="underline">About</span> | <span className="underline">Services</span> | <span className="underline">Contact</span>
+                <span className="underline">Home</span> | <span className="underline">About Us</span> | <span className="underline">Services</span> | <span className="underline">Contact</span>
              </div>
              {/* Hero */}
              <div className="bg-slate-300 h-64 flex items-center justify-center relative border-b-4 border-[#8b0000]">
-                 <div className="absolute inset-0 opacity-10 bg-[url('https://images.unsplash.com/photo-1504328345606-18bbc8c9d7d1?auto=format&fit=crop&q=80')] bg-cover bg-center grayscale"></div>
+                 <div className="absolute inset-0 opacity-10 bg-[url('https://images.unsplash.com/photo-1585747644393-25319727187b?auto=format&fit=crop&q=80')] bg-cover bg-center grayscale"></div>
                  <div className="bg-white/90 p-6 border-2 border-black text-center shadow-lg max-w-xs relative z-10">
-                     <h4 className="text-black font-bold text-lg mb-2 text-red-900">Welcome to our Website</h4>
-                     <p className="text-xs text-black mb-4 leading-tight">We are the best plumbers. Call us for leaks, drains, and more.</p>
-                     <button className="bg-[#ccc] border border-black px-2 py-1 text-xs text-black shadow-[2px_2px_0px_black] active:translate-y-[2px] active:shadow-none">Click Here</button>
+                     <h4 className="text-black font-bold text-lg mb-2 text-red-900">Reliable Plumbing Services</h4>
+                     <p className="text-xs text-black mb-4 leading-tight">We handle all your plumbing needs. No job is too big or too small. Call us for a quote.</p>
+                     <button className="bg-[#ccc] border border-black px-2 py-1 text-xs text-black shadow-[2px_2px_0px_black] active:translate-y-[2px] active:shadow-none">More Info</button>
                  </div>
              </div>
              {/* Content Wall */}
              <div className="p-8 text-black bg-[#f4f4f4] flex-1 border-t border-white">
-                 <h5 className="font-bold underline mb-2">Why Choose Us?</h5>
+                 <h5 className="font-bold underline mb-2">Our Services</h5>
                  <p className="text-xs leading-5 max-w-md">
-                    Lorem ipsum dolor sit amet, consectetur adipiscing elit. Sed do eiusmod tempor incididunt ut labore et dolore magna aliqua. Ut enim ad minim veniam.
+                    We specialize in water heaters, drain cleaning, and pipe repair for all of Gwinnett County. Our team is fully licensed and insured for your peace of mind. Call us today to schedule an appointment with our office.
                  </p>
                  <br/>
                  <p className="text-xs text-red-600 font-bold">
-                    * * * CALL 555-0123 * * *
+                    Office Hours: Mon-Fri 9am-5pm
                  </p>
              </div>
              
@@ -155,12 +156,12 @@ const JetViz: React.FC = () => {
              {/* Modern Header */}
              <div className="bg-white px-6 py-4 flex justify-between items-center shadow-sm z-20 relative">
                 <div className="flex items-center gap-2">
-                    <div className="w-8 h-8 bg-indigo-600 rounded-lg flex items-center justify-center text-white font-bold shadow-indigo-200 shadow-md">A1</div>
-                    <span className="font-bold text-slate-900 tracking-tight">A1 Plumbing</span>
+                    <div className="w-8 h-8 bg-indigo-600 rounded-lg flex items-center justify-center text-white font-bold shadow-indigo-200 shadow-md">GP</div>
+                    <span className="font-bold text-slate-900 tracking-tight">Gwinnett Plumbing</span>
                 </div>
                 <div className="hidden md:flex gap-6 text-sm font-medium text-slate-600">
                     <span className="text-indigo-600 cursor-pointer">Home</span>
-                    <span className="hover:text-indigo-600 cursor-pointer transition-colors">Services</span>
+                    <span className="hover:text-indigo-600 cursor-pointer transition-colors">Emergency Service</span>
                     <span className="hover:text-indigo-600 cursor-pointer transition-colors">Reviews</span>
                 </div>
                 <button className="bg-indigo-600 text-white px-4 py-2 rounded-full text-sm font-bold shadow-lg shadow-indigo-200 flex items-center gap-2 hover:bg-indigo-500 transition-colors">
@@ -178,21 +179,21 @@ const JetViz: React.FC = () => {
                  <div className="relative z-10 px-8 md:px-12 w-full max-w-2xl">
                      <div className="flex gap-1 mb-4">
                         {[1,2,3,4,5].map(i => <Star key={i} className="w-4 h-4 text-yellow-400 fill-yellow-400" />)}
-                        <span className="text-white text-xs ml-2 font-medium bg-white/10 px-2 py-0.5 rounded backdrop-blur-sm">500+ 5-Star Reviews</span>
+                        <span className="text-white text-xs ml-2 font-medium bg-white/10 px-2 py-0.5 rounded backdrop-blur-sm">500+ 5-Star Reviews on Google</span>
                      </div>
                      <h1 className="text-3xl md:text-5xl font-bold text-white mb-4 leading-tight tracking-tight">
-                         Emergency Plumbing,<br/>
-                         <span className="text-indigo-400">Solved in 60 Mins.</span>
+                         24/7 Emergency Plumbing<br/>
+                         <span className="text-indigo-400">in Gwinnett County.</span>
                      </h1>
                      <p className="text-slate-300 text-sm md:text-base mb-8 max-w-md leading-relaxed font-medium">
-                         Licensed, bonded, and serving Gwinnett County 24/7. Upfront pricing and 0% financing available.
+                         Technicians at your door in 60 minutes. Upfront pricing, no hidden fees, and 100% satisfaction guaranteed.
                      </p>
                      <div className="flex gap-3">
                          <button className="bg-emerald-500 text-white px-6 py-3 rounded-xl font-bold text-sm shadow-lg shadow-emerald-900/20 hover:bg-emerald-400 transition-colors hover:translate-y-[-1px]">
-                             Book Online Now
+                             Get Help Now
                          </button>
                          <button className="bg-white/10 backdrop-blur text-white border border-white/20 px-6 py-3 rounded-xl font-bold text-sm hover:bg-white/20 transition-colors">
-                             View Service Area
+                             See Pricing
                          </button>
                      </div>
                  </div>
@@ -203,8 +204,8 @@ const JetViz: React.FC = () => {
                          <CheckCircle2 className="w-6 h-6 text-green-600" />
                      </div>
                      <div>
-                         <div className="text-xs text-slate-500 font-bold uppercase tracking-wide">Response Time</div>
-                         <div className="text-sm font-bold text-slate-900">Under 1 Hour Avg</div>
+                         <div className="text-xs text-slate-500 font-bold uppercase tracking-wide">Next Available Tech</div>
+                         <div className="text-sm font-bold text-slate-900">14 Minutes Away</div>
                      </div>
                  </div>
              </div>
@@ -264,10 +265,10 @@ const JetViz: React.FC = () => {
                                 className="block w-full pl-11 pr-4 py-4 bg-slate-900 border border-slate-600 rounded-xl text-white placeholder-slate-500 focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500 transition-all outline-none shadow-inner"
                             />
                         </div>
-                        <button type="submit" className="whitespace-nowrap bg-indigo-600 text-white px-8 py-4 rounded-xl font-bold hover:bg-indigo-500 transition-all shadow-lg shadow-indigo-900/40 flex items-center justify-center gap-2 group active:scale-95">
+                        <Link to="/jetviz" className="whitespace-nowrap bg-indigo-600 text-white px-8 py-4 rounded-xl font-bold hover:bg-indigo-500 transition-all shadow-lg shadow-indigo-900/40 flex items-center justify-center gap-2 group active:scale-95">
                             Run Free Visual Check
                             <ArrowRight className="w-4 h-4 group-hover:translate-x-1 transition-transform" />
-                        </button>
+                        </Link>
                     </form>
 
                     <div className="flex flex-wrap items-center justify-center gap-x-6 gap-y-2 mt-8 text-xs font-semibold text-slate-500 uppercase tracking-widest">

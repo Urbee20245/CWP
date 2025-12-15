@@ -1,5 +1,6 @@
 import React from 'react';
 import { Activity, Smartphone, MapPin, Gauge, FileSearch, ArrowRight, ShieldCheck } from 'lucide-react';
+import { Link } from 'react-router-dom';
 
 const JetOptimizer: React.FC = () => {
   const checks = [
@@ -67,10 +68,10 @@ const JetOptimizer: React.FC = () => {
               ))}
             </div>
 
-            <button className="bg-slate-900 text-white px-8 py-4 rounded-xl font-bold hover:bg-slate-800 transition-all shadow-lg hover:shadow-xl active:scale-95 flex items-center gap-2 group">
+            <Link to="/jet-local-optimizer" className="inline-flex bg-slate-900 text-white px-8 py-4 rounded-xl font-bold hover:bg-slate-800 transition-all shadow-lg hover:shadow-xl active:scale-95 items-center gap-2 group">
               Get Your Free Health Report
               <ArrowRight className="w-4 h-4 group-hover:translate-x-1 transition-transform" />
-            </button>
+            </Link>
             <p className="text-xs text-slate-400 mt-4 ml-1">
               *Takes less than 2 minutes. No credit card required.
             </p>
