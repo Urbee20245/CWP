@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import type { AnalysisRequest } from '../types';
 
 interface AnalyzerFormProps {
@@ -11,6 +11,13 @@ export function AnalyzerForm({ onAnalyze, isLoading, initialUrl = '' }: Analyzer
   const [websiteUrl, setWebsiteUrl] = useState(initialUrl);
   const [businessName, setBusinessName] = useState('');
   const [industry, setIndustry] = useState('');
+
+  // Update URL when initialUrl prop changes
+  useEffect(() => {
+    if (initialUrl) {
+      setWebsiteUrl(initialUrl);
+    }
+  }, [initialUrl]);
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
@@ -38,7 +45,7 @@ export function AnalyzerForm({ onAnalyze, isLoading, initialUrl = '' }: Analyzer
       
       <div className="space-y-4">
         <div>
-          <label htmlFor="websiteUrl" className="block text-sm font-medium mb-2">
+          <label htmlFor="websiteUrl" className="block text-sm font-medium mb-2 text-gray-700">
             Website URL *
           </label>
           <input
@@ -47,14 +54,15 @@ export function AnalyzerForm({ onAnalyze, isLoading, initialUrl = '' }: Analyzer
             placeholder="https://example.com"
             value={websiteUrl}
             onChange={(e) => setWebsiteUrl(e.target.value)}
-            className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-transparent"
+            className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-transparent bg-white text-gray-900"
             required
             disabled={isLoading}
+            autoComplete="url"
           />
         </div>
 
         <div>
-          <label htmlFor="businessName" className="block text-sm font-medium mb-2">
+          <label htmlFor="businessName" className="block text-sm font-medium mb-2 text-gray-700">
             Business Name (Optional)
           </label>
           <input
@@ -63,24 +71,40 @@ export function AnalyzerForm({ onAnalyze, isLoading, initialUrl = '' }: Analyzer
             placeholder="Your Business Name"
             value={businessName}
             onChange={(e) => setBusinessName(e.target.value)}
-            className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-transparent"
+            className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-transparent bg-white text-gray-900"
             disabled={isLoading}
+            autoComplete="organization"
           />
         </div>
 
         <div>
-          <label htmlFor="industry" className="block text-sm font-medium mb-2">
+          <label htmlFor="industry" className="block text-sm font-medium mb-2 text-gray-700">
             Industry (Optional)
           </label>
-          <input
+          <select
             id="industry"
-            type="text"
-            placeholder="e.g., Restaurant, Retail, Professional Services"
             value={industry}
             onChange={(e) => setIndustry(e.target.value)}
-            className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-transparent"
+            className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-transparent bg-white text-gray-900"
             disabled={isLoading}
-          />
+          >
+            <option value="">Select an industry...</option>
+            <option value="Restaurant">Restaurant / Food Service</option>
+            <option value="Retail">Retail / E-commerce</option>
+            <option value="Healthcare">Healthcare / Medical</option>
+            <option value="Real Estate">Real Estate</option>
+            <option value="Legal">Legal / Law Firm</option>
+            <option value="Construction">Construction / Contractors</option>
+            <option value="Automotive">Automotive</option>
+            <option value="Beauty">Beauty / Salon</option>
+            <option value="Fitness">Fitness / Gym</option>
+            <option value="Professional Services">Professional Services</option>
+            <option value="Technology">Technology / Software</option>
+            <option value="Education">Education / Training</option>
+            <option value="Hospitality">Hospitality / Hotels</option>
+            <option value="Home Services">Home Services / Plumbing</option>
+            <option value="Other">Other</option>
+          </select>
         </div>
 
         <button
@@ -97,7 +121,7 @@ export function AnalyzerForm({ onAnalyze, isLoading, initialUrl = '' }: Analyzer
               Analyzing Design...
             </span>
           ) : (
-            'Analyze Website Design'
+            'Analyze Mobile Design'
           )}
         </button>
         

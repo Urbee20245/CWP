@@ -57,11 +57,24 @@ const JetVizPage: React.FC = () => {
 
   const handleAnalyze = (e: React.FormEvent) => {
     e.preventDefault();
-    if (!url) return;
+    if (!url.trim()) {
+      alert('Please enter a website URL');
+      return;
+    }
     setShowAnalyzer(true);
     // Scroll to analyzer after state updates
     setTimeout(() => {
-      document.getElementById('analyzer-tool')?.scrollIntoView({ behavior: 'smooth' });
+      const analyzerElement = document.getElementById('analyzer-tool');
+      if (analyzerElement) {
+        analyzerElement.scrollIntoView({ behavior: 'smooth', block: 'start' });
+        // Focus on the first input field after scrolling
+        setTimeout(() => {
+          const firstInput = analyzerElement.querySelector('input') as HTMLInputElement;
+          if (firstInput && firstInput.id !== 'websiteUrl') {
+            firstInput.focus();
+          }
+        }, 800);
+      }
     }, 100);
   };
 

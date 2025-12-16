@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import type { AnalysisRequest } from '../types';
 
 interface AnalyzerFormProps {
@@ -11,6 +11,13 @@ export function AnalyzerForm({ onAnalyze, isLoading, initialUrl = '' }: Analyzer
   const [websiteUrl, setWebsiteUrl] = useState(initialUrl);
   const [businessName, setBusinessName] = useState('');
   const [industry, setIndustry] = useState('');
+
+  // Update URL when initialUrl prop changes
+  useEffect(() => {
+    if (initialUrl) {
+      setWebsiteUrl(initialUrl);
+    }
+  }, [initialUrl]);
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();

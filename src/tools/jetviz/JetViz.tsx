@@ -59,15 +59,19 @@ export function JetViz({ initialUrl = '', autoAnalyze = false }: JetVizProps) {
     <div className="min-h-screen bg-gradient-to-br from-purple-50 via-pink-50 to-blue-50 py-12 px-4">
       <div className="max-w-7xl mx-auto">
         {/* Header */}
-        <div className="text-center mb-12">
-          <h1 className="text-4xl md:text-5xl font-bold mb-4 bg-gradient-to-r from-purple-600 to-pink-600 bg-clip-text text-transparent">
-            JetViz - Visual Website Analyzer
-          </h1>
-          <p className="text-lg text-gray-600 max-w-2xl mx-auto">
-            Discover how your website's design compares to modern standards. 
-            Get instant visual analysis and see what's holding your site back.
-          </p>
-        </div>
+        {!result && (
+          <div className="text-center mb-12">
+            <h1 className="text-4xl md:text-5xl font-bold mb-4 bg-gradient-to-r from-purple-600 to-pink-600 bg-clip-text text-transparent">
+              JetViz - Visual Website Analyzer
+            </h1>
+            <p className="text-lg text-gray-600 max-w-2xl mx-auto">
+              {initialUrl ? 
+                'Add your business details and analyze your website design' : 
+                'Discover how your website\'s design compares to modern standards'
+              }
+            </p>
+          </div>
+        )}
 
         {/* Analyzer Form */}
         {!result && (
