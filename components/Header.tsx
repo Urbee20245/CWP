@@ -1,8 +1,10 @@
 import React, { useState, useEffect } from 'react';
-import { Menu, X, ChevronDown, Gauge, Eye, Phone, ArrowRight } from 'lucide-react';
+import { Menu, X, ChevronDown, Gauge, Eye, Phone, ArrowRight, Sparkles } from 'lucide-react';
 import { NavigationLink } from '../types';
+import { Link, useNavigate } from 'react-router-dom';
 
 const Header: React.FC = () => {
+  const navigate = useNavigate();
   const [isScrolled, setIsScrolled] = useState(false);
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
   const [isToolsOpen, setIsToolsOpen] = useState(false);
@@ -52,6 +54,14 @@ const Header: React.FC = () => {
 
         {/* Desktop Navigation */}
         <nav className="hidden md:flex items-center gap-1">
+          <button
+            onClick={() => navigate('/jetsuite')}
+            className="px-5 py-2.5 text-sm font-medium text-slate-600 hover:text-slate-900 hover:bg-white/50 rounded-full transition-all flex items-center gap-1.5"
+          >
+            <Sparkles className="w-3.5 h-3.5" />
+            JetSuite
+          </button>
+
           <button
             onClick={() => scrollToSection(NavigationLink.Services)}
             className="px-5 py-2.5 text-sm font-medium text-slate-600 hover:text-slate-900 hover:bg-white/50 rounded-full transition-all"
@@ -163,6 +173,13 @@ const Header: React.FC = () => {
         <div className="absolute top-24 left-4 right-4 z-40 md:hidden">
             <div className="bg-white/95 backdrop-blur-2xl rounded-3xl p-2 shadow-2xl border border-white/20 animate-fade-in-up ring-1 ring-black/5">
                 <div className="p-4 space-y-1">
+                    <button
+                      onClick={() => { navigate('/jetsuite'); setIsMobileMenuOpen(false); }}
+                      className="w-full text-left px-4 py-3 rounded-xl hover:bg-slate-50 text-slate-700 font-semibold flex items-center gap-2"
+                    >
+                      <Sparkles className="w-4 h-4 text-indigo-600" />
+                      JetSuite
+                    </button>
                     <button
                       onClick={() => scrollToSection(NavigationLink.Services)}
                       className="w-full text-left px-4 py-3 rounded-xl hover:bg-slate-50 text-slate-700 font-semibold"
