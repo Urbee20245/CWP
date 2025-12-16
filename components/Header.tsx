@@ -51,19 +51,19 @@ const Header: React.FC = () => {
         {/* Desktop Navigation */}
         <nav className="hidden md:flex items-center gap-1">
           <Link
+            to="/services"
+            className="px-5 py-2.5 text-sm font-medium text-slate-600 hover:text-slate-900 hover:bg-white/50 rounded-full transition-all"
+          >
+            Services
+          </Link>
+
+          <Link
             to="/jetsuite"
             className="px-5 py-2.5 text-sm font-medium text-slate-600 hover:text-slate-900 hover:bg-white/50 rounded-full transition-all flex items-center gap-1.5"
           >
             <Sparkles className="w-3.5 h-3.5" />
             JetSuite
           </Link>
-
-          <button
-            onClick={() => scrollToSection(NavigationLink.Services)}
-            className="px-5 py-2.5 text-sm font-medium text-slate-600 hover:text-slate-900 hover:bg-white/50 rounded-full transition-all"
-          >
-            Services
-          </button>
 
           {/* Tools Dropdown Container */}
           <div 
@@ -170,6 +170,13 @@ const Header: React.FC = () => {
             <div className="bg-white/95 backdrop-blur-2xl rounded-3xl p-2 shadow-2xl border border-white/20 animate-fade-in-up ring-1 ring-black/5">
                 <div className="p-4 space-y-1">
                     <Link
+                      to="/services"
+                      onClick={() => setIsMobileMenuOpen(false)}
+                      className="w-full text-left px-4 py-3 rounded-xl hover:bg-slate-50 text-slate-700 font-semibold"
+                    >
+                      Services
+                    </Link>
+                    <Link
                       to="/jetsuite"
                       onClick={() => setIsMobileMenuOpen(false)}
                       className="w-full text-left px-4 py-3 rounded-xl hover:bg-slate-50 text-slate-700 font-semibold flex items-center gap-2"
@@ -177,12 +184,6 @@ const Header: React.FC = () => {
                       <Sparkles className="w-4 h-4 text-indigo-600" />
                       JetSuite
                     </Link>
-                    <button
-                      onClick={() => scrollToSection(NavigationLink.Services)}
-                      className="w-full text-left px-4 py-3 rounded-xl hover:bg-slate-50 text-slate-700 font-semibold"
-                    >
-                      Services
-                    </button>
                     <button
                       onClick={() => scrollToSection(NavigationLink.Process)}
                       className="w-full text-left px-4 py-3 rounded-xl hover:bg-slate-50 text-slate-700 font-semibold"
