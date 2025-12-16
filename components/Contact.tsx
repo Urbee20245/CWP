@@ -25,12 +25,12 @@ const Contact: React.FC = () => {
             <div className="lg:col-span-5 space-y-6">
                 
                 {/* Primary Call Card - High Visibility */}
-                <a href="tel:4045520926" className="group block p-8 rounded-2xl bg-slate-900 text-white shadow-xl hover:shadow-2xl hover:scale-[1.02] transition-all duration-300 relative overflow-hidden">
+                <a href="tel:4045329266" className="group block p-8 rounded-2xl bg-slate-900 text-white shadow-xl hover:shadow-2xl hover:scale-[1.02] transition-all duration-300 relative overflow-hidden">
                     <div className="absolute top-0 right-0 w-32 h-32 bg-white/5 rounded-full blur-2xl -translate-y-1/2 translate-x-1/2 group-hover:bg-indigo-500/20 transition-colors"></div>
                     <div className="relative z-10 flex items-start justify-between">
                         <div>
                             <div className="text-slate-400 text-xs font-bold uppercase tracking-widest mb-2">Priority Line</div>
-                            <h3 className="text-3xl font-bold mb-1">(404) 552-0926</h3>
+                            <h3 className="text-3xl font-bold mb-1">(404) 532-9266</h3>
                             <p className="text-slate-400 text-sm">Speak directly with a strategist.</p>
                         </div>
                         <div className="w-12 h-12 rounded-full bg-white/10 flex items-center justify-center group-hover:bg-indigo-600 transition-colors">
