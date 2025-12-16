@@ -21,8 +21,8 @@ const JetLocalOptimizerPage: React.FC = () => {
   return (
     <div className="min-h-screen bg-slate-50 font-sans text-slate-900 selection:bg-emerald-100 selection:text-emerald-900">
       
-      {/* Hero Section with Integrated System Status */}
-      <header className="relative bg-slate-900 pt-12 pb-20 overflow-hidden border-b border-slate-800">
+      {/* Hero Section with Integrated System Status - Positioned below fixed main header */}
+      <header className="relative bg-slate-900 pt-28 md:pt-32 pb-20 overflow-hidden border-b border-slate-800">
         <div className="absolute inset-0 bg-[linear-gradient(rgba(255,255,255,0.02)_1px,transparent_1px),linear-gradient(90deg,rgba(255,255,255,0.02)_1px,transparent_1px)] bg-[size:24px_24px]"></div>
         
         <div className="max-w-7xl mx-auto px-6 relative z-10">
