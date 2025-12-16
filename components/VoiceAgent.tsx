@@ -183,22 +183,42 @@ const VoiceAgent: React.FC = () => {
     }
 
     try {
-      // Check microphone permission first
+      console.log('🚀 Starting Luna AI session...');
       console.log('🎤 Checking microphone permission...');
       
-      const apiKey = process.env.API_KEY;
+      // Try multiple ways to access the API key (maximum compatibility)
+      const importMetaEnv = (import.meta as any).env;
+      const apiKey = importMetaEnv?.VITE_GEMINI_API_KEY || 
+                     importMetaEnv?.GEMINI_API_KEY ||
+                     process.env.API_KEY || 
+                     process.env.GEMINI_API_KEY;
       
-      // Debug logging
-      console.log('🔑 API Key check:', apiKey ? 'Present ✅' : 'Missing ❌');
-      console.log('🔍 Environment variables available:', Object.keys(process.env || {}).filter(key => key.includes('API') || key.includes('GEMINI')));
+      // COMPREHENSIVE DEBUG LOGGING
+      console.log('=== ENVIRONMENT DEBUG INFO ===');
+      console.log('🔑 API Key Status:', apiKey ? `✅ FOUND (${apiKey.length} chars, starts with: ${apiKey.substring(0, 7)}...)` : '❌ NOT FOUND');
+      console.log('📦 import.meta.env keys:', Object.keys(importMetaEnv || {}));
+      console.log('📦 process.env keys:', Object.keys(process.env || {}));
+      console.log('🔍 VITE_GEMINI_API_KEY in import.meta.env:', importMetaEnv?.VITE_GEMINI_API_KEY ? '✅ YES' : '❌ NO');
+      console.log('🔍 GEMINI_API_KEY in import.meta.env:', importMetaEnv?.GEMINI_API_KEY ? '✅ YES' : '❌ NO');
+      console.log('🔍 API_KEY in process.env:', process.env.API_KEY ? '✅ YES' : '❌ NO');
+      console.log('==============================');
       
       if (!apiKey) {
-        const errorMsg = "Luna AI is not configured yet. The API key is missing. Please contact support.";
-        console.error('❌', errorMsg);
+        const errorMsg = "Luna AI is not configured. Please see console for details.";
+        console.error('❌ API KEY NOT FOUND!');
+        console.error('💡 SOLUTION: In Vercel Dashboard →');
+        console.error('   1. Go to Settings → Environment Variables');
+        console.error('   2. Add: VITE_GEMINI_API_KEY');
+        console.error('   3. Value: Your Gemini API key (from aistudio.google.com)');
+        console.error('   4. Enable for Production');
+        console.error('   5. Click Save');
+        console.error('   6. Redeploy the site');
+        console.error('   7. Wait 2-3 minutes');
+        console.error('   8. Hard refresh browser (Ctrl+Shift+R)');
         throw new Error(errorMsg);
       }
 
-      console.log('✅ API Key present, initializing AI...');
+      console.log('✅ API Key present, initializing Google AI...');
       const ai = new GoogleGenAI({ apiKey });
       
       console.log('🎧 Creating audio contexts...');
@@ -504,18 +524,25 @@ Already have site: "Try our free analysis tools at /jetsuite to see how your cur
              <div className="flex flex-col gap-3">
                  {error && (
                      <div className="bg-red-500/10 border border-red-500/20 text-red-400 px-4 py-3 rounded-xl text-sm">
-                        <div className="font-bold mb-1 flex items-center gap-2">
-                          <span className="text-red-500">⚠️</span> Connection Error
+                        <div className="font-bold mb-2 flex items-center gap-2">
+                          <span className="text-red-500">⚠️</span> Unable to Connect
                         </div>
-                        <div className="text-xs leading-relaxed">{error}</div>
-                        {error.includes('contact support') && (
+                        <div className="text-xs leading-relaxed mb-3">{error}</div>
+                        <div className="text-xs text-slate-400 mb-2">Alternative contact methods:</div>
+                        <div className="flex flex-col gap-2">
                           <a 
                             href="tel:4045329266" 
-                            className="mt-2 text-xs text-blue-400 hover:text-blue-300 underline block"
+                            className="text-xs text-blue-400 hover:text-blue-300 underline"
                           >
-                            Call us: (404) 532-9266
+                            📞 Call: (404) 532-9266
                           </a>
-                        )}
+                          <a 
+                            href="mailto:hello@customwebsitesplus.com" 
+                            className="text-xs text-blue-400 hover:text-blue-300 underline"
+                          >
+                            ✉️ Email: hello@customwebsitesplus.com
+                          </a>
+                        </div>
                      </div>
                  )}
                  
