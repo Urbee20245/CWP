@@ -11,23 +11,82 @@ import {
   BarChart3, 
   Cpu, 
   Terminal,
-  Lock
+  Lock,
+  ArrowLeft
 } from 'lucide-react';
 import { Link } from 'react-router-dom';
+import { AnalyzerService } from '../src/tools/jet-local-optimizer/services/analyzer';
+import { ResultsDashboard } from '../src/tools/jet-local-optimizer/components/ResultsDashboard';
+import { CTASection } from '../src/tools/jet-local-optimizer/components/CTASection';
+import { brands } from '../src/tools/jet-local-optimizer/config/brands';
+import type { AnalysisResult } from '../src/tools/jet-local-optimizer/types';
 
 const JetLocalOptimizerPage: React.FC = () => {
   const [url, setUrl] = useState('');
   const [isScanning, setIsScanning] = useState(false);
+  const [result, setResult] = useState<AnalysisResult | null>(null);
 
-  const handleScan = (e: React.FormEvent) => {
+  // Default brand config
+  const brandConfig = brands.cwp;
+
+  const handleScan = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!url) return;
     setIsScanning(true);
-    setTimeout(() => {
+    setResult(null);
+    
+    try {
+        const data = await AnalyzerService.analyzeWebsite({
+            websiteUrl: url,
+            businessName: undefined,
+            industry: undefined
+        });
+        setResult(data);
+    } catch (err) {
+        console.error("Scan failed", err);
+        alert("Scan initialization failed. Please try again.");
+    } finally {
         setIsScanning(false);
-        alert("System Demo: In a live environment, this connects to the Lighthouse API.");
-    }, 2000);
+    }
   };
+
+  const resetScan = () => {
+    setResult(null);
+    setUrl('');
+  };
+
+  if (result) {
+      return (
+          <div className="min-h-screen bg-slate-50 font-sans pt-20 pb-20">
+              <div className="max-w-7xl mx-auto px-6 mb-8">
+                  <button 
+                    onClick={resetScan}
+                    className="flex items-center gap-2 text-slate-500 hover:text-indigo-600 transition-colors font-bold uppercase text-xs tracking-widest mb-8"
+                  >
+                      <ArrowLeft className="w-4 h-4" />
+                      Back to Scanner
+                  </button>
+                  <div className="text-center mb-12 animate-fade-in-up">
+                      <div className="inline-flex items-center gap-2 px-4 py-2 bg-emerald-100 text-emerald-700 rounded-full font-bold text-sm mb-4">
+                          <Terminal className="w-4 h-4" />
+                          Analysis Complete
+                      </div>
+                      <h1 className="text-3xl md:text-5xl font-bold text-slate-900 mb-4">
+                          Audit Results for <span className="text-indigo-600">{new URL(result.websiteUrl).hostname}</span>
+                      </h1>
+                      <p className="text-slate-500 max-w-2xl mx-auto">
+                          Our diagnostic bot has finished crawling your site. Below is the detailed breakdown of technical performance and local SEO visibility.
+                      </p>
+                  </div>
+                  
+                  <div className="animate-fade-in-up">
+                      <ResultsDashboard result={result} />
+                      <CTASection brandConfig={brandConfig} result={result} />
+                  </div>
+              </div>
+          </div>
+      );
+  }
 
   return (
     <div className="min-h-screen bg-slate-50 font-sans text-slate-900 selection:bg-emerald-100 selection:text-emerald-900 pt-20">
@@ -83,9 +142,16 @@ const JetLocalOptimizerPage: React.FC = () => {
                          <button 
                             type="submit" 
                             disabled={isScanning}
-                            className="bg-emerald-600 text-white px-6 py-2 rounded font-bold text-xs uppercase tracking-wider hover:bg-emerald-500 transition-colors disabled:opacity-50 disabled:cursor-wait font-mono"
+                            className="bg-emerald-600 text-white px-6 py-2 rounded font-bold text-xs uppercase tracking-wider hover:bg-emerald-500 transition-colors disabled:opacity-50 disabled:cursor-wait font-mono flex items-center gap-2"
                         >
-                            {isScanning ? 'RUNNING_SCAN...' : 'INITIATE_SCAN'}
+                            {isScanning ? (
+                                <>
+                                    <div className="w-3 h-3 border-2 border-white/30 border-t-white rounded-full animate-spin"></div>
+                                    RUNNING...
+                                </>
+                            ) : (
+                                'INITIATE_SCAN'
+                            )}
                         </button>
                     </div>
                 </form>

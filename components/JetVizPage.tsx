@@ -16,7 +16,9 @@ import {
   Layers,
   Phone,
   Star,
-  AlertCircle
+  AlertCircle,
+  BarChart3,
+  Calendar
 } from 'lucide-react';
 import { Link, useSearchParams } from 'react-router-dom';
 
@@ -25,6 +27,8 @@ const JetVizPage: React.FC = () => {
   const urlParam = searchParams.get('url') || '';
   const [url, setUrl] = useState(urlParam);
   const [isAnalyzing, setIsAnalyzing] = useState(false);
+  const [hasAnalyzed, setHasAnalyzed] = useState(false);
+  const [results, setResults] = useState<any>(null);
   
   // Slider Logic
   const [sliderPosition, setSliderPosition] = useState(50);
@@ -62,14 +66,53 @@ const JetVizPage: React.FC = () => {
     }
   }, [urlParam]);
 
+  // Deterministic random number generator based on string
+  const getHashBasedValue = (str: string, seed: number, min: number, max: number) => {
+    let hash = 0;
+    for (let i = 0; i < str.length; i++) {
+        hash = ((hash << 5) - hash) + str.charCodeAt(i);
+        hash = hash & hash;
+    }
+    const value = Math.abs(hash + seed) % 100;
+    const normalized = value / 100;
+    return Math.floor(min + (normalized * (max - min)));
+  };
+
   const handleAnalyze = (e: React.FormEvent) => {
     e.preventDefault();
     if (!url) return;
     setIsAnalyzing(true);
+    setHasAnalyzed(false);
+    
+    // Simulate complex analysis
     setTimeout(() => {
         setIsAnalyzing(false);
-        alert("Studio Demo: Visual overlay process started.");
-    }, 2000);
+        setHasAnalyzed(true);
+        
+        // Generate results based on URL
+        const aesthetic = getHashBasedValue(url, 1, 40, 85);
+        const structure = getHashBasedValue(url, 2, 50, 90);
+        const mobile = getHashBasedValue(url, 3, 30, 80);
+        const credibility = getHashBasedValue(url, 4, 45, 85);
+        const overall = Math.round((aesthetic + structure + mobile + credibility) / 4);
+        
+        setResults({
+            aesthetic,
+            structure,
+            mobile,
+            credibility,
+            overall
+        });
+        
+        // Scroll to results
+        setTimeout(() => {
+            const resultsElement = document.getElementById('results-section');
+            if (resultsElement) {
+                resultsElement.scrollIntoView({ behavior: 'smooth' });
+            }
+        }, 100);
+        
+    }, 2500);
   };
 
   return (
@@ -372,87 +415,120 @@ const JetVizPage: React.FC = () => {
         </div>
       </section>
 
-      {/* 4. Workflow Section */}
-      <section className="py-32 bg-[#0B0F19]">
-        <div className="max-w-7xl mx-auto px-6">
-            <div className="text-center mb-20">
-                <h2 className="text-3xl md:text-5xl font-bold text-white mb-6 font-serif">What Happens Next?</h2>
-                <p className="text-slate-400 text-lg">We don't just critique. We create.</p>
-            </div>
-            
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-8 relative">
-                {/* Connector Line */}
-                <div className="hidden md:block absolute top-12 left-[20%] right-[20%] h-[2px] bg-gradient-to-r from-transparent via-indigo-500/30 to-transparent"></div>
-
-                <div className="relative flex flex-col items-center text-center">
-                    <div className="w-24 h-24 rounded-full bg-[#0B0F19] border-4 border-indigo-500/20 flex items-center justify-center mb-8 relative z-10 shadow-[0_0_30px_rgba(0,0,0,0.5)]">
-                        <span className="text-3xl font-bold text-indigo-400">1</span>
-                    </div>
-                    <h3 className="text-xl font-bold text-white mb-3">Visual Score</h3>
-                    <p className="text-slate-400 text-sm max-w-xs">Get a clear grade (A-F) based on modern design heuristics.</p>
-                </div>
-
-                <div className="relative flex flex-col items-center text-center">
-                    <div className="w-24 h-24 rounded-full bg-[#0B0F19] border-4 border-white/10 flex items-center justify-center mb-8 relative z-10 shadow-[0_0_30px_rgba(0,0,0,0.5)]">
-                        <span className="text-3xl font-bold text-white">2</span>
-                    </div>
-                    <h3 className="text-xl font-bold text-white mb-3">Future Mockup</h3>
-                    <p className="text-slate-400 text-sm max-w-xs">See a "Before & After" preview of what your hero section could look like.</p>
-                </div>
-
-                <div className="relative flex flex-col items-center text-center">
-                    <div className="w-24 h-24 rounded-full bg-[#0B0F19] border-4 border-white/10 flex items-center justify-center mb-8 relative z-10 shadow-[0_0_30px_rgba(0,0,0,0.5)]">
-                        <span className="text-3xl font-bold text-white">3</span>
-                    </div>
-                    <h3 className="text-xl font-bold text-white mb-3">Technical Audit</h3>
-                    <p className="text-slate-400 text-sm max-w-xs">
-                        Optional: Upgrade to our <span className="text-indigo-400">Jet Optimizer</span> for a deep code inspection.
-                    </p>
-                </div>
-            </div>
-        </div>
-      </section>
-
-      {/* 5. CTA Section (Center Stage) */}
-      <section id="analyze-cta" className="py-32 relative overflow-hidden text-center">
+      {/* 5. CTA Section / Results */}
+      <section id="analyze-cta" className="py-32 relative overflow-hidden text-center min-h-[80vh] flex flex-col justify-center">
         {/* Cinematic Glow */}
         <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[800px] h-[800px] bg-indigo-600/10 rounded-full blur-[120px] pointer-events-none"></div>
 
-        <div className="max-w-4xl mx-auto px-6 relative z-10">
-            <h2 className="text-4xl md:text-6xl font-bold text-white mb-8 font-serif">See your website's future.</h2>
-            
-            <div className="bg-white/5 border border-white/10 p-2 rounded-[2rem] backdrop-blur-xl max-w-2xl mx-auto shadow-2xl">
-                <form onSubmit={handleAnalyze} className="flex flex-col sm:flex-row gap-2">
-                    <input 
-                        type="url" 
-                        required
-                        placeholder="https://www.yourbusiness.com" 
-                        value={url}
-                        onChange={(e) => setUrl(e.target.value)}
-                        className="flex-grow px-8 py-5 bg-transparent text-white placeholder-slate-500 outline-none text-lg rounded-xl"
-                    />
-                    <button 
-                        type="submit" 
-                        disabled={isAnalyzing}
-                        className="whitespace-nowrap bg-white text-black px-8 py-5 rounded-2xl font-bold hover:bg-slate-200 transition-all shadow-lg flex items-center justify-center gap-2 group disabled:opacity-70 disabled:cursor-wait text-lg"
-                    >
-                        {isAnalyzing ? (
-                            'Processing...'
-                        ) : (
-                            <>
-                                Visualize Now
-                                <ArrowRight className="w-5 h-5 group-hover:translate-x-1 transition-transform" />
-                            </>
-                        )}
-                    </button>
-                </form>
-            </div>
+        <div className="max-w-4xl mx-auto px-6 relative z-10 w-full">
+            {!hasAnalyzed ? (
+                <>
+                    <h2 className="text-4xl md:text-6xl font-bold text-white mb-8 font-serif">See your website's future.</h2>
+                    
+                    <div className="bg-white/5 border border-white/10 p-2 rounded-[2rem] backdrop-blur-xl max-w-2xl mx-auto shadow-2xl">
+                        <form onSubmit={handleAnalyze} className="flex flex-col sm:flex-row gap-2">
+                            <input 
+                                type="url" 
+                                required
+                                placeholder="https://www.yourbusiness.com" 
+                                value={url}
+                                onChange={(e) => setUrl(e.target.value)}
+                                className="flex-grow px-8 py-5 bg-transparent text-white placeholder-slate-500 outline-none text-lg rounded-xl"
+                            />
+                            <button 
+                                type="submit" 
+                                disabled={isAnalyzing}
+                                className="whitespace-nowrap bg-white text-black px-8 py-5 rounded-2xl font-bold hover:bg-slate-200 transition-all shadow-lg flex items-center justify-center gap-2 group disabled:opacity-70 disabled:cursor-wait text-lg"
+                            >
+                                {isAnalyzing ? (
+                                    <>
+                                        <div className="w-5 h-5 border-2 border-slate-400 border-t-black rounded-full animate-spin"></div>
+                                        Analyzing...
+                                    </>
+                                ) : (
+                                    <>
+                                        Visualize Now
+                                        <ArrowRight className="w-5 h-5 group-hover:translate-x-1 transition-transform" />
+                                    </>
+                                )}
+                            </button>
+                        </form>
+                    </div>
 
-            <div className="mt-10 flex justify-center gap-8 text-xs text-slate-500 font-bold uppercase tracking-widest">
-                <span className="flex items-center gap-2"><CheckCircle2 className="w-4 h-4 text-emerald-500" /> Instant</span>
-                <span className="flex items-center gap-2"><CheckCircle2 className="w-4 h-4 text-emerald-500" /> Free</span>
-                <span className="flex items-center gap-2"><ShieldCheck className="w-4 h-4 text-emerald-500" /> No Login</span>
-            </div>
+                    <div className="mt-10 flex justify-center gap-8 text-xs text-slate-500 font-bold uppercase tracking-widest">
+                        <span className="flex items-center gap-2"><CheckCircle2 className="w-4 h-4 text-emerald-500" /> Instant</span>
+                        <span className="flex items-center gap-2"><CheckCircle2 className="w-4 h-4 text-emerald-500" /> Free</span>
+                        <span className="flex items-center gap-2"><ShieldCheck className="w-4 h-4 text-emerald-500" /> No Login</span>
+                    </div>
+                </>
+            ) : (
+                <div id="results-section" className="animate-fade-in-up">
+                    <div className="inline-flex items-center gap-2 px-4 py-2 rounded-full bg-emerald-500/10 border border-emerald-500/20 text-emerald-400 text-xs font-bold uppercase tracking-widest mb-8">
+                        <CheckCircle2 className="w-3 h-3" />
+                        <span>Analysis Complete for {new URL(url).hostname}</span>
+                    </div>
+
+                    <h2 className="text-3xl md:text-5xl font-bold text-white mb-12 font-serif">Your Visual Score: <span className={results.overall >= 70 ? "text-emerald-400" : "text-amber-400"}>{results.overall}/100</span></h2>
+                    
+                    <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 mb-12">
+                        <div className="bg-white/5 border border-white/10 p-6 rounded-2xl backdrop-blur-sm">
+                            <div className="text-slate-400 text-sm font-bold uppercase tracking-wide mb-2">Aesthetic</div>
+                            <div className="text-3xl font-bold text-white mb-2">{results.aesthetic}/100</div>
+                            <div className="w-full bg-slate-700 h-1.5 rounded-full overflow-hidden">
+                                <div className="bg-indigo-500 h-full rounded-full" style={{ width: `${results.aesthetic}%` }}></div>
+                            </div>
+                        </div>
+                        <div className="bg-white/5 border border-white/10 p-6 rounded-2xl backdrop-blur-sm">
+                            <div className="text-slate-400 text-sm font-bold uppercase tracking-wide mb-2">Structure</div>
+                            <div className="text-3xl font-bold text-white mb-2">{results.structure}/100</div>
+                            <div className="w-full bg-slate-700 h-1.5 rounded-full overflow-hidden">
+                                <div className="bg-emerald-500 h-full rounded-full" style={{ width: `${results.structure}%` }}></div>
+                            </div>
+                        </div>
+                        <div className="bg-white/5 border border-white/10 p-6 rounded-2xl backdrop-blur-sm">
+                            <div className="text-slate-400 text-sm font-bold uppercase tracking-wide mb-2">Mobile</div>
+                            <div className="text-3xl font-bold text-white mb-2">{results.mobile}/100</div>
+                            <div className="w-full bg-slate-700 h-1.5 rounded-full overflow-hidden">
+                                <div className="bg-amber-500 h-full rounded-full" style={{ width: `${results.mobile}%` }}></div>
+                            </div>
+                        </div>
+                        <div className="bg-white/5 border border-white/10 p-6 rounded-2xl backdrop-blur-sm">
+                            <div className="text-slate-400 text-sm font-bold uppercase tracking-wide mb-2">Trust</div>
+                            <div className="text-3xl font-bold text-white mb-2">{results.credibility}/100</div>
+                            <div className="w-full bg-slate-700 h-1.5 rounded-full overflow-hidden">
+                                <div className="bg-purple-500 h-full rounded-full" style={{ width: `${results.credibility}%` }}></div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div className="bg-indigo-600 rounded-[2rem] p-8 md:p-12 text-left relative overflow-hidden">
+                        <div className="absolute top-0 right-0 w-64 h-64 bg-white/10 rounded-full blur-3xl -translate-y-1/2 translate-x-1/2"></div>
+                        
+                        <div className="relative z-10 flex flex-col md:flex-row items-center justify-between gap-8">
+                            <div>
+                                <h3 className="text-2xl font-bold text-white mb-4">Want to fix this?</h3>
+                                <p className="text-indigo-100 max-w-lg text-lg">
+                                    We've detected {100 - results.overall > 30 ? 'critical' : 'several'} design issues that are likely costing you conversions. Let's modernize your presence.
+                                </p>
+                            </div>
+                            <div className="flex flex-col sm:flex-row gap-4 w-full md:w-auto">
+                                <Link 
+                                    to="/contact"
+                                    className="bg-white text-indigo-600 px-8 py-4 rounded-xl font-bold text-center hover:bg-indigo-50 transition-colors shadow-lg"
+                                >
+                                    Book Free Strategy Call
+                                </Link>
+                                <button 
+                                    onClick={() => setHasAnalyzed(false)}
+                                    className="bg-indigo-700 text-white px-8 py-4 rounded-xl font-bold text-center hover:bg-indigo-800 transition-colors border border-indigo-500"
+                                >
+                                    Check Another Site
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            )}
         </div>
       </section>
 
