@@ -184,7 +184,14 @@ const VoiceAgent: React.FC = () => {
 
     try {
       const apiKey = process.env.API_KEY;
-      if (!apiKey) throw new Error("API Key not found");
+      
+      // Debug logging
+      console.log('🔑 API Key check:', apiKey ? 'Present ✅' : 'Missing ❌');
+      console.log('🔍 Environment variables available:', Object.keys(process.env || {}).filter(key => key.includes('API') || key.includes('GEMINI')));
+      
+      if (!apiKey) {
+        throw new Error("API Key not found. Please add VITE_GEMINI_API_KEY to your environment variables in Vercel.");
+      }
 
       const ai = new GoogleGenAI({ apiKey });
       
