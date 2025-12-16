@@ -240,13 +240,13 @@ const ServicesPage: React.FC = () => {
           </p>
 
           <div className="flex flex-col sm:flex-row gap-4 justify-center items-center">
-            <a
-              href="/#contact"
+            <Link
+              to="/contact"
               className="px-8 py-4 bg-gradient-to-r from-indigo-600 to-purple-600 text-white rounded-xl font-bold text-lg hover:shadow-2xl hover:shadow-indigo-200 transition-all hover:scale-105 flex items-center gap-2"
             >
               Schedule Free Consultation
               <ArrowRight className="w-5 h-5" />
-            </a>
+            </Link>
             <Link
               to="/jetsuite"
               className="px-8 py-4 bg-white text-slate-700 border-2 border-slate-200 rounded-xl font-bold text-lg hover:border-indigo-300 hover:text-indigo-600 transition-all flex items-center gap-2"
@@ -499,12 +499,12 @@ const ServicesPage: React.FC = () => {
                   <p className="text-slate-200 font-semibold">{pkg.bestFor}</p>
                 </div>
 
-                <a
-                  href="/#contact"
+                <Link
+                  to="/contact"
                   className={`block w-full py-3 rounded-xl font-bold text-center bg-gradient-to-r ${pkg.gradient} text-white hover:shadow-xl transition-all`}
                 >
                   Discuss This Package
-                </a>
+                </Link>
               </div>
             ))}
           </div>
@@ -609,13 +609,13 @@ const ServicesPage: React.FC = () => {
           </p>
 
           <div className="flex flex-col sm:flex-row gap-4 justify-center mb-12">
-            <a
-              href="/#contact"
+            <Link
+              to="/contact"
               className="px-8 py-4 bg-white text-indigo-600 rounded-xl font-bold text-lg hover:bg-slate-100 transition-all hover:scale-105 flex items-center justify-center gap-2"
             >
               Schedule Consultation
               <ArrowRight className="w-5 h-5" />
-            </a>
+            </Link>
             <Link
               to="/jetsuite"
               className="px-8 py-4 bg-white/10 backdrop-blur text-white border-2 border-white/20 rounded-xl font-bold text-lg hover:bg-white/20 transition-all flex items-center justify-center gap-2"

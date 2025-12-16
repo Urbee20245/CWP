@@ -128,12 +128,12 @@ const Header: React.FC = () => {
             Process
           </button>
           
-          <button
-            onClick={() => scrollToSection(NavigationLink.Contact)}
+          <Link
+            to="/contact"
             className="px-5 py-2.5 text-sm font-medium text-slate-600 hover:text-slate-900 hover:bg-white/50 rounded-full transition-all"
           >
             Contact
-          </button>
+          </Link>
         </nav>
 
         {/* Right Side Actions */}
@@ -190,12 +190,13 @@ const Header: React.FC = () => {
                     >
                       Process
                     </button>
-                    <button
-                      onClick={() => scrollToSection(NavigationLink.Contact)}
+                    <Link
+                      to="/contact"
+                      onClick={() => setIsMobileMenuOpen(false)}
                       className="w-full text-left px-4 py-3 rounded-xl hover:bg-slate-50 text-slate-700 font-semibold"
                     >
                       Contact
-                    </button>
+                    </Link>
                 </div>
                 
                 {/* Mobile Tools Block */}
