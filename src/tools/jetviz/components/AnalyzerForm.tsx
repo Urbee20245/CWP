@@ -28,7 +28,12 @@ export function AnalyzerForm({ onAnalyze, isLoading }: AnalyzerFormProps) {
 
   return (
     <form onSubmit={handleSubmit} className="max-w-2xl mx-auto p-6 bg-white rounded-lg shadow-lg">
-      <h2 className="text-2xl font-bold mb-6">Analyze Your Website</h2>
+      <div className="text-center mb-6">
+        <h2 className="text-2xl font-bold mb-2">Analyze Your Website Design</h2>
+        <p className="text-gray-600 text-sm">
+          Get a visual analysis of your website's design and see how it compares to modern standards
+        </p>
+      </div>
       
       <div className="space-y-4">
         <div>
@@ -41,7 +46,7 @@ export function AnalyzerForm({ onAnalyze, isLoading }: AnalyzerFormProps) {
             placeholder="https://example.com"
             value={websiteUrl}
             onChange={(e) => setWebsiteUrl(e.target.value)}
-            className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+            className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-transparent"
             required
             disabled={isLoading}
           />
@@ -57,7 +62,7 @@ export function AnalyzerForm({ onAnalyze, isLoading }: AnalyzerFormProps) {
             placeholder="Your Business Name"
             value={businessName}
             onChange={(e) => setBusinessName(e.target.value)}
-            className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+            className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-transparent"
             disabled={isLoading}
           />
         </div>
@@ -69,10 +74,10 @@ export function AnalyzerForm({ onAnalyze, isLoading }: AnalyzerFormProps) {
           <input
             id="industry"
             type="text"
-            placeholder="e.g., Plumbing, Restaurant, Real Estate"
+            placeholder="e.g., Restaurant, Retail, Professional Services"
             value={industry}
             onChange={(e) => setIndustry(e.target.value)}
-            className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+            className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-transparent"
             disabled={isLoading}
           />
         </div>
@@ -80,10 +85,26 @@ export function AnalyzerForm({ onAnalyze, isLoading }: AnalyzerFormProps) {
         <button
           type="submit"
           disabled={isLoading}
-          className="w-full py-3 px-6 bg-blue-600 text-white font-semibold rounded-lg hover:bg-blue-700 disabled:bg-gray-400 disabled:cursor-not-allowed transition"
+          className="w-full py-3 px-6 bg-gradient-to-r from-purple-600 to-pink-600 text-white font-semibold rounded-lg hover:from-purple-700 hover:to-pink-700 disabled:from-gray-400 disabled:to-gray-400 disabled:cursor-not-allowed transition shadow-lg"
         >
-          {isLoading ? 'Analyzing...' : 'Analyze Website'}
+          {isLoading ? (
+            <span className="flex items-center justify-center">
+              <svg className="animate-spin -ml-1 mr-3 h-5 w-5 text-white" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+                <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+              </svg>
+              Analyzing Design...
+            </span>
+          ) : (
+            'Analyze Website Design'
+          )}
         </button>
+        
+        {isLoading && (
+          <p className="text-sm text-center text-gray-500 mt-2">
+            Capturing screenshots and analyzing visual design patterns...
+          </p>
+        )}
       </div>
     </form>
   );
