@@ -233,6 +233,9 @@ const VoiceAgent: React.FC = () => {
       console.log('✅ Microphone access granted');
       streamRef.current = stream;
 
+      console.log('🔌 Attempting to connect to Gemini Live API...');
+      console.log('📡 Model: gemini-2.5-flash-native-audio-preview-09-2025');
+      
       const connectPromise = ai.live.connect({
         model: 'gemini-2.5-flash-native-audio-preview-09-2025',
         config: {
@@ -292,9 +295,14 @@ Already have site: "Try our free analysis tools at /jetsuite to see how your cur
         },
         callbacks: {
           onopen: () => {
+            console.log('✅ WebSocket connection opened!');
+            console.log('🎉 Luna AI is now connected and ready!');
             setIsConnected(true);
             setIsConnecting(false);
-            if (!inputAudioContextRef.current || !streamRef.current) return;
+            if (!inputAudioContextRef.current || !streamRef.current) {
+              console.warn('⚠️ Audio context or stream missing after connection');
+              return;
+            }
             
             const source = inputAudioContextRef.current.createMediaStreamSource(streamRef.current);
             sourceRef.current = source;
@@ -318,8 +326,11 @@ Already have site: "Try our free analysis tools at /jetsuite to see how your cur
 
             source.connect(scriptProcessor);
             scriptProcessor.connect(inputAudioContextRef.current.destination);
+            console.log('🎵 Audio pipeline connected and ready');
           },
           onmessage: async (message: LiveServerMessage) => {
+            console.log('📨 Received message from Luna:', message.serverContent?.modelTurn ? 'Model response' : message.serverContent?.turnComplete ? 'Turn complete' : 'Other');
+            
             // 1. Handle Audio Output
             const base64Audio = message.serverContent?.modelTurn?.parts?.[0]?.inlineData?.data;
             if (base64Audio && outputAudioContextRef.current) {
@@ -356,31 +367,71 @@ Already have site: "Try our free analysis tools at /jetsuite to see how your cur
                markTurnComplete(); 
             }
           },
-          onclose: () => stopSession(),
+          onclose: () => {
+            console.log('🔌 Connection closed');
+            stopSession();
+          },
           onerror: (e) => {
-            console.error(e);
-            setError("Connection disrupted. Please try again.");
+            console.error('❌ WebSocket Error:', e);
+            console.error('Error details:', JSON.stringify(e, null, 2));
+            setError("Connection failed. Please check console for details or try again.");
+            setIsConnecting(false);
             stopSession();
           }
         }
       });
-      sessionRef.current = connectPromise;
-      console.log('✅ Luna AI session started successfully!');
+      // Await the connection and store the session
+      console.log('⏳ Waiting for connection to establish...');
+      console.log('🔗 Connection promise created, awaiting WebSocket handshake...');
+      
+      const session = await connectPromise.catch((err: any) => {
+        console.error('❌ Connection promise rejected:', err);
+        throw err;
+      });
+      
+      console.log('✅ Connection promise resolved!');
+      sessionRef.current = session;
+      console.log('✅ Session reference stored successfully!');
+      console.log('💬 Luna is ready to chat!');
+      
+      // Add a timeout check - if not connected in 10 seconds, show error
+      setTimeout(() => {
+        if (isConnecting && !isConnected) {
+          console.error('⏱️ Connection timeout - no response from server after 10 seconds');
+          setError("Connection timeout. The server is not responding. Please try again or contact support.");
+          setIsConnecting(false);
+          stopSession();
+        }
+      }, 10000);
+      
     } catch (err: any) {
       console.error('❌ Luna AI Error:', err);
+      console.error('Error name:', err.name);
+      console.error('Error message:', err.message);
+      console.error('Error stack:', err.stack);
       
       let userFriendlyError = "Unable to start conversation. ";
       
       if (err.name === 'NotAllowedError' || err.name === 'PermissionDeniedError') {
         userFriendlyError = "Microphone access denied. Please allow microphone access in your browser settings and try again.";
+        console.error('💡 Fix: Click lock icon 🔒 in address bar → Allow microphone');
       } else if (err.name === 'NotFoundError') {
         userFriendlyError = "No microphone found. Please connect a microphone and try again.";
-      } else if (err.message.includes('API Key')) {
+      } else if (err.message.includes('API Key') || err.message.includes('api key')) {
         userFriendlyError = "Luna AI is not configured yet. Please contact support at (404) 532-9266.";
-      } else if (err.message.includes('fetch') || err.message.includes('network')) {
-        userFriendlyError = "Network error. Please check your connection and try again.";
+        console.error('💡 Fix: Add VITE_GEMINI_API_KEY to Vercel environment variables');
+      } else if (err.message.includes('fetch') || err.message.includes('network') || err.message.includes('Failed to fetch')) {
+        userFriendlyError = "Network error. Please check your internet connection and try again.";
+        console.error('💡 Check: Internet connection, firewall, VPN');
+      } else if (err.message.includes('quota') || err.message.includes('limit')) {
+        userFriendlyError = "API quota exceeded. Please contact support.";
+        console.error('💡 Issue: API key has reached usage limits');
+      } else if (err.message.includes('invalid') || err.message.includes('unauthorized')) {
+        userFriendlyError = "Authentication failed. Invalid API key. Please contact support.";
+        console.error('💡 Issue: API key may be invalid or expired');
       } else {
-        userFriendlyError = err.message || "An error occurred. Please try again or contact support.";
+        userFriendlyError = err.message || "An unexpected error occurred. Please try again or contact support.";
+        console.error('💡 Unknown error - see details above');
       }
       
       setError(userFriendlyError);
