@@ -14,4 +14,32 @@ export const metadata = {
   robots: 'index, follow',
   language: 'en',
   viewport: 'width=device-width, initial-scale=1',
+
+  // Open Graph
+  openGraph: {
+    type: 'website',
+    locale: 'en_US',
+    url: 'https://customwebsitesplus.com/',
+    siteName: 'Custom Websites Plus',
+    title: 'Custom Websites Plus | Stop Losing Customers to Outdated Websites',
+    description:
+      "Free tools to analyze your website's performance, SEO, and design. See exactly what's holding your business back.",
+    images: [
+      {
+        url: '/og-image.jpg',
+        width: 1200,
+        height: 630,
+        alt: 'Custom Websites Plus - Website Optimization',
+      },
+    ],
+  },
+
+  // Twitter
+  twitter: {
+    card: 'summary_large_image',
+    title: 'Custom Websites Plus | Website Optimization Tools',
+    description:
+      'Free website analysis tools for local businesses. Find out if your site is costing you customers.',
+    images: ['/twitter-image.jpg'],
+  },
 };
