@@ -192,6 +192,11 @@ const VoiceAgent: React.FC = () => {
                      importMetaEnv?.GEMINI_API_KEY ||
                      process.env.API_KEY || 
                      process.env.GEMINI_API_KEY;
+
+      const modelName = importMetaEnv?.VITE_GEMINI_MODEL ||
+                        importMetaEnv?.GEMINI_MODEL ||
+                        process.env.GEMINI_MODEL ||
+                        'gemini-2.0-flash-exp';
       
       // COMPREHENSIVE DEBUG LOGGING
       console.log('=== ENVIRONMENT DEBUG INFO ===');
@@ -234,10 +239,10 @@ const VoiceAgent: React.FC = () => {
       streamRef.current = stream;
 
       console.log('🔌 Attempting to connect to Gemini Live API...');
-      console.log('📡 Model: gemini-2.5-flash-native-audio-preview-09-2025');
+      console.log(`📡 Model: ${modelName}`);
       
       const connectPromise = ai.live.connect({
-        model: 'gemini-2.5-flash-native-audio-preview-09-2025',
+        model: modelName,
         config: {
           responseModalities: [Modality.AUDIO],
           inputAudioTranscription: { model: 'google_default' }, // Enable user speech-to-text

@@ -28,6 +28,10 @@ Luna AI is configured in the code but requires a Google Gemini API key to functi
 ```
 Name:   VITE_GEMINI_API_KEY
 Value:  AIzaSy... (paste your actual key)
+
+Optional:
+Name:   VITE_GEMINI_MODEL
+Value:  gemini-2.0-flash-exp (or your preferred model)
 ```
 
 6. Select environments:
