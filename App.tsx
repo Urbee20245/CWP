@@ -1,5 +1,5 @@
 import React from 'react';
-import { HashRouter, Routes, Route } from 'react-router-dom';
+import { BrowserRouter, Routes, Route } from 'react-router-dom';
 import Header from './components/Header';
 import Hero from './components/Hero';
 import ProblemSolution from './components/ProblemSolution';
@@ -12,8 +12,11 @@ import Process from './components/Process';
 import Contact from './components/Contact';
 import Footer from './components/Footer';
 import VoiceAgent from './components/VoiceAgent';
-import JetLocalOptimizerPage from './components/JetLocalOptimizerPage';
 import JetVizPage from './components/JetVizPage';
+import ServicesPage from './src/pages/services';
+import ServicesJetVizPage from './src/pages/services/JetViz';
+import ProcessPage from './src/pages/Process';
+import { JetLocalOptimizer } from './src/JetLocalOptimizer';
 
 const Home = () => (
   <main>
@@ -32,18 +35,21 @@ const Home = () => (
 
 const App: React.FC = () => {
   return (
-    <HashRouter>
+    <BrowserRouter>
       <div className="min-h-screen bg-slate-50 font-sans selection:bg-blue-100 selection:text-blue-900">
         <Header />
         <Routes>
           <Route path="/" element={<Home />} />
           <Route path="/jetviz" element={<JetVizPage />} />
-          <Route path="/jet-local-optimizer" element={<JetLocalOptimizerPage />} />
+          <Route path="/jet-local-optimizer" element={<JetLocalOptimizer />} />
+          <Route path="/services" element={<ServicesPage />} />
+          <Route path="/services/jetviz" element={<ServicesJetVizPage />} />
+          <Route path="/process" element={<ProcessPage />} />
         </Routes>
         <Footer />
         <VoiceAgent />
       </div>
-    </HashRouter>
+    </BrowserRouter>
   );
 };
 
