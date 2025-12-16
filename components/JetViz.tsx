@@ -5,6 +5,7 @@ import { Link } from 'react-router-dom';
 const JetViz: React.FC = () => {
   const [sliderPosition, setSliderPosition] = useState(50);
   const [isDragging, setIsDragging] = useState(false);
+  const [inputUrl, setInputUrl] = useState('');
   const containerRef = useRef<HTMLDivElement>(null);
 
   const handleMove = (clientX: number) => {
@@ -257,11 +258,16 @@ const JetViz: React.FC = () => {
                             <input 
                                 type="url" 
                                 required
+                                value={inputUrl}
+                                onChange={(e) => setInputUrl(e.target.value)}
                                 placeholder="https://www.yourbusiness.com" 
                                 className="block w-full pl-11 pr-4 py-4 bg-slate-900 border border-slate-600 rounded-xl text-white placeholder-slate-500 focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500 transition-all outline-none shadow-inner"
                             />
                         </div>
-                        <Link to="/jetviz" className="whitespace-nowrap bg-indigo-600 text-white px-8 py-4 rounded-xl font-bold hover:bg-indigo-500 transition-all shadow-lg shadow-indigo-900/40 flex items-center justify-center gap-2 group active:scale-95">
+                        <Link 
+                            to={inputUrl ? `/jetviz?url=${encodeURIComponent(inputUrl)}` : '/jetviz'} 
+                            className="whitespace-nowrap bg-indigo-600 text-white px-8 py-4 rounded-xl font-bold hover:bg-indigo-500 transition-all shadow-lg shadow-indigo-900/40 flex items-center justify-center gap-2 group active:scale-95"
+                        >
                             Run Free Visual Check
                             <ArrowRight className="w-4 h-4 group-hover:translate-x-1 transition-transform" />
                         </Link>

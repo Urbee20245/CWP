@@ -1,6 +1,7 @@
 import React from 'react';
 import { ArrowRight, Phone, CheckCircle2, Play } from 'lucide-react';
 import { NavigationLink } from '../types';
+import { Link } from 'react-router-dom';
 
 const Hero: React.FC = () => {
   return (
@@ -39,13 +40,13 @@ const Hero: React.FC = () => {
                 </p>
 
                 <div className="flex flex-col sm:flex-row items-center gap-4 w-full">
-                  <a 
-                    href="#optimizer"
+                  <Link 
+                    to="/jetsuite"
                     className="w-full sm:w-auto px-8 py-4 bg-slate-900 text-white rounded-xl font-semibold transition-all hover:bg-slate-800 hover:shadow-xl hover:shadow-slate-900/10 active:scale-95 flex items-center justify-center gap-2"
                   >
                     Get A Free Site Audit
                     <ArrowRight className="w-4 h-4" />
-                  </a>
+                  </Link>
                   
                   <a 
                     href={`#${NavigationLink.Services}`}

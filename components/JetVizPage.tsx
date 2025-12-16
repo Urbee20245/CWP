@@ -18,10 +18,12 @@ import {
   Star,
   AlertCircle
 } from 'lucide-react';
-import { Link } from 'react-router-dom';
+import { Link, useSearchParams } from 'react-router-dom';
 
 const JetVizPage: React.FC = () => {
-  const [url, setUrl] = useState('');
+  const [searchParams] = useSearchParams();
+  const urlParam = searchParams.get('url') || '';
+  const [url, setUrl] = useState(urlParam);
   const [isAnalyzing, setIsAnalyzing] = useState(false);
   
   // Slider Logic
@@ -53,6 +55,13 @@ const JetVizPage: React.FC = () => {
     return () => window.removeEventListener('mouseup', handleGlobalMouseUp);
   }, []);
 
+  // Update URL field when URL parameter changes
+  useEffect(() => {
+    if (urlParam) {
+      setUrl(urlParam);
+    }
+  }, [urlParam]);
+
   const handleAnalyze = (e: React.FormEvent) => {
     e.preventDefault();
     if (!url) return;
@@ -64,35 +73,31 @@ const JetVizPage: React.FC = () => {
   };
 
   return (
-    <div className="min-h-screen bg-[#0B0F19] font-sans text-white selection:bg-indigo-500 selection:text-white">
-      
-      {/* Studio Navigation */}
-      <nav className="sticky top-0 z-50 bg-[#0B0F19]/80 backdrop-blur-xl border-b border-white/5">
-        <div className="max-w-7xl mx-auto px-6 h-20 flex items-center justify-between">
-            <div className="flex items-center gap-4">
-                <div className="w-10 h-10 bg-gradient-to-tr from-indigo-500 to-violet-600 rounded-xl flex items-center justify-center shadow-[0_0_15px_rgba(99,102,241,0.3)]">
-                    <Eye className="w-5 h-5 text-white" />
-                </div>
-                <div>
-                    <span className="font-bold text-xl tracking-tight block leading-none">JetViz</span>
-                    <span className="text-[10px] text-indigo-300 font-medium tracking-widest uppercase">Visual Engine</span>
-                </div>
-            </div>
-            <div className="flex items-center gap-6 text-sm font-medium">
-                <Link to="/" className="px-5 py-2.5 bg-white/5 hover:bg-white/10 rounded-full border border-white/10 transition-all text-xs font-bold tracking-wide text-slate-300 hover:text-white hover:border-indigo-500/30">
-                    Exit Studio
-                </Link>
-            </div>
-        </div>
-      </nav>
+    <div className="min-h-screen bg-[#0B0F19] font-sans text-white selection:bg-indigo-500 selection:text-white pt-20">
 
       {/* 1. Immersive Hero */}
-      <header className="relative pt-20 pb-32 overflow-hidden">
+      <header className="relative pt-12 pb-32 overflow-hidden">
         {/* Ambient Glows */}
         <div className="absolute top-0 left-1/2 -translate-x-1/2 w-[80vw] h-[500px] bg-indigo-600/20 rounded-full blur-[150px] -z-10 pointer-events-none mix-blend-screen"></div>
         <div className="absolute top-20 right-0 w-[400px] h-[400px] bg-violet-600/10 rounded-full blur-[100px] -z-10 pointer-events-none"></div>
         
         <div className="max-w-7xl mx-auto px-6 text-center">
+            {/* Branding and Status - Integrated into Hero */}
+            <div className="flex flex-wrap items-center justify-center gap-3 mb-8">
+                <div className="inline-flex items-center gap-3 px-4 py-2 rounded-full bg-white/5 border border-white/10 backdrop-blur-md">
+                    <div className="w-8 h-8 bg-gradient-to-tr from-indigo-500 to-violet-600 rounded-lg flex items-center justify-center shadow-[0_0_15px_rgba(99,102,241,0.3)]">
+                        <Eye className="w-4 h-4 text-white" />
+                    </div>
+                    <div className="text-left">
+                        <span className="font-bold text-sm tracking-tight block leading-none">JetViz</span>
+                        <span className="text-[9px] text-indigo-300 font-medium tracking-widest uppercase">Visual Engine</span>
+                    </div>
+                </div>
+                <Link to="/" className="px-4 py-2 bg-white/5 hover:bg-white/10 rounded-full border border-white/10 transition-all text-xs font-bold tracking-wide text-slate-300 hover:text-white hover:border-indigo-500/30">
+                    Exit Studio
+                </Link>
+            </div>
+            
             <div className="inline-flex items-center gap-2 px-4 py-2 rounded-full bg-white/5 border border-white/10 text-indigo-200 text-xs font-bold uppercase tracking-widest mb-10 backdrop-blur-md">
                 <Sparkles className="w-3 h-3 text-yellow-300" />
                 <span>The 0.05 Second Test</span>

@@ -30,35 +30,28 @@ const JetLocalOptimizerPage: React.FC = () => {
   };
 
   return (
-    <div className="min-h-screen bg-slate-50 font-sans text-slate-900 selection:bg-emerald-100 selection:text-emerald-900">
+    <div className="min-h-screen bg-slate-50 font-sans text-slate-900 selection:bg-emerald-100 selection:text-emerald-900 pt-20">
       
-      {/* Technical Navigation */}
-      <nav className="sticky top-0 z-50 bg-slate-900 border-b border-slate-800 text-white">
-        <div className="max-w-7xl mx-auto px-6 h-14 flex items-center justify-between">
-            <div className="flex items-center gap-3">
-                <div className="flex items-center gap-2 text-emerald-400">
-                    <Terminal className="w-4 h-4" />
-                    <span className="font-mono text-sm font-bold tracking-tight">JET_OPTIMIZER_V2.1</span>
-                </div>
-            </div>
-            <div className="flex items-center gap-6 text-sm font-medium">
-                <div className="hidden md:flex items-center gap-2 text-xs text-slate-500 font-mono">
-                    <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse"></span>
-                    SYSTEM ONLINE
-                </div>
-                <Link to="/" className="text-xs text-slate-400 hover:text-white transition-colors font-mono uppercase tracking-wider">
-                    [ Return_Home ]
-                </Link>
-            </div>
-        </div>
-      </nav>
-
       {/* 1. Technical Hero Section */}
-      <header className="relative bg-slate-900 pt-16 pb-28 overflow-hidden border-b border-slate-800">
+      <header className="relative bg-slate-900 pt-12 pb-28 overflow-hidden border-b border-slate-800">
         <div className="absolute inset-0 bg-[linear-gradient(rgba(255,255,255,0.02)_1px,transparent_1px),linear-gradient(90deg,rgba(255,255,255,0.02)_1px,transparent_1px)] bg-[size:24px_24px]"></div>
         
         <div className="max-w-7xl mx-auto px-6 relative z-10 grid grid-cols-1 lg:grid-cols-2 gap-16 items-center">
             <div>
+                {/* System Status Indicator */}
+                <div className="flex flex-wrap items-center gap-3 mb-6">
+                    <div className="inline-flex items-center gap-2 text-emerald-400 font-mono text-[10px] bg-slate-800/50 px-3 py-1.5 rounded border border-slate-700">
+                        <Terminal className="w-3 h-3" />
+                        <span className="font-bold">JET_OPTIMIZER_V2.1</span>
+                    </div>
+                    <div className="inline-flex items-center gap-2 text-emerald-400 font-mono text-[10px] bg-slate-800/50 px-3 py-1.5 rounded border border-slate-700">
+                        <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse"></span>
+                        <span>SYSTEM ONLINE</span>
+                    </div>
+                    <Link to="/" className="inline-flex items-center gap-1 text-slate-400 hover:text-emerald-400 transition-colors font-mono text-[10px] px-3 py-1.5 bg-slate-800/50 rounded border border-slate-700 hover:border-emerald-700">
+                        <span>[ Return Home ]</span>
+                    </Link>
+                </div>
                 <div className="inline-flex items-center gap-2 text-emerald-400 font-mono text-[10px] mb-6 bg-slate-800/50 px-3 py-1 rounded border border-slate-700">
                     <span>STATUS: READY</span>
                     <span className="text-slate-600">|</span>
