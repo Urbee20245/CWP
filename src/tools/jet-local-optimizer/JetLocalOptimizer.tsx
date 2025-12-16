@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { AnalyzerForm } from './components/AnalyzerForm';
 import { ResultsDashboard } from './components/ResultsDashboard';
 import { CTASection } from './components/CTASection';
@@ -6,11 +6,24 @@ import { AnalyzerService } from './services/analyzer';
 import { getCurrentBrand } from './config/brands';
 import type { AnalysisRequest, AnalysisResult } from './types';
 
-export function JetLocalOptimizer() {
+interface JetLocalOptimizerProps {
+  initialUrl?: string;
+  autoAnalyze?: boolean;
+}
+
+export function JetLocalOptimizer({ initialUrl = '', autoAnalyze = false }: JetLocalOptimizerProps) {
   const [isAnalyzing, setIsAnalyzing] = useState(false);
   const [result, setResult] = useState<AnalysisResult | null>(null);
   const [error, setError] = useState<string | null>(null);
   const brandConfig = getCurrentBrand();
+
+  // Auto-analyze if URL is provided and autoAnalyze is true
+  useEffect(() => {
+    if (autoAnalyze && initialUrl) {
+      handleAnalyze({ websiteUrl: initialUrl });
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [autoAnalyze, initialUrl]);
 
   const handleAnalyze = async (request: AnalysisRequest) => {
     setIsAnalyzing(true);
@@ -59,7 +72,11 @@ export function JetLocalOptimizer() {
         {/* Analyzer Form */}
         {!result && (
           <div className="mb-12">
-            <AnalyzerForm onAnalyze={handleAnalyze} isLoading={isAnalyzing} />
+            <AnalyzerForm 
+              onAnalyze={handleAnalyze} 
+              isLoading={isAnalyzing}
+              initialUrl={initialUrl}
+            />
           </div>
         )}
 

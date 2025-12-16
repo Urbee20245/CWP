@@ -452,7 +452,7 @@ const JetVizPage: React.FC = () => {
       {showAnalyzer && (
         <section id="analyzer-tool" className="py-12 bg-slate-50">
           <div className="max-w-7xl mx-auto px-6">
-            <JetVizAnalyzer />
+            <JetVizAnalyzer initialUrl={url} autoAnalyze={false} />
           </div>
         </section>
       )}

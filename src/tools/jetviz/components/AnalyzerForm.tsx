@@ -4,10 +4,11 @@ import type { AnalysisRequest } from '../types';
 interface AnalyzerFormProps {
   onAnalyze: (request: AnalysisRequest) => void;
   isLoading: boolean;
+  initialUrl?: string;
 }
 
-export function AnalyzerForm({ onAnalyze, isLoading }: AnalyzerFormProps) {
-  const [websiteUrl, setWebsiteUrl] = useState('');
+export function AnalyzerForm({ onAnalyze, isLoading, initialUrl = '' }: AnalyzerFormProps) {
+  const [websiteUrl, setWebsiteUrl] = useState(initialUrl);
   const [businessName, setBusinessName] = useState('');
   const [industry, setIndustry] = useState('');
 
