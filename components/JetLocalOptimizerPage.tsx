@@ -21,37 +21,46 @@ const JetLocalOptimizerPage: React.FC = () => {
   return (
     <div className="min-h-screen bg-slate-50 font-sans text-slate-900 selection:bg-emerald-100 selection:text-emerald-900">
       
-      {/* Technical Navigation */}
-      <nav className="sticky top-0 z-50 bg-slate-900 border-b border-slate-800 text-white">
-        <div className="max-w-7xl mx-auto px-6 h-14 flex items-center justify-between">
-            <div className="flex items-center gap-3">
-                <div className="flex items-center gap-2 text-emerald-400">
-                    <Terminal className="w-4 h-4" />
-                    <span className="font-mono text-sm font-bold tracking-tight">JET_OPTIMIZER_V2.1</span>
-                </div>
-            </div>
-            <div className="flex items-center gap-6 text-sm font-medium">
-                <div className="hidden md:flex items-center gap-2 text-xs text-slate-500 font-mono">
-                    <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse"></span>
-                    SYSTEM ONLINE
-                </div>
-                <Link to="/" className="text-xs text-slate-400 hover:text-white transition-colors font-mono uppercase tracking-wider">
-                    [ Return_Home ]
-                </Link>
-            </div>
-        </div>
-      </nav>
-
-      {/* Hero Section with CTA */}
-      <header className="relative bg-slate-900 pt-16 pb-20 overflow-hidden border-b border-slate-800">
+      {/* Hero Section with Integrated System Status */}
+      <header className="relative bg-slate-900 pt-12 pb-20 overflow-hidden border-b border-slate-800">
         <div className="absolute inset-0 bg-[linear-gradient(rgba(255,255,255,0.02)_1px,transparent_1px),linear-gradient(90deg,rgba(255,255,255,0.02)_1px,transparent_1px)] bg-[size:24px_24px]"></div>
         
-        <div className="max-w-7xl mx-auto px-6 relative z-10 text-center">
-            <div className="inline-flex items-center gap-2 text-emerald-400 font-mono text-[10px] mb-6 bg-slate-800/50 px-3 py-1 rounded border border-slate-700">
-                <span>STATUS: READY</span>
-                <span className="text-slate-600">|</span>
-                <span>FREE ANALYSIS TOOL</span>
+        <div className="max-w-7xl mx-auto px-6 relative z-10">
+            {/* System Status Header - Technical Monitoring Aesthetic */}
+            <div className="flex flex-col sm:flex-row items-center justify-between mb-8 pb-6 border-b border-slate-800/50">
+                <div className="flex items-center gap-3 mb-4 sm:mb-0">
+                    <Terminal className="w-5 h-5 text-emerald-400" />
+                    <span className="font-mono text-sm font-bold tracking-tight text-emerald-400">
+                        JET_OPTIMIZER_V2.1
+                    </span>
+                    <span className="hidden sm:inline text-slate-600 font-mono">|</span>
+                    <div className="hidden sm:flex items-center gap-2 text-xs text-slate-500 font-mono">
+                        <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse"></span>
+                        <span className="text-emerald-400">SYSTEM ONLINE</span>
+                    </div>
+                </div>
+                <Link 
+                    to="/" 
+                    className="text-xs text-slate-400 hover:text-emerald-400 transition-colors font-mono uppercase tracking-wider flex items-center gap-2 group"
+                >
+                    <span className="group-hover:translate-x-[-4px] transition-transform">←</span>
+                    Return_Home
+                </Link>
             </div>
+            
+            {/* Mobile System Status */}
+            <div className="sm:hidden flex items-center justify-center gap-2 text-xs text-slate-500 font-mono mb-6">
+                <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse"></span>
+                <span className="text-emerald-400">SYSTEM ONLINE</span>
+            </div>
+
+            {/* Hero Content */}
+            <div className="text-center">
+                <div className="inline-flex items-center gap-2 text-emerald-400 font-mono text-[10px] mb-6 bg-slate-800/50 px-3 py-1 rounded border border-slate-700">
+                    <span>STATUS: READY</span>
+                    <span className="text-slate-600">|</span>
+                    <span>FREE ANALYSIS TOOL</span>
+                </div>
             <h1 className="text-4xl md:text-6xl font-bold text-white mb-6 leading-tight tracking-tight max-w-4xl mx-auto">
                 Technical Website Audit & <br/>
                 <span className="text-transparent bg-clip-text bg-gradient-to-r from-emerald-400 to-cyan-400">Performance Diagnostics</span>
@@ -60,17 +69,18 @@ const JetLocalOptimizerPage: React.FC = () => {
                 Analyze your website's performance, SEO, and local optimization using real data from Google PageSpeed Insights. Get actionable insights in seconds.
             </p>
 
-            <div className="flex flex-col sm:flex-row gap-4 justify-center items-center">
-                <button 
-                    onClick={scrollToAnalyzer}
-                    className="bg-emerald-600 text-white px-8 py-4 rounded-lg font-bold text-sm uppercase tracking-wider hover:bg-emerald-500 transition-colors shadow-lg"
-                >
-                    Start Free Analysis
-                </button>
-                <div className="flex items-center gap-6 text-[10px] text-slate-500 font-mono uppercase tracking-wider">
-                    <span className="flex items-center gap-1.5"><Lock className="w-3 h-3" /> SSL Secure</span>
-                    <span>•</span>
-                    <span>No Login Required</span>
+                <div className="flex flex-col sm:flex-row gap-4 justify-center items-center">
+                    <button 
+                        onClick={scrollToAnalyzer}
+                        className="bg-emerald-600 text-white px-8 py-4 rounded-lg font-bold text-sm uppercase tracking-wider hover:bg-emerald-500 transition-colors shadow-lg"
+                    >
+                        Start Free Analysis
+                    </button>
+                    <div className="flex items-center gap-6 text-[10px] text-slate-500 font-mono uppercase tracking-wider">
+                        <span className="flex items-center gap-1.5"><Lock className="w-3 h-3" /> SSL Secure</span>
+                        <span>•</span>
+                        <span>No Login Required</span>
+                    </div>
                 </div>
             </div>
         </div>
