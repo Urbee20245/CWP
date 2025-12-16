@@ -12,11 +12,11 @@ import Process from './components/Process';
 import Contact from './components/Contact';
 import Footer from './components/Footer';
 import VoiceAgent from './components/VoiceAgent';
-import JetLocalOptimizerPage from './components/JetLocalOptimizerPage';
 import JetVizPage from './components/JetVizPage';
 import ServicesPage from './src/pages/services';
 import ServicesJetVizPage from './src/pages/services/JetViz';
 import ProcessPage from './src/pages/Process';
+import { JetLocalOptimizer } from './src/JetLocalOptimizer';
 
 const Home = () => (
   <main>
@@ -41,7 +41,7 @@ const App: React.FC = () => {
         <Routes>
           <Route path="/" element={<Home />} />
           <Route path="/jetviz" element={<JetVizPage />} />
-          <Route path="/jet-local-optimizer" element={<JetLocalOptimizerPage />} />
+          <Route path="/jet-local-optimizer" element={<JetLocalOptimizer />} />
           <Route path="/services" element={<ServicesPage />} />
           <Route path="/services/jetviz" element={<ServicesJetVizPage />} />
           <Route path="/process" element={<ProcessPage />} />
