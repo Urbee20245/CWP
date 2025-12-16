@@ -319,9 +319,14 @@ Already have site: "Try our free analysis tools at /jetsuite to see how your cur
               const resampledData = resampleTo16kHZ(inputData, inputAudioContextRef.current!.sampleRate);
               const pcmBlob = createBlob(resampledData);
               
-              connectPromise.then((session) => {
-                 session.sendRealtimeInput({ media: pcmBlob });
-              });
+              // Use sessionRef instead of connectPromise to avoid race conditions
+              if (sessionRef.current) {
+                try {
+                  sessionRef.current.sendRealtimeInput({ media: pcmBlob });
+                } catch (err) {
+                  console.error('❌ Error sending audio data:', err);
+                }
+              }
             };
 
             source.connect(scriptProcessor);
@@ -367,8 +372,22 @@ Already have site: "Try our free analysis tools at /jetsuite to see how your cur
                markTurnComplete(); 
             }
           },
-          onclose: () => {
+          onclose: (closeEvent?: any) => {
             console.log('🔌 Connection closed');
+            console.log('Close event details:', closeEvent);
+            
+            // Check if this is a normal close or error close
+            if (closeEvent?.code) {
+              console.log(`Close code: ${closeEvent.code}, Reason: ${closeEvent.reason || 'No reason provided'}`);
+            }
+            
+            // If we were just connecting and it closed immediately, show error
+            if (isConnecting) {
+              console.error('⚠️ Connection closed immediately after opening - this is abnormal');
+              setError("Connection unstable. Please try again. If problem persists, Luna may be temporarily unavailable.");
+              setIsConnecting(false);
+            }
+            
             stopSession();
           },
           onerror: (e) => {
@@ -393,6 +412,12 @@ Already have site: "Try our free analysis tools at /jetsuite to see how your cur
       sessionRef.current = session;
       console.log('✅ Session reference stored successfully!');
       console.log('💬 Luna is ready to chat!');
+      
+      // Keep connection alive - send empty audio frames periodically
+      console.log('📤 Setting up connection keepalive...');
+      
+      // The onopen callback will set up the audio pipeline which keeps connection alive
+      // No additional action needed here as audio processing will maintain the connection
       
       // Add a timeout check - if not connected in 10 seconds, show error
       setTimeout(() => {
@@ -559,10 +584,20 @@ Already have site: "Try our free analysis tools at /jetsuite to see how your cur
              
              {/* Loading / Connecting State */}
              {isConnecting && (
-                 <div className="flex justify-start">
+                 <div className="flex justify-start animate-fade-in">
                      <div className="bg-slate-800/50 rounded-2xl px-4 py-3 border border-slate-700/50 flex items-center gap-3">
                         <Loader2 className="w-4 h-4 animate-spin text-indigo-400" />
                         <span className="text-xs text-slate-400 font-medium">Connecting to secure line...</span>
+                     </div>
+                 </div>
+             )}
+             
+             {/* Connected Status */}
+             {isConnected && !isConnecting && messages.length > 0 && (
+                 <div className="flex justify-center">
+                     <div className="bg-emerald-500/10 rounded-full px-4 py-2 border border-emerald-500/20 flex items-center gap-2">
+                        <Activity className="w-3 h-3 text-emerald-400 animate-pulse" />
+                        <span className="text-xs text-emerald-400 font-bold">Luna is listening...</span>
                      </div>
                  </div>
              )}
