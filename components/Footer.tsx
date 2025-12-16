@@ -13,7 +13,7 @@ const Footer: React.FC = () => {
                 <img 
                   src="/CWPlogodark.png" 
                   alt="Custom Websites Plus" 
-                  className="h-10 w-auto mb-6 object-contain"
+                  className="h-12 w-auto mb-6 object-contain"
                 />
                 <p className="text-sm leading-relaxed text-slate-400 mb-6">
                     We help local service businesses in Georgia stop losing leads to outdated websites. We build fast, high-performance digital assets that rank locally and convert visitors into calls.

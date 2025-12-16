@@ -78,6 +78,13 @@ const JetSuitePage: React.FC = () => {
             Complete Digital Toolkit
           </div>
 
+          {/* Jet Automations Logo */}
+          <img 
+            src="/Jetautofull.png" 
+            alt="Jet Automations" 
+            className="h-16 md:h-20 w-auto mx-auto mb-6 object-contain"
+          />
+
           {/* Main Heading */}
           <h1 className="text-5xl md:text-7xl font-bold text-white mb-6 leading-tight tracking-tight">
             JetSuite
