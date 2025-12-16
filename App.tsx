@@ -16,6 +16,7 @@ import JetLocalOptimizerPage from './components/JetLocalOptimizerPage';
 import JetVizPage from './components/JetVizPage';
 import JetSuitePage from './components/JetSuitePage';
 import ServicesPage from './components/ServicesPage';
+import ContactPage from './components/ContactPage';
 
 const Home = () => (
   <main>
@@ -40,6 +41,7 @@ const App: React.FC = () => {
         <Routes>
           <Route path="/" element={<Home />} />
           <Route path="/services" element={<ServicesPage />} />
+          <Route path="/contact" element={<ContactPage />} />
           <Route path="/jetsuite" element={<JetSuitePage />} />
           <Route path="/jetviz" element={<JetVizPage />} />
           <Route path="/jet-local-optimizer" element={<JetLocalOptimizerPage />} />
