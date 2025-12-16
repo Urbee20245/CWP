@@ -183,6 +183,9 @@ const VoiceAgent: React.FC = () => {
     }
 
     try {
+      // Check microphone permission first
+      console.log('🎤 Checking microphone permission...');
+      
       const apiKey = process.env.API_KEY;
       
       // Debug logging
@@ -190,18 +193,24 @@ const VoiceAgent: React.FC = () => {
       console.log('🔍 Environment variables available:', Object.keys(process.env || {}).filter(key => key.includes('API') || key.includes('GEMINI')));
       
       if (!apiKey) {
-        throw new Error("API Key not found. Please add VITE_GEMINI_API_KEY to your environment variables in Vercel.");
+        const errorMsg = "Luna AI is not configured yet. The API key is missing. Please contact support.";
+        console.error('❌', errorMsg);
+        throw new Error(errorMsg);
       }
 
+      console.log('✅ API Key present, initializing AI...');
       const ai = new GoogleGenAI({ apiKey });
       
+      console.log('🎧 Creating audio contexts...');
       inputAudioContextRef.current = new (window.AudioContext || (window as any).webkitAudioContext)();
       outputAudioContextRef.current = new (window.AudioContext || (window as any).webkitAudioContext)();
       
       const outputNode = outputAudioContextRef.current.createGain();
       outputNode.connect(outputAudioContextRef.current.destination);
 
+      console.log('🎤 Requesting microphone access...');
       const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+      console.log('✅ Microphone access granted');
       streamRef.current = stream;
 
       const connectPromise = ai.live.connect({
@@ -336,10 +345,27 @@ Already have site: "Try our free analysis tools at /jetsuite to see how your cur
         }
       });
       sessionRef.current = connectPromise;
+      console.log('✅ Luna AI session started successfully!');
     } catch (err: any) {
-      console.error(err);
-      setError(err.message || "Failed to access microphone.");
+      console.error('❌ Luna AI Error:', err);
+      
+      let userFriendlyError = "Unable to start conversation. ";
+      
+      if (err.name === 'NotAllowedError' || err.name === 'PermissionDeniedError') {
+        userFriendlyError = "Microphone access denied. Please allow microphone access in your browser settings and try again.";
+      } else if (err.name === 'NotFoundError') {
+        userFriendlyError = "No microphone found. Please connect a microphone and try again.";
+      } else if (err.message.includes('API Key')) {
+        userFriendlyError = "Luna AI is not configured yet. Please contact support at (404) 532-9266.";
+      } else if (err.message.includes('fetch') || err.message.includes('network')) {
+        userFriendlyError = "Network error. Please check your connection and try again.";
+      } else {
+        userFriendlyError = err.message || "An error occurred. Please try again or contact support.";
+      }
+      
+      setError(userFriendlyError);
       setIsConnecting(false);
+      stopSession();
     }
   };
 
@@ -405,12 +431,39 @@ Already have site: "Try our free analysis tools at /jetsuite to see how your cur
 
           {/* Chat Messages Body */}
           <div className="flex-1 overflow-y-auto p-4 space-y-6 scrollbar-thin scrollbar-thumb-slate-700 scrollbar-track-transparent">
-             {messages.length === 0 && !isConnecting && (
+             {messages.length === 0 && !isConnecting && !error && (
                  <div className="h-full flex flex-col items-center justify-center text-center p-6 opacity-60">
                      <div className="w-16 h-16 rounded-full bg-slate-800/50 flex items-center justify-center mb-4 border border-slate-700">
                         <Sparkles className="w-8 h-8 text-indigo-400" />
                      </div>
                      <p className="text-slate-400 text-sm">Tap the microphone below to start a voice conversation.</p>
+                 </div>
+             )}
+             
+             {error && messages.length === 0 && (
+                 <div className="h-full flex flex-col items-center justify-center text-center p-6">
+                     <div className="w-16 h-16 rounded-full bg-red-500/10 flex items-center justify-center mb-4 border border-red-500/20">
+                        <span className="text-3xl">⚠️</span>
+                     </div>
+                     <p className="text-slate-300 text-sm font-semibold mb-2">Unable to Connect</p>
+                     <p className="text-slate-400 text-xs mb-4">Try refreshing or use one of these options:</p>
+                     <div className="flex flex-col gap-2 w-full">
+                        <a 
+                          href="tel:4045329266" 
+                          className="px-4 py-2 bg-indigo-600 text-white rounded-lg text-sm font-semibold hover:bg-indigo-500 transition-all flex items-center justify-center gap-2"
+                        >
+                          <Phone className="w-4 h-4" />
+                          Call Us: (404) 532-9266
+                        </a>
+                        <a 
+                          href="/#contact" 
+                          onClick={() => setIsOpen(false)}
+                          className="px-4 py-2 bg-slate-700 text-white rounded-lg text-sm font-semibold hover:bg-slate-600 transition-all flex items-center justify-center gap-2"
+                        >
+                          <MessageSquare className="w-4 h-4" />
+                          Contact Form
+                        </a>
+                     </div>
                  </div>
              )}
              
@@ -450,8 +503,19 @@ Already have site: "Try our free analysis tools at /jetsuite to see how your cur
           <div className="p-4 bg-slate-900/80 backdrop-blur-md border-t border-white/5 shrink-0">
              <div className="flex flex-col gap-3">
                  {error && (
-                     <div className="bg-red-500/10 border border-red-500/20 text-red-400 px-3 py-2 rounded-lg text-xs text-center">
-                        {error}
+                     <div className="bg-red-500/10 border border-red-500/20 text-red-400 px-4 py-3 rounded-xl text-sm">
+                        <div className="font-bold mb-1 flex items-center gap-2">
+                          <span className="text-red-500">⚠️</span> Connection Error
+                        </div>
+                        <div className="text-xs leading-relaxed">{error}</div>
+                        {error.includes('contact support') && (
+                          <a 
+                            href="tel:4045329266" 
+                            className="mt-2 text-xs text-blue-400 hover:text-blue-300 underline block"
+                          >
+                            Call us: (404) 532-9266
+                          </a>
+                        )}
                      </div>
                  )}
                  
