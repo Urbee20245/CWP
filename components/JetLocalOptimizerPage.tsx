@@ -14,19 +14,21 @@ import {
   Lock
 } from 'lucide-react';
 import { Link } from 'react-router-dom';
+import { JetLocalOptimizer } from '../src/tools/jet-local-optimizer';
 
 const JetLocalOptimizerPage: React.FC = () => {
   const [url, setUrl] = useState('');
   const [isScanning, setIsScanning] = useState(false);
+  const [showAnalyzer, setShowAnalyzer] = useState(false);
 
   const handleScan = (e: React.FormEvent) => {
     e.preventDefault();
     if (!url) return;
-    setIsScanning(true);
+    setShowAnalyzer(true);
+    // Scroll to analyzer after state updates
     setTimeout(() => {
-        setIsScanning(false);
-        alert("System Demo: In a live environment, this connects to the Lighthouse API.");
-    }, 2000);
+      document.getElementById('analyzer-tool')?.scrollIntoView({ behavior: 'smooth' });
+    }, 100);
   };
 
   return (
@@ -368,6 +370,15 @@ const JetLocalOptimizerPage: React.FC = () => {
             </p>
         </div>
       </section>
+
+      {/* Analyzer Tool Section */}
+      {showAnalyzer && (
+        <section id="analyzer-tool" className="py-12 bg-slate-50">
+          <div className="max-w-7xl mx-auto px-6">
+            <JetLocalOptimizer initialUrl={url} autoAnalyze={false} />
+          </div>
+        </section>
+      )}
 
       {/* Footer */}
       <footer className="bg-slate-950 text-slate-500 py-12 border-t border-slate-900 font-mono text-xs">

@@ -19,10 +19,12 @@ import {
   AlertCircle
 } from 'lucide-react';
 import { Link } from 'react-router-dom';
+import { JetViz as JetVizAnalyzer } from '../src/tools/jetviz';
 
 const JetVizPage: React.FC = () => {
   const [url, setUrl] = useState('');
   const [isAnalyzing, setIsAnalyzing] = useState(false);
+  const [showAnalyzer, setShowAnalyzer] = useState(false);
   
   // Slider Logic
   const [sliderPosition, setSliderPosition] = useState(50);
@@ -55,12 +57,25 @@ const JetVizPage: React.FC = () => {
 
   const handleAnalyze = (e: React.FormEvent) => {
     e.preventDefault();
-    if (!url) return;
-    setIsAnalyzing(true);
+    if (!url.trim()) {
+      alert('Please enter a website URL');
+      return;
+    }
+    setShowAnalyzer(true);
+    // Scroll to analyzer after state updates
     setTimeout(() => {
-        setIsAnalyzing(false);
-        alert("Studio Demo: Visual overlay process started.");
-    }, 2000);
+      const analyzerElement = document.getElementById('analyzer-tool');
+      if (analyzerElement) {
+        analyzerElement.scrollIntoView({ behavior: 'smooth', block: 'start' });
+        // Focus on the first input field after scrolling
+        setTimeout(() => {
+          const firstInput = analyzerElement.querySelector('input') as HTMLInputElement;
+          if (firstInput && firstInput.id !== 'websiteUrl') {
+            firstInput.focus();
+          }
+        }, 800);
+      }
+    }, 100);
   };
 
   return (
@@ -427,18 +442,13 @@ const JetVizPage: React.FC = () => {
                         className="flex-grow px-8 py-5 bg-transparent text-white placeholder-slate-500 outline-none text-lg rounded-xl"
                     />
                     <button 
-                        type="submit" 
-                        disabled={isAnalyzing}
-                        className="whitespace-nowrap bg-white text-black px-8 py-5 rounded-2xl font-bold hover:bg-slate-200 transition-all shadow-lg flex items-center justify-center gap-2 group disabled:opacity-70 disabled:cursor-wait text-lg"
+                        type="submit"
+                        className="whitespace-nowrap bg-white text-black px-8 py-5 rounded-2xl font-bold hover:bg-slate-200 transition-all shadow-lg flex items-center justify-center gap-2 group text-lg"
                     >
-                        {isAnalyzing ? (
-                            'Processing...'
-                        ) : (
-                            <>
-                                Visualize Now
-                                <ArrowRight className="w-5 h-5 group-hover:translate-x-1 transition-transform" />
-                            </>
-                        )}
+                        <>
+                            Visualize Now
+                            <ArrowRight className="w-5 h-5 group-hover:translate-x-1 transition-transform" />
+                        </>
                     </button>
                 </form>
             </div>
@@ -450,6 +460,15 @@ const JetVizPage: React.FC = () => {
             </div>
         </div>
       </section>
+
+      {/* Analyzer Tool Section */}
+      {showAnalyzer && (
+        <section id="analyzer-tool" className="py-12 bg-slate-50">
+          <div className="max-w-7xl mx-auto px-6">
+            <JetVizAnalyzer initialUrl={url} autoAnalyze={false} />
+          </div>
+        </section>
+      )}
 
       <footer className="py-12 border-t border-white/5 bg-black text-center text-slate-600 text-sm">
         <p>&copy; 2025 Custom Websites Plus. JetViz Technology.</p>
