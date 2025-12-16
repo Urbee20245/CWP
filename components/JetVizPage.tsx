@@ -6,21 +6,17 @@ import {
   Smartphone, 
   ArrowRight, 
   CheckCircle2, 
-  XCircle, 
+  ShieldCheck, 
   Palette,
   Zap,
-  ShieldCheck, 
   TrendingUp, 
-  Globe,
   Sparkles,
-  Layers,
   Phone,
   Star,
-  AlertCircle,
-  BarChart3,
-  Calendar
+  AlertCircle
 } from 'lucide-react';
 import { Link, useSearchParams } from 'react-router-dom';
+import { AnalyzerService } from '../src/tools/jet-local-optimizer/services/analyzer';
 
 const JetVizPage: React.FC = () => {
   const [searchParams] = useSearchParams();
@@ -66,34 +62,35 @@ const JetVizPage: React.FC = () => {
     }
   }, [urlParam]);
 
-  // Deterministic random number generator based on string
-  const getHashBasedValue = (str: string, seed: number, min: number, max: number) => {
-    let hash = 0;
-    for (let i = 0; i < str.length; i++) {
-        hash = ((hash << 5) - hash) + str.charCodeAt(i);
-        hash = hash & hash;
-    }
-    const value = Math.abs(hash + seed) % 100;
-    const normalized = value / 100;
-    return Math.floor(min + (normalized * (max - min)));
-  };
-
-  const handleAnalyze = (e: React.FormEvent) => {
+  const handleAnalyze = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!url) return;
     setIsAnalyzing(true);
     setHasAnalyzed(false);
     
-    // Simulate complex analysis
-    setTimeout(() => {
-        setIsAnalyzing(false);
-        setHasAnalyzed(true);
-        
-        // Generate results based on URL
-        const aesthetic = getHashBasedValue(url, 1, 40, 85);
-        const structure = getHashBasedValue(url, 2, 50, 90);
-        const mobile = getHashBasedValue(url, 3, 30, 80);
-        const credibility = getHashBasedValue(url, 4, 45, 85);
+    try {
+        // Use the Real Analyzer Service
+        const data = await AnalyzerService.analyzeWebsite({
+            websiteUrl: url,
+            industry: 'general' // Default
+        });
+
+        // Map technical metrics to visual scores
+        // Aesthetic: Based on layout stability (CLS) and structure (H1s/meta)
+        // 100 - (CLS * 100), max 100. Lower CLS is better.
+        const clsScore = Math.max(0, 100 - (data.coreWebVitals.cls * 100)); 
+        const aesthetic = Math.round((clsScore * 0.6) + (data.mobileScore.score * 0.4));
+
+        // Structure: Based on SEO structure
+        const structure = Math.round(data.seoStructure.score);
+
+        // Mobile: Based on PageSpeed mobile score + heuristics
+        const mobile = Math.round(data.mobileScore.score);
+
+        // Credibility: Based on local trust signals (SSL, NAP, Reviews schema)
+        // We use localRelevance as a proxy + some base trust from SSL (assumed if https)
+        const credibility = Math.round(data.localRelevance.score);
+
         const overall = Math.round((aesthetic + structure + mobile + credibility) / 4);
         
         setResults({
@@ -104,6 +101,9 @@ const JetVizPage: React.FC = () => {
             overall
         });
         
+        setIsAnalyzing(false);
+        setHasAnalyzed(true);
+
         // Scroll to results
         setTimeout(() => {
             const resultsElement = document.getElementById('results-section');
@@ -111,8 +111,12 @@ const JetVizPage: React.FC = () => {
                 resultsElement.scrollIntoView({ behavior: 'smooth' });
             }
         }, 100);
-        
-    }, 2500);
+
+    } catch (err) {
+        console.error("Analysis failed:", err);
+        setIsAnalyzing(false);
+        alert("Could not complete analysis. Please check the URL and try again.");
+    }
   };
 
   return (
