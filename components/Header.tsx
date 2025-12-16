@@ -42,7 +42,7 @@ const Header: React.FC = () => {
         {/* Logo Area */}
         <Link to="/" className="flex items-center gap-2 cursor-pointer">
            <img 
-            src="https://customwebsitesplus.com/wp-content/uploads/2019/01/CWPtrans.png" 
+            src="/CWPlogolight.png" 
             alt="Custom Websites Plus" 
             className="h-8 md:h-10 w-auto object-contain"
           />

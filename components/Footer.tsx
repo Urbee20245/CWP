@@ -11,9 +11,9 @@ const Footer: React.FC = () => {
             {/* Column 1: Brand & Description */}
             <div className="col-span-1 md:col-span-1">
                 <img 
-                  src="https://customwebsitesplus.com/wp-content/uploads/2019/01/CWPtrans.png" 
+                  src="/CWPlogodark.png" 
                   alt="Custom Websites Plus" 
-                  className="h-10 w-auto mb-6 object-contain brightness-0 invert"
+                  className="h-10 w-auto mb-6 object-contain"
                 />
                 <p className="text-sm leading-relaxed text-slate-400 mb-6">
                     We help local service businesses in Georgia stop losing leads to outdated websites. We build fast, high-performance digital assets that rank locally and convert visitors into calls.
