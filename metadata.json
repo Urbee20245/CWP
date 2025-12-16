@@ -1,6 +1,6 @@
 {
   "name": "Custom Websites Plus",
-  "description": "Modern web design and AI automation agency website featuring a live AI voice agent demo.",
+  "description": "Free website analysis tools to identify if your outdated website is costing you customers. Get a complete performance, SEO, and modernization audit in minutes.",
   "requestFramePermissions": [
     "microphone"
   ]
