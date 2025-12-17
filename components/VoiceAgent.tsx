@@ -16,6 +16,7 @@ const VoiceAgent: React.FC = () => {
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const [configError, setConfigError] = useState<string | null>(null);
+  const chatTranscriptRef = useRef<string>('');
   
   // Voice State
   const [isConnected, setIsConnected] = useState(false);
@@ -59,10 +60,27 @@ const VoiceAgent: React.FC = () => {
     return window.btoa(binary);
   };
 
+  const getGeminiApiKey = () => (import.meta as any).env.VITE_GEMINI_API_KEY as string | undefined;
+  const getGeminiModel = () => ((import.meta as any).env.VITE_GEMINI_MODEL as string | undefined) || 'gemini-2.0-flash-exp';
+
+  const LUNA_SYSTEM_PROMPT = `You are Luna, AI assistant for Custom Websites Plus.
+Be helpful, concise, and professional. Do not invent facts.
+If the user asks for pricing, give a realistic range and recommend booking a consult.`;
+
+  const normalizeErrorMessage = (err: any) => {
+    const raw = err?.message || err?.toString?.() || 'Connection failed';
+    if (typeof raw !== 'string') return 'Connection failed';
+    // Give a friendly, actionable message for the common failure mode.
+    if (/api key/i.test(raw) && /missing/i.test(raw)) {
+      return 'Luna is not configured yet (missing API key). Set VITE_GEMINI_API_KEY and redeploy.';
+    }
+    return raw;
+  };
+
   // --- VOICE SESSION MANAGEMENT ---
   const connectVoiceSession = async () => {
     try {
-      const apiKey = (import.meta as any).env.VITE_GEMINI_API_KEY;
+      const apiKey = getGeminiApiKey();
       if (!apiKey) throw new Error("API Key missing");
 
       // 1. Setup Audio Context
@@ -178,7 +196,7 @@ const VoiceAgent: React.FC = () => {
 
     } catch (err: any) {
       console.error("Voice Connection Failed:", err);
-      setConfigError(err.message || "Connection failed");
+      setConfigError(normalizeErrorMessage(err));
       setIsConnected(false);
     }
   };
@@ -239,16 +257,45 @@ const VoiceAgent: React.FC = () => {
     // ... (Keep existing Chat Logic for text mode fallback)
     // Re-implementing briefly for completeness
     try {
-        const apiKey = (import.meta as any).env.VITE_GEMINI_API_KEY;
-        if (!apiKey) return;
+        setConfigError(null);
+        const apiKey = getGeminiApiKey();
+        if (!apiKey) {
+          setConfigError('Luna is not configured yet (missing API key). Set VITE_GEMINI_API_KEY and redeploy.');
+          return;
+        }
+
         const client = new GoogleGenAI({ apiKey });
-        const model = client.getGenerativeModel({ model: 'gemini-2.0-flash-exp' });
-        chatSessionRef.current = model.startChat({ 
-            history: [],
-            systemInstruction: `You are Luna, AI assistant for Custom Websites Plus.`
-        });
+        const modelName = getGeminiModel();
+
+        // Keep a simple transcript so we don't depend on any specific chat-session API shape.
+        chatTranscriptRef.current = `System: ${LUNA_SYSTEM_PROMPT}\n`;
+
+        chatSessionRef.current = {
+          sendMessage: async (text: string) => {
+            const prompt = `${chatTranscriptRef.current}\nUser: ${text}\nLuna:`;
+            // @google/genai supports passing a single string as contents.
+            const resp = await (client as any).models.generateContent({
+              model: modelName,
+              contents: prompt,
+            });
+
+            const assistantText =
+              (typeof resp?.text === 'string' && resp.text) ||
+              (typeof resp?.text === 'function' && resp.text()) ||
+              (typeof resp?.response?.text === 'function' && resp.response.text()) ||
+              (resp?.candidates?.[0]?.content?.parts?.[0]?.text as string | undefined) ||
+              '';
+
+            // Append to transcript to maintain conversational context.
+            chatTranscriptRef.current = `${prompt} ${assistantText}\n`;
+
+            // Return a compatible shape for the existing handleTextSend() usage.
+            return { response: { text: () => assistantText } };
+          }
+        };
     } catch (e) {
         console.error("Chat init error", e);
+        setConfigError(normalizeErrorMessage(e));
     }
   };
 
@@ -268,10 +315,15 @@ const VoiceAgent: React.FC = () => {
 
     try {
         if (!chatSessionRef.current) await initChat();
+        if (!chatSessionRef.current) {
+          throw new Error(configError || 'Chat session not initialized');
+        }
         const result = await chatSessionRef.current.sendMessage(text);
         setMessages(p => [...p, { id: Date.now().toString(), role: 'assistant', text: result.response.text() }]);
-    } catch (e) {
-        setMessages(p => [...p, { id: Date.now().toString(), role: 'assistant', text: "Error connecting." }]);
+    } catch (e: any) {
+        const friendly = normalizeErrorMessage(e);
+        setConfigError(friendly);
+        setMessages(p => [...p, { id: Date.now().toString(), role: 'assistant', text: friendly || "Error connecting." }]);
     } finally {
         setIsTyping(false);
     }
@@ -378,6 +430,14 @@ const VoiceAgent: React.FC = () => {
             {/* CHAT INTERFACE */}
             {mode === 'chat' && (
                 <>
+                    {configError && (
+                      <div className="px-4 pt-4">
+                        <div className="text-amber-300 bg-amber-900/20 p-3 rounded-xl border border-amber-500/20 text-xs">
+                          <div className="font-bold mb-1">Luna chat issue</div>
+                          <div>{configError}</div>
+                        </div>
+                      </div>
+                    )}
                     <div className="flex-1 overflow-y-auto p-4 space-y-4">
                         {messages.length === 0 && (
                             <div className="h-full flex flex-col items-center justify-center opacity-50">
