@@ -1,6 +1,6 @@
 import React, { useState, useRef, useEffect } from 'react';
 import { X, MessageSquare, Bot, Send, Sparkles } from 'lucide-react';
-import { GoogleGenAI } from '@google/genai';
+import { GoogleGenerativeAI } from '@google/generative-ai';
 
 interface ChatMessage {
   id: string;
@@ -48,14 +48,17 @@ const VoiceAgent: React.FC = () => {
       }
 
       // Initialize the client
-      const ai = new GoogleGenAI({ apiKey });
-      
-      // Note: @google/genai v1.0+ structure might differ. 
-      // If getGenerativeModel is not available, we might need to fallback or check docs.
-      // Assuming standard usage for now based on package version.
+      const ai = new GoogleGenerativeAI(apiKey);
       
       // Configure the model
-      const systemInstruction = `You are Luna, a professional and knowledgeable AI receptionist for Custom Websites Plus.
+      const systemInstruction = `You are Luna... (rest of prompt)`; // We will need to move the prompt string back or reference it
+
+      let chat;
+      
+      try {
+          const model = ai.getGenerativeModel({ 
+            model: modelName,
+            systemInstruction: `You are Luna, a professional and knowledgeable AI receptionist for Custom Websites Plus.
 
 COMPANY INFO:
 - Location: Atlanta, Georgia (serving metro Atlanta area)
@@ -94,19 +97,7 @@ YOUR BEHAVIOR:
 KEY PHRASES:
 - "Have you tried our free website analysis tools?"
 - "Let me help you schedule a consultation"
-- "Every project is unique, so we provide custom quotes"`;
-
-      // Depending on the exact version of @google/genai, the method to start chat might vary.
-      // v1.0.0+ uses getGenerativeModel, older versions might use different patterns.
-      // Based on installed ^1.33.0, getGenerativeModel should be correct.
-      // If q.getGenerativeModel is not a function, likely 'ai' is not an instance of GoogleGenAI or something else is wrong.
-      
-      let chat;
-      
-      try {
-          const model = ai.getGenerativeModel({ 
-            model: modelName,
-            systemInstruction: systemInstruction
+- "Every project is unique, so we provide custom quotes"`
           });
           
           chat = model.startChat({
