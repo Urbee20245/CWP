@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { Link } from 'react-router-dom';
-import { Zap, Eye, MapPin, Sparkles, ArrowRight, Bell, CheckCircle2 } from 'lucide-react';
+import { Zap, Eye, MapPin, Building2, Sparkles, ArrowRight, Bell, CheckCircle2 } from 'lucide-react';
 
 const JetSuitePage: React.FC = () => {
   const [showWaitlist, setShowWaitlist] = useState(false);
@@ -34,6 +34,21 @@ const JetSuitePage: React.FC = () => {
       hoverShadow: 'hover:shadow-purple-200',
       iconBg: 'bg-purple-50',
       iconColor: 'text-purple-600',
+      isActive: true,
+    },
+    {
+      id: 'jetbiz',
+      icon: Building2,
+      title: 'JetBiz',
+      description: "Analyze your Google Business Profile and discover what's holding you back from local search visibility. Benchmark against nearby competitors and get a prioritized fix list.",
+      badge: 'FREE TOOL',
+      ctaText: 'Analyze My Business',
+      ctaLink: '/jetbiz',
+      gradient: 'from-indigo-600 to-purple-600',
+      bgGradient: 'from-indigo-50 to-purple-50',
+      hoverShadow: 'hover:shadow-indigo-200',
+      iconBg: 'bg-indigo-50',
+      iconColor: 'text-indigo-700',
       isActive: true,
     },
     {

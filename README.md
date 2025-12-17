@@ -18,3 +18,20 @@ View your app in AI Studio: https://ai.studio/apps/drive/19ocGb6bPuB7C9I3f2DbdXz
 2. Set the `GEMINI_API_KEY` in [.env.local](.env.local) to your Gemini API key
 3. Run the app:
    `npm run dev`
+
+## JetSuite Tools
+
+This project includes a set of free “JetSuite” analyzer tools available in the UI:
+
+- **Jet Local Optimizer**: Website health audit (performance, mobile, SEO, local relevance).
+- **JetViz**: Visual website trust / modernity check.
+- **JetBiz**: Google Business Profile Optimizer (Places API based competitor benchmarking + recommendations).
+
+### JetBiz setup
+
+JetBiz is **client-side only** and uses the Google Places JavaScript library. Provide an API key as either:
+
+- `NEXT_PUBLIC_GOOGLE_PLACES_API_KEY`
+- `VITE_GOOGLE_PLACES_API_KEY`
+
+If the API key is missing or the client-side quota is hit, JetBiz will show a helpful error and suggest booking/joining the waitlist.
