@@ -6,6 +6,9 @@ import { AnalyzerService } from './services/analyzer';
 import { getCurrentBrand } from './config/brands';
 import type { AnalysisRequest, AnalysisResult } from './types';
 
+const MIN_GENERATING_MS = 5000;
+const delay = (ms: number) => new Promise<void>((resolve) => setTimeout(resolve, ms));
+
 export function JetLocalOptimizer() {
   const [isLoading, setIsLoading] = useState(false);
   const [result, setResult] = useState<AnalysisResult | null>(null);
@@ -16,7 +19,10 @@ export function JetLocalOptimizer() {
   const handleAnalyze = async (request: AnalysisRequest) => {
     setIsLoading(true);
     try {
-      const data = await AnalyzerService.analyzeWebsite(request);
+      const [data] = await Promise.all([
+        AnalyzerService.analyzeWebsite(request),
+        delay(MIN_GENERATING_MS)
+      ]);
       setResult(data);
     } catch (error) {
       console.error('Analysis failed:', error);

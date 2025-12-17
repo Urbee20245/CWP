@@ -1,5 +1,6 @@
 import { useState } from 'react';
 import type { AnalysisRequest } from '../types';
+import { GeneratingEffect } from './GeneratingEffect';
 
 interface AnalyzerFormProps {
   onAnalyze: (request: AnalysisRequest) => void;
@@ -84,6 +85,17 @@ export function AnalyzerForm({ onAnalyze, isLoading }: AnalyzerFormProps) {
         >
           {isLoading ? 'Analyzing...' : 'Analyze Website'}
         </button>
+
+        {isLoading && (
+          <div className="pt-2">
+            <GeneratingEffect
+              theme="light"
+              durationMs={5000}
+              title="Generating your audit…"
+              subtitle="Hang tight — we’re compiling metrics and recommendations."
+            />
+          </div>
+        )}
       </div>
     </form>
   );
