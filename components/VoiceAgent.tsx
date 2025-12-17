@@ -15,6 +15,7 @@ const VoiceAgent: React.FC = () => {
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const chatSessionRef = useRef<any>(null);
+  const [configError, setConfigError] = useState<string | null>(null);
 
   const scrollToBottom = () => {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
@@ -36,15 +37,25 @@ const VoiceAgent: React.FC = () => {
 
       const modelName = importMetaEnv?.VITE_GEMINI_MODEL || 'gemini-2.0-flash-exp';
 
+      console.log('Luna AI: Initializing with model:', modelName);
+      console.log('Luna AI: API Key present:', !!apiKey);
+
       if (!apiKey) {
-        console.error("Luna AI: API Key not found");
+        const err = "Configuration Error: Google Gemini API Key is missing. Please add VITE_GEMINI_API_KEY to your environment variables.";
+        console.error(err);
+        setConfigError(err);
         return;
       }
 
+      // Initialize the client
       const ai = new GoogleGenAI({ apiKey });
-      const model = ai.getGenerativeModel({ 
-        model: modelName,
-        systemInstruction: `You are Luna, a professional and knowledgeable AI receptionist for Custom Websites Plus.
+      
+      // Note: @google/genai v1.0+ structure might differ. 
+      // If getGenerativeModel is not available, we might need to fallback or check docs.
+      // Assuming standard usage for now based on package version.
+      
+      // Configure the model
+      const systemInstruction = `You are Luna, a professional and knowledgeable AI receptionist for Custom Websites Plus.
 
 COMPANY INFO:
 - Location: Atlanta, Georgia (serving metro Atlanta area)
@@ -83,12 +94,32 @@ YOUR BEHAVIOR:
 KEY PHRASES:
 - "Have you tried our free website analysis tools?"
 - "Let me help you schedule a consultation"
-- "Every project is unique, so we provide custom quotes"`
-      });
+- "Every project is unique, so we provide custom quotes"`;
+
+      // Depending on the exact version of @google/genai, the method to start chat might vary.
+      // If this throws, we catch it below.
+      // Trying the most standard interface for the newer SDKs.
+      // If getGenerativeModel is not a function, we might be on a version that uses a different entry point.
       
-      chatSessionRef.current = model.startChat({
-        history: []
-      });
+      let chat;
+      
+      // Attempt 1: Standard GenerativeAI style (likely what's expected)
+      try {
+          const model = ai.getGenerativeModel({ 
+            model: modelName,
+            systemInstruction: systemInstruction
+          });
+          
+          chat = model.startChat({
+            history: []
+          });
+      } catch (e: any) {
+          console.warn("Luna AI: Standard init failed, checking alternatives...", e);
+          // Fallback or re-throw if critical
+          throw e; 
+      }
+
+      chatSessionRef.current = chat;
 
       // Initial message
       if (messages.length === 0) {
@@ -99,8 +130,9 @@ KEY PHRASES:
         }]);
       }
 
-    } catch (err) {
-      console.error("Luna Init Error:", err);
+    } catch (err: any) {
+      console.error("Luna AI Init Error:", err);
+      setConfigError(`Initialization Failed: ${err.message || 'Unknown error'}`);
     }
   };
 
@@ -120,7 +152,13 @@ KEY PHRASES:
     setIsTyping(true);
 
     try {
-      if (!chatSessionRef.current) await initChat();
+      if (!chatSessionRef.current) {
+          await initChat();
+          // If still null after retry, we have a hard failure
+          if (!chatSessionRef.current) {
+              throw new Error(configError || "Failed to initialize chat session. API Key may be invalid or missing.");
+          }
+      }
       
       const result = await chatSessionRef.current.sendMessage(text);
       const responseText = result.response.text();
@@ -130,12 +168,25 @@ KEY PHRASES:
         role: 'assistant', 
         text: responseText 
       }]);
-    } catch (err) {
-      console.error("Chat Error:", err);
+    } catch (err: any) {
+      console.error("Luna AI Chat Error details:", err);
+      
+      let errorMessage = "I'm having trouble connecting right now. Please try again later or call us at (404) 532-9266.";
+      
+      // More specific error messaging
+      if (err.message?.includes("API Key")) {
+          errorMessage = "Configuration Error: API Key missing or invalid. Please check settings.";
+      } else if (err.message?.includes("fetch")) {
+          errorMessage = "Network Error: Could not reach AI services. Please check your connection.";
+      } else if (err.message) {
+          // Log the actual error for debugging in the UI if needed (optional)
+          console.warn("Detailed error:", err.message);
+      }
+
       setMessages(prev => [...prev, { 
         id: Date.now().toString(), 
         role: 'assistant', 
-        text: "I'm having trouble connecting right now. Please try again later or call us at (404) 532-9266." 
+        text: errorMessage
       }]);
     } finally {
       setIsTyping(false);
@@ -169,13 +220,19 @@ KEY PHRASES:
                     <div className="w-10 h-10 rounded-full bg-gradient-to-tr from-indigo-500 to-violet-600 flex items-center justify-center border border-white/10 shadow-inner">
                         <Bot className="w-6 h-6 text-white" />
                     </div>
-                    <span className="absolute bottom-0 right-0 w-3 h-3 bg-green-500 border-2 border-slate-900 rounded-full"></span>
+                    <span className={`absolute bottom-0 right-0 w-3 h-3 border-2 border-slate-900 rounded-full ${configError ? 'bg-red-500' : 'bg-green-500'}`}></span>
                 </div>
                 <div>
                     <h3 className="text-white font-bold text-base leading-none">Luna AI</h3>
                     <div className="flex items-center gap-1.5 mt-1">
-                        <span className="block w-1.5 h-1.5 rounded-full bg-green-500 animate-pulse"></span>
-                        <span className="text-slate-400 text-xs font-medium">Online</span>
+                        {!configError ? (
+                            <>
+                                <span className="block w-1.5 h-1.5 rounded-full bg-green-500 animate-pulse"></span>
+                                <span className="text-slate-400 text-xs font-medium">Online</span>
+                            </>
+                        ) : (
+                            <span className="text-red-400 text-xs font-medium">Connection Error</span>
+                        )}
                     </div>
                 </div>
             </div>
@@ -189,12 +246,22 @@ KEY PHRASES:
 
           {/* Messages */}
           <div className="flex-1 overflow-y-auto p-4 space-y-4 scrollbar-thin scrollbar-thumb-slate-700">
-             {messages.length === 0 && !isTyping && (
+             {messages.length === 0 && !isTyping && !configError && (
                  <div className="h-full flex flex-col items-center justify-center text-center p-6 opacity-60">
                      <div className="w-16 h-16 rounded-full bg-slate-800/50 flex items-center justify-center mb-4 border border-slate-700">
                         <Sparkles className="w-8 h-8 text-indigo-400" />
                      </div>
                      <p className="text-slate-400 text-sm">Ask about our services, pricing, or web design process.</p>
+                 </div>
+             )}
+
+             {configError && messages.length === 0 && (
+                 <div className="h-full flex flex-col items-center justify-center text-center p-6 text-red-400">
+                     <div className="w-16 h-16 rounded-full bg-red-900/20 flex items-center justify-center mb-4 border border-red-500/20">
+                        <X className="w-8 h-8" />
+                     </div>
+                     <p className="text-sm font-bold mb-2">Setup Required</p>
+                     <p className="text-xs opacity-80">{configError}</p>
                  </div>
              )}
              
@@ -229,12 +296,13 @@ KEY PHRASES:
                 type="text"
                 value={inputValue}
                 onChange={(e) => setInputValue(e.target.value)}
-                placeholder="Ask Luna anything..."
-                className="flex-1 bg-slate-800 border border-slate-700 text-white placeholder-slate-500 rounded-xl px-4 py-3 focus:outline-none focus:border-indigo-500 transition-colors"
+                placeholder={configError ? "Unavailable" : "Ask Luna anything..."}
+                disabled={!!configError}
+                className="flex-1 bg-slate-800 border border-slate-700 text-white placeholder-slate-500 rounded-xl px-4 py-3 focus:outline-none focus:border-indigo-500 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
               />
               <button
                 type="submit"
-                disabled={!inputValue.trim() || isTyping}
+                disabled={!inputValue.trim() || isTyping || !!configError}
                 className="bg-indigo-600 text-white p-3 rounded-xl hover:bg-indigo-500 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
               >
                 <Send className="w-5 h-5" />
