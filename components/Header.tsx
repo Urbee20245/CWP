@@ -93,8 +93,9 @@ const Header: React.FC = () => {
                     <div className="px-3 py-2 text-[10px] font-bold text-slate-400 uppercase tracking-widest border-b border-slate-50 mb-1">
                         Free Utilities
                     </div>
-                    <button 
-                        onClick={() => scrollToSection('optimizer')}
+                    <Link 
+                        to="/jet-local-optimizer"
+                        onClick={() => setIsToolsOpen(false)}
                         className="w-full flex items-start gap-3 p-3 rounded-xl hover:bg-slate-50 transition-colors text-left group/item"
                     >
                         <div className="mt-1 bg-indigo-50 p-2 rounded-lg text-indigo-600 group-hover/item:bg-indigo-100 transition-colors">
@@ -104,9 +105,10 @@ const Header: React.FC = () => {
                             <div className="text-sm font-bold text-slate-900 group-hover/item:text-indigo-700 transition-colors">Jet Optimizer</div>
                             <div className="text-xs text-slate-500 leading-tight mt-0.5">Technical website audit & health check.</div>
                         </div>
-                    </button>
-                    <button 
-                        onClick={() => scrollToSection('jetviz')}
+                    </Link>
+                    <Link 
+                        to="/jetviz"
+                        onClick={() => setIsToolsOpen(false)}
                         className="w-full flex items-start gap-3 p-3 rounded-xl hover:bg-slate-50 transition-colors text-left group/item"
                     >
                         <div className="mt-1 bg-purple-50 p-2 rounded-lg text-purple-600 group-hover/item:bg-purple-100 transition-colors">
@@ -116,7 +118,20 @@ const Header: React.FC = () => {
                             <div className="text-sm font-bold text-slate-900 group-hover/item:text-purple-700 transition-colors">JetViz</div>
                             <div className="text-xs text-slate-500 leading-tight mt-0.5">Instant visual design comparison.</div>
                         </div>
-                    </button>
+                    </Link>
+                    <Link 
+                        to="/jetsuite"
+                        onClick={() => setIsToolsOpen(false)}
+                        className="w-full flex items-start gap-3 p-3 rounded-xl hover:bg-slate-50 transition-colors text-left group/item"
+                    >
+                        <div className="mt-1 bg-emerald-50 p-2 rounded-lg text-emerald-600 group-hover/item:bg-emerald-100 transition-colors">
+                            <Sparkles className="w-5 h-5" />
+                        </div>
+                        <div>
+                            <div className="text-sm font-bold text-slate-900 group-hover/item:text-emerald-700 transition-colors">JetSuite</div>
+                            <div className="text-xs text-slate-500 leading-tight mt-0.5">The complete agency operating system.</div>
+                        </div>
+                    </Link>
                 </div>
             </div>
           </div>
@@ -145,13 +160,13 @@ const Header: React.FC = () => {
                 <Phone className="w-4 h-4" />
                 <span className="hidden lg:inline">(404) 552-0926</span>
              </a>
-             <button
-                onClick={() => scrollToSection('optimizer')} 
+             <Link
+                to="/jet-local-optimizer" 
                 className="bg-indigo-600 text-white px-6 py-2.5 rounded-full text-sm font-bold hover:bg-indigo-500 transition-all shadow-lg shadow-indigo-200 hover:shadow-indigo-300 active:scale-95 flex items-center gap-2"
              >
                 Run Website Audit
                 <ArrowRight className="w-4 h-4" />
-             </button>
+             </Link>
         </div>
 
         {/* Mobile Toggle */}
@@ -203,8 +218,9 @@ const Header: React.FC = () => {
                 <div className="mx-2 bg-slate-50 rounded-2xl p-4 mb-2 border border-slate-100">
                    <div className="text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-3 pl-1">Free Tools</div>
                    <div className="space-y-2">
-                       <button 
-                           onClick={() => scrollToSection('optimizer')} 
+                       <Link 
+                           to="/jet-local-optimizer"
+                           onClick={() => setIsMobileMenuOpen(false)}
                            className="w-full text-left p-3 rounded-xl bg-white border border-slate-100 flex items-center gap-3 active:scale-[0.98] transition-transform"
                        >
                           <div className="bg-indigo-50 p-2 rounded-lg text-indigo-600"><Gauge className="w-5 h-5" /></div>
@@ -212,9 +228,10 @@ const Header: React.FC = () => {
                               <div className="text-sm font-bold text-slate-900">Jet Local Optimizer</div>
                               <div className="text-xs text-slate-500">Technical Website Audit</div>
                           </div>
-                       </button>
-                       <button 
-                           onClick={() => scrollToSection('jetviz')} 
+                       </Link>
+                       <Link 
+                           to="/jetviz"
+                           onClick={() => setIsMobileMenuOpen(false)}
                            className="w-full text-left p-3 rounded-xl bg-white border border-slate-100 flex items-center gap-3 active:scale-[0.98] transition-transform"
                        >
                           <div className="bg-purple-50 p-2 rounded-lg text-purple-600"><Eye className="w-5 h-5" /></div>
@@ -222,18 +239,19 @@ const Header: React.FC = () => {
                               <div className="text-sm font-bold text-slate-900">JetViz</div>
                               <div className="text-xs text-slate-500">Visual Website Check</div>
                           </div>
-                       </button>
+                       </Link>
                    </div>
                 </div>
 
                 <div className="p-2">
-                    <button
-                      onClick={() => scrollToSection('optimizer')}
+                    <Link
+                      to="/jet-local-optimizer"
+                      onClick={() => setIsMobileMenuOpen(false)}
                       className="w-full bg-indigo-600 text-white px-4 py-4 rounded-2xl font-bold shadow-lg flex justify-center items-center gap-2"
                     >
                       Run Website Audit
                       <ArrowRight className="w-4 h-4" />
-                    </button>
+                    </Link>
                 </div>
             </div>
         </div>
