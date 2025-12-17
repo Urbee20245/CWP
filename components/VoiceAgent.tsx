@@ -139,6 +139,7 @@ const VoiceAgent: React.FC = () => {
       });
       mediaStreamRef.current = stream;
 
+      if (!audioContextRef.current) return;
       const source = audioContextRef.current.createMediaStreamSource(stream);
       const processor = audioContextRef.current.createScriptProcessor(4096, 1, 1);
       processorRef.current = processor;
