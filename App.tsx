@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from 'react';
-import { BrowserRouter, Routes, Route } from 'react-router-dom';
+import { BrowserRouter, Routes, Route, useLocation } from 'react-router-dom';
 import Header from './components/Header';
 import Hero from './components/Hero';
 import ProblemSolution from './components/ProblemSolution';
@@ -44,7 +44,6 @@ const App: React.FC = () => {
 export default App;
 
 const AppShell: React.FC = () => {
-  const { useLocation } = require('react-router-dom');
   const location = useLocation();
   const [isMobile, setIsMobile] = useState(false);
 
