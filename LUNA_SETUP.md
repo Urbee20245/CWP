@@ -1,7 +1,7 @@
-# Luna AI Voice Agent Setup Guide
+# Luna AI Chat Agent Setup Guide
 
 ## Current Status
-Luna AI is configured in the code but requires a Google Gemini API key to function.
+Luna AI is configured as a text-based chat agent and requires a Google Gemini API key to function.
 
 ---
 
@@ -78,31 +78,12 @@ Click "Console" tab
 
 ### What You Should See (Success):
 ```
-🎤 Checking microphone permission...
-🔑 API Key check: Present ✅ (Length: 39)
-🔍 import.meta.env check: {VITE_GEMINI_API_KEY: "AIza..."}
-✅ API Key present, initializing AI...
-🎧 Creating audio contexts...
-🎤 Requesting microphone access...
-✅ Microphone access granted
 ✅ Luna AI session started successfully!
 ```
 
 ### What You Might See (API Key Missing):
 ```
-🎤 Checking microphone permission...
-🔑 API Key check: Missing ❌
-🔍 import.meta.env check: {}
-❌ Luna AI configuration missing. API key not found...
-```
-
-### What You Might See (Microphone Denied):
-```
-🎤 Checking microphone permission...
-🔑 API Key check: Present ✅
-...
-❌ Luna AI Error: NotAllowedError
-Error: Microphone access denied...
+❌ Luna AI Error: API Key not found
 ```
 
 ---
