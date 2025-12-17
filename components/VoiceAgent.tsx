@@ -84,6 +84,10 @@ const VoiceAgent: React.FC = () => {
 
   const getGeminiApiKey = () => (import.meta as any).env.VITE_GEMINI_API_KEY as string | undefined;
   const getGeminiModel = () => ((import.meta as any).env.VITE_GEMINI_MODEL as string | undefined) || 'gemini-2.0-flash-exp';
+  // Live (voice) models change more frequently; prefer an explicit env var with a safe default.
+  const getGeminiLiveModel = () =>
+    ((import.meta as any).env.VITE_GEMINI_LIVE_MODEL as string | undefined) ||
+    'gemini-2.5-flash-native-audio-preview-12-2025';
 
   const LUNA_SYSTEM_PROMPT = `You are Luna, AI assistant for Custom Websites Plus.
 Be helpful, concise, and professional. Do not invent facts.
@@ -210,14 +214,15 @@ If the user asks for pricing, give a realistic range and recommend booking a con
       
       // 3. Connect Live Session
       const session = await client.live.connect({
-        model: getGeminiModel(),
+        model: getGeminiLiveModel(),
         config: {
-          generationConfig: {
-            speechConfig: {
-              voiceConfig: {
-                prebuiltVoiceConfig: {
-                  voiceName: 'Aoede',
-                },
+          // Newer Gemini Live config expects these fields directly on the connect config,
+          // not nested under generationConfig (which is deprecated and may be ignored).
+          responseModalities: ['AUDIO'],
+          speechConfig: {
+            voiceConfig: {
+              prebuiltVoiceConfig: {
+                voiceName: 'Aoede',
               },
             },
           },
@@ -245,6 +250,15 @@ If the user asks for pricing, give a realistic range and recommend booking a con
 
       clientRef.current = session;
       setIsConnected(true);
+
+      // If we don't receive any audio quickly, surface a clear error instead of silently hanging.
+      const noAudioTimeoutMs = 12000;
+      let receivedAnyAudio = false;
+      const noAudioTimer = window.setTimeout(() => {
+        if (!receivedAnyAudio) {
+          setConfigError('Voice connected, but no audio was received. This is usually a model/Live API mismatch or browser blocking the connection. Try setting VITE_GEMINI_LIVE_MODEL to a supported native-audio model.');
+        }
+      }, noAudioTimeoutMs);
 
       // Prompt Luna to speak a quick greeting so users know the call is live.
       try {
@@ -274,6 +288,8 @@ If the user asks for pricing, give a realistic range and recommend booking a con
         try {
           for await (const chunk of session.receive()) {
             if (chunk.serverContent?.modelTurn?.parts?.[0]?.inlineData) {
+              receivedAnyAudio = true;
+              window.clearTimeout(noAudioTimer);
               const b64Data = chunk.serverContent.modelTurn.parts[0].inlineData.data;
               playAudioChunk(b64Data);
             }
