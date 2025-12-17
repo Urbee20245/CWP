@@ -97,13 +97,12 @@ KEY PHRASES:
 - "Every project is unique, so we provide custom quotes"`;
 
       // Depending on the exact version of @google/genai, the method to start chat might vary.
-      // If this throws, we catch it below.
-      // Trying the most standard interface for the newer SDKs.
-      // If getGenerativeModel is not a function, we might be on a version that uses a different entry point.
+      // v1.0.0+ uses getGenerativeModel, older versions might use different patterns.
+      // Based on installed ^1.33.0, getGenerativeModel should be correct.
+      // If q.getGenerativeModel is not a function, likely 'ai' is not an instance of GoogleGenAI or something else is wrong.
       
       let chat;
       
-      // Attempt 1: Standard GenerativeAI style (likely what's expected)
       try {
           const model = ai.getGenerativeModel({ 
             model: modelName,
@@ -115,7 +114,6 @@ KEY PHRASES:
           });
       } catch (e: any) {
           console.warn("Luna AI: Standard init failed, checking alternatives...", e);
-          // Fallback or re-throw if critical
           throw e; 
       }
 
