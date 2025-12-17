@@ -1,7 +1,8 @@
-import React, { useMemo, useState } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 import { ArrowLeft, ClipboardCheck, Download } from 'lucide-react';
 import { Link } from 'react-router-dom';
 import { GeneratingEffect } from '../../src/tools/jet-local-optimizer/components/GeneratingEffect';
+import { JetBizUpgradeOffer } from './JetBizUpgradeOffer';
 import {
   calculateJetBizLite,
   gradeFromScore,
@@ -77,8 +78,15 @@ export const JetBizLite: React.FC = () => {
   const [checklist, setChecklist] = useState<JetBizLiteChecklist>(defaultChecklist);
   const [isLoading, setIsLoading] = useState(false);
   const [result, setResult] = useState<ReturnType<typeof calculateJetBizLite> | null>(null);
+  const [showUpgrade, setShowUpgrade] = useState(false);
 
   const livePreview = useMemo(() => calculateJetBizLite(checklist, inputs), [checklist, inputs]);
+
+  useEffect(() => {
+    if (!result) return;
+    const t = window.setTimeout(() => setShowUpgrade(true), 2000);
+    return () => window.clearTimeout(t);
+  }, [result]);
 
   const handleRadiusChange = (radiusMeters: RadiusMeters) => {
     setInputs((p) => ({ ...p, radiusMeters }));
@@ -92,6 +100,7 @@ export const JetBizLite: React.FC = () => {
   const reset = () => {
     setResult(null);
     setChecklist(defaultChecklist);
+    setShowUpgrade(false);
   };
 
   const runAudit = async (e: React.FormEvent) => {
@@ -379,6 +388,14 @@ export const JetBizLite: React.FC = () => {
           </>
         ) : (
           <div className="space-y-10 animate-fade-in-up">
+            <JetBizUpgradeOffer
+              isOpen={showUpgrade}
+              onClose={() => setShowUpgrade(false)}
+              businessName={inputs.businessName}
+              location={inputs.location}
+              liteScore={result.overallScore}
+              competitorRadiusMeters={inputs.radiusMeters}
+            />
             <div className="flex items-center justify-between gap-4">
               <button onClick={reset} className="text-indigo-600 hover:text-indigo-800 font-medium flex items-center gap-2">
                 <ArrowLeft className="w-4 h-4" />

@@ -19,6 +19,7 @@ import ServicesPage from './components/ServicesPage';
 import ContactPage from './components/ContactPage';
 import JetBizPage from './components/JetBizPage';
 import JetBizLitePage from './components/JetBizLitePage';
+import JetBizProPage from './components/JetBizProPage';
 
 const Home = () => (
   <main>
@@ -78,6 +79,7 @@ const AppShell: React.FC = () => {
         <Route path="/jet-local-optimizer" element={<JetLocalOptimizerPage />} />
         <Route path="/jetbiz" element={<JetBizPage />} />
         <Route path="/jetbiz-lite" element={<JetBizLitePage />} />
+        <Route path="/jetbiz/pro/:id" element={<JetBizProPage />} />
       </Routes>
       <Footer />
       {!hideVoiceAgentOnThisPage && <VoiceAgent />}

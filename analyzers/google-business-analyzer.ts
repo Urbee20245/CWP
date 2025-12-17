@@ -531,7 +531,8 @@ export class GoogleBusinessAnalyzer {
 
   static async analyze(
     request: JetBizAnalysisRequest & { placeId?: string },
-    dailyLimit = DAILY_LIMIT_DEFAULT
+    dailyLimit = DAILY_LIMIT_DEFAULT,
+    options?: { competitorLimit?: number; competitorRadiusMeters?: number }
   ): Promise<JetBizAnalysisResult> {
     const apiKey = ensureApiKey();
     await loadGooglePlaces(apiKey);
@@ -581,16 +582,19 @@ export class GoogleBusinessAnalyzer {
 
     // Use first meaningful type as a category hint
     const typeHint = (place.types || []).find((t) => !['point_of_interest', 'establishment'].includes(t));
+    const competitorLimit = Math.max(1, Math.min(10, Number(options?.competitorLimit ?? 5)));
+    const competitorRadiusMeters = Math.max(1000, Math.min(20000, Number(options?.competitorRadiusMeters ?? 5500)));
+
     const nearby = await wrapNearby(ps, {
       location,
-      radius: 5500,
+      radius: competitorRadiusMeters,
       type: typeHint,
       keyword: request.industry || undefined,
     });
 
     const competitorBasics = nearby
       .filter((r) => (r as any).place_id && (r as any).place_id !== place.placeId)
-      .slice(0, 5);
+      .slice(0, competitorLimit);
 
     const competitors: JetBizCompetitorSummary[] = [];
     for (const c of competitorBasics) {

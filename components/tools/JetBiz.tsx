@@ -1,4 +1,4 @@
-import React, { useMemo, useState } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 import { AlertTriangle, Building2, Download, Search, MapPin, ArrowLeft } from 'lucide-react';
 import { Link } from 'react-router-dom';
 import { GeneratingEffect } from '../../src/tools/jet-local-optimizer/components/GeneratingEffect';
@@ -7,6 +7,7 @@ import type { JetBizAnalysisResult, JetBizPlacePrediction, JetBizRecommendation 
 
 const MIN_GENERATING_MS = 5000;
 const delay = (ms: number) => new Promise<void>((resolve) => setTimeout(resolve, ms));
+const UPGRADE_CONTEXT_KEY = 'jetbiz_upgrade_context_v1';
 
 const gradeColor = (grade: JetBizAnalysisResult['grade']) => {
   switch (grade) {
@@ -40,6 +41,8 @@ export const JetBiz: React.FC = () => {
   const [location, setLocation] = useState('');
   const [googleMapsUrl, setGoogleMapsUrl] = useState('');
   const [industry, setIndustry] = useState('');
+  const [competitorRadiusMeters, setCompetitorRadiusMeters] = useState<number | null>(null);
+  const [competitorLimit, setCompetitorLimit] = useState<number | null>(null);
 
   const [predictions, setPredictions] = useState<JetBizPlacePrediction[]>([]);
   const [selectedPlaceId, setSelectedPlaceId] = useState<string | null>(null);
@@ -59,6 +62,22 @@ export const JetBiz: React.FC = () => {
     setError(null);
     setErrorCode(null);
   };
+
+  // If the user came from JetBiz Lite Pro checkout, preload the saved context.
+  useEffect(() => {
+    try {
+      const raw = localStorage.getItem(UPGRADE_CONTEXT_KEY);
+      if (!raw) return;
+      const ctx = JSON.parse(raw);
+      if (ctx?.businessName && !businessName) setBusinessName(String(ctx.businessName));
+      if (ctx?.location && !location) setLocation(String(ctx.location));
+      if (typeof ctx?.competitorRadiusMeters === 'number') setCompetitorRadiusMeters(Number(ctx.competitorRadiusMeters));
+      setCompetitorLimit(10);
+    } catch {
+      // ignore
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   const handleFind = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -92,7 +111,14 @@ export const JetBiz: React.FC = () => {
 
     try {
       const [data] = await Promise.all([
-        GoogleBusinessAnalyzer.analyze({ businessName, location, googleMapsUrl, industry, placeId }),
+        GoogleBusinessAnalyzer.analyze(
+          { businessName, location, googleMapsUrl, industry, placeId },
+          undefined,
+          {
+            competitorLimit: competitorLimit ?? 5,
+            competitorRadiusMeters: competitorRadiusMeters ?? undefined,
+          }
+        ),
         delay(MIN_GENERATING_MS),
       ]);
       setResult(data);
@@ -372,7 +398,7 @@ export const JetBiz: React.FC = () => {
                 Rank: <span className="font-bold">#{Math.min(6, result.benchmarks.rank.userRatingsTotal)}</span> by reviews in your area
               </div>
               <p className="mt-4 text-slate-500 max-w-3xl mx-auto">
-                Compared against {result.benchmarks.competitorCount} nearby competitors. The gaps below explain why you’re losing visibility.
+                Compared against {result.benchmarks.competitorCount} nearby competitors{competitorLimit === 10 ? ' (Pro)' : ''}. The gaps below explain why you’re losing visibility.
               </p>
             </div>
 
