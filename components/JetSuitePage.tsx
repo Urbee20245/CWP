@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { Link } from 'react-router-dom';
-import { Zap, Eye, MapPin, Building2, Sparkles, ArrowRight, Bell, CheckCircle2 } from 'lucide-react';
+import { Zap, Eye, MapPin, Building2, ClipboardCheck, Sparkles, ArrowRight, Bell, CheckCircle2 } from 'lucide-react';
 
 const JetSuitePage: React.FC = () => {
   const [showWaitlist, setShowWaitlist] = useState(false);
@@ -49,6 +49,21 @@ const JetSuitePage: React.FC = () => {
       hoverShadow: 'hover:shadow-indigo-200',
       iconBg: 'bg-indigo-50',
       iconColor: 'text-indigo-700',
+      isActive: true,
+    },
+    {
+      id: 'jetbiz-lite',
+      icon: ClipboardCheck,
+      title: 'JetBiz Lite',
+      description: 'Free self-audit checklist for your Google Business Profile. Score your setup in minutes and get a clear fix list (no API calls).',
+      badge: 'FREE TOOL',
+      ctaText: 'Start Self‑Audit',
+      ctaLink: '/jetbiz-lite',
+      gradient: 'from-slate-900 to-indigo-700',
+      bgGradient: 'from-slate-50 to-indigo-50',
+      hoverShadow: 'hover:shadow-slate-200',
+      iconBg: 'bg-slate-100',
+      iconColor: 'text-slate-900',
       isActive: true,
     },
     {
