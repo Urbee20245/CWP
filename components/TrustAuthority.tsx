@@ -1,5 +1,7 @@
 import React from 'react';
-import { Briefcase, Gavel, Stethoscope, Home, Quote } from 'lucide-react';
+import { Briefcase, Gavel, Stethoscope, Home } from 'lucide-react';
+
+import Testimonials from './Testimonials';
 
 const TrustAuthority: React.FC = () => {
   const industries = [
@@ -35,46 +37,10 @@ const TrustAuthority: React.FC = () => {
                 </div>
             ))}
         </div>
-
-        {/* Testimonials */}
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
-            <div className="bg-slate-900 text-white p-10 rounded-3xl relative overflow-hidden">
-                <Quote className="absolute top-8 right-8 w-20 h-20 text-slate-800 rotate-180" />
-                <div className="relative z-10 flex flex-col h-full justify-between">
-                    <p className="text-lg leading-relaxed font-medium mb-8">
-                        "We had a 'nice' website before, but it didn't generate calls. Since the rebuild, our organic traffic is up 300% and the quality of leads is noticeably higher. The local SEO foundation really works."
-                    </p>
-                    <div className="flex items-center gap-4">
-                        <div className="w-12 h-12 rounded-full bg-slate-700 flex items-center justify-center text-xs font-bold">JD</div>
-                        <div>
-                            <div className="font-bold">John D.</div>
-                            <div className="text-slate-400 text-xs">Local HVAC Owner • Loganville, GA</div>
-                        </div>
-                    </div>
-                </div>
-            </div>
-
-            <div className="bg-white border border-slate-200 p-10 rounded-3xl relative shadow-sm">
-                 <Quote className="absolute top-8 right-8 w-20 h-20 text-slate-100 rotate-180" />
-                 <div className="relative z-10 flex flex-col h-full justify-between">
-                    <p className="text-lg leading-relaxed text-slate-600 font-medium mb-8">
-                        "I was skeptical about the 'AI Voice Agent' at first, but it catches every call we miss after hours. It's like having a receptionist who never sleeps. Paid for itself in the first month."
-                    </p>
-                    <div className="flex items-center gap-4">
-                        <div className="w-12 h-12 rounded-full bg-indigo-50 flex items-center justify-center text-xs font-bold text-indigo-600">SM</div>
-                        <div>
-                            <div className="font-bold text-slate-900">Sarah M.</div>
-                            <div className="text-slate-500 text-xs">Real Estate Broker • Lawrenceville, GA</div>
-                        </div>
-                    </div>
-                </div>
-            </div>
-        </div>
-
-        <p className="text-center text-slate-400 text-xs mt-8 uppercase tracking-widest">
-            * Placeholder testimonials for demonstration purposes
-        </p>
       </div>
+      
+      {/* Testimonials Component */}
+      <Testimonials />
     </section>
   );
 };
