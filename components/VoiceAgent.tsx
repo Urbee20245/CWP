@@ -1,6 +1,6 @@
 import React, { useState, useRef, useEffect, useCallback } from 'react';
 import { X, MessageSquare, Bot, Send, Sparkles, Mic, MicOff, Volume2, VolumeX, Phone } from 'lucide-react';
-import { GoogleGenAI } from '@google/genai';
+import { GoogleGenAI, Modality, type LiveServerMessage } from '@google/genai';
 
 interface ChatMessage {
   id: string;
@@ -27,13 +27,19 @@ const VoiceAgent: React.FC = () => {
   const [isSpeaking, setIsSpeaking] = useState(false);
   const [volumeLevel, setVolumeLevel] = useState(0);
   const [isConnectingVoice, setIsConnectingVoice] = useState(false);
+  const [realtimeInput, setRealtimeInput] = useState('');
   
   // Refs for Audio
   const audioContextRef = useRef<AudioContext | null>(null);
+  const inputAudioContextRef = useRef<AudioContext | null>(null);
+  const outputAudioContextRef = useRef<AudioContext | null>(null);
   const mediaStreamRef = useRef<MediaStream | null>(null);
   const processorRef = useRef<ScriptProcessorNode | null>(null);
   const clientRef = useRef<any>(null);
   const chatSessionRef = useRef<any>(null);
+  const liveSessionRef = useRef<any>(null);
+  const nextStartTimeRef = useRef<number>(0);
+  const audioSourcesRef = useRef<Set<AudioBufferSourceNode>>(new Set());
   
   const scrollToBottom = () => {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
@@ -87,7 +93,7 @@ const VoiceAgent: React.FC = () => {
   // Live (voice) models change more frequently; prefer an explicit env var with a safe default.
   const getGeminiLiveModel = () =>
     ((import.meta as any).env.VITE_GEMINI_LIVE_MODEL as string | undefined) ||
-    'gemini-2.5-flash-native-audio-preview-12-2025';
+    'gemini-2.5-flash-native-audio-preview-09-2025';
 
   const LUNA_SYSTEM_PROMPT = `You are Luna, AI assistant for Custom Websites Plus.
 Be helpful, concise, and professional. Do not invent facts.
@@ -195,37 +201,80 @@ If the user asks for pricing, give a realistic range and recommend booking a con
     try {
       setIsConnectingVoice(true);
       setConfigError(null);
+      setRealtimeInput('');
       const apiKey = getGeminiApiKey();
       if (!apiKey) throw new Error("API Key missing");
+      if (!window.isSecureContext) {
+        throw new Error('Voice Mode requires HTTPS to access the microphone.');
+      }
 
-      // 1. Setup Audio Context
-      audioContextRef.current = new (window.AudioContext || (window as any).webkitAudioContext)({
-        sampleRate: 24000, // Gemini Output Rate
-      });
+      // 1. Setup Audio Contexts (separate input/output mirrors the known-working pattern)
+      const AudioContextClass = window.AudioContext || (window as any).webkitAudioContext;
+      inputAudioContextRef.current = new AudioContextClass();
+      outputAudioContextRef.current = new AudioContextClass({ sampleRate: 24000 });
+      audioContextRef.current = outputAudioContextRef.current;
+
       // Some browsers start the AudioContext suspended until resumed by a user gesture.
       try {
-        await audioContextRef.current.resume();
+        if (outputAudioContextRef.current?.state === 'suspended') {
+          await outputAudioContextRef.current.resume();
+        }
       } catch {
-        // If resume fails, we'll still attempt; browser may auto-resume.
+        // If resume fails, continue; browser may auto-resume.
       }
 
       // 2. Setup Client
       const client = new GoogleGenAI({ apiKey });
       
-      // 3. Connect Live Session
-      const session = await client.live.connect({
+      // 3. Setup Microphone Input
+      const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+      mediaStreamRef.current = stream;
+
+      // 4. Connect Live Session (match known-working callback-based approach)
+      const noAudioTimeoutMs = 12000;
+      let receivedAnyAudio = false;
+      const noAudioTimer = window.setTimeout(() => {
+        if (!receivedAnyAudio) {
+          setConfigError(
+            'Voice connected, but no audio was received. This is usually a model/Live API mismatch, browser blocking, or CORS/extension interference. Try a supported native-audio model via VITE_GEMINI_LIVE_MODEL.'
+          );
+        }
+      }, noAudioTimeoutMs);
+
+      const downsampleTo16k = (buffer: Float32Array, inputSampleRate: number): Float32Array => {
+        if (inputSampleRate === 16000) return buffer;
+        const ratio = inputSampleRate / 16000;
+        const newLength = Math.ceil(buffer.length / ratio);
+        const result = new Float32Array(newLength);
+        for (let i = 0; i < newLength; i++) {
+          const x = i * ratio;
+          const index = Math.floor(x);
+          const t = x - index;
+          const v0 = buffer[index];
+          const v1 = buffer[index + 1] || v0;
+          result[i] = v0 * (1 - t) + v1 * t;
+        }
+        return result;
+      };
+
+      const createPcmMedia16k = (data: Float32Array): { data: string; mimeType: string } => {
+        const l = data.length;
+        const int16 = new Int16Array(l);
+        for (let i = 0; i < l; i++) int16[i] = Math.max(-1, Math.min(1, data[i])) * 32768;
+        return { data: arrayBufferToBase64(int16.buffer), mimeType: 'audio/pcm;rate=16000' };
+      };
+
+      const sessionPromise = client.live.connect({
         model: getGeminiLiveModel(),
         config: {
-          // Newer Gemini Live config expects these fields directly on the connect config,
-          // not nested under generationConfig (which is deprecated and may be ignored).
-          responseModalities: ['AUDIO'],
+          responseModalities: [Modality.AUDIO],
           speechConfig: {
             voiceConfig: {
-              prebuiltVoiceConfig: {
-                voiceName: 'Aoede',
-              },
-            },
+              prebuiltVoiceConfig: { voiceName: 'Aoede' }
+            }
           },
+          inputAudioTranscription: {},
+          outputAudioTranscription: {},
           systemInstruction: {
             parts: [{
               text: `You are Luna, a professional AI receptionist for Custom Websites Plus.
@@ -243,111 +292,103 @@ If the user asks for pricing, give a realistic range and recommend booking a con
               - Encourage users to book a consultation or use the free JetSuite tools.
               - Do not make up technical details.
               `
-            }],
-          },
+            }]
+          }
         },
-      });
+        callbacks: {
+          onopen: () => {
+            setIsConnected(true);
+            setIsConnectingVoice(false);
+            // Setup audio capture loop
+            if (!inputAudioContextRef.current || !mediaStreamRef.current) return;
+            const inputSampleRate = inputAudioContextRef.current.sampleRate;
+            const source = inputAudioContextRef.current.createMediaStreamSource(mediaStreamRef.current);
+            const processor = inputAudioContextRef.current.createScriptProcessor(4096, 1, 1);
+            processorRef.current = processor;
 
-      clientRef.current = session;
-      setIsConnected(true);
+            processor.onaudioprocess = (e) => {
+              if (!inputAudioContextRef.current) return;
+              const inputData = e.inputBuffer.getChannelData(0);
 
-      // If we don't receive any audio quickly, surface a clear error instead of silently hanging.
-      const noAudioTimeoutMs = 12000;
-      let receivedAnyAudio = false;
-      const noAudioTimer = window.setTimeout(() => {
-        if (!receivedAnyAudio) {
-          setConfigError('Voice connected, but no audio was received. This is usually a model/Live API mismatch or browser blocking the connection. Try setting VITE_GEMINI_LIVE_MODEL to a supported native-audio model.');
-        }
-      }, noAudioTimeoutMs);
+              // Visualizer volume
+              let sum = 0;
+              for (let i = 0; i < inputData.length; i += 10) sum += Math.abs(inputData[i]);
+              setVolumeLevel(Math.min(100, Math.round(sum * 500)));
 
-      // Prompt Luna to speak a quick greeting so users know the call is live.
-      try {
-        session.send({
-          clientContent: {
-            turns: [
-              {
-                role: 'user',
-                parts: [
-                  {
-                    text: `Please greet the caller with: "Welcome to Custom Websites Plus — I'm Luna. How can I assist you?"`
+              const downsampled = downsampleTo16k(inputData, inputSampleRate);
+              const media = createPcmMedia16k(downsampled);
+              sessionPromise.then((sess: any) => sess.sendRealtimeInput({ media })).catch(() => {});
+            };
+
+            source.connect(processor);
+            // Mute node prevents feedback while keeping processor alive
+            const muteNode = inputAudioContextRef.current.createGain();
+            muteNode.gain.value = 0;
+            processor.connect(muteNode);
+            muteNode.connect(inputAudioContextRef.current.destination);
+
+            // Ask Luna to speak a greeting so users know the call is live.
+            sessionPromise
+              .then((sess: any) =>
+                sess.send({
+                  clientContent: {
+                    turns: [
+                      {
+                        role: 'user',
+                        parts: [{ text: `Welcome to Custom Websites Plus — I'm Luna. How can I assist you?` }]
+                      }
+                    ],
+                    turnComplete: true
                   }
-                ]
-              }
-            ],
-            turnComplete: true
-          }
-        });
-      } catch (e) {
-        // If the SDK shape differs, we ignore and continue with microphone streaming.
-        console.warn('Voice greeting send failed:', e);
-      }
-
-      // 4. Handle Incoming Audio (Stream)
-      // Using a simple loop to process the incoming stream
-      (async () => {
-        try {
-          for await (const chunk of session.receive()) {
-            if (chunk.serverContent?.modelTurn?.parts?.[0]?.inlineData) {
-              receivedAnyAudio = true;
-              window.clearTimeout(noAudioTimer);
-              const b64Data = chunk.serverContent.modelTurn.parts[0].inlineData.data;
-              playAudioChunk(b64Data);
-            }
-            if (chunk.serverContent?.turnComplete) {
-              setIsSpeaking(false);
-            }
-          }
-        } catch (e) {
-          console.error("Stream error:", e);
-          disconnectVoiceSession();
-        }
-      })();
-
-      // 5. Setup Microphone Input
-      const stream = await navigator.mediaDevices.getUserMedia({
-        audio: {
-          channelCount: 1,
-          sampleRate: 24000,
-        },
-      });
-      mediaStreamRef.current = stream;
-
-      if (!audioContextRef.current) return;
-      const source = audioContextRef.current.createMediaStreamSource(stream);
-      const processor = audioContextRef.current.createScriptProcessor(4096, 1, 1);
-      processorRef.current = processor;
-
-      processor.onaudioprocess = (e) => {
-        const inputData = e.inputBuffer.getChannelData(0);
-        
-        // Calculate volume for visualizer
-        let sum = 0;
-        for(let i = 0; i < inputData.length; i += 10) {
-            sum += Math.abs(inputData[i]);
-        }
-        setVolumeLevel(Math.min(100, Math.round(sum * 500)));
-
-        // Convert to PCM 16kHz
-        // Note: Assuming input is close to 16k or we just send it. 
-        // For best results, we should downsample if context is 44.1k/48k.
-        // Simple 1-to-1 skip for downsampling if needed:
-        // (Omitted strict resampling for brevity, usually context handles pull or we rely on robust backend)
-        
-        const pcm16 = floatTo16BitPCM(inputData);
-        const b64 = arrayBufferToBase64(pcm16);
-
-        clientRef.current.send({
-          realtimeInput: {
-            mediaChunks: [{
-              mimeType: "audio/pcm;rate=24000",
-              data: b64,
-            }],
+                })
+              )
+              .catch(() => {});
           },
-        });
-      };
+          onmessage: async (message: LiveServerMessage) => {
+            const parts = message.serverContent?.modelTurn?.parts || [];
+            for (const part of parts) {
+              const audioData = part.inlineData?.data;
+              if (audioData) {
+                receivedAnyAudio = true;
+                window.clearTimeout(noAudioTimer);
+                playAudioChunk(audioData);
+              }
+            }
 
-      source.connect(processor);
-      processor.connect(audioContextRef.current.destination);
+            const inputTrans = (message as any).serverContent?.inputTranscription?.text;
+            if (inputTrans) {
+              setRealtimeInput((prev) => (prev + inputTrans).slice(-240));
+            }
+
+            if (message.serverContent?.turnComplete) {
+              setIsSpeaking(false);
+              setRealtimeInput('');
+              const ctx = outputAudioContextRef.current;
+              if (ctx && nextStartTimeRef.current < ctx.currentTime) {
+                nextStartTimeRef.current = ctx.currentTime;
+              }
+            }
+
+            if ((message as any).serverContent?.interrupted) {
+              audioSourcesRef.current.forEach((src) => src.stop());
+              audioSourcesRef.current.clear();
+              nextStartTimeRef.current = 0;
+              setRealtimeInput('');
+            }
+          },
+          onclose: () => {
+            window.clearTimeout(noAudioTimer);
+            disconnectVoiceSession();
+          },
+          onerror: () => {
+            window.clearTimeout(noAudioTimer);
+            disconnectVoiceSession();
+          }
+        }
+      });
+
+      liveSessionRef.current = sessionPromise;
+      clientRef.current = sessionPromise;
 
     } catch (err: any) {
       console.error("Voice Connection Failed:", err);
@@ -371,15 +412,31 @@ If the user asks for pricing, give a realistic range and recommend booking a con
       audioContextRef.current.close();
       audioContextRef.current = null;
     }
+    if (inputAudioContextRef.current) {
+      inputAudioContextRef.current.close().catch(() => {});
+      inputAudioContextRef.current = null;
+    }
+    if (outputAudioContextRef.current) {
+      outputAudioContextRef.current.close().catch(() => {});
+      outputAudioContextRef.current = null;
+    }
+    if (audioSourcesRef.current) {
+      audioSourcesRef.current.forEach((src) => src.stop());
+      audioSourcesRef.current.clear();
+    }
+    nextStartTimeRef.current = 0;
+    liveSessionRef.current = null;
     clientRef.current = null; // Session cleanup
     setIsConnected(false);
     setIsSpeaking(false);
     setVolumeLevel(0);
+    setRealtimeInput('');
   };
 
   const playAudioChunk = (base64Data: string) => {
     setIsSpeaking(true);
-    if (!audioContextRef.current) return;
+    const ctx = outputAudioContextRef.current || audioContextRef.current;
+    if (!ctx) return;
 
     try {
       const binaryString = window.atob(base64Data);
@@ -393,16 +450,19 @@ If the user asks for pricing, give a realistic range and recommend booking a con
         floatData[i] = pcmData[i] / 32768.0;
       }
 
-      const buffer = audioContextRef.current.createBuffer(1, floatData.length, 24000);
+      const buffer = ctx.createBuffer(1, floatData.length, 24000);
       buffer.getChannelData(0).set(floatData);
 
-      const source = audioContextRef.current.createBufferSource();
+      const source = ctx.createBufferSource();
       source.buffer = buffer;
-      source.connect(audioContextRef.current.destination);
-      source.start();
+      source.connect(ctx.destination);
+      const startAt = Math.max(nextStartTimeRef.current, ctx.currentTime);
+      source.start(startAt);
+      nextStartTimeRef.current = startAt + buffer.duration;
+      audioSourcesRef.current.add(source);
       
       source.onended = () => {
-          // Typically handled by stream turnComplete, but safe fallback
+          audioSourcesRef.current.delete(source);
       };
     } catch (e) {
       console.error("Audio playback error", e);
