@@ -17,11 +17,14 @@ const VoiceAgent: React.FC = () => {
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const [configError, setConfigError] = useState<string | null>(null);
   const chatTranscriptRef = useRef<string>('');
+  const [firstName, setFirstName] = useState<string | null>(null);
+  const firstNameRef = useRef<string>('');
   
   // Voice State
   const [isConnected, setIsConnected] = useState(false);
   const [isSpeaking, setIsSpeaking] = useState(false);
   const [volumeLevel, setVolumeLevel] = useState(0);
+  const [isConnectingVoice, setIsConnectingVoice] = useState(false);
   
   // Refs for Audio
   const audioContextRef = useRef<AudioContext | null>(null);
@@ -37,6 +40,23 @@ const VoiceAgent: React.FC = () => {
   useEffect(() => {
     scrollToBottom();
   }, [messages, isOpen, mode]);
+
+  useEffect(() => {
+    firstNameRef.current = firstName || '';
+  }, [firstName]);
+
+  // One-time welcome message for chat mode (additive, does not replace any existing behavior).
+  useEffect(() => {
+    if (!isOpen || mode !== 'chat') return;
+    if (messages.length > 0) return;
+    setMessages([
+      {
+        id: 'luna-welcome',
+        role: 'assistant',
+        text: `Welcome — I’m Luna. What’s your first name?`
+      }
+    ]);
+  }, [isOpen, mode, messages.length]);
 
   // --- AUDIO UTILS ---
   const floatTo16BitPCM = (float32Array: Float32Array) => {
@@ -66,7 +86,9 @@ const VoiceAgent: React.FC = () => {
   const LUNA_SYSTEM_PROMPT = `You are Luna, AI assistant for Custom Websites Plus.
 Be helpful, concise, and professional. Do not invent facts.
 Default to 1–2 sentences. Only expand if the user explicitly asks for more detail.
+Be polite. Ask for the user's first name early if you don't know it yet. Once you know it, address them by first name naturally.
 When helpful, include 1–2 direct on-site links in your reply so the user can take action (do not spam links).
+When you include links, format them as Markdown links so they are clickable, e.g. [JetSuite](/jetsuite).
 Use these internal URLs (pick the most relevant):
 - Tool hub: /jetsuite
 - Run a free local audit: /jet-local-optimizer
@@ -86,9 +108,87 @@ If the user asks for pricing, give a realistic range and recommend booking a con
     return raw;
   };
 
+  const extractFirstName = (text: string) => {
+    const cleaned = text.trim();
+    if (!cleaned) return null;
+
+    // Common patterns: "I'm John", "I am John", "my name is John"
+    const m1 = cleaned.match(/\b(?:i\s*am|i['’]m|im|my\s+name\s+is)\s+([a-zA-Z'-]{2,30})\b/i);
+    if (m1?.[1]) return m1[1];
+
+    // If the message is a single "name-like" token, accept it.
+    const single = cleaned.replace(/[^\w'-]/g, '');
+    if (/^[a-zA-Z][a-zA-Z'-]{1,29}$/.test(single) && cleaned.split(/\s+/).length === 1) return single;
+
+    return null;
+  };
+
+  const stripTrailingPunctuation = (href: string) => href.replace(/[),.;!?]+$/g, '');
+
+  const renderTextWithLinks = (text: string) => {
+    const pattern =
+      /(\[([^\]]+)\]\(([^)]+)\))|(https?:\/\/[^\s]+)|(\/[A-Za-z0-9\-._~\/?#[\]@!$&'()*+,;=%]+)/g;
+
+    const parts: React.ReactNode[] = [];
+    let lastIndex = 0;
+    let match: RegExpExecArray | null;
+    let key = 0;
+
+    while ((match = pattern.exec(text)) !== null) {
+      const index = match.index;
+      if (index > lastIndex) {
+        parts.push(<span key={`t-${key++}`}>{text.slice(lastIndex, index)}</span>);
+      }
+
+      // Markdown link: [label](href)
+      if (match[2] && match[3]) {
+        const label = match[2];
+        const rawHref = match[3];
+        const href = stripTrailingPunctuation(rawHref);
+        parts.push(
+          <a
+            key={`a-${key++}`}
+            href={href}
+            className="text-indigo-300 hover:text-indigo-200 underline decoration-indigo-400/40 underline-offset-4"
+            rel={href.startsWith('http') ? 'noopener noreferrer' : undefined}
+            target={href.startsWith('http') ? '_blank' : undefined}
+          >
+            {label}
+          </a>
+        );
+      } else if (match[4] || match[5]) {
+        const rawHref = match[4] || match[5] || '';
+        const href = stripTrailingPunctuation(rawHref);
+        parts.push(
+          <a
+            key={`a-${key++}`}
+            href={href}
+            className="text-indigo-300 hover:text-indigo-200 underline decoration-indigo-400/40 underline-offset-4"
+            rel={href.startsWith('http') ? 'noopener noreferrer' : undefined}
+            target={href.startsWith('http') ? '_blank' : undefined}
+          >
+            {href}
+          </a>
+        );
+      } else {
+        parts.push(<span key={`t-${key++}`}>{match[0]}</span>);
+      }
+
+      lastIndex = pattern.lastIndex;
+    }
+
+    if (lastIndex < text.length) {
+      parts.push(<span key={`t-${key++}`}>{text.slice(lastIndex)}</span>);
+    }
+
+    return <>{parts}</>;
+  };
+
   // --- VOICE SESSION MANAGEMENT ---
   const connectVoiceSession = async () => {
     try {
+      setIsConnectingVoice(true);
+      setConfigError(null);
       const apiKey = getGeminiApiKey();
       if (!apiKey) throw new Error("API Key missing");
 
@@ -102,7 +202,7 @@ If the user asks for pricing, give a realistic range and recommend booking a con
       
       // 3. Connect Live Session
       const session = await client.live.connect({
-        model: 'gemini-2.0-flash-exp',
+        model: getGeminiModel(),
         config: {
           generationConfig: {
             speechConfig: {
@@ -207,6 +307,8 @@ If the user asks for pricing, give a realistic range and recommend booking a con
       console.error("Voice Connection Failed:", err);
       setConfigError(normalizeErrorMessage(err));
       setIsConnected(false);
+    } finally {
+      setIsConnectingVoice(false);
     }
   };
 
@@ -277,11 +379,11 @@ If the user asks for pricing, give a realistic range and recommend booking a con
         const modelName = getGeminiModel();
 
         // Keep a simple transcript so we don't depend on any specific chat-session API shape.
-        chatTranscriptRef.current = `System: ${LUNA_SYSTEM_PROMPT}\n`;
+        chatTranscriptRef.current = `System: ${LUNA_SYSTEM_PROMPT}\nKnown user first name: ${firstNameRef.current || 'unknown'}\n`;
 
         chatSessionRef.current = {
           sendMessage: async (text: string) => {
-            const prompt = `${chatTranscriptRef.current}\nUser: ${text}\nLuna:`;
+            const prompt = `${chatTranscriptRef.current}\nKnown user first name: ${firstNameRef.current || 'unknown'}\nUser: ${text}\nLuna:`;
             // @google/genai supports passing a single string as contents.
             const resp = await (client as any).models.generateContent({
               model: modelName,
@@ -323,6 +425,10 @@ If the user asks for pricing, give a realistic range and recommend booking a con
     setIsTyping(true);
 
     try {
+        if (!firstName) {
+          const maybeName = extractFirstName(text);
+          if (maybeName) setFirstName(maybeName);
+        }
         if (!chatSessionRef.current) await initChat();
         if (!chatSessionRef.current) {
           throw new Error(configError || 'Chat session not initialized');
@@ -419,10 +525,11 @@ If the user asks for pricing, give a realistic range and recommend booking a con
                     {!isConnected ? (
                         <button 
                             onClick={connectVoiceSession}
-                            className="bg-white text-indigo-900 px-8 py-4 rounded-full font-bold hover:bg-indigo-50 transition-all shadow-lg hover:scale-105 flex items-center gap-2"
+                            disabled={isConnectingVoice}
+                            className="bg-white text-indigo-900 px-8 py-4 rounded-full font-bold hover:bg-indigo-50 transition-all shadow-lg hover:scale-105 flex items-center gap-2 disabled:opacity-70 disabled:cursor-wait disabled:hover:scale-100"
                         >
                             <Phone className="w-5 h-5" />
-                            Start Call
+                            {isConnectingVoice ? 'Connecting…' : 'Start Call'}
                         </button>
                     ) : (
                         <button 
@@ -457,7 +564,7 @@ If the user asks for pricing, give a realistic range and recommend booking a con
                         {messages.map(m => (
                             <div key={m.id} className={`flex ${m.role === 'user' ? 'justify-end' : 'justify-start'}`}>
                                 <div className={`max-w-[85%] px-4 py-3 rounded-2xl text-sm ${m.role === 'user' ? 'bg-indigo-600 text-white' : 'bg-slate-800 text-slate-200'}`}>
-                                    {m.text}
+                                    {m.role === 'assistant' ? renderTextWithLinks(m.text) : m.text}
                                 </div>
                             </div>
                         ))}
