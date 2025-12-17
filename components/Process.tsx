@@ -25,7 +25,7 @@ const Process: React.FC = () => {
   ];
 
   return (
-    <section id={NavigationLink.Process} className="py-24 bg-slate-50 border-t border-slate-200">
+    <section className="py-24 bg-slate-50 border-t border-slate-200">
       <div className="max-w-7xl mx-auto px-6">
         <div className="text-center mb-16">
             <span className="text-slate-500 font-bold text-xs tracking-[0.2em] uppercase mb-4 block">Our Process</span>

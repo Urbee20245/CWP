@@ -1,5 +1,5 @@
 import React from 'react';
-import { HashRouter, Routes, Route } from 'react-router-dom';
+import { BrowserRouter, Routes, Route } from 'react-router-dom';
 import Header from './components/Header';
 import Hero from './components/Hero';
 import ProblemSolution from './components/ProblemSolution';
@@ -35,12 +35,13 @@ const Home = () => (
 
 const App: React.FC = () => {
   return (
-    <HashRouter>
+    <BrowserRouter>
       <div className="min-h-screen bg-slate-50 font-sans selection:bg-blue-100 selection:text-blue-900">
         <Header />
         <Routes>
           <Route path="/" element={<Home />} />
           <Route path="/services" element={<ServicesPage />} />
+          <Route path="/process" element={<Process />} />
           <Route path="/contact" element={<ContactPage />} />
           <Route path="/jetsuite" element={<JetSuitePage />} />
           <Route path="/jetviz" element={<JetVizPage />} />
@@ -49,7 +50,7 @@ const App: React.FC = () => {
         <Footer />
         <VoiceAgent />
       </div>
-    </HashRouter>
+    </BrowserRouter>
   );
 };
 

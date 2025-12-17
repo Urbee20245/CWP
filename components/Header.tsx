@@ -136,12 +136,12 @@ const Header: React.FC = () => {
             </div>
           </div>
 
-          <button
-            onClick={() => scrollToSection(NavigationLink.Process)}
+          <Link
+            to="/process"
             className="px-5 py-2.5 text-sm font-medium text-slate-600 hover:text-slate-900 hover:bg-white/50 rounded-full transition-all"
           >
             Process
-          </button>
+          </Link>
           
           <Link
             to="/contact"
@@ -199,12 +199,13 @@ const Header: React.FC = () => {
                       <Sparkles className="w-4 h-4 text-indigo-600" />
                       JetSuite
                     </Link>
-                    <button
-                      onClick={() => scrollToSection(NavigationLink.Process)}
+                    <Link
+                      to="/process"
+                      onClick={() => setIsMobileMenuOpen(false)}
                       className="w-full text-left px-4 py-3 rounded-xl hover:bg-slate-50 text-slate-700 font-semibold"
                     >
                       Process
-                    </button>
+                    </Link>
                     <Link
                       to="/contact"
                       onClick={() => setIsMobileMenuOpen(false)}
