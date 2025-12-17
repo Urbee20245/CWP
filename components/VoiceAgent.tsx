@@ -65,6 +65,7 @@ const VoiceAgent: React.FC = () => {
 
   const LUNA_SYSTEM_PROMPT = `You are Luna, AI assistant for Custom Websites Plus.
 Be helpful, concise, and professional. Do not invent facts.
+Default to 1–2 sentences. Only expand if the user explicitly asks for more detail.
 If the user asks for pricing, give a realistic range and recommend booking a consult.`;
 
   const normalizeErrorMessage = (err: any) => {
