@@ -108,7 +108,8 @@ Use these internal URLs (pick the most relevant):
 - Contact / book a consult: /contact
 - Learn services: /services
 - See the process: /process
-If the user asks for pricing, give a realistic range and recommend booking a consult.`;
+Never mention or estimate the price of a website rebuild. Every situation is unique.
+If the user asks about cost, explain that we review it case-by-case and invite them to book a quick consultation here: [Book a consult](/contact).`;
 
   const normalizeErrorMessage = (err: any) => {
     const raw = err?.message || err?.toString?.() || 'Connection failed';
@@ -283,12 +284,13 @@ If the user asks for pricing, give a realistic range and recommend booking a con
               - Name: Custom Websites Plus (CWP)
               - Phone: (404) 532-9266
               - Service: Website Rebuilds, SEO, AI Agents
-              - Pricing: $5k-$15k typically
               - Timeline: 4-6 weeks
               
               YOUR ROLE:
               - Be helpful, concise, and professional.
               - Answer questions about services.
+              - Never mention or estimate pricing for a website rebuild. Treat every project as case-by-case.
+              - If asked about cost, invite them to book a consult at /contact so we can review their situation.
               - Encourage users to book a consultation or use the free JetSuite tools.
               - Do not make up technical details.
               `
