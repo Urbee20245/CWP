@@ -1,5 +1,5 @@
 import React, { useState, useRef, useEffect } from 'react';
-import { X, MessageSquare, Bot, Send, Sparkles } from 'lucide-react';
+import { X, MessageSquare, Bot, Send, Sparkles, Mic, MicOff, Volume2, VolumeX } from 'lucide-react';
 import { GoogleGenerativeAI } from '@google/generative-ai';
 
 interface ChatMessage {
@@ -16,6 +16,13 @@ const VoiceAgent: React.FC = () => {
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const chatSessionRef = useRef<any>(null);
   const [configError, setConfigError] = useState<string | null>(null);
+  
+  // Voice States
+  const [isListening, setIsListening] = useState(false);
+  const [isSpeaking, setIsSpeaking] = useState(false);
+  const [speechSupported, setSpeechSupported] = useState(false);
+  const recognitionRef = useRef<any>(null);
+  const synthesisRef = useRef<SpeechSynthesis | null>(null);
 
   const scrollToBottom = () => {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
@@ -24,6 +31,84 @@ const VoiceAgent: React.FC = () => {
   useEffect(() => {
     scrollToBottom();
   }, [messages, isOpen]);
+
+  // Initialize Speech APIs
+  useEffect(() => {
+    if (typeof window !== 'undefined') {
+      // Speech Recognition Setup
+      const SpeechRecognition = (window as any).SpeechRecognition || (window as any).webkitSpeechRecognition;
+      if (SpeechRecognition) {
+        setSpeechSupported(true);
+        recognitionRef.current = new SpeechRecognition();
+        recognitionRef.current.continuous = false;
+        recognitionRef.current.interimResults = false;
+        recognitionRef.current.lang = 'en-US';
+
+        recognitionRef.current.onresult = (event: any) => {
+          const transcript = event.results[0][0].transcript;
+          setInputValue(prev => prev + (prev ? ' ' : '') + transcript);
+          setIsListening(false);
+        };
+
+        recognitionRef.current.onerror = (event: any) => {
+          console.error('Speech recognition error', event.error);
+          setIsListening(false);
+        };
+
+        recognitionRef.current.onend = () => {
+          setIsListening(false);
+        };
+      }
+
+      // Speech Synthesis Setup
+      if ('speechSynthesis' in window) {
+        synthesisRef.current = window.speechSynthesis;
+      }
+    }
+  }, []);
+
+  const toggleListening = () => {
+    if (!speechSupported || !recognitionRef.current) return;
+
+    if (isListening) {
+      recognitionRef.current.stop();
+      setIsListening(false);
+    } else {
+      setInputValue(''); // Clear input when starting new dictation? Or keep it? Let's keep context if typing.
+      try {
+        recognitionRef.current.start();
+        setIsListening(true);
+      } catch (e) {
+        console.error("Failed to start speech recognition:", e);
+      }
+    }
+  };
+
+  const speakText = (text: string) => {
+    if (!synthesisRef.current) return;
+    
+    // Stop any current speech
+    synthesisRef.current.cancel();
+
+    const utterance = new SpeechSynthesisUtterance(text);
+    utterance.onstart = () => setIsSpeaking(true);
+    utterance.onend = () => setIsSpeaking(false);
+    utterance.onerror = () => setIsSpeaking(false);
+    
+    // Attempt to pick a nice voice
+    const voices = synthesisRef.current.getVoices();
+    const preferredVoice = voices.find(v => v.name.includes('Google US English') || v.name.includes('Samantha'));
+    if (preferredVoice) utterance.voice = preferredVoice;
+
+    synthesisRef.current.speak(utterance);
+  };
+
+  const stopSpeaking = () => {
+    if (synthesisRef.current) {
+      synthesisRef.current.cancel();
+      setIsSpeaking(false);
+    }
+  };
 
   const initChat = async () => {
     if (chatSessionRef.current) return;
@@ -50,9 +135,6 @@ const VoiceAgent: React.FC = () => {
       // Initialize the client
       const ai = new GoogleGenerativeAI(apiKey);
       
-      // Configure the model
-      const systemInstruction = `You are Luna... (rest of prompt)`; // We will need to move the prompt string back or reference it
-
       let chat;
       
       try {
@@ -128,6 +210,8 @@ KEY PHRASES:
   useEffect(() => {
     if (isOpen) {
       initChat();
+    } else {
+        stopSpeaking(); // Stop speaking when closed
     }
   }, [isOpen]);
 
@@ -139,6 +223,7 @@ KEY PHRASES:
     setInputValue('');
     setMessages(prev => [...prev, { id: Date.now().toString(), role: 'user', text }]);
     setIsTyping(true);
+    stopSpeaking(); // Stop any current speech
 
     try {
       if (!chatSessionRef.current) {
@@ -157,19 +242,21 @@ KEY PHRASES:
         role: 'assistant', 
         text: responseText 
       }]);
+
+      // Auto-speak response if not muted (optional, maybe controlled by a toggle? let's auto-speak if user used mic recently?)
+      // For now, let's just enable it if the user wants to click the speaker button, OR we could auto-speak.
+      // Let's auto-speak to emulate "Voice Agent" feel
+      speakText(responseText);
+
     } catch (err: any) {
       console.error("Luna AI Chat Error details:", err);
       
       let errorMessage = "I'm having trouble connecting right now. Please try again later or call us at (404) 532-9266.";
       
-      // More specific error messaging
       if (err.message?.includes("API Key")) {
           errorMessage = "Configuration Error: API Key missing or invalid. Please check settings.";
       } else if (err.message?.includes("fetch")) {
           errorMessage = "Network Error: Could not reach AI services. Please check your connection.";
-      } else if (err.message) {
-          // Log the actual error for debugging in the UI if needed (optional)
-          console.warn("Detailed error:", err.message);
       }
 
       setMessages(prev => [...prev, { 
@@ -225,12 +312,23 @@ KEY PHRASES:
                     </div>
                 </div>
             </div>
-            <button 
-              onClick={() => setIsOpen(false)}
-              className="text-slate-500 hover:text-white transition-colors bg-white/5 p-2 rounded-full hover:bg-white/10"
-            >
-              <X className="w-5 h-5" />
-            </button>
+            <div className="flex items-center gap-2">
+                {isSpeaking ? (
+                    <button onClick={stopSpeaking} className="text-indigo-400 hover:text-white transition-colors p-2 rounded-full hover:bg-white/10">
+                        <Volume2 className="w-5 h-5 animate-pulse" />
+                    </button>
+                ) : (
+                    <button onClick={() => {}} className="text-slate-600 hover:text-slate-500 transition-colors p-2 cursor-default">
+                        <VolumeX className="w-5 h-5" />
+                    </button>
+                )}
+                <button 
+                  onClick={() => setIsOpen(false)}
+                  className="text-slate-500 hover:text-white transition-colors bg-white/5 p-2 rounded-full hover:bg-white/10"
+                >
+                  <X className="w-5 h-5" />
+                </button>
+            </div>
           </div>
 
           {/* Messages */}
@@ -280,13 +378,27 @@ KEY PHRASES:
 
           {/* Input Area */}
           <div className="p-4 bg-slate-900/95 border-t border-white/5">
-            <form onSubmit={handleSend} className="flex gap-2">
+            <form onSubmit={handleSend} className="flex gap-2 items-center">
+              {speechSupported && (
+                  <button
+                    type="button"
+                    onClick={toggleListening}
+                    className={`p-3 rounded-xl transition-all ${
+                        isListening 
+                        ? 'bg-red-500 text-white animate-pulse' 
+                        : 'bg-slate-800 text-slate-400 hover:text-white hover:bg-slate-700'
+                    }`}
+                  >
+                    {isListening ? <MicOff className="w-5 h-5" /> : <Mic className="w-5 h-5" />}
+                  </button>
+              )}
+              
               <input
                 type="text"
                 value={inputValue}
                 onChange={(e) => setInputValue(e.target.value)}
-                placeholder={configError ? "Unavailable" : "Ask Luna anything..."}
-                disabled={!!configError}
+                placeholder={isListening ? "Listening..." : (configError ? "Unavailable" : "Type a message...")}
+                disabled={!!configError || isListening}
                 className="flex-1 bg-slate-800 border border-slate-700 text-white placeholder-slate-500 rounded-xl px-4 py-3 focus:outline-none focus:border-indigo-500 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
               />
               <button
