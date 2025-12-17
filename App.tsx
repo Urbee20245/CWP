@@ -8,7 +8,7 @@ import JetViz from './components/JetViz';
 import Services from './components/Services';
 import TrustAuthority from './components/TrustAuthority';
 import Stats from './components/Stats';
-import Process from './components/Process';
+import Process from './components/ProcessPage';
 import Contact from './components/Contact';
 import Footer from './components/Footer';
 import VoiceAgent from './components/VoiceAgent';
