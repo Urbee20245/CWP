@@ -18,7 +18,7 @@ import { Link } from 'react-router-dom';
 import { AnalyzerService } from '../src/tools/jet-local-optimizer/services/analyzer';
 import { ResultsDashboard } from '../src/tools/jet-local-optimizer/components/ResultsDashboard';
 import { CTASection } from '../src/tools/jet-local-optimizer/components/CTASection';
-import { BRAND_CONFIGS } from '../src/tools/jet-local-optimizer/config/brands';
+import { getCurrentBrand } from '../src/tools/jet-local-optimizer/config/brands';
 import type { AnalysisResult } from '../src/tools/jet-local-optimizer/types';
 
 const JetLocalOptimizerPage: React.FC = () => {
@@ -27,7 +27,7 @@ const JetLocalOptimizerPage: React.FC = () => {
   const [result, setResult] = useState<AnalysisResult | null>(null);
 
   // Default brand config
-  const brandConfig = BRAND_CONFIGS.cwp;
+  const brandConfig = getCurrentBrand();
 
   const handleScan = async (e: React.FormEvent) => {
     e.preventDefault();

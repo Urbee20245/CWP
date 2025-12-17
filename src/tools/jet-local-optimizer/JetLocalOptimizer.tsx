@@ -3,7 +3,7 @@ import { AnalyzerForm } from './components/AnalyzerForm';
 import { ResultsDashboard } from './components/ResultsDashboard';
 import { CTASection } from './components/CTASection';
 import { AnalyzerService } from './services/analyzer';
-import { BRAND_CONFIGS } from './config/brands';
+import { getCurrentBrand } from './config/brands';
 import type { AnalysisRequest, AnalysisResult } from './types';
 
 export function JetLocalOptimizer() {
@@ -11,8 +11,7 @@ export function JetLocalOptimizer() {
   const [result, setResult] = useState<AnalysisResult | null>(null);
   
   // Get brand config based on env var or default to first one
-  const brandKey = import.meta.env.VITE_BRAND || 'cwp';
-  const brandConfig = BRAND_CONFIGS[brandKey as keyof typeof BRAND_CONFIGS] || BRAND_CONFIGS.cwp;
+  const brandConfig = getCurrentBrand();
 
   const handleAnalyze = async (request: AnalysisRequest) => {
     setIsLoading(true);
