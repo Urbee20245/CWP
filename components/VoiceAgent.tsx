@@ -19,6 +19,8 @@ const VoiceAgent: React.FC = () => {
   const chatTranscriptRef = useRef<string>('');
   const [firstName, setFirstName] = useState<string | null>(null);
   const firstNameRef = useRef<string>('');
+  const [hasAskedForName, setHasAskedForName] = useState(false);
+  const [pendingUserRequest, setPendingUserRequest] = useState<string | null>(null);
   
   // Voice State
   const [isConnected, setIsConnected] = useState(false);
@@ -53,7 +55,7 @@ const VoiceAgent: React.FC = () => {
       {
         id: 'luna-welcome',
         role: 'assistant',
-        text: `Welcome — I’m Luna. What’s your first name?`
+        text: `Welcome to Custom Websites Plus- I'm Luna How can I assist you?`
       }
     ]);
   }, [isOpen, mode, messages.length]);
@@ -196,6 +198,12 @@ If the user asks for pricing, give a realistic range and recommend booking a con
       audioContextRef.current = new (window.AudioContext || (window as any).webkitAudioContext)({
         sampleRate: 24000, // Gemini Output Rate
       });
+      // Some browsers start the AudioContext suspended until resumed by a user gesture.
+      try {
+        await audioContextRef.current.resume();
+      } catch {
+        // If resume fails, we'll still attempt; browser may auto-resume.
+      }
 
       // 2. Setup Client
       const client = new GoogleGenAI({ apiKey });
@@ -238,6 +246,28 @@ If the user asks for pricing, give a realistic range and recommend booking a con
       clientRef.current = session;
       setIsConnected(true);
 
+      // Prompt Luna to speak a quick greeting so users know the call is live.
+      try {
+        session.send({
+          clientContent: {
+            turns: [
+              {
+                role: 'user',
+                parts: [
+                  {
+                    text: `Please greet the caller with: "Welcome to Custom Websites Plus — I'm Luna. How can I assist you?"`
+                  }
+                ]
+              }
+            ],
+            turnComplete: true
+          }
+        });
+      } catch (e) {
+        // If the SDK shape differs, we ignore and continue with microphone streaming.
+        console.warn('Voice greeting send failed:', e);
+      }
+
       // 4. Handle Incoming Audio (Stream)
       // Using a simple loop to process the incoming stream
       (async () => {
@@ -261,7 +291,7 @@ If the user asks for pricing, give a realistic range and recommend booking a con
       const stream = await navigator.mediaDevices.getUserMedia({
         audio: {
           channelCount: 1,
-          sampleRate: 16000,
+          sampleRate: 24000,
         },
       });
       mediaStreamRef.current = stream;
@@ -293,7 +323,7 @@ If the user asks for pricing, give a realistic range and recommend booking a con
         clientRef.current.send({
           realtimeInput: {
             mediaChunks: [{
-              mimeType: "audio/pcm",
+              mimeType: "audio/pcm;rate=24000",
               data: b64,
             }],
           },
@@ -425,16 +455,45 @@ If the user asks for pricing, give a realistic range and recommend booking a con
     setIsTyping(true);
 
     try {
+        // If we don't know the user's name yet, ask once after their first request,
+        // then wait for them to provide it before proceeding.
+        if (!firstName && !hasAskedForName) {
+          setHasAskedForName(true);
+          setPendingUserRequest(text);
+          setMessages(p => [
+            ...p,
+            { id: Date.now().toString(), role: 'assistant', text: `I'd be happy to assist you with that. May i have your first name please...` }
+          ]);
+          return;
+        }
+
+        // Capture first name if the user provides it.
         if (!firstName) {
           const maybeName = extractFirstName(text);
-          if (maybeName) setFirstName(maybeName);
+          if (maybeName) {
+            setFirstName(maybeName);
+          } else {
+            setMessages(p => [
+              ...p,
+              { id: Date.now().toString(), role: 'assistant', text: `Thanks — what’s your first name?` }
+            ]);
+            return;
+          }
         }
+
+        // If we were waiting on a name, use the original request once we have it.
+        const effectiveUserText =
+          pendingUserRequest
+            ? `${pendingUserRequest}\n\n(My first name is ${extractFirstName(text) || firstNameRef.current || 'unknown'}.)`
+            : text;
+
         if (!chatSessionRef.current) await initChat();
         if (!chatSessionRef.current) {
           throw new Error(configError || 'Chat session not initialized');
         }
-        const result = await chatSessionRef.current.sendMessage(text);
+        const result = await chatSessionRef.current.sendMessage(effectiveUserText);
         setMessages(p => [...p, { id: Date.now().toString(), role: 'assistant', text: result.response.text() }]);
+        if (pendingUserRequest) setPendingUserRequest(null);
     } catch (e: any) {
         const friendly = normalizeErrorMessage(e);
         setConfigError(friendly);
