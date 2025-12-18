@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { Link } from 'react-router-dom';
-import { Zap, Eye, MapPin, Building2, ClipboardCheck, Sparkles, ArrowRight, Bell, CheckCircle2 } from 'lucide-react';
+import { Zap, Eye, ClipboardCheck, Sparkles, ArrowRight, Bell, CheckCircle2 } from 'lucide-react';
 
 const JetSuitePage: React.FC = () => {
   const [showWaitlist, setShowWaitlist] = useState(false);
@@ -9,7 +9,7 @@ const JetSuitePage: React.FC = () => {
     {
       id: 'jet-local-optimizer',
       icon: Zap,
-      title: 'Jet Local Optimizer',
+      title: 'Jet Local Optimizer Lite',
       description: 'Complete website health check in 60 seconds. Analyze Core Web Vitals, mobile responsiveness, SEO structure, local relevance, and keyword gaps.',
       badge: 'FREE TOOL',
       ctaText: 'Run Audit',
@@ -24,7 +24,7 @@ const JetSuitePage: React.FC = () => {
     {
       id: 'jetviz',
       icon: Eye,
-      title: 'JetViz',
+      title: 'JetViz Lite',
       description: 'Visual website modernization analysis. See your site through your customers\' eyes with design era detection, trust signals, and mobile preview.',
       badge: 'FREE TOOL',
       ctaText: 'Visualize Now',
@@ -37,27 +37,12 @@ const JetSuitePage: React.FC = () => {
       isActive: true,
     },
     {
-      id: 'jetbiz',
-      icon: Building2,
-      title: 'JetBiz',
-      description: "Analyze your Google Business Profile and discover what's holding you back from local search visibility. Benchmark against nearby competitors and get a prioritized fix list.",
-      badge: 'FREE TOOL',
-      ctaText: 'Analyze My Business',
-      ctaLink: '/jetbiz',
-      gradient: 'from-indigo-600 to-purple-600',
-      bgGradient: 'from-indigo-50 to-purple-50',
-      hoverShadow: 'hover:shadow-indigo-200',
-      iconBg: 'bg-indigo-50',
-      iconColor: 'text-indigo-700',
-      isActive: true,
-    },
-    {
       id: 'jetbiz-lite',
       icon: ClipboardCheck,
       title: 'JetBiz Lite',
-      description: 'Free self-audit checklist for your Google Business Profile. Score your setup in minutes and get a clear fix list (no API calls).',
+      description: 'Free self-audit for your Google Business Profile',
       badge: 'FREE TOOL',
-      ctaText: 'Start Self‑Audit',
+      ctaText: 'Start Self-Audit',
       ctaLink: '/jetbiz-lite',
       gradient: 'from-slate-900 to-indigo-700',
       bgGradient: 'from-slate-50 to-indigo-50',
@@ -65,21 +50,6 @@ const JetSuitePage: React.FC = () => {
       iconBg: 'bg-slate-100',
       iconColor: 'text-slate-900',
       isActive: true,
-    },
-    {
-      id: 'jetcitations',
-      icon: MapPin,
-      title: 'JetCitations',
-      description: 'Boost your local visibility with automated citation building and NAP consistency management across 50+ directories and platforms.',
-      badge: 'COMING SOON',
-      ctaText: 'Get Notified',
-      ctaLink: '#',
-      gradient: 'from-emerald-500 to-teal-600',
-      bgGradient: 'from-emerald-50 to-teal-50',
-      hoverShadow: 'hover:shadow-emerald-200',
-      iconBg: 'bg-emerald-50',
-      iconColor: 'text-emerald-600',
-      isActive: false,
     },
   ];
 
