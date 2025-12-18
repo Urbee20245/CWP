@@ -1,9 +1,7 @@
-import React, { useEffect, useMemo, useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import { useParams, useSearchParams, Link } from 'react-router-dom';
 import { GeneratingEffect } from '../src/tools/jet-local-optimizer/components/GeneratingEffect';
-import { JetBiz } from './tools/JetBiz';
-
-const UPGRADE_CONTEXT_KEY = 'jetbiz_upgrade_context_v1';
+import { JetBizPro } from './tools/JetBizPro';
 
 export default function JetBizProPage() {
   const { id } = useParams();
@@ -16,15 +14,6 @@ export default function JetBizProPage() {
     const t = window.setTimeout(() => setShowIntro(false), 1200);
     return () => window.clearTimeout(t);
   }, [analyzing]);
-
-  const context = useMemo(() => {
-    try {
-      const raw = localStorage.getItem(UPGRADE_CONTEXT_KEY);
-      return raw ? JSON.parse(raw) : null;
-    } catch {
-      return null;
-    }
-  }, []);
 
   return (
     <div className="min-h-screen bg-slate-50 py-10 px-4 sm:px-6 lg:px-8">
@@ -56,12 +45,12 @@ export default function JetBizProPage() {
           </div>
         )}
 
-        {/* JetBiz reads the upgrade context from localStorage and runs in Pro (10 competitors). */}
-        <JetBiz />
-
-        {!context && (
-          <div className="mt-6 text-xs text-slate-500">
-            Note: No upgrade context found in localStorage. You can still run JetBiz Pro manually by searching for your business.
+        {/* JetBiz Pro uses Stripe session metadata for the paid radius. */}
+        {id ? (
+          <JetBizPro sessionId={id} analyzing={analyzing} />
+        ) : (
+          <div className="bg-white rounded-lg shadow-lg p-6 border border-red-200 text-red-700">
+            Missing Pro session id.
           </div>
         )}
       </div>
