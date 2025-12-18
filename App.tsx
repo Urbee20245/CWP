@@ -1,5 +1,5 @@
-import React from 'react';
-import { BrowserRouter, Routes, Route } from 'react-router-dom';
+import React, { useEffect, useState } from 'react';
+import { BrowserRouter, Routes, Route, useLocation } from 'react-router-dom';
 import Header from './components/Header';
 import Hero from './components/Hero';
 import ProblemSolution from './components/ProblemSolution';
@@ -17,6 +17,9 @@ import JetVizPage from './components/JetVizPage';
 import JetSuitePage from './components/JetSuitePage';
 import ServicesPage from './components/ServicesPage';
 import ContactPage from './components/ContactPage';
+import JetBizPage from './components/JetBizPage';
+import JetBizLitePage from './components/JetBizLitePage';
+import JetBizProPage from './components/JetBizProPage';
 
 const Home = () => (
   <main>
@@ -36,22 +39,50 @@ const Home = () => (
 const App: React.FC = () => {
   return (
     <BrowserRouter>
-      <div className="min-h-screen bg-slate-50 font-sans selection:bg-blue-100 selection:text-blue-900">
-        <Header />
-        <Routes>
-          <Route path="/" element={<Home />} />
-          <Route path="/services" element={<ServicesPage />} />
-          <Route path="/process" element={<Process />} />
-          <Route path="/contact" element={<ContactPage />} />
-          <Route path="/jetsuite" element={<JetSuitePage />} />
-          <Route path="/jetviz" element={<JetVizPage />} />
-          <Route path="/jet-local-optimizer" element={<JetLocalOptimizerPage />} />
-        </Routes>
-        <Footer />
-        <VoiceAgent />
-      </div>
+      <AppShell />
     </BrowserRouter>
   );
 };
 
 export default App;
+
+const AppShell: React.FC = () => {
+  const location = useLocation();
+  const [isMobile, setIsMobile] = useState(false);
+
+  useEffect(() => {
+    const mq = window.matchMedia('(max-width: 767px)');
+    const update = () => setIsMobile(mq.matches);
+    update();
+    // Safari < 14 uses addListener/removeListener
+    if (typeof mq.addEventListener === 'function') {
+      mq.addEventListener('change', update);
+      return () => mq.removeEventListener('change', update);
+    }
+    mq.addListener(update);
+    return () => mq.removeListener(update);
+  }, []);
+
+  const mobileHiddenPaths = new Set(['/jet-local-optimizer', '/jetviz', '/services']);
+  const hideVoiceAgentOnThisPage = isMobile && mobileHiddenPaths.has(location.pathname);
+
+  return (
+    <div className="min-h-screen bg-slate-50 font-sans selection:bg-blue-100 selection:text-blue-900">
+      <Header />
+      <Routes>
+        <Route path="/" element={<Home />} />
+        <Route path="/services" element={<ServicesPage />} />
+        <Route path="/process" element={<Process />} />
+        <Route path="/contact" element={<ContactPage />} />
+        <Route path="/jetsuite" element={<JetSuitePage />} />
+        <Route path="/jetviz" element={<JetVizPage />} />
+        <Route path="/jet-local-optimizer" element={<JetLocalOptimizerPage />} />
+        <Route path="/jetbiz" element={<JetBizPage />} />
+        <Route path="/jetbiz-lite" element={<JetBizLitePage />} />
+        <Route path="/jetbiz/pro/:id" element={<JetBizProPage />} />
+      </Routes>
+      <Footer />
+      {!hideVoiceAgentOnThisPage && <VoiceAgent />}
+    </div>
+  );
+};

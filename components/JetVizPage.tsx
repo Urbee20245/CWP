@@ -17,6 +17,7 @@ import {
 } from 'lucide-react';
 import { Link, useSearchParams } from 'react-router-dom';
 import { AnalyzerService } from '../src/tools/jet-local-optimizer/services/analyzer';
+import { GeneratingEffect } from '../src/tools/jet-local-optimizer/components/GeneratingEffect';
 
 const JetVizPage: React.FC = () => {
   const [searchParams] = useSearchParams();
@@ -62,6 +63,8 @@ const JetVizPage: React.FC = () => {
     }
   }, [urlParam]);
 
+  const MIN_GENERATING_MS = 5000;
+
   const handleAnalyze = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!url) return;
@@ -69,6 +72,8 @@ const JetVizPage: React.FC = () => {
     setHasAnalyzed(false);
     
     try {
+        const minDelay = new Promise<void>((resolve) => setTimeout(resolve, MIN_GENERATING_MS));
+
         // Use the Real Analyzer Service
         const data = await AnalyzerService.analyzeWebsite({
             websiteUrl: url,
@@ -100,9 +105,11 @@ const JetVizPage: React.FC = () => {
             credibility,
             overall
         });
-        
-        setIsAnalyzing(false);
+
+        // Ensure a modern "generating" effect is visible before results appear.
+        await minDelay;
         setHasAnalyzed(true);
+        setIsAnalyzing(false);
 
         // Scroll to results
         setTimeout(() => {
@@ -437,6 +444,7 @@ const JetVizPage: React.FC = () => {
                                 placeholder="https://www.yourbusiness.com" 
                                 value={url}
                                 onChange={(e) => setUrl(e.target.value)}
+                                disabled={isAnalyzing}
                                 className="flex-grow px-8 py-5 bg-transparent text-white placeholder-slate-500 outline-none text-lg rounded-xl"
                             />
                             <button 
@@ -458,6 +466,24 @@ const JetVizPage: React.FC = () => {
                             </button>
                         </form>
                     </div>
+
+                    {isAnalyzing && (
+                      <div className="mt-8 max-w-2xl mx-auto text-left">
+                        <GeneratingEffect
+                          theme="dark"
+                          durationMs={5000}
+                          title="Generating your visual score…"
+                          subtitle="Simulating first impressions, layout trust signals, and mobile flow."
+                          steps={[
+                            'Capturing layout stability signals',
+                            'Estimating aesthetic modernity',
+                            'Scoring structure & hierarchy',
+                            'Weighting mobile experience',
+                            'Finalizing visual trust index'
+                          ]}
+                        />
+                      </div>
+                    )}
 
                     <div className="mt-10 flex justify-center gap-8 text-xs text-slate-500 font-bold uppercase tracking-widest">
                         <span className="flex items-center gap-2"><CheckCircle2 className="w-4 h-4 text-emerald-500" /> Instant</span>

@@ -1,6 +1,6 @@
 import React, { useState, useRef, useEffect, useCallback } from 'react';
 import { X, MessageSquare, Bot, Send, Sparkles, Mic, MicOff, Volume2, VolumeX, Phone } from 'lucide-react';
-import { GoogleGenAI } from '@google/genai';
+import { GoogleGenAI, Modality, type LiveServerMessage } from '@google/genai';
 
 interface ChatMessage {
   id: string;
@@ -16,18 +16,30 @@ const VoiceAgent: React.FC = () => {
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const [configError, setConfigError] = useState<string | null>(null);
+  const chatTranscriptRef = useRef<string>('');
+  const [firstName, setFirstName] = useState<string | null>(null);
+  const firstNameRef = useRef<string>('');
+  const [hasAskedForName, setHasAskedForName] = useState(false);
+  const [pendingUserRequest, setPendingUserRequest] = useState<string | null>(null);
   
   // Voice State
   const [isConnected, setIsConnected] = useState(false);
   const [isSpeaking, setIsSpeaking] = useState(false);
   const [volumeLevel, setVolumeLevel] = useState(0);
+  const [isConnectingVoice, setIsConnectingVoice] = useState(false);
+  const [realtimeInput, setRealtimeInput] = useState('');
   
   // Refs for Audio
   const audioContextRef = useRef<AudioContext | null>(null);
+  const inputAudioContextRef = useRef<AudioContext | null>(null);
+  const outputAudioContextRef = useRef<AudioContext | null>(null);
   const mediaStreamRef = useRef<MediaStream | null>(null);
   const processorRef = useRef<ScriptProcessorNode | null>(null);
   const clientRef = useRef<any>(null);
   const chatSessionRef = useRef<any>(null);
+  const liveSessionRef = useRef<any>(null);
+  const nextStartTimeRef = useRef<number>(0);
+  const audioSourcesRef = useRef<Set<AudioBufferSourceNode>>(new Set());
   
   const scrollToBottom = () => {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
@@ -36,6 +48,23 @@ const VoiceAgent: React.FC = () => {
   useEffect(() => {
     scrollToBottom();
   }, [messages, isOpen, mode]);
+
+  useEffect(() => {
+    firstNameRef.current = firstName || '';
+  }, [firstName]);
+
+  // One-time welcome message for chat mode (additive, does not replace any existing behavior).
+  useEffect(() => {
+    if (!isOpen || mode !== 'chat') return;
+    if (messages.length > 0) return;
+    setMessages([
+      {
+        id: 'luna-welcome',
+        role: 'assistant',
+        text: `Welcome to Custom Websites Plus- I'm Luna How can I assist you?`
+      }
+    ]);
+  }, [isOpen, mode, messages.length]);
 
   // --- AUDIO UTILS ---
   const floatTo16BitPCM = (float32Array: Float32Array) => {
@@ -59,33 +88,194 @@ const VoiceAgent: React.FC = () => {
     return window.btoa(binary);
   };
 
+  const getGeminiApiKey = () => (import.meta as any).env.VITE_GEMINI_API_KEY as string | undefined;
+  const getGeminiModel = () => ((import.meta as any).env.VITE_GEMINI_MODEL as string | undefined) || 'gemini-2.0-flash-exp';
+  // Live (voice) models change more frequently; prefer an explicit env var with a safe default.
+  const getGeminiLiveModel = () =>
+    ((import.meta as any).env.VITE_GEMINI_LIVE_MODEL as string | undefined) ||
+    'gemini-2.5-flash-native-audio-preview-09-2025';
+
+  const LUNA_SYSTEM_PROMPT = `You are Luna, AI assistant for Custom Websites Plus.
+Be helpful, concise, and professional. Do not invent facts.
+Default to 1–2 sentences. Only expand if the user explicitly asks for more detail.
+Be polite. Ask for the user's first name early if you don't know it yet. Once you know it, address them by first name naturally.
+When helpful, include 1–2 direct on-site links in your reply so the user can take action (do not spam links).
+When you include links, format them as Markdown links so they are clickable, e.g. [JetSuite](/jetsuite).
+Use these internal URLs (pick the most relevant):
+- Tool hub: /jetsuite
+- Run a free local audit: /jet-local-optimizer
+- Run a free visual check: /jetviz
+- Contact / book a consult: /contact
+- Learn services: /services
+- See the process: /process
+Never mention or estimate the price of a website rebuild. Every situation is unique.
+If the user asks about cost, explain that we review it case-by-case and invite them to book a quick consultation here: [Book a consult](/contact).`;
+
+  const normalizeErrorMessage = (err: any) => {
+    const raw = err?.message || err?.toString?.() || 'Connection failed';
+    if (typeof raw !== 'string') return 'Connection failed';
+    // Give a friendly, actionable message for the common failure mode.
+    if (/api key/i.test(raw) && /missing/i.test(raw)) {
+      return 'Luna is not configured yet (missing API key). Set VITE_GEMINI_API_KEY and redeploy.';
+    }
+    return raw;
+  };
+
+  const extractFirstName = (text: string) => {
+    const cleaned = text.trim();
+    if (!cleaned) return null;
+
+    // Common patterns: "I'm John", "I am John", "my name is John"
+    const m1 = cleaned.match(/\b(?:i\s*am|i['’]m|im|my\s+name\s+is)\s+([a-zA-Z'-]{2,30})\b/i);
+    if (m1?.[1]) return m1[1];
+
+    // If the message is a single "name-like" token, accept it.
+    const single = cleaned.replace(/[^\w'-]/g, '');
+    if (/^[a-zA-Z][a-zA-Z'-]{1,29}$/.test(single) && cleaned.split(/\s+/).length === 1) return single;
+
+    return null;
+  };
+
+  const stripTrailingPunctuation = (href: string) => href.replace(/[),.;!?]+$/g, '');
+
+  const renderTextWithLinks = (text: string) => {
+    const pattern =
+      /(\[([^\]]+)\]\(([^)]+)\))|(https?:\/\/[^\s]+)|(\/[A-Za-z0-9\-._~\/?#[\]@!$&'()*+,;=%]+)/g;
+
+    const parts: React.ReactNode[] = [];
+    let lastIndex = 0;
+    let match: RegExpExecArray | null;
+    let key = 0;
+
+    while ((match = pattern.exec(text)) !== null) {
+      const index = match.index;
+      if (index > lastIndex) {
+        parts.push(<span key={`t-${key++}`}>{text.slice(lastIndex, index)}</span>);
+      }
+
+      // Markdown link: [label](href)
+      if (match[2] && match[3]) {
+        const label = match[2];
+        const rawHref = match[3];
+        const href = stripTrailingPunctuation(rawHref);
+        parts.push(
+          <a
+            key={`a-${key++}`}
+            href={href}
+            className="text-indigo-300 hover:text-indigo-200 underline decoration-indigo-400/40 underline-offset-4"
+            rel={href.startsWith('http') ? 'noopener noreferrer' : undefined}
+            target={href.startsWith('http') ? '_blank' : undefined}
+          >
+            {label}
+          </a>
+        );
+      } else if (match[4] || match[5]) {
+        const rawHref = match[4] || match[5] || '';
+        const href = stripTrailingPunctuation(rawHref);
+        parts.push(
+          <a
+            key={`a-${key++}`}
+            href={href}
+            className="text-indigo-300 hover:text-indigo-200 underline decoration-indigo-400/40 underline-offset-4"
+            rel={href.startsWith('http') ? 'noopener noreferrer' : undefined}
+            target={href.startsWith('http') ? '_blank' : undefined}
+          >
+            {href}
+          </a>
+        );
+      } else {
+        parts.push(<span key={`t-${key++}`}>{match[0]}</span>);
+      }
+
+      lastIndex = pattern.lastIndex;
+    }
+
+    if (lastIndex < text.length) {
+      parts.push(<span key={`t-${key++}`}>{text.slice(lastIndex)}</span>);
+    }
+
+    return <>{parts}</>;
+  };
+
   // --- VOICE SESSION MANAGEMENT ---
   const connectVoiceSession = async () => {
     try {
-      const apiKey = (import.meta as any).env.VITE_GEMINI_API_KEY;
+      setIsConnectingVoice(true);
+      setConfigError(null);
+      setRealtimeInput('');
+      const apiKey = getGeminiApiKey();
       if (!apiKey) throw new Error("API Key missing");
+      if (!window.isSecureContext) {
+        throw new Error('Voice Mode requires HTTPS to access the microphone.');
+      }
 
-      // 1. Setup Audio Context
-      audioContextRef.current = new (window.AudioContext || (window as any).webkitAudioContext)({
-        sampleRate: 24000, // Gemini Output Rate
-      });
+      // 1. Setup Audio Contexts (separate input/output mirrors the known-working pattern)
+      const AudioContextClass = window.AudioContext || (window as any).webkitAudioContext;
+      inputAudioContextRef.current = new AudioContextClass();
+      outputAudioContextRef.current = new AudioContextClass({ sampleRate: 24000 });
+      audioContextRef.current = outputAudioContextRef.current;
+
+      // Some browsers start the AudioContext suspended until resumed by a user gesture.
+      try {
+        if (outputAudioContextRef.current?.state === 'suspended') {
+          await outputAudioContextRef.current.resume();
+        }
+      } catch {
+        // If resume fails, continue; browser may auto-resume.
+      }
 
       // 2. Setup Client
       const client = new GoogleGenAI({ apiKey });
       
-      // 3. Connect Live Session
-      const session = await client.live.connect({
-        model: 'gemini-2.0-flash-exp',
+      // 3. Setup Microphone Input
+      const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+      mediaStreamRef.current = stream;
+
+      // 4. Connect Live Session (match known-working callback-based approach)
+      const noAudioTimeoutMs = 12000;
+      let receivedAnyAudio = false;
+      const noAudioTimer = window.setTimeout(() => {
+        if (!receivedAnyAudio) {
+          setConfigError(
+            'Voice connected, but no audio was received. This is usually a model/Live API mismatch, browser blocking, or CORS/extension interference. Try a supported native-audio model via VITE_GEMINI_LIVE_MODEL.'
+          );
+        }
+      }, noAudioTimeoutMs);
+
+      const downsampleTo16k = (buffer: Float32Array, inputSampleRate: number): Float32Array => {
+        if (inputSampleRate === 16000) return buffer;
+        const ratio = inputSampleRate / 16000;
+        const newLength = Math.ceil(buffer.length / ratio);
+        const result = new Float32Array(newLength);
+        for (let i = 0; i < newLength; i++) {
+          const x = i * ratio;
+          const index = Math.floor(x);
+          const t = x - index;
+          const v0 = buffer[index];
+          const v1 = buffer[index + 1] || v0;
+          result[i] = v0 * (1 - t) + v1 * t;
+        }
+        return result;
+      };
+
+      const createPcmMedia16k = (data: Float32Array): { data: string; mimeType: string } => {
+        const l = data.length;
+        const int16 = new Int16Array(l);
+        for (let i = 0; i < l; i++) int16[i] = Math.max(-1, Math.min(1, data[i])) * 32768;
+        return { data: arrayBufferToBase64(int16.buffer), mimeType: 'audio/pcm;rate=16000' };
+      };
+
+      const sessionPromise = client.live.connect({
+        model: getGeminiLiveModel(),
         config: {
-          generationConfig: {
-            speechConfig: {
-              voiceConfig: {
-                prebuiltVoiceConfig: {
-                  voiceName: 'Aoede',
-                },
-              },
-            },
+          responseModalities: [Modality.AUDIO],
+          speechConfig: {
+            voiceConfig: {
+              prebuiltVoiceConfig: { voiceName: 'Aoede' }
+            }
           },
+          inputAudioTranscription: {},
+          outputAudioTranscription: {},
           systemInstruction: {
             parts: [{
               text: `You are Luna, a professional AI receptionist for Custom Websites Plus.
@@ -94,92 +284,120 @@ const VoiceAgent: React.FC = () => {
               - Name: Custom Websites Plus (CWP)
               - Phone: (404) 532-9266
               - Service: Website Rebuilds, SEO, AI Agents
-              - Pricing: $5k-$15k typically
               - Timeline: 4-6 weeks
               
               YOUR ROLE:
               - Be helpful, concise, and professional.
               - Answer questions about services.
+              - Never mention or estimate pricing for a website rebuild. Treat every project as case-by-case.
+              - If asked about cost, invite them to book a consult at /contact so we can review their situation.
               - Encourage users to book a consultation or use the free JetSuite tools.
               - Do not make up technical details.
               `
-            }],
-          },
-        },
-      });
-
-      clientRef.current = session;
-      setIsConnected(true);
-
-      // 4. Handle Incoming Audio (Stream)
-      // Using a simple loop to process the incoming stream
-      (async () => {
-        try {
-          for await (const chunk of session.receive()) {
-            if (chunk.serverContent?.modelTurn?.parts?.[0]?.inlineData) {
-              const b64Data = chunk.serverContent.modelTurn.parts[0].inlineData.data;
-              playAudioChunk(b64Data);
-            }
-            if (chunk.serverContent?.turnComplete) {
-              setIsSpeaking(false);
-            }
+            }]
           }
-        } catch (e) {
-          console.error("Stream error:", e);
-          disconnectVoiceSession();
-        }
-      })();
-
-      // 5. Setup Microphone Input
-      const stream = await navigator.mediaDevices.getUserMedia({
-        audio: {
-          channelCount: 1,
-          sampleRate: 16000,
         },
-      });
-      mediaStreamRef.current = stream;
+        callbacks: {
+          onopen: () => {
+            setIsConnected(true);
+            setIsConnectingVoice(false);
+            // Setup audio capture loop
+            if (!inputAudioContextRef.current || !mediaStreamRef.current) return;
+            const inputSampleRate = inputAudioContextRef.current.sampleRate;
+            const source = inputAudioContextRef.current.createMediaStreamSource(mediaStreamRef.current);
+            const processor = inputAudioContextRef.current.createScriptProcessor(4096, 1, 1);
+            processorRef.current = processor;
 
-      if (!audioContextRef.current) return;
-      const source = audioContextRef.current.createMediaStreamSource(stream);
-      const processor = audioContextRef.current.createScriptProcessor(4096, 1, 1);
-      processorRef.current = processor;
+            processor.onaudioprocess = (e) => {
+              if (!inputAudioContextRef.current) return;
+              const inputData = e.inputBuffer.getChannelData(0);
 
-      processor.onaudioprocess = (e) => {
-        const inputData = e.inputBuffer.getChannelData(0);
-        
-        // Calculate volume for visualizer
-        let sum = 0;
-        for(let i = 0; i < inputData.length; i += 10) {
-            sum += Math.abs(inputData[i]);
-        }
-        setVolumeLevel(Math.min(100, Math.round(sum * 500)));
+              // Visualizer volume
+              let sum = 0;
+              for (let i = 0; i < inputData.length; i += 10) sum += Math.abs(inputData[i]);
+              setVolumeLevel(Math.min(100, Math.round(sum * 500)));
 
-        // Convert to PCM 16kHz
-        // Note: Assuming input is close to 16k or we just send it. 
-        // For best results, we should downsample if context is 44.1k/48k.
-        // Simple 1-to-1 skip for downsampling if needed:
-        // (Omitted strict resampling for brevity, usually context handles pull or we rely on robust backend)
-        
-        const pcm16 = floatTo16BitPCM(inputData);
-        const b64 = arrayBufferToBase64(pcm16);
+              const downsampled = downsampleTo16k(inputData, inputSampleRate);
+              const media = createPcmMedia16k(downsampled);
+              sessionPromise.then((sess: any) => sess.sendRealtimeInput({ media })).catch(() => {});
+            };
 
-        clientRef.current.send({
-          realtimeInput: {
-            mediaChunks: [{
-              mimeType: "audio/pcm",
-              data: b64,
-            }],
+            source.connect(processor);
+            // Mute node prevents feedback while keeping processor alive
+            const muteNode = inputAudioContextRef.current.createGain();
+            muteNode.gain.value = 0;
+            processor.connect(muteNode);
+            muteNode.connect(inputAudioContextRef.current.destination);
+
+            // Ask Luna to speak a greeting so users know the call is live.
+            sessionPromise
+              .then((sess: any) =>
+                sess.send({
+                  clientContent: {
+                    turns: [
+                      {
+                        role: 'user',
+                        parts: [{ text: `Welcome to Custom Websites Plus — I'm Luna. How can I assist you?` }]
+                      }
+                    ],
+                    turnComplete: true
+                  }
+                })
+              )
+              .catch(() => {});
           },
-        });
-      };
+          onmessage: async (message: LiveServerMessage) => {
+            const parts = message.serverContent?.modelTurn?.parts || [];
+            for (const part of parts) {
+              const audioData = part.inlineData?.data;
+              if (audioData) {
+                receivedAnyAudio = true;
+                window.clearTimeout(noAudioTimer);
+                playAudioChunk(audioData);
+              }
+            }
 
-      source.connect(processor);
-      processor.connect(audioContextRef.current.destination);
+            const inputTrans = (message as any).serverContent?.inputTranscription?.text;
+            if (inputTrans) {
+              setRealtimeInput((prev) => (prev + inputTrans).slice(-240));
+            }
+
+            if (message.serverContent?.turnComplete) {
+              setIsSpeaking(false);
+              setRealtimeInput('');
+              const ctx = outputAudioContextRef.current;
+              if (ctx && nextStartTimeRef.current < ctx.currentTime) {
+                nextStartTimeRef.current = ctx.currentTime;
+              }
+            }
+
+            if ((message as any).serverContent?.interrupted) {
+              audioSourcesRef.current.forEach((src) => src.stop());
+              audioSourcesRef.current.clear();
+              nextStartTimeRef.current = 0;
+              setRealtimeInput('');
+            }
+          },
+          onclose: () => {
+            window.clearTimeout(noAudioTimer);
+            disconnectVoiceSession();
+          },
+          onerror: () => {
+            window.clearTimeout(noAudioTimer);
+            disconnectVoiceSession();
+          }
+        }
+      });
+
+      liveSessionRef.current = sessionPromise;
+      clientRef.current = sessionPromise;
 
     } catch (err: any) {
       console.error("Voice Connection Failed:", err);
-      setConfigError(err.message || "Connection failed");
+      setConfigError(normalizeErrorMessage(err));
       setIsConnected(false);
+    } finally {
+      setIsConnectingVoice(false);
     }
   };
 
@@ -196,15 +414,31 @@ const VoiceAgent: React.FC = () => {
       audioContextRef.current.close();
       audioContextRef.current = null;
     }
+    if (inputAudioContextRef.current) {
+      inputAudioContextRef.current.close().catch(() => {});
+      inputAudioContextRef.current = null;
+    }
+    if (outputAudioContextRef.current) {
+      outputAudioContextRef.current.close().catch(() => {});
+      outputAudioContextRef.current = null;
+    }
+    if (audioSourcesRef.current) {
+      audioSourcesRef.current.forEach((src) => src.stop());
+      audioSourcesRef.current.clear();
+    }
+    nextStartTimeRef.current = 0;
+    liveSessionRef.current = null;
     clientRef.current = null; // Session cleanup
     setIsConnected(false);
     setIsSpeaking(false);
     setVolumeLevel(0);
+    setRealtimeInput('');
   };
 
   const playAudioChunk = (base64Data: string) => {
     setIsSpeaking(true);
-    if (!audioContextRef.current) return;
+    const ctx = outputAudioContextRef.current || audioContextRef.current;
+    if (!ctx) return;
 
     try {
       const binaryString = window.atob(base64Data);
@@ -218,16 +452,19 @@ const VoiceAgent: React.FC = () => {
         floatData[i] = pcmData[i] / 32768.0;
       }
 
-      const buffer = audioContextRef.current.createBuffer(1, floatData.length, 24000);
+      const buffer = ctx.createBuffer(1, floatData.length, 24000);
       buffer.getChannelData(0).set(floatData);
 
-      const source = audioContextRef.current.createBufferSource();
+      const source = ctx.createBufferSource();
       source.buffer = buffer;
-      source.connect(audioContextRef.current.destination);
-      source.start();
+      source.connect(ctx.destination);
+      const startAt = Math.max(nextStartTimeRef.current, ctx.currentTime);
+      source.start(startAt);
+      nextStartTimeRef.current = startAt + buffer.duration;
+      audioSourcesRef.current.add(source);
       
       source.onended = () => {
-          // Typically handled by stream turnComplete, but safe fallback
+          audioSourcesRef.current.delete(source);
       };
     } catch (e) {
       console.error("Audio playback error", e);
@@ -239,16 +476,45 @@ const VoiceAgent: React.FC = () => {
     // ... (Keep existing Chat Logic for text mode fallback)
     // Re-implementing briefly for completeness
     try {
-        const apiKey = (import.meta as any).env.VITE_GEMINI_API_KEY;
-        if (!apiKey) return;
+        setConfigError(null);
+        const apiKey = getGeminiApiKey();
+        if (!apiKey) {
+          setConfigError('Luna is not configured yet (missing API key). Set VITE_GEMINI_API_KEY and redeploy.');
+          return;
+        }
+
         const client = new GoogleGenAI({ apiKey });
-        const model = client.getGenerativeModel({ model: 'gemini-2.0-flash-exp' });
-        chatSessionRef.current = model.startChat({ 
-            history: [],
-            systemInstruction: `You are Luna, AI assistant for Custom Websites Plus.`
-        });
+        const modelName = getGeminiModel();
+
+        // Keep a simple transcript so we don't depend on any specific chat-session API shape.
+        chatTranscriptRef.current = `System: ${LUNA_SYSTEM_PROMPT}\nKnown user first name: ${firstNameRef.current || 'unknown'}\n`;
+
+        chatSessionRef.current = {
+          sendMessage: async (text: string) => {
+            const prompt = `${chatTranscriptRef.current}\nKnown user first name: ${firstNameRef.current || 'unknown'}\nUser: ${text}\nLuna:`;
+            // @google/genai supports passing a single string as contents.
+            const resp = await (client as any).models.generateContent({
+              model: modelName,
+              contents: prompt,
+            });
+
+            const assistantText =
+              (typeof resp?.text === 'string' && resp.text) ||
+              (typeof resp?.text === 'function' && resp.text()) ||
+              (typeof resp?.response?.text === 'function' && resp.response.text()) ||
+              (resp?.candidates?.[0]?.content?.parts?.[0]?.text as string | undefined) ||
+              '';
+
+            // Append to transcript to maintain conversational context.
+            chatTranscriptRef.current = `${prompt} ${assistantText}\n`;
+
+            // Return a compatible shape for the existing handleTextSend() usage.
+            return { response: { text: () => assistantText } };
+          }
+        };
     } catch (e) {
         console.error("Chat init error", e);
+        setConfigError(normalizeErrorMessage(e));
     }
   };
 
@@ -267,11 +533,49 @@ const VoiceAgent: React.FC = () => {
     setIsTyping(true);
 
     try {
+        // If we don't know the user's name yet, ask once after their first request,
+        // then wait for them to provide it before proceeding.
+        if (!firstName && !hasAskedForName) {
+          setHasAskedForName(true);
+          setPendingUserRequest(text);
+          setMessages(p => [
+            ...p,
+            { id: Date.now().toString(), role: 'assistant', text: `I'd be happy to assist you with that. May i have your first name please...` }
+          ]);
+          return;
+        }
+
+        // Capture first name if the user provides it.
+        if (!firstName) {
+          const maybeName = extractFirstName(text);
+          if (maybeName) {
+            setFirstName(maybeName);
+          } else {
+            setMessages(p => [
+              ...p,
+              { id: Date.now().toString(), role: 'assistant', text: `Thanks — what’s your first name?` }
+            ]);
+            return;
+          }
+        }
+
+        // If we were waiting on a name, use the original request once we have it.
+        const effectiveUserText =
+          pendingUserRequest
+            ? `${pendingUserRequest}\n\n(My first name is ${extractFirstName(text) || firstNameRef.current || 'unknown'}.)`
+            : text;
+
         if (!chatSessionRef.current) await initChat();
-        const result = await chatSessionRef.current.sendMessage(text);
+        if (!chatSessionRef.current) {
+          throw new Error(configError || 'Chat session not initialized');
+        }
+        const result = await chatSessionRef.current.sendMessage(effectiveUserText);
         setMessages(p => [...p, { id: Date.now().toString(), role: 'assistant', text: result.response.text() }]);
-    } catch (e) {
-        setMessages(p => [...p, { id: Date.now().toString(), role: 'assistant', text: "Error connecting." }]);
+        if (pendingUserRequest) setPendingUserRequest(null);
+    } catch (e: any) {
+        const friendly = normalizeErrorMessage(e);
+        setConfigError(friendly);
+        setMessages(p => [...p, { id: Date.now().toString(), role: 'assistant', text: friendly || "Error connecting." }]);
     } finally {
         setIsTyping(false);
     }
@@ -358,10 +662,11 @@ const VoiceAgent: React.FC = () => {
                     {!isConnected ? (
                         <button 
                             onClick={connectVoiceSession}
-                            className="bg-white text-indigo-900 px-8 py-4 rounded-full font-bold hover:bg-indigo-50 transition-all shadow-lg hover:scale-105 flex items-center gap-2"
+                            disabled={isConnectingVoice}
+                            className="bg-white text-indigo-900 px-8 py-4 rounded-full font-bold hover:bg-indigo-50 transition-all shadow-lg hover:scale-105 flex items-center gap-2 disabled:opacity-70 disabled:cursor-wait disabled:hover:scale-100"
                         >
                             <Phone className="w-5 h-5" />
-                            Start Call
+                            {isConnectingVoice ? 'Connecting…' : 'Start Call'}
                         </button>
                     ) : (
                         <button 
@@ -378,6 +683,14 @@ const VoiceAgent: React.FC = () => {
             {/* CHAT INTERFACE */}
             {mode === 'chat' && (
                 <>
+                    {configError && (
+                      <div className="px-4 pt-4">
+                        <div className="text-amber-300 bg-amber-900/20 p-3 rounded-xl border border-amber-500/20 text-xs">
+                          <div className="font-bold mb-1">Luna chat issue</div>
+                          <div>{configError}</div>
+                        </div>
+                      </div>
+                    )}
                     <div className="flex-1 overflow-y-auto p-4 space-y-4">
                         {messages.length === 0 && (
                             <div className="h-full flex flex-col items-center justify-center opacity-50">
@@ -388,7 +701,7 @@ const VoiceAgent: React.FC = () => {
                         {messages.map(m => (
                             <div key={m.id} className={`flex ${m.role === 'user' ? 'justify-end' : 'justify-start'}`}>
                                 <div className={`max-w-[85%] px-4 py-3 rounded-2xl text-sm ${m.role === 'user' ? 'bg-indigo-600 text-white' : 'bg-slate-800 text-slate-200'}`}>
-                                    {m.text}
+                                    {m.role === 'assistant' ? renderTextWithLinks(m.text) : m.text}
                                 </div>
                             </div>
                         ))}
