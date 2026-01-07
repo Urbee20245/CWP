@@ -3,12 +3,12 @@
 import React, { useState, useEffect } from 'react';
 import { useParams, Link } from 'react-router-dom';
 import { supabase } from '../integrations/supabase/client';
-import { Loader2, Briefcase, FileText, DollarSign, MessageSquare, Phone, Mail, MapPin, Plus, CreditCard, Zap, ExternalLink, ShieldCheck, AlertTriangle, Lock, Trash2, Send } from 'lucide-react';
+import { Loader2, Briefcase, FileText, DollarSign, Plus, CreditCard, Zap, ExternalLink, ShieldCheck, Lock, Trash2, Send } from 'lucide-react';
 import AdminLayout from '../components/AdminLayout';
 import { Profile } from '../types/auth';
 import { BillingService } from '../services/billingService';
 import { SUBSCRIPTION_PLANS } from '../config/billing';
-import { sendBillingNotification } from '../../supabase/functions/_shared/notificationService'; // Import client-side mock
+import { sendBillingNotification } from '../../supabase/functions/_shared/notificationService';
 
 interface Client {
   id: string;
@@ -225,7 +225,6 @@ const AdminClientDetail: React.FC = () => {
       .update({ 
         access_override: overrideEnabled,
         access_override_note: overrideNote.trim() || null,
-        // Note: access_status is updated by the server function, but we can set it manually if needed
       })
       .eq('id', client.id);
 
@@ -249,11 +248,9 @@ const AdminClientDetail: React.FC = () => {
     
     try {
         // Use the mock notification service for client-side simulation/admin trigger
+        // Note: This uses the client-side mock, the server-side function handles real automation
         await sendBillingNotification(client.billing_email, client.business_name, stage, graceDate);
         alert(`Manual reminder (Stage ${stage}) sent to ${client.billing_email}.`);
-        
-        // Optionally update last_billing_notice_sent in DB if we want to respect the 24h cooldown
-        // For manual trigger, we skip DB update to allow immediate re-send if needed.
     } catch (e: any) {
         alert(`Failed to send reminder: ${e.message}`);
     }
