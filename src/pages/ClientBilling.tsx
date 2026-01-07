@@ -2,7 +2,7 @@
 
 import React, { useState, useEffect } from 'react';
 import { useAuth } from '@/hooks/useAuth';
-import { supabase } from '@/integrations/supabase/client';
+import { supabase } from '../integrations/supabase/client';
 import { Loader2, DollarSign, FileText, ExternalLink } from 'lucide-react';
 import ClientLayout from '@/components/ClientLayout';
 

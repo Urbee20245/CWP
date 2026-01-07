@@ -2,7 +2,7 @@
 
 import React, { useState, useEffect } from 'react';
 import { useParams, Link } from 'react-router-dom';
-import { supabase } from '@/integrations/supabase/client';
+import { supabase } from '../integrations/supabase/client';
 import { Loader2, Briefcase, FileText, DollarSign, MessageSquare, Phone, Mail, MapPin } from 'lucide-react';
 import AdminLayout from '@/components/AdminLayout';
 import { Profile } from '@/types/auth';

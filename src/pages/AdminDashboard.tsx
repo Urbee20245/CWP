@@ -3,7 +3,7 @@
 import React, { useState, useEffect } from 'react';
 import { Link } from 'react-router-dom';
 import { useAuth } from '@/hooks/useAuth';
-import { supabase } from '@/integrations/supabase/client';
+import { supabase } from '../integrations/supabase/client';
 import { Users, Briefcase, DollarSign, Loader2, LogOut, Plus } from 'lucide-react';
 import AdminLayout from '@/components/AdminLayout';
 import { Profile } from '@/types/auth';
