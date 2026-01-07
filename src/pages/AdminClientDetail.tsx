@@ -3,7 +3,7 @@
 import React, { useState, useEffect } from 'react';
 import { useParams, Link } from 'react-router-dom';
 import { supabase } from '../integrations/supabase/client';
-import { Loader2, Briefcase, FileText, DollarSign, MessageSquare, Phone, Mail, MapPin, Plus, CreditCard, Zap, ExternalLink } from 'lucide-react';
+import { Loader2, Briefcase, FileText, DollarSign, MessageSquare, Phone, Mail, MapPin, Plus, CreditCard, Zap, ExternalLink, ShieldCheck, AlertTriangle, Lock } from 'lucide-react';
 import AdminLayout from '../components/AdminLayout';
 import { Profile } from '../types/auth';
 import { BillingService } from '../services/billingService';
@@ -18,6 +18,9 @@ interface Client {
   owner_profile_id: string;
   stripe_customer_id: string | null;
   billing_email: string | null;
+  access_override: boolean;
+  access_override_note: string | null;
+  access_status: string;
   profiles: Profile;
   projects: ProjectSummary[];
   invoices: InvoiceSummary[];
@@ -51,13 +54,18 @@ const AdminClientDetail: React.FC = () => {
   const { id } = useParams<{ id: string }>();
   const [client, setClient] = useState<Client | null>(null);
   const [isLoading, setIsLoading] = useState(true);
-  const [activeTab, setActiveTab] = useState<'projects' | 'billing' | 'notes'>('projects');
+  const [activeTab, setActiveTab] = useState<'projects' | 'billing' | 'notes' | 'access'>('projects');
   
   // Billing State
   const [isProcessing, setIsProcessing] = useState(false);
   const [selectedPriceId, setSelectedPriceId] = useState('');
   const [invoiceItems, setInvoiceItems] = useState([{ description: '', amount: 0 }]);
   const [invoiceDueDate, setInvoiceDueDate] = useState('');
+  
+  // Access State
+  const [overrideEnabled, setOverrideEnabled] = useState(false);
+  const [overrideNote, setOverrideNote] = useState('');
+  const [isSavingAccess, setIsSavingAccess] = useState(false);
 
   const fetchClientData = async () => {
     if (!id) return;
@@ -78,7 +86,10 @@ const AdminClientDetail: React.FC = () => {
       console.error('Error fetching client details:', error);
       setClient(null);
     } else {
-      setClient(data as unknown as Client);
+      const clientData = data as unknown as Client;
+      setClient(clientData);
+      setOverrideEnabled(clientData.access_override);
+      setOverrideNote(clientData.access_override_note || '');
     }
     setIsLoading(false);
   };
@@ -93,8 +104,11 @@ const AdminClientDetail: React.FC = () => {
       case 'active': return 'bg-emerald-100 text-emerald-800';
       case 'paid': return 'bg-emerald-100 text-emerald-800';
       case 'open': return 'bg-amber-100 text-amber-800';
+      case 'past_due': return 'bg-red-100 text-red-800';
       case 'paused': return 'bg-amber-100 text-amber-800';
       case 'completed': return 'bg-blue-100 text-blue-800';
+      case 'restricted': return 'bg-red-100 text-red-800';
+      case 'override': return 'bg-purple-100 text-purple-800';
       default: return 'bg-slate-100 text-slate-800';
     }
   };
@@ -185,6 +199,32 @@ const AdminClientDetail: React.FC = () => {
     }
     setInvoiceItems(newItems);
   };
+  
+  // --- Access Handlers ---
+  const handleSaveAccessOverride = async () => {
+    if (!client) return;
+    setIsSavingAccess(true);
+    
+    const { error } = await supabase
+      .from('clients')
+      .update({ 
+        access_override: overrideEnabled,
+        access_override_note: overrideNote.trim() || null,
+        // Note: access_status is updated by the server function, but we can set it manually if needed
+      })
+      .eq('id', client.id);
+
+    if (error) {
+      console.error('Error saving access override:', error);
+      alert('Failed to save access settings.');
+    } else {
+      alert('Access settings saved successfully!');
+      fetchClientData();
+    }
+    setIsSavingAccess(false);
+  };
+
+  const overdueInvoicesCount = client?.invoices?.filter(inv => inv.status === 'past_due' || inv.status === 'open').length || 0;
 
   if (isLoading) {
     return (
@@ -250,6 +290,16 @@ const AdminClientDetail: React.FC = () => {
               }`}
             >
               Notes
+            </button>
+            <button
+              onClick={() => setActiveTab('access')}
+              className={`whitespace-nowrap py-4 px-1 border-b-2 font-medium text-sm transition-colors ${
+                activeTab === 'access'
+                  ? 'border-indigo-600 text-indigo-600'
+                  : 'border-transparent text-slate-500 hover:text-slate-700 hover:border-slate-300'
+              }`}
+            >
+              Access Control
             </button>
           </nav>
         </div>
@@ -319,7 +369,82 @@ const AdminClientDetail: React.FC = () => {
             </div>
           )}
 
-          {/* Billing Tab Content */}
+          {/* Access Control Tab Content */}
+          {activeTab === 'access' && (
+            <div className="lg:col-span-3 space-y-6">
+                <div className="bg-white p-6 rounded-xl shadow-lg border border-slate-100">
+                    <h2 className="text-xl font-bold mb-4 flex items-center gap-2 text-slate-900 border-b border-slate-100 pb-4">
+                        <Lock className="w-5 h-5 text-indigo-600" /> Access Control
+                    </h2>
+                    
+                    <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-6">
+                        <div className="p-4 bg-slate-50 rounded-lg border border-slate-200">
+                            <p className="text-xs text-slate-500 uppercase font-semibold mb-1">Current Access Status</p>
+                            <span className={`px-3 py-1 rounded-full text-sm font-bold ${getStatusColor(client.access_status)}`}>
+                                {client.access_status.replace('_', ' ')}
+                            </span>
+                        </div>
+                        <div className="p-4 bg-slate-50 rounded-lg border border-slate-200">
+                            <p className="text-xs text-slate-500 uppercase font-semibold mb-1">Overdue Invoices</p>
+                            <p className="text-xl font-bold text-red-600">{overdueInvoicesCount}</p>
+                        </div>
+                        <div className="p-4 bg-slate-50 rounded-lg border border-slate-200">
+                            <p className="text-xs text-slate-500 uppercase font-semibold mb-1">Override Status</p>
+                            <p className={`text-xl font-bold ${client.access_override ? 'text-purple-600' : 'text-slate-500'}`}>
+                                {client.access_override ? 'ENABLED' : 'DISABLED'}
+                            </p>
+                        </div>
+                    </div>
+
+                    <div className="p-4 bg-indigo-50 border border-indigo-200 rounded-xl mb-6">
+                        <h3 className="font-bold text-indigo-800 mb-2 flex items-center gap-2">
+                            <ShieldCheck className="w-5 h-5" /> Override Billing Restrictions
+                        </h3>
+                        <p className="text-sm text-indigo-700 mb-4">
+                            Grant client access to the portal regardless of their current subscription or invoice status.
+                        </p>
+                        
+                        <div className="flex items-center justify-between p-3 bg-white rounded-lg border border-slate-200">
+                            <span className="font-medium text-slate-700">Enable Access Override</span>
+                            <label className="relative inline-flex items-center cursor-pointer">
+                                <input 
+                                    type="checkbox" 
+                                    checked={overrideEnabled} 
+                                    onChange={(e) => setOverrideEnabled(e.target.checked)} 
+                                    className="sr-only peer" 
+                                />
+                                <div className="w-11 h-6 bg-slate-200 peer-focus:outline-none peer-focus:ring-4 peer-focus:ring-indigo-300 rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-slate-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-indigo-600"></div>
+                            </label>
+                        </div>
+                    </div>
+
+                    <div className="mb-6">
+                        <label htmlFor="override-note" className="block text-sm font-bold text-slate-700 mb-2">
+                            Override Note (Admin Only)
+                        </label>
+                        <textarea
+                            id="override-note"
+                            rows={3}
+                            value={overrideNote}
+                            onChange={(e) => setOverrideNote(e.target.value)}
+                            placeholder="Reason for override (e.g., 'Good faith extension', 'Internal project')"
+                            className="w-full p-3 border border-slate-300 rounded-lg text-sm resize-none focus:border-indigo-500 outline-none"
+                        />
+                    </div>
+
+                    <button 
+                        onClick={handleSaveAccessOverride}
+                        disabled={isSavingAccess}
+                        className="w-full py-3 bg-indigo-600 text-white rounded-lg font-semibold hover:bg-indigo-700 transition-colors disabled:opacity-50 flex items-center justify-center gap-2"
+                    >
+                        {isSavingAccess ? <Loader2 className="w-5 h-5 animate-spin" /> : <ShieldCheck className="w-5 h-5" />}
+                        Save Access Settings
+                    </button>
+                </div>
+            </div>
+          )}
+
+          {/* Billing Tab Content (Existing) */}
           {activeTab === 'billing' && (
             <>
               {/* Left Column: Customer & Subscriptions */}

@@ -3,9 +3,10 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { useParams, Link } from 'react-router-dom';
 import { supabase } from '../integrations/supabase/client';
-import { Loader2, Briefcase, CheckCircle2, MessageSquare, FileText, Upload, Download, Send, ArrowLeft } from 'lucide-react';
+import { Loader2, Briefcase, CheckCircle2, MessageSquare, FileText, Upload, Download, Send, ArrowLeft, AlertTriangle, DollarSign } from 'lucide-react';
 import ClientLayout from '../components/ClientLayout';
 import { useAuth } from '../hooks/useAuth';
+import { BillingService } from '../services/billingService';
 
 interface Project {
   id: string;
@@ -44,6 +45,11 @@ interface FileItem {
   profiles: { full_name: string };
 }
 
+interface AccessStatus {
+  hasAccess: boolean;
+  reason: 'active' | 'overdue' | 'no_subscription' | 'override' | 'restricted' | 'system_error';
+}
+
 const ClientProjectDetail: React.FC = () => {
   const { id } = useParams<{ id: string }>();
   const { profile } = useAuth();
@@ -52,13 +58,64 @@ const ClientProjectDetail: React.FC = () => {
   const [newMessage, setNewMessage] = useState('');
   const [fileToUpload, setFileToUpload] = useState<File | null>(null);
   const [isUploading, setIsUploading] = useState(false);
+  const [accessStatus, setAccessStatus] = useState<AccessStatus>({ hasAccess: false, reason: 'restricted' });
+  const [clientId, setClientId] = useState<string | null>(null);
+  const [showOverdueBanner, setShowOverdueBanner] = useState(true);
   const messagesEndRef = useRef<HTMLDivElement>(null);
 
-  const fetchProjectData = async () => {
-    if (!id) return;
-    setIsLoading(true);
+  const fetchClientData = async () => {
+    if (!profile) return;
     
-    // Fetch project details, tasks, messages, and files
+    // 1. Get Client ID
+    const { data: clientData, error: clientError } = await supabase
+        .from('clients')
+        .select('id')
+        .eq('owner_profile_id', profile.id)
+        .single();
+
+    if (clientError || !clientData) {
+        console.error('Error fetching client record:', clientError);
+        setIsLoading(false);
+        return;
+    }
+    const currentClientId = clientData.id;
+    setClientId(currentClientId);
+
+    // 2. Check Access Status
+    try {
+        const accessResult = await BillingService.checkClientAccess(currentClientId);
+        setAccessStatus(accessResult);
+        
+        // Determine if we should show the non-blocking overdue banner
+        if (accessResult.hasAccess && accessResult.reason === 'override') {
+            const { data: overdueInvoices } = await supabase
+                .from('invoices')
+                .select('id')
+                .eq('client_id', currentClientId)
+                .in('status', ['open', 'past_due', 'unpaid']);
+            
+            if (overdueInvoices && overdueInvoices.length > 0) {
+                setShowOverdueBanner(true);
+            } else {
+                setShowOverdueBanner(false);
+            }
+        } else if (accessResult.hasAccess && accessResult.reason === 'active') {
+             setShowOverdueBanner(false);
+        }
+
+        if (!accessResult.hasAccess) {
+            setIsLoading(false);
+            return;
+        }
+
+    } catch (e) {
+        console.error("Failed to check access:", e);
+        setAccessStatus({ hasAccess: false, reason: 'system_error' });
+        setIsLoading(false);
+        return;
+    }
+
+    // 3. Fetch project details, tasks, messages, and files (only if access is granted)
     const { data, error } = await supabase
       .from('projects')
       .select(`
@@ -82,8 +139,8 @@ const ClientProjectDetail: React.FC = () => {
   };
 
   useEffect(() => {
-    fetchProjectData();
-  }, [id]);
+    fetchClientData();
+  }, [id, profile]);
 
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
@@ -106,33 +163,17 @@ const ClientProjectDetail: React.FC = () => {
       alert('Failed to send message.');
     } else {
       setNewMessage('');
-      fetchProjectData();
+      fetchClientData();
     }
   };
 
   const handleFileUpload = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!fileToUpload || !project || !profile) return;
+    if (!fileToUpload || !project || !profile || !clientId) return;
 
     setIsUploading(true);
     
-    // 1. Get Client ID (needed for storage path RLS)
-    const { data: clientData, error: clientError } = await supabase
-        .from('clients')
-        .select('id')
-        .eq('owner_profile_id', profile.id)
-        .single();
-
-    if (clientError || !clientData) {
-        console.error('Could not find client ID for profile:', clientError);
-        alert('Authentication error: Could not determine client ownership.');
-        setIsUploading(false);
-        return;
-    }
-    const clientId = clientData.id;
-
-    // 2. Upload file to storage
-    const fileExtension = fileToUpload.name.split('.').pop();
+    // 1. Upload file to storage
     const storagePath = `${clientId}/${project.id}/${Date.now()}-${fileToUpload.name}`;
 
     const { data: uploadData, error: uploadError } = await supabase.storage
@@ -149,7 +190,7 @@ const ClientProjectDetail: React.FC = () => {
       return;
     }
 
-    // 3. Insert file record into database
+    // 2. Insert file record into database
     const { error: dbError } = await supabase
       .from('files')
       .insert({
@@ -169,7 +210,7 @@ const ClientProjectDetail: React.FC = () => {
     } else {
       setFileToUpload(null);
       alert('File uploaded successfully!');
-      fetchProjectData();
+      fetchClientData();
     }
     setIsUploading(false);
   };
@@ -198,11 +239,67 @@ const ClientProjectDetail: React.FC = () => {
   const completedTasks = project?.tasks.filter(t => t.status === 'done').length || 0;
   const totalTasks = project?.tasks.length || 0;
 
+  const getProgressColor = (percent: number) => {
+    if (percent === 100) return 'bg-emerald-600';
+    if (percent >= 75) return 'bg-indigo-600';
+    if (percent >= 50) return 'bg-amber-600';
+    return 'bg-red-600';
+  };
+  
+  const getAccessMessage = (reason: AccessStatus['reason']) => {
+    switch (reason) {
+      case 'overdue':
+        return "Your account has an overdue invoice. Please resolve billing to regain access to your project details.";
+      case 'no_subscription':
+        return "An active service plan is required to access your project details.";
+      case 'restricted':
+      case 'system_error':
+      default:
+        return "Access is currently restricted. Please contact support for assistance.";
+    }
+  };
+
+  const renderAccessPanel = () => (
+    <div className="max-w-2xl mx-auto p-10 bg-white rounded-xl shadow-2xl border border-red-200 text-center">
+      <AlertTriangle className="w-16 h-16 text-red-500 mx-auto mb-6" />
+      <h2 className="text-3xl font-bold text-slate-900 mb-4">Access Temporarily Restricted</h2>
+      <p className="text-lg text-slate-600 mb-8">{getAccessMessage(accessStatus.reason)}</p>
+      
+      <div className="flex flex-col sm:flex-row gap-4 justify-center">
+        <Link
+          to="/client/billing"
+          className="px-6 py-3 bg-red-600 text-white rounded-lg font-semibold hover:bg-red-700 transition-colors flex items-center justify-center gap-2"
+        >
+          <DollarSign className="w-5 h-5" /> View & Pay Invoice
+        </Link>
+        <a
+          href="mailto:hello@customwebsitesplus.com"
+          className="px-6 py-3 bg-slate-100 text-slate-700 rounded-lg font-semibold hover:bg-slate-200 transition-colors flex items-center justify-center gap-2"
+        >
+          <MessageSquare className="w-5 h-5" /> Contact Support
+        </a>
+      </div>
+    </div>
+  );
+
   if (isLoading) {
     return (
       <ClientLayout>
         <div className="min-h-[60vh] flex items-center justify-center">
           <Loader2 className="w-8 h-8 animate-spin text-indigo-600" />
+        </div>
+      </ClientLayout>
+    );
+  }
+  
+  if (!accessStatus.hasAccess) {
+    return (
+      <ClientLayout>
+        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-12">
+            <Link to="/client/dashboard" className="text-indigo-600 hover:text-indigo-800 text-sm font-medium mb-8 block">
+                ← Back to Dashboard
+            </Link>
+            {renderAccessPanel()}
         </div>
       </ClientLayout>
     );
@@ -218,19 +315,28 @@ const ClientProjectDetail: React.FC = () => {
     );
   }
 
-  const getProgressColor = (percent: number) => {
-    if (percent === 100) return 'bg-emerald-600';
-    if (percent >= 75) return 'bg-indigo-600';
-    if (percent >= 50) return 'bg-amber-600';
-    return 'bg-red-600';
-  };
-
   return (
     <ClientLayout>
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-12">
         <Link to="/client/dashboard" className="text-indigo-600 hover:text-indigo-800 text-sm font-medium mb-4 block">
           ← Back to Projects
         </Link>
+        
+        {/* Overdue Warning Banner (Non-blocking) */}
+        {showOverdueBanner && (
+            <div className="p-4 mb-8 bg-amber-50 border border-amber-200 rounded-xl flex justify-between items-center">
+                <div className="flex items-center gap-3">
+                    <AlertTriangle className="w-5 h-5 text-amber-600 flex-shrink-0" />
+                    <p className="text-sm text-amber-800">
+                        <strong>Billing Notice:</strong> You have an overdue invoice. Continued access may be limited if not resolved.
+                    </p>
+                </div>
+                <button onClick={() => setShowOverdueBanner(false)} className="text-amber-600 hover:text-amber-800 text-sm font-medium flex-shrink-0">
+                    Dismiss
+                </button>
+            </div>
+        )}
+
         <h1 className="text-3xl font-bold text-slate-900 mb-2 flex items-center gap-3">
           <Briefcase className="w-7 h-7 text-indigo-600" />
           {project.title}
