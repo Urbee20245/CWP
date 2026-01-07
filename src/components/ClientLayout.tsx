@@ -1,7 +1,7 @@
 "use client";
 
 import React from 'react';
-import { useAuth } from '@/hooks/useAuth';
+import { useAuth } from '../hooks/useAuth';
 import { Link } from 'react-router-dom';
 import { Briefcase, DollarSign, LogOut, User } from 'lucide-react';
 

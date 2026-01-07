@@ -2,10 +2,10 @@
 
 import React, { useState, useEffect } from 'react';
 import { Link } from 'react-router-dom';
-import { useAuth } from '@/hooks/useAuth';
+import { useAuth } from '../hooks/useAuth';
 import { supabase } from '../integrations/supabase/client';
 import { Briefcase, Loader2, LogOut, CheckCircle2, DollarSign } from 'lucide-react';
-import ClientLayout from '@/components/ClientLayout';
+import ClientLayout from '../components/ClientLayout';
 
 interface ProjectSummary {
   id: string;
