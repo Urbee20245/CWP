@@ -19,10 +19,10 @@ serve(async (req) => {
       return errorResponse('Client ID is required.', 400);
     }
 
-    // 1. Fetch Client Data (including override status)
+    // 1. Fetch Client Data (including override status, grace period, and status)
     const { data: client, error: clientError } = await supabaseAdmin
       .from('clients')
-      .select('access_override, access_status')
+      .select('access_override, access_status, billing_grace_until')
       .eq('id', client_id)
       .single();
 
@@ -33,7 +33,7 @@ serve(async (req) => {
 
     // 2. Check Admin Override
     if (client.access_override) {
-      return jsonResponse({ hasAccess: true, reason: 'override' });
+      return jsonResponse({ hasAccess: true, reason: 'override', graceUntil: client.billing_grace_until });
     }
 
     // 3. Check for Active Subscriptions
@@ -46,7 +46,7 @@ serve(async (req) => {
     if (subsError) {
       console.error('[access-check] Subscription check failed:', subsError);
       // Default to restricted if we can't verify status securely
-      return jsonResponse({ hasAccess: false, reason: 'system_error' });
+      return jsonResponse({ hasAccess: false, reason: 'system_error', graceUntil: client.billing_grace_until });
     }
 
     const hasActiveSubscription = (activeSubsCount || 0) > 0;
@@ -60,7 +60,7 @@ serve(async (req) => {
       
     if (invoiceError) {
       console.error('[access-check] Invoice check failed:', invoiceError);
-      return jsonResponse({ hasAccess: false, reason: 'system_error' });
+      return jsonResponse({ hasAccess: false, reason: 'system_error', graceUntil: client.billing_grace_until });
     }
 
     const now = new Date();
@@ -70,22 +70,31 @@ serve(async (req) => {
     );
 
     // --- Final Access Logic ---
+    
+    // Check if we are in the grace period (access granted temporarily)
+    const inGracePeriod = client.billing_grace_until && new Date(client.billing_grace_until) > now;
+
     if (hasActiveSubscription && !isOverdue) {
-      return jsonResponse({ hasAccess: true, reason: 'active' });
+      return jsonResponse({ hasAccess: true, reason: 'active', graceUntil: client.billing_grace_until });
     }
     
-    if (isOverdue) {
-      // If overdue, access is restricted unless overridden
-      return jsonResponse({ hasAccess: false, reason: 'overdue' });
+    if (isOverdue && inGracePeriod) {
+        // Overdue but still in grace period
+        return jsonResponse({ hasAccess: true, reason: 'grace_period', graceUntil: client.billing_grace_until });
+    }
+
+    if (isOverdue && !inGracePeriod) {
+      // If overdue and grace period expired
+      return jsonResponse({ hasAccess: false, reason: 'overdue', graceUntil: client.billing_grace_until });
     }
     
     if (!hasActiveSubscription) {
-      // If no active subscription and no overdue invoices (e.g., new client or paused service)
-      return jsonResponse({ hasAccess: false, reason: 'no_subscription' });
+      // If no active subscription (and no overdue invoice to trigger grace)
+      return jsonResponse({ hasAccess: false, reason: 'no_subscription', graceUntil: client.billing_grace_until });
     }
 
     // Should be unreachable if logic is sound, but default to restricted
-    return jsonResponse({ hasAccess: false, reason: 'restricted' });
+    return jsonResponse({ hasAccess: false, reason: 'restricted', graceUntil: client.billing_grace_until });
 
   } catch (error: any) {
     console.error('[access-check] Unhandled error:', error.message);

@@ -2,6 +2,7 @@ import { serve } from "https://deno.land/std@0.190.0/http/server.ts";
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2.45.0';
 import Stripe from 'https://esm.sh/stripe@16.2.0?target=deno';
 import { handleCors, jsonResponse, errorResponse } from '../_shared/utils.ts';
+import { sendBillingNotification } from '../_shared/notificationService.ts';
 
 const STRIPE_SECRET_KEY = Deno.env.get('STRIPE_SECRET_KEY');
 const STRIPE_WEBHOOK_SECRET = Deno.env.get('STRIPE_WEBHOOK_SECRET');
@@ -76,7 +77,7 @@ serve(async (req) => {
     if (customer_id) {
         const { data: clientData } = await supabaseAdmin
             .from('clients')
-            .select('id')
+            .select('id, business_name, billing_email')
             .eq('stripe_customer_id', customer_id)
             .single();
         client_id = clientData?.id || null;
@@ -98,6 +99,36 @@ serve(async (req) => {
     // 2. Handle specific events
     switch (event.type) {
       case 'invoice.paid':
+      case 'checkout.session.completed': {
+        if (!client_id) break;
+        
+        // Auto-Recovery Logic: Clear flags and restore access
+        const { data: client, error: clientFetchError } = await supabaseAdmin
+            .from('clients')
+            .select('business_name, billing_email')
+            .eq('id', client_id)
+            .single();
+
+        if (!clientFetchError && client) {
+            await supabaseAdmin
+                .from('clients')
+                .update({
+                    access_status: 'active',
+                    billing_escalation_stage: 0,
+                    billing_grace_until: null,
+                    last_billing_notice_sent: null,
+                })
+                .eq('id', client_id);
+            
+            // Send confirmation email
+            if (client.billing_email) {
+                await sendBillingNotification(client.billing_email, client.business_name, 3);
+            }
+            console.log(`[stripe-webhook] Access restored for client ${client_id} due to successful payment.`);
+        }
+        
+        // Fall through to invoice handling
+      }
       case 'invoice.payment_succeeded':
       case 'invoice.payment_failed':
       case 'invoice.finalized':
@@ -149,7 +180,7 @@ serve(async (req) => {
         if (subscription.status === 'active' || subscription.status === 'trialing') {
             await supabaseAdmin
                 .from('clients')
-                .update({ stripe_subscription_id: subscription.id })
+                .update({ stripe_subscription_id: subscription.id, access_status: 'active' }) // Auto-restore access on active subscription
                 .eq('id', client_id);
         } else if (event.type === 'customer.subscription.deleted') {
              await supabaseAdmin

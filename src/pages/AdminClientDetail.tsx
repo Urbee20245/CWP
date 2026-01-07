@@ -3,11 +3,12 @@
 import React, { useState, useEffect } from 'react';
 import { useParams, Link } from 'react-router-dom';
 import { supabase } from '../integrations/supabase/client';
-import { Loader2, Briefcase, FileText, DollarSign, MessageSquare, Phone, Mail, MapPin, Plus, CreditCard, Zap, ExternalLink, ShieldCheck, AlertTriangle, Lock, Trash2 } from 'lucide-react';
+import { Loader2, Briefcase, FileText, DollarSign, MessageSquare, Phone, Mail, MapPin, Plus, CreditCard, Zap, ExternalLink, ShieldCheck, AlertTriangle, Lock, Trash2, Send } from 'lucide-react';
 import AdminLayout from '../components/AdminLayout';
 import { Profile } from '../types/auth';
 import { BillingService } from '../services/billingService';
 import { SUBSCRIPTION_PLANS } from '../config/billing';
+import { sendBillingNotification } from '../../supabase/functions/_shared/notificationService'; // Import client-side mock
 
 interface Client {
   id: string;
@@ -21,6 +22,9 @@ interface Client {
   access_override: boolean;
   access_override_note: string | null;
   access_status: string;
+  billing_grace_until: string | null;
+  billing_escalation_stage: number;
+  last_billing_notice_sent: string | null;
   profiles: Profile;
   projects: ProjectSummary[];
   invoices: InvoiceSummary[];
@@ -109,7 +113,18 @@ const AdminClientDetail: React.FC = () => {
       case 'completed': return 'bg-blue-100 text-blue-800';
       case 'restricted': return 'bg-red-100 text-red-800';
       case 'override': return 'bg-purple-100 text-purple-800';
+      case 'grace_period': return 'bg-yellow-100 text-yellow-800';
       default: return 'bg-slate-100 text-slate-800';
+    }
+  };
+  
+  const getEscalationStageText = (stage: number) => {
+    switch (stage) {
+        case 0: return 'None';
+        case 1: return 'Reminder Sent (Day 1)';
+        case 2: return 'Final Notice Sent (Day 5)';
+        case 3: return 'Access Restricted';
+        default: return 'Unknown';
     }
   };
 
@@ -222,6 +237,26 @@ const AdminClientDetail: React.FC = () => {
       fetchClientData();
     }
     setIsSavingAccess(false);
+  };
+  
+  const handleSendManualReminder = async (stage: 1 | 2) => {
+    if (!client || !client.billing_email) {
+        alert("Client email is missing.");
+        return;
+    }
+    
+    const graceDate = client.billing_grace_until ? new Date(client.billing_grace_until).toLocaleDateString() : 'N/A';
+    
+    try {
+        // Use the mock notification service for client-side simulation/admin trigger
+        await sendBillingNotification(client.billing_email, client.business_name, stage, graceDate);
+        alert(`Manual reminder (Stage ${stage}) sent to ${client.billing_email}.`);
+        
+        // Optionally update last_billing_notice_sent in DB if we want to respect the 24h cooldown
+        // For manual trigger, we skip DB update to allow immediate re-send if needed.
+    } catch (e: any) {
+        alert(`Failed to send reminder: ${e.message}`);
+    }
   };
 
   const overdueInvoicesCount = client?.invoices?.filter(inv => inv.status === 'past_due' || inv.status === 'open').length || 0;
@@ -395,6 +430,50 @@ const AdminClientDetail: React.FC = () => {
                             </p>
                         </div>
                     </div>
+                    
+                    {/* Automation Status */}
+                    <div className="p-4 bg-slate-50 rounded-xl border border-slate-200 mb-6">
+                        <h3 className="font-bold text-slate-900 mb-3 flex items-center gap-2">
+                            <Zap className="w-5 h-5 text-amber-600" /> Automation Status
+                        </h3>
+                        <div className="grid grid-cols-2 gap-4 text-sm">
+                            <div>
+                                <p className="text-xs text-slate-500 uppercase font-semibold mb-1">Escalation Stage</p>
+                                <p className="font-medium text-slate-800">{getEscalationStageText(client.billing_escalation_stage)} ({client.billing_escalation_stage}/3)</p>
+                            </div>
+                            <div>
+                                <p className="text-xs text-slate-500 uppercase font-semibold mb-1">Grace Period Ends</p>
+                                <p className="font-medium text-slate-800">
+                                    {client.billing_grace_until ? new Date(client.billing_grace_until).toLocaleDateString() : 'N/A'}
+                                </p>
+                            </div>
+                            <div className="col-span-2">
+                                <p className="text-xs text-slate-500 uppercase font-semibold mb-1">Last Notice Sent</p>
+                                <p className="font-medium text-slate-800">
+                                    {client.last_billing_notice_sent ? new Date(client.last_billing_notice_sent).toLocaleString() : 'Never'}
+                                </p>
+                            </div>
+                        </div>
+                        
+                        {/* Manual Reminder Buttons */}
+                        {overdueInvoicesCount > 0 && client.billing_escalation_stage < 3 && (
+                            <div className="mt-4 pt-4 border-t border-slate-200 flex gap-3">
+                                <button 
+                                    onClick={() => handleSendManualReminder(1)}
+                                    className="flex-1 py-2 bg-indigo-500 text-white rounded-lg text-xs font-semibold hover:bg-indigo-600 transition-colors flex items-center justify-center gap-2"
+                                >
+                                    <Send className="w-4 h-4" /> Send Stage 1
+                                </button>
+                                <button 
+                                    onClick={() => handleSendManualReminder(2)}
+                                    className="flex-1 py-2 bg-red-500 text-white rounded-lg text-xs font-semibold hover:bg-red-600 transition-colors flex items-center justify-center gap-2"
+                                >
+                                    <Send className="w-4 h-4" /> Send Stage 2
+                                </button>
+                            </div>
+                        )}
+                    </div>
+
 
                     <div className="p-4 bg-indigo-50 border border-indigo-200 rounded-xl mb-6">
                         <h3 className="font-bold text-indigo-800 mb-2 flex items-center gap-2">

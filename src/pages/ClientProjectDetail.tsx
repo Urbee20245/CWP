@@ -47,7 +47,8 @@ interface FileItem {
 
 interface AccessStatus {
   hasAccess: boolean;
-  reason: 'active' | 'overdue' | 'no_subscription' | 'override' | 'restricted' | 'system_error';
+  reason: 'active' | 'overdue' | 'no_subscription' | 'override' | 'restricted' | 'system_error' | 'grace_period';
+  graceUntil?: string | null;
 }
 
 const ClientProjectDetail: React.FC = () => {
@@ -87,7 +88,7 @@ const ClientProjectDetail: React.FC = () => {
         setAccessStatus(accessResult);
         
         // Determine if we should show the non-blocking overdue banner
-        if (accessResult.hasAccess && accessResult.reason === 'override') {
+        if (accessResult.reason === 'grace_period' || (accessResult.hasAccess && accessResult.reason === 'override')) {
             const { data: overdueInvoices } = await supabase
                 .from('invoices')
                 .select('id')
@@ -99,7 +100,7 @@ const ClientProjectDetail: React.FC = () => {
             } else {
                 setShowOverdueBanner(false);
             }
-        } else if (accessResult.hasAccess && accessResult.reason === 'active') {
+        } else {
              setShowOverdueBanner(false);
         }
 
@@ -252,6 +253,8 @@ const ClientProjectDetail: React.FC = () => {
         return "Your account has an overdue invoice. Please resolve billing to regain access to your project details.";
       case 'no_subscription':
         return "An active service plan is required to access your project details.";
+      case 'grace_period':
+        return "Your invoice is overdue. Access is currently maintained during the grace period, but will be restricted if not resolved.";
       case 'restricted':
       case 'system_error':
       default:
@@ -281,6 +284,10 @@ const ClientProjectDetail: React.FC = () => {
       </div>
     </div>
   );
+  
+  const formatGraceDate = (dateString: string) => {
+    return new Date(dateString).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
+  };
 
   if (isLoading) {
     return (
@@ -323,12 +330,12 @@ const ClientProjectDetail: React.FC = () => {
         </Link>
         
         {/* Overdue Warning Banner (Non-blocking) */}
-        {showOverdueBanner && (
+        {showOverdueBanner && accessStatus.graceUntil && (
             <div className="p-4 mb-8 bg-amber-50 border border-amber-200 rounded-xl flex justify-between items-center">
                 <div className="flex items-center gap-3">
                     <AlertTriangle className="w-5 h-5 text-amber-600 flex-shrink-0" />
                     <p className="text-sm text-amber-800">
-                        <strong>Billing Notice:</strong> You have an overdue invoice. Continued access may be limited if not resolved.
+                        <strong>Billing Notice:</strong> Your invoice is overdue. Access will be limited if not resolved by {formatGraceDate(accessStatus.graceUntil)}.
                     </p>
                 </div>
                 <button onClick={() => setShowOverdueBanner(false)} className="text-amber-600 hover:text-amber-800 text-sm font-medium flex-shrink-0">

@@ -17,7 +17,8 @@ interface ProjectSummary {
 
 interface AccessStatus {
   hasAccess: boolean;
-  reason: 'active' | 'overdue' | 'no_subscription' | 'override' | 'restricted' | 'system_error';
+  reason: 'active' | 'overdue' | 'no_subscription' | 'override' | 'restricted' | 'system_error' | 'grace_period';
+  graceUntil?: string | null;
 }
 
 const ClientDashboard: React.FC = () => {
@@ -57,7 +58,7 @@ const ClientDashboard: React.FC = () => {
         setAccessStatus(accessResult);
         
         // Determine if we should show the non-blocking overdue banner
-        if (accessResult.hasAccess && accessResult.reason === 'override') {
+        if (accessResult.reason === 'grace_period' || (accessResult.hasAccess && accessResult.reason === 'override')) {
             // If access is overridden, we still check for overdue invoices to show a warning
             const { data: overdueInvoices } = await supabase
                 .from('invoices')
@@ -70,10 +71,7 @@ const ClientDashboard: React.FC = () => {
             } else {
                 setShowOverdueBanner(false);
             }
-        } else if (accessResult.hasAccess && accessResult.reason === 'active') {
-             setShowOverdueBanner(false);
-        } else if (!accessResult.hasAccess && accessResult.reason === 'overdue') {
-             // If access is restricted due to overdue, the main blocking panel handles it.
+        } else {
              setShowOverdueBanner(false);
         }
 
@@ -117,6 +115,8 @@ const ClientDashboard: React.FC = () => {
         return "Your account has an overdue invoice. Please resolve billing to regain access to your project dashboard.";
       case 'no_subscription':
         return "An active service plan is required to access your project dashboard. Please contact support or check your billing status.";
+      case case 'grace_period':
+        return "Your invoice is overdue. Access is currently maintained during the grace period, but will be restricted if not resolved.";
       case 'restricted':
       case 'system_error':
       default:
@@ -147,6 +147,10 @@ const ClientDashboard: React.FC = () => {
     </div>
   );
 
+  const formatGraceDate = (dateString: string) => {
+    return new Date(dateString).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
+  };
+
   return (
     <ClientLayout>
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-12">
@@ -165,7 +169,7 @@ const ClientDashboard: React.FC = () => {
                 <div className="flex items-center gap-3">
                     <AlertTriangle className="w-5 h-5 text-amber-600 flex-shrink-0" />
                     <p className="text-sm text-amber-800">
-                        <strong>Billing Notice:</strong> You have an overdue invoice. Continued access may be limited if not resolved.
+                        <strong>Billing Notice:</strong> Your invoice is overdue. Access will be limited if not resolved by {formatGraceDate(accessStatus.graceUntil || '')}.
                     </p>
                 </div>
                 <button onClick={() => setShowOverdueBanner(false)} className="text-amber-600 hover:text-amber-800 text-sm font-medium flex-shrink-0">
