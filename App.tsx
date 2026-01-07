@@ -26,6 +26,7 @@ import AdminClientDetail from './src/pages/AdminClientDetail';
 import AdminProjectDetail from './src/pages/AdminProjectDetail';
 import ClientProjectDetail from './src/pages/ClientProjectDetail';
 import ClientBilling from './src/pages/ClientBilling';
+import BackOfficeRedirect from './src/pages/BackOfficeRedirect';
 
 const Home = () => (
   <main>
@@ -58,6 +59,11 @@ const App: React.FC = () => {
             <Route path="/jetviz" element={<JetVizPage />} />
             <Route path="/jet-local-optimizer" element={<JetLocalOptimizerPage />} />
             <Route path="/back-office/login" element={<LoginPage />} />
+            
+            {/* New Protected Redirect Route */}
+            <Route path="/back-office" element={<ProtectedRoute allowedRoles={['admin', 'client']} />}>
+              <Route index element={<BackOfficeRedirect />} />
+            </Route>
 
             {/* Admin Routes */}
             <Route path="/admin/*" element={<ProtectedRoute allowedRoles={['admin']} />}>

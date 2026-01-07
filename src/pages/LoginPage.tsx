@@ -1,59 +1,66 @@
 "use client";
 
-import React, { useEffect } from 'react';
-import { Auth } from '@supabase/auth-ui-react';
-import { ThemeSupa } from '@supabase/auth-ui-shared';
+import React, { useState } from 'react';
 import { supabase } from '../integrations/supabase/client';
-import { useAuth } from '../hooks/useAuth';
-import { Navigate, useLocation } from 'react-router-dom';
-import { Bot, Loader2 } from 'lucide-react';
+import { Bot, Loader2, LogIn, UserPlus } from 'lucide-react';
 
-const LoginPage: React.FC = () => {
-  const { user, profile, isLoading } = useAuth();
-  const location = useLocation();
-  const from = location.state?.from?.pathname || '/';
+// Note: We are intentionally NOT using useAuth or useNavigate here, 
+// as per user instructions to keep this page simple and redirect externally.
 
-  // Redirect authenticated users based on role
-  useEffect(() => {
-    if (user && profile) {
-      const targetPath = profile.role === 'admin' ? '/admin/dashboard' : '/client/dashboard';
-      
-      // Check if the user is already on the correct dashboard or was trying to access a protected route
-      if (location.pathname.startsWith(targetPath) || from.startsWith(targetPath)) {
-        // Do nothing, let the user stay or proceed to the intended protected route
-        return;
-      }
-      
-      // If coming from the login page itself, redirect to dashboard
-      if (location.pathname === '/back-office/login') {
-        window.location.replace(targetPath);
-        return;
-      }
-      
-      // If coming from a different public page, redirect to dashboard
-      if (from !== '/back-office/login') {
-        window.location.replace(from);
-        return;
-      }
+export default function BackOfficeLogin() {
+  const [email, setEmail] = useState('');
+  const [password, setPassword] = useState('');
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const [isSignupMode, setIsSignupMode] = useState(false);
+  const [signupSuccess, setSignupSuccess] = useState(false);
+
+  async function handleLogin(e: React.FormEvent) {
+    e.preventDefault();
+    setLoading(true);
+    setError(null);
+
+    const { error } = await supabase.auth.signInWithPassword({
+      email,
+      password,
+    });
+
+    if (error) {
+      setError(error.message);
+      setLoading(false);
+      return;
     }
-  }, [user, profile, from, location.pathname]);
 
-  if (isLoading || (user && !profile)) {
-    // Show loading spinner while checking session or fetching profile
-    return (
-      <div className="min-h-[80vh] flex items-center justify-center pt-20">
-        <Loader2 className="w-8 h-8 border-4 border-indigo-200 border-t-indigo-600 rounded-full animate-spin" />
-      </div>
-    );
+    // Successful login — redirect handled by the new /back-office route guard
+    window.location.href = '/back-office';
   }
 
-  // If user is authenticated and profile is loaded, but useEffect hasn't redirected yet (should be fast)
-  if (user && profile) {
-    return (
-      <div className="min-h-[80vh] flex items-center justify-center pt-20">
-        <Loader2 className="w-8 h-8 border-4 border-indigo-200 border-t-indigo-600 rounded-full animate-spin" />
-      </div>
-    );
+  async function handleSignup(e: React.FormEvent) {
+    e.preventDefault();
+    setLoading(true);
+    setError(null);
+    setSignupSuccess(false);
+
+    const { error } = await supabase.auth.signUp({
+      email,
+      password,
+      options: {
+        // Optional: Add default metadata if needed, e.g., full_name
+        data: {
+            full_name: email.split('@')[0],
+        }
+      }
+    });
+
+    if (error) {
+      setError(error.message);
+    } else {
+      setSignupSuccess(true);
+      setEmail('');
+      setPassword('');
+    }
+
+    setLoading(false);
   }
 
   return (
@@ -63,30 +70,83 @@ const LoginPage: React.FC = () => {
           <div className="w-12 h-12 bg-slate-900 rounded-full flex items-center justify-center mx-auto mb-3">
             <Bot className="w-6 h-6 text-indigo-400" />
           </div>
-          <h1 className="text-2xl font-bold text-slate-900">Back Office Login</h1>
+          <h1 className="text-2xl font-bold text-slate-900">{isSignupMode ? 'Create Account' : 'Back Office Login'}</h1>
           <p className="text-sm text-slate-500">Access your client portal or admin dashboard.</p>
         </div>
-        <Auth
-          supabaseClient={supabase}
-          appearance={{
-            theme: ThemeSupa,
-            variables: {
-              default: {
-                colors: {
-                  brand: '#4F46E5', // Indigo-600
-                  brandAccent: '#6366F1', // Indigo-500
-                },
-              },
-            },
-          }}
-          providers={[]}
-          view="sign_in"
-          // Note: redirectTo is crucial for Supabase to handle deep links after magic link/email confirmation
-          redirectTo={window.location.origin + '/back-office/login'}
-        />
+
+        {signupSuccess ? (
+            <div className="p-6 bg-emerald-50 border border-emerald-200 rounded-xl text-center">
+                <h3 className="font-bold text-emerald-800 mb-2">Success! Check your email.</h3>
+                <p className="text-sm text-emerald-700">A confirmation link has been sent to your email address. Please click the link to complete registration.</p>
+                <button type="button" onClick={() => { setIsSignupMode(false); setSignupSuccess(false); }} className="mt-4 text-indigo-600 text-sm font-medium hover:text-indigo-800">
+                    Return to Login
+                </button>
+            </div>
+        ) : (
+            <form onSubmit={isSignupMode ? handleSignup : handleLogin} className="space-y-6">
+                {error && (
+                    <div className="p-3 bg-red-100 border border-red-300 text-red-800 rounded-lg text-sm">
+                        {error}
+                    </div>
+                )}
+
+                <div>
+                    <label className="block text-sm font-bold text-slate-700 mb-2">Email</label>
+                    <input
+                        type="email"
+                        value={email}
+                        onChange={(e) => setEmail(e.target.value)}
+                        placeholder="your@email.com"
+                        className="w-full px-4 py-3 border border-slate-300 rounded-xl focus:border-indigo-500 focus:ring-2 focus:ring-indigo-200 outline-none transition-all"
+                        required
+                        disabled={loading}
+                    />
+                </div>
+
+                <div>
+                    <label className="block text-sm font-bold text-slate-700 mb-2">Password</label>
+                    <input
+                        type="password"
+                        value={password}
+                        onChange={(e) => setPassword(e.target.value)}
+                        placeholder="••••••••"
+                        className="w-full px-4 py-3 border border-slate-300 rounded-xl focus:border-indigo-500 focus:ring-2 focus:ring-indigo-200 outline-none transition-all"
+                        required
+                        disabled={loading}
+                    />
+                </div>
+
+                <button
+                    type="submit"
+                    disabled={loading}
+                    className="w-full py-4 bg-gradient-to-r from-indigo-600 to-purple-600 text-white rounded-xl font-bold text-lg hover:shadow-xl hover:shadow-indigo-200 transition-all disabled:opacity-50 flex items-center justify-center gap-2"
+                >
+                    {loading ? (
+                        <>
+                            <Loader2 className="w-5 h-5 animate-spin" />
+                            {isSignupMode ? 'Signing Up...' : 'Logging In...'}
+                        </>
+                    ) : (
+                        <>
+                            {isSignupMode ? <UserPlus className="w-5 h-5" /> : <LogIn className="w-5 h-5" />}
+                            {isSignupMode ? 'Sign Up' : 'Log In'}
+                        </>
+                    )}
+                </button>
+                
+                <div className="text-center pt-4 border-t border-slate-100">
+                    <button 
+                        type="button"
+                        onClick={() => setIsSignupMode(p => !p)}
+                        className="text-sm text-indigo-600 hover:text-indigo-800 font-medium"
+                        disabled={loading}
+                    >
+                        {isSignupMode ? 'Already have an account? Log In' : 'Need an account? Sign Up'}
+                    </button>
+                </div>
+            </form>
+        )}
       </div>
     </div>
   );
-};
-
-export default LoginPage;
+}
