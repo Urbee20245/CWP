@@ -115,7 +115,7 @@ const ClientDashboard: React.FC = () => {
         return "Your account has an overdue invoice. Please resolve billing to regain access to your project dashboard.";
       case 'no_subscription':
         return "An active service plan is required to access your project dashboard. Please contact support or check your billing status.";
-      case case 'grace_period':
+      case 'grace_period':
         return "Your invoice is overdue. Access is currently maintained during the grace period, but will be restricted if not resolved.";
       case 'restricted':
       case 'system_error':
