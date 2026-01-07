@@ -53,12 +53,32 @@ const JetSuitePage: React.FC = () => {
     },
   ];
 
-  const upcomingTools = [
-    { name: 'JetSocial', description: 'Automated social media content generation' },
-    { name: 'JetTestimonials', description: 'Customer review aggregation & showcase' },
-    { name: 'JetAnalytics', description: 'Simplified performance dashboard' },
-    { name: 'JetBooking', description: 'Seamless appointment scheduling' },
+  const allJetSuiteTools = [
+    { name: 'JetBiz', category: 'Foundation' },
+    { name: 'JetLocal Optimizer', category: 'Foundation' },
+    { name: 'JetViz', category: 'Foundation' },
+    { name: 'Growth Score', category: 'Foundation' },
+    { name: 'Business Details', category: 'Foundation' },
+    { name: 'JetCreate', category: 'Marketing' },
+    { name: 'JetPost', category: 'Marketing' },
+    { name: 'JetContent', category: 'Marketing' },
+    { name: 'JetImage', category: 'Marketing' },
+    { name: 'JetSocial', category: 'Marketing' },
+    { name: 'JetReply', category: 'Engagement' },
+    { name: 'JetReviews', category: 'Engagement' },
+    { name: 'JetLeads', category: 'Engagement' },
+    { name: 'JetEvents', category: 'Engagement' },
+    { name: 'JetBooking', category: 'Engagement' },
+    { name: 'Growth Plan', category: 'Strategy' },
+    { name: 'Command Center', category: 'Strategy' },
+    { name: 'Home Dashboard', category: 'Strategy' },
+    { name: 'Analytics', category: 'Strategy' },
+    { name: 'Knowledge Base', category: 'Strategy' },
   ];
+  
+  const toolsToShow = allJetSuiteTools.slice(0, 15);
+  const remainingToolsCount = allJetSuiteTools.length - toolsToShow.length;
+
 
   return (
     <div className="min-h-screen bg-slate-50">
@@ -211,7 +231,7 @@ const JetSuitePage: React.FC = () => {
         </div>
       </section>
 
-      {/* More Tools Coming Soon Section */}
+      {/* JetSuite Platform Overview Section (Replaces 'More Tools Coming Soon') */}
       <section className="py-20 bg-white border-t border-slate-200">
         <div className="max-w-5xl mx-auto px-6 text-center">
           <div className="inline-flex items-center justify-center w-16 h-16 rounded-full bg-gradient-to-br from-indigo-500 to-purple-600 text-white mb-6">
@@ -219,38 +239,38 @@ const JetSuitePage: React.FC = () => {
           </div>
           
           <h2 className="text-3xl md:text-4xl font-bold text-slate-900 mb-4">
-            More Tools Coming Soon
+            JetSuite — One System for Business Growth
           </h2>
           <p className="text-lg text-slate-600 mb-12 max-w-2xl mx-auto">
-            We're constantly building new tools to help local businesses thrive online. Here's what's in the pipeline:
+            JetSuite helps organizations set up their business correctly, present a strong brand, and actively engage customers — all from one unified system.
           </p>
 
-          {/* Upcoming Tools Grid */}
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mb-12">
-            {upcomingTools.map((tool, index) => (
+          {/* Tools Grid */}
+          <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-5 gap-4 mb-12">
+            {toolsToShow.map((tool, index) => (
               <div
                 key={index}
-                className="flex items-start gap-4 p-6 rounded-xl bg-slate-50 border border-slate-200 text-left hover:border-indigo-300 hover:bg-indigo-50/50 transition-all duration-300"
+                className="p-4 rounded-xl bg-slate-50 border border-slate-200 text-center hover:border-indigo-300 hover:bg-indigo-50/50 transition-all duration-300"
               >
-                <div className="flex-shrink-0 w-10 h-10 rounded-lg bg-gradient-to-br from-indigo-500 to-purple-600 flex items-center justify-center text-white font-bold">
-                  {index + 1}
-                </div>
-                <div>
-                  <h4 className="font-bold text-slate-900 mb-1">{tool.name}</h4>
-                  <p className="text-sm text-slate-600">{tool.description}</p>
-                </div>
+                <h4 className="font-bold text-slate-900 text-sm">{tool.name}</h4>
+                <p className="text-xs text-slate-500 mt-1">{tool.category}</p>
               </div>
             ))}
+            {remainingToolsCount > 0 && (
+                <div className="p-4 rounded-xl bg-slate-900 text-white text-center flex items-center justify-center border border-slate-700">
+                    <span className="font-bold text-sm">+{remainingToolsCount} More Inside JetSuite</span>
+                </div>
+            )}
           </div>
 
-          {/* Waitlist CTA */}
-          <button
-            onClick={() => setShowWaitlist(true)}
+          {/* CTA Button */}
+          <a
+            href="https://getjetsuite.com"
             className="inline-flex items-center gap-2 px-8 py-4 rounded-xl bg-gradient-to-r from-indigo-600 to-purple-600 text-white font-bold text-lg hover:shadow-xl hover:shadow-indigo-200 transition-all duration-300 hover:scale-105"
           >
-            <Bell className="w-5 h-5" />
-            Join the Waitlist
-          </button>
+            <Sparkles className="w-5 h-5" />
+            Visit JetSuite
+          </a>
         </div>
       </section>
 
