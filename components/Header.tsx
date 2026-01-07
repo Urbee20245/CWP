@@ -151,7 +151,7 @@ const Header: React.FC = () => {
           </Link>
         </nav>
 
-        {/* Right Side Actions */}
+        {/* Right Side Actions (Replaced Back Office with Audit CTA) */}
         <div className="hidden md:flex items-center gap-4 pl-4 border-l border-slate-200 ml-2">
              <a 
                 href="tel:4045520926" 
@@ -161,11 +161,11 @@ const Header: React.FC = () => {
                 <span className="hidden lg:inline">(404) 552-0926</span>
              </a>
              <Link
-                to="/back-office/login" 
+                to="/jet-local-optimizer" 
                 className="bg-slate-900 text-white px-4 py-2.5 rounded-full text-sm font-bold hover:bg-slate-800 transition-all shadow-lg shadow-slate-900/20 active:scale-95 flex items-center gap-2"
              >
-                <LogIn className="w-4 h-4" />
-                Back Office
+                <Gauge className="w-4 h-4" />
+                Run Website Audit
              </Link>
         </div>
 
@@ -246,12 +246,12 @@ const Header: React.FC = () => {
 
                 <div className="p-2">
                     <Link
-                      to="/back-office/login"
+                      to="/jet-local-optimizer"
                       onClick={() => setIsMobileMenuOpen(false)}
                       className="w-full bg-indigo-600 text-white px-4 py-4 rounded-2xl font-bold shadow-lg flex justify-center items-center gap-2"
                     >
-                      <LogIn className="w-4 h-4" />
-                      Back Office Login
+                      <Gauge className="w-4 h-4" />
+                      Run Website Audit
                     </Link>
                 </div>
             </div>
