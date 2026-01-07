@@ -36,21 +36,6 @@ const JetSuitePage: React.FC = () => {
       iconColor: 'text-purple-600',
       isActive: true,
     },
-    {
-      id: 'jetcitations',
-      icon: MapPin,
-      title: 'JetCitations',
-      description: 'Boost your local visibility with automated citation building and NAP consistency management across 50+ directories and platforms.',
-      badge: 'COMING SOON',
-      ctaText: 'Get Notified',
-      ctaLink: '#',
-      gradient: 'from-emerald-500 to-teal-600',
-      bgGradient: 'from-emerald-50 to-teal-50',
-      hoverShadow: 'hover:shadow-emerald-200',
-      iconBg: 'bg-emerald-50',
-      iconColor: 'text-emerald-600',
-      isActive: false,
-    },
   ];
 
   const allJetSuiteTools = [
@@ -278,27 +263,27 @@ const JetSuitePage: React.FC = () => {
       <section className="py-20 bg-gradient-to-br from-slate-900 to-indigo-900 text-white">
         <div className="max-w-4xl mx-auto px-6 text-center">
           <h2 className="text-3xl md:text-4xl font-bold mb-6">
-            Ready to Transform Your Online Presence?
+            Ready to Grow with JetSuite?
           </h2>
           <p className="text-xl text-slate-300 mb-10">
-            Start with a free analysis and discover what's possible for your business.
+            JetSuite is the complete AI-powered platform built to help businesses improve visibility, strengthen their brand, and engage customers — all from one system.
           </p>
           
           <div className="flex flex-col sm:flex-row gap-4 justify-center">
-            <Link
-              to="/jet-local-optimizer"
+            <a
+              href="https://getjetsuite.com"
               className="px-8 py-4 bg-white text-slate-900 rounded-xl font-bold hover:bg-slate-100 transition-all hover:shadow-xl flex items-center justify-center gap-2"
             >
-              <Zap className="w-5 h-5" />
-              Run Website Audit
-            </Link>
-            <Link
-              to="/jetviz"
+              <Sparkles className="w-5 h-5" />
+              Visit JetSuite
+            </a>
+            <a
+              href="https://getjetsuite.com"
               className="px-8 py-4 bg-transparent border-2 border-white text-white rounded-xl font-bold hover:bg-white/10 transition-all flex items-center justify-center gap-2"
             >
               <Eye className="w-5 h-5" />
-              Check Design Score
-            </Link>
+              Explore the Platform
+            </a>
           </div>
         </div>
       </section>
