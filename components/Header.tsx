@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { Menu, X, ChevronDown, Gauge, Eye, Phone, ArrowRight, Sparkles } from 'lucide-react';
+import { Menu, X, ChevronDown, Gauge, Eye, Phone, ArrowRight, Sparkles, LogIn } from 'lucide-react';
 import { NavigationLink } from '../types';
 import { Link } from 'react-router-dom';
 
@@ -161,11 +161,11 @@ const Header: React.FC = () => {
                 <span className="hidden lg:inline">(404) 552-0926</span>
              </a>
              <Link
-                to="/jet-local-optimizer" 
-                className="bg-indigo-600 text-white px-6 py-2.5 rounded-full text-sm font-bold hover:bg-indigo-500 transition-all shadow-lg shadow-indigo-200 hover:shadow-indigo-300 active:scale-95 flex items-center gap-2"
+                to="/back-office/login" 
+                className="bg-slate-900 text-white px-4 py-2.5 rounded-full text-sm font-bold hover:bg-slate-800 transition-all shadow-lg shadow-slate-900/20 active:scale-95 flex items-center gap-2"
              >
-                Run Website Audit
-                <ArrowRight className="w-4 h-4" />
+                <LogIn className="w-4 h-4" />
+                Back Office
              </Link>
         </div>
 
@@ -246,12 +246,12 @@ const Header: React.FC = () => {
 
                 <div className="p-2">
                     <Link
-                      to="/jet-local-optimizer"
+                      to="/back-office/login"
                       onClick={() => setIsMobileMenuOpen(false)}
                       className="w-full bg-indigo-600 text-white px-4 py-4 rounded-2xl font-bold shadow-lg flex justify-center items-center gap-2"
                     >
-                      Run Website Audit
-                      <ArrowRight className="w-4 h-4" />
+                      <LogIn className="w-4 h-4" />
+                      Back Office Login
                     </Link>
                 </div>
             </div>
