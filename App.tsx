@@ -17,15 +17,15 @@ import JetVizPage from './components/JetVizPage';
 import JetSuitePage from './components/JetSuitePage';
 import ServicesPage from './components/ServicesPage';
 import ContactPage from './components/ContactPage';
-import SessionProvider from './context/SessionProvider';
-import LoginPage from './pages/LoginPage';
-import ProtectedRoute from './components/ProtectedRoute';
-import AdminDashboard from './pages/AdminDashboard';
-import ClientDashboard from './pages/ClientDashboard';
-import AdminClientDetail from './pages/AdminClientDetail';
-import AdminProjectDetail from './pages/AdminProjectDetail';
-import ClientProjectDetail from './pages/ClientProjectDetail';
-import ClientBilling from './pages/ClientBilling';
+import SessionProvider from './src/context/SessionProvider';
+import LoginPage from './src/pages/LoginPage';
+import ProtectedRoute from './src/components/ProtectedRoute';
+import AdminDashboard from './src/pages/AdminDashboard';
+import ClientDashboard from './src/pages/ClientDashboard';
+import AdminClientDetail from './src/pages/AdminClientDetail';
+import AdminProjectDetail from './src/pages/AdminProjectDetail';
+import ClientProjectDetail from './src/pages/ClientProjectDetail';
+import ClientBilling from './src/pages/ClientBilling';
 
 const Home = () => (
   <main>
