@@ -41,17 +41,21 @@ const SessionProvider: React.FC<SessionProviderProps> = ({ children }) => {
           setUser(null);
           setProfile(null);
         }
-        setIsLoading(false);
+        // Only set isLoading to false after the initial session check AND profile fetch attempt
+        if (event === 'INITIAL_SESSION' || event === 'SIGNED_IN' || event === 'SIGNED_OUT') {
+            setIsLoading(false);
+        }
       }
     );
 
-    // Fetch initial session
+    // Fallback check for initial session if listener doesn't fire immediately
     supabase.auth.getSession().then(({ data: { session } }) => {
       if (session?.user) {
         setUser(session.user);
         fetchProfile(session.user.id);
+      } else {
+        setIsLoading(false);
       }
-      setIsLoading(false);
     });
 
     return () => {

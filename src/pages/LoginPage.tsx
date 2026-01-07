@@ -6,7 +6,7 @@ import { ThemeSupa } from '@supabase/auth-ui-shared';
 import { supabase } from '../integrations/supabase/client';
 import { useAuth } from '../hooks/useAuth';
 import { Navigate, useLocation } from 'react-router-dom';
-import { Bot } from 'lucide-react';
+import { Bot, Loader2 } from 'lucide-react';
 
 const LoginPage: React.FC = () => {
   const { user, profile, isLoading } = useAuth();
@@ -17,29 +17,41 @@ const LoginPage: React.FC = () => {
   useEffect(() => {
     if (user && profile) {
       const targetPath = profile.role === 'admin' ? '/admin/dashboard' : '/client/dashboard';
-      if (from !== '/back-office/login' && from.startsWith(`/${profile.role}`)) {
-        // If user was trying to access a specific protected route, send them there
-        window.location.replace(from);
-      } else {
-        // Otherwise, send them to their default dashboard
+      
+      // Check if the user is already on the correct dashboard or was trying to access a protected route
+      if (location.pathname.startsWith(targetPath) || from.startsWith(targetPath)) {
+        // Do nothing, let the user stay or proceed to the intended protected route
+        return;
+      }
+      
+      // If coming from the login page itself, redirect to dashboard
+      if (location.pathname === '/back-office/login') {
         window.location.replace(targetPath);
+        return;
+      }
+      
+      // If coming from a different public page, redirect to dashboard
+      if (from !== '/back-office/login') {
+        window.location.replace(from);
+        return;
       }
     }
-  }, [user, profile, from]);
+  }, [user, profile, from, location.pathname]);
 
   if (isLoading || (user && !profile)) {
+    // Show loading spinner while checking session or fetching profile
     return (
       <div className="min-h-[80vh] flex items-center justify-center pt-20">
-        <div className="w-8 h-8 border-4 border-indigo-200 border-t-indigo-600 rounded-full animate-spin"></div>
+        <Loader2 className="w-8 h-8 border-4 border-indigo-200 border-t-indigo-600 rounded-full animate-spin" />
       </div>
     );
   }
 
+  // If user is authenticated and profile is loaded, but useEffect hasn't redirected yet (should be fast)
   if (user && profile) {
-    // Already authenticated and profile loaded, waiting for redirect
     return (
       <div className="min-h-[80vh] flex items-center justify-center pt-20">
-        <div className="w-8 h-8 border-4 border-indigo-200 border-t-indigo-600 rounded-full animate-spin"></div>
+        <Loader2 className="w-8 h-8 border-4 border-indigo-200 border-t-indigo-600 rounded-full animate-spin" />
       </div>
     );
   }
@@ -69,6 +81,7 @@ const LoginPage: React.FC = () => {
           }}
           providers={[]}
           view="sign_in"
+          // Note: redirectTo is crucial for Supabase to handle deep links after magic link/email confirmation
           redirectTo={window.location.origin + '/back-office/login'}
         />
       </div>
