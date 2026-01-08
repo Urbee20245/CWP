@@ -1,5 +1,5 @@
 import React from 'react';
-import { BrowserRouter, Routes, Route, useLocation } from 'react-router-dom';
+import { BrowserRouter, Routes, Route, useLocation, Navigate } from 'react-router-dom';
 import Header from './components/Header';
 import Footer from './components/Footer';
 import VoiceAgent from './components/VoiceAgent';
@@ -32,8 +32,8 @@ import NotFoundPage from './src/pages/NotFoundPage';
 import ErrorBoundary from './src/components/ErrorBoundary';
 import GlobalLoading from './src/components/GlobalLoading';
 import { useAuth } from './src/hooks/useAuth';
-import { ModalProvider } from './src/context/ModalProvider'; // New Import
-import LoginModal from './src/components/LoginModal'; // New Import
+import { ModalProvider } from './src/context/ModalProvider';
+import LoginModal from './src/components/LoginModal';
 
 // Component that uses useLocation to conditionally render global elements
 const AppContent: React.FC = () => {
@@ -72,6 +72,7 @@ const AppContent: React.FC = () => {
 
         {/* Admin Routes */}
         <Route path="/admin/*" element={<ProtectedRoute allowedRoles={['admin']} />}>
+          <Route index element={<Navigate to="dashboard" replace />} /> {/* FIX: Redirect /admin to /admin/dashboard */}
           <Route path="dashboard" element={<AdminDashboard />} />
           <Route path="clients" element={<AdminClientList />} />
           <Route path="clients/:id" element={<AdminClientDetail />} />
