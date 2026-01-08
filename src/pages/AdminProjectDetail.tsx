@@ -139,7 +139,7 @@ const AdminProjectDetail: React.FC = () => {
       .from('projects')
       .select(`
         *,
-        clients (business_name, billing_email),
+        clients (business_name),
         tasks (id, title, status, due_date),
         files (id, file_name, file_type, file_size, storage_path, created_at, profiles (full_name)),
         milestones (id, name, amount_cents, status, order_index, stripe_invoice_id),
@@ -149,7 +149,6 @@ const AdminProjectDetail: React.FC = () => {
         )
       `)
       .eq('id', id)
-      .order('created_at', { foreignTable: 'messages', ascending: true })
       .order('due_date', { foreignTable: 'tasks', ascending: true })
       .order('order_index', { foreignTable: 'milestones', ascending: true })
       .order('created_at', { foreignTable: 'project_threads', ascending: false })
@@ -160,6 +159,16 @@ const AdminProjectDetail: React.FC = () => {
       setProject(null);
     } else {
       const projectData = data as unknown as Project;
+      
+      // Manually sort messages within each thread since Supabase doesn't support nested ordering in the select string
+      if (projectData.threads) {
+          projectData.threads.forEach(thread => {
+              if (thread.messages) {
+                  thread.messages.sort((a, b) => new Date(a.created_at).getTime() - new Date(b.created_at).getTime());
+              }
+          });
+      }
+      
       setProject(projectData);
       setNewProgress(projectData.progress_percent);
       setSlaDays(projectData.sla_days || '');
