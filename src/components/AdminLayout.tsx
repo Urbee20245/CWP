@@ -3,7 +3,7 @@
 import React from 'react';
 import { useAuth } from '../hooks/useAuth';
 import { Link } from 'react-router-dom';
-import { Users, Briefcase, DollarSign, LogOut, Bot } from 'lucide-react';
+import { Users, Briefcase, DollarSign, LogOut, Bot, BarChart3 } from 'lucide-react';
 
 interface AdminLayoutProps {
   children: React.ReactNode;
@@ -16,7 +16,8 @@ const AdminLayout: React.FC<AdminLayoutProps> = ({ children }) => {
     { name: 'Dashboard', href: '/admin/dashboard', icon: Bot },
     { name: 'Clients', href: '/admin/dashboard', icon: Users }, // Using dashboard for client list for MVP
     { name: 'Projects', href: '/admin/dashboard', icon: Briefcase },
-    { name: 'Billing Products', href: '/admin/billing/products', icon: DollarSign }, // New link
+    { name: 'Revenue', href: '/admin/billing/revenue', icon: BarChart3 }, // New link
+    { name: 'Billing Products', href: '/admin/billing/products', icon: DollarSign }, 
   ];
 
   return (

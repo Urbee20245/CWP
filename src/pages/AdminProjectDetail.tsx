@@ -3,9 +3,11 @@
 import React, { useState, useEffect } from 'react';
 import { useParams, Link } from 'react-router-dom';
 import { supabase } from '../integrations/supabase/client';
-import { Loader2, Briefcase, CheckCircle2, MessageSquare, FileText, Upload, Trash2, Plus, ArrowLeft } from 'lucide-react';
+import { Loader2, Briefcase, CheckCircle2, MessageSquare, FileText, Upload, Trash2, Plus, ArrowLeft, Clock, AlertTriangle, ShieldOff } from 'lucide-react';
 import AdminLayout from '../components/AdminLayout';
 import { Profile } from '../types/auth';
+import { calculateSlaMetrics, calculateSlaDueDate, SlaStatus } from '../utils/sla';
+import { format } from 'date-fns';
 
 interface Project {
   id: string;
@@ -18,6 +20,11 @@ interface Project {
   tasks: Task[];
   messages: Message[];
   files: FileItem[];
+  // SLA Fields
+  sla_days: number | null;
+  sla_start_date: string | null;
+  sla_due_date: string | null;
+  sla_status: SlaStatus;
 }
 
 interface Task {
@@ -53,6 +60,11 @@ const AdminProjectDetail: React.FC = () => {
   const [newProgress, setNewProgress] = useState(0);
   const [newMessage, setNewMessage] = useState('');
   const [isUpdating, setIsUpdating] = useState(false);
+  
+  // SLA State
+  const [slaDays, setSlaDays] = useState<number | ''>('');
+  const [slaStartDate, setSlaStartDate] = useState<string>('');
+  const [slaMetrics, setSlaMetrics] = useState<ReturnType<typeof calculateSlaMetrics> | null>(null);
 
   const fetchProjectData = async () => {
     if (!id) return;
@@ -76,8 +88,28 @@ const AdminProjectDetail: React.FC = () => {
       console.error('Error fetching project details:', error);
       setProject(null);
     } else {
-      setProject(data as unknown as Project);
-      setNewProgress(data.progress_percent);
+      const projectData = data as unknown as Project;
+      setProject(projectData);
+      setNewProgress(projectData.progress_percent);
+      setSlaDays(projectData.sla_days || '');
+      setSlaStartDate(projectData.sla_start_date ? format(new Date(projectData.sla_start_date), 'yyyy-MM-dd') : '');
+      
+      // Calculate SLA metrics immediately
+      if (projectData.sla_days && projectData.sla_start_date && projectData.sla_due_date) {
+        const metrics = calculateSlaMetrics(
+          projectData.progress_percent,
+          projectData.sla_days,
+          projectData.sla_start_date,
+          projectData.sla_due_date
+        );
+        setSlaMetrics(metrics);
+        // Update DB status if calculated status differs (optional auto-sync)
+        if (metrics.slaStatus !== projectData.sla_status) {
+            await supabase.from('projects').update({ sla_status: metrics.slaStatus }).eq('id', id);
+        }
+      } else {
+          setSlaMetrics(null);
+      }
     }
     setIsLoading(false);
   };
@@ -101,6 +133,39 @@ const AdminProjectDetail: React.FC = () => {
     } else {
       alert('Progress updated successfully!');
       fetchProjectData(); // Re-fetch data to update UI
+    }
+    setIsUpdating(false);
+  };
+  
+  const handleSlaUpdate = async () => {
+    if (!project || !slaDays || !slaStartDate) return;
+    setIsUpdating(true);
+    
+    const days = typeof slaDays === 'string' ? parseInt(slaDays) : slaDays;
+    if (days <= 0) {
+        alert("SLA days must be positive.");
+        setIsUpdating(false);
+        return;
+    }
+    
+    const newSlaDueDate = calculateSlaDueDate(slaStartDate, days);
+    
+    const { error } = await supabase
+      .from('projects')
+      .update({ 
+          sla_days: days,
+          sla_start_date: new Date(slaStartDate).toISOString(),
+          sla_due_date: newSlaDueDate,
+          sla_status: 'on_track' // Reset status on manual update
+      })
+      .eq('id', project.id);
+
+    if (error) {
+      console.error('Error updating SLA:', error);
+      alert('Failed to update SLA.');
+    } else {
+      alert('SLA updated successfully!');
+      fetchProjectData();
     }
     setIsUpdating(false);
   };
@@ -131,6 +196,15 @@ const AdminProjectDetail: React.FC = () => {
 
   const completedTasks = project?.tasks.filter(t => t.status === 'done').length || 0;
   const totalTasks = project?.tasks.length || 0;
+  
+  const getSlaColor = (status: SlaStatus) => {
+      switch (status) {
+          case 'on_track': return 'bg-emerald-100 text-emerald-800';
+          case 'at_risk': return 'bg-amber-100 text-amber-800';
+          case 'breached': return 'bg-red-100 text-red-800';
+          default: return 'bg-slate-100 text-slate-800';
+      }
+  };
 
   if (isLoading) {
     return (
@@ -166,7 +240,7 @@ const AdminProjectDetail: React.FC = () => {
 
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
           
-          {/* Left Column: Progress & Tasks */}
+          {/* Left Column: Progress, SLA & Tasks */}
           <div className="lg:col-span-1 space-y-8">
             
             {/* Progress Control */}
@@ -208,6 +282,59 @@ const AdminProjectDetail: React.FC = () => {
                   {isUpdating ? 'Saving...' : 'Save Progress'}
                 </button>
               </div>
+            </div>
+            
+            {/* SLA Control */}
+            <div className="bg-white p-6 rounded-xl shadow-lg border border-slate-100">
+              <h2 className="text-xl font-bold mb-4 flex items-center gap-2 border-b border-slate-100 pb-4">
+                <Clock className="w-5 h-5 text-red-600" /> SLA Timer
+              </h2>
+              
+              {project.sla_due_date && slaMetrics ? (
+                  <div className="mb-4 p-3 rounded-lg border border-slate-200">
+                      <p className="text-xs text-slate-500 uppercase font-semibold mb-1">Current Status</p>
+                      <span className={`px-2 py-0.5 rounded-full text-sm font-bold ${getSlaColor(slaMetrics.slaStatus)}`}>
+                          {slaMetrics.slaStatus.replace('_', ' ')}
+                      </span>
+                      <p className="text-sm text-slate-600 mt-2">Due: {format(new Date(project.sla_due_date), 'MMM dd, yyyy')}</p>
+                      <p className="text-sm text-slate-600">Expected Progress: {slaMetrics.expectedProgress}%</p>
+                      <p className="text-sm text-slate-600">Days Remaining: {slaMetrics.daysRemaining}</p>
+                  </div>
+              ) : (
+                  <p className="text-sm text-slate-500 mb-4">SLA not configured.</p>
+              )}
+
+              <h3 className="font-bold text-sm mb-2">Set/Update SLA</h3>
+              <div className="space-y-3">
+                  <div>
+                      <label className="block text-xs font-medium text-slate-600 mb-1">SLA Duration (Days)</label>
+                      <input
+                          type="number"
+                          value={slaDays}
+                          onChange={(e) => setSlaDays(parseInt(e.target.value) || '')}
+                          min="1"
+                          className="w-full p-2 border border-slate-300 rounded-lg text-sm"
+                          disabled={isUpdating}
+                      />
+                  </div>
+                  <div>
+                      <label className="block text-xs font-medium text-slate-600 mb-1">Start Date</label>
+                      <input
+                          type="date"
+                          value={slaStartDate}
+                          onChange={(e) => setSlaStartDate(e.target.value)}
+                          className="w-full p-2 border border-slate-300 rounded-lg text-sm"
+                          disabled={isUpdating}
+                      />
+                  </div>
+              </div>
+              <button 
+                onClick={handleSlaUpdate}
+                disabled={isUpdating || !slaDays || !slaStartDate}
+                className="mt-4 w-full py-2 bg-indigo-600 text-white rounded-lg text-sm font-semibold hover:bg-indigo-700 transition-colors disabled:opacity-50"
+              >
+                {isUpdating ? 'Saving SLA...' : 'Save SLA'}
+              </button>
             </div>
 
             {/* Tasks List */}

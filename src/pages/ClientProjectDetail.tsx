@@ -3,10 +3,12 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { useParams, Link } from 'react-router-dom';
 import { supabase } from '../integrations/supabase/client';
-import { Loader2, Briefcase, CheckCircle2, MessageSquare, FileText, Upload, Download, Send, ArrowLeft, AlertTriangle, DollarSign } from 'lucide-react';
+import { Loader2, Briefcase, CheckCircle2, MessageSquare, FileText, Upload, Download, Send, ArrowLeft, AlertTriangle, DollarSign, Clock } from 'lucide-react';
 import ClientLayout from '../components/ClientLayout';
 import { useAuth } from '../hooks/useAuth';
 import { BillingService } from '../services/billingService';
+import { calculateSlaMetrics, SlaStatus } from '../utils/sla';
+import { format } from 'date-fns';
 
 interface Project {
   id: string;
@@ -17,6 +19,11 @@ interface Project {
   tasks: Task[];
   messages: Message[];
   files: FileItem[];
+  // SLA Fields
+  sla_days: number | null;
+  sla_start_date: string | null;
+  sla_due_date: string | null;
+  sla_status: SlaStatus;
 }
 
 interface Task {
@@ -62,6 +69,7 @@ const ClientProjectDetail: React.FC = () => {
   const [accessStatus, setAccessStatus] = useState<AccessStatus>({ hasAccess: false, reason: 'restricted' });
   const [clientId, setClientId] = useState<string | null>(null);
   const [showOverdueBanner, setShowOverdueBanner] = useState(true);
+  const [slaMetrics, setSlaMetrics] = useState<ReturnType<typeof calculateSlaMetrics> | null>(null);
   const messagesEndRef = useRef<HTMLDivElement>(null);
 
   const fetchClientData = async () => {
@@ -120,7 +128,7 @@ const ClientProjectDetail: React.FC = () => {
     const { data, error } = await supabase
       .from('projects')
       .select(`
-        id, title, description, status, progress_percent,
+        id, title, description, status, progress_percent, sla_days, sla_start_date, sla_due_date, sla_status,
         tasks (id, title, status, due_date),
         messages (id, body, created_at, sender_profile_id, profiles (full_name)),
         files (id, file_name, file_type, file_size, storage_path, created_at, profiles (full_name))
@@ -134,7 +142,20 @@ const ClientProjectDetail: React.FC = () => {
       console.error('Error fetching project details:', error);
       setProject(null);
     } else {
-      setProject(data as unknown as Project);
+      const projectData = data as unknown as Project;
+      setProject(projectData);
+      
+      // Calculate SLA metrics
+      if (projectData.sla_days && projectData.sla_start_date && projectData.sla_due_date) {
+        setSlaMetrics(calculateSlaMetrics(
+          projectData.progress_percent,
+          projectData.sla_days,
+          projectData.sla_start_date,
+          projectData.sla_due_date
+        ));
+      } else {
+          setSlaMetrics(null);
+      }
     }
     setIsLoading(false);
   };
@@ -288,6 +309,15 @@ const ClientProjectDetail: React.FC = () => {
   const formatGraceDate = (dateString: string) => {
     return new Date(dateString).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
   };
+  
+  const getSlaColor = (status: SlaStatus) => {
+      switch (status) {
+          case 'on_track': return 'bg-emerald-100 text-emerald-800';
+          case 'at_risk': return 'bg-amber-100 text-amber-800';
+          case 'breached': return 'bg-red-100 text-red-800';
+          default: return 'bg-slate-100 text-slate-800';
+      }
+  };
 
   if (isLoading) {
     return (
@@ -352,7 +382,7 @@ const ClientProjectDetail: React.FC = () => {
 
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
           
-          {/* Left Column: Progress & Tasks */}
+          {/* Left Column: Progress, SLA & Tasks */}
           <div className="lg:col-span-1 space-y-8">
             
             {/* Progress View */}
@@ -369,6 +399,33 @@ const ClientProjectDetail: React.FC = () => {
 
               <p className="text-sm text-slate-600">{completedTasks}/{totalTasks} Tasks Completed</p>
             </div>
+            
+            {/* SLA Status (Client View) */}
+            {project.sla_due_date && slaMetrics && (
+                <div className="bg-white p-6 rounded-xl shadow-lg border border-slate-100">
+                    <h2 className="text-xl font-bold mb-4 flex items-center gap-2 border-b border-slate-100 pb-4">
+                        <Clock className="w-5 h-5 text-red-600" /> Project Timeline
+                    </h2>
+                    <div className="space-y-3">
+                        <div className="flex justify-between items-center">
+                            <p className="text-sm font-medium text-slate-700">Status:</p>
+                            <span className={`px-2 py-0.5 rounded-full text-sm font-bold ${getSlaColor(slaMetrics.slaStatus)}`}>
+                                {slaMetrics.slaStatus.replace('_', ' ')}
+                            </span>
+                        </div>
+                        <div className="flex justify-between items-center">
+                            <p className="text-sm font-medium text-slate-700">Due Date:</p>
+                            <p className="text-sm text-slate-600">{format(new Date(project.sla_due_date), 'MMM dd, yyyy')}</p>
+                        </div>
+                        <div className="flex justify-between items-center">
+                            <p className="text-sm font-medium text-slate-700">Days Remaining:</p>
+                            <p className={`text-sm font-bold ${slaMetrics.daysRemaining < 0 ? 'text-red-600' : 'text-emerald-600'}`}>
+                                {slaMetrics.daysRemaining}
+                            </p>
+                        </div>
+                    </div>
+                </div>
+            )}
 
             {/* Tasks List */}
             <div className="bg-white p-6 rounded-xl shadow-lg border border-slate-100">
