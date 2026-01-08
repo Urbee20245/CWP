@@ -3,7 +3,7 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import { useParams, Link, useNavigate } from 'react-router-dom';
 import { supabase } from '../integrations/supabase/client';
-import { Loader2, Briefcase, FileText, DollarSign, Plus, CreditCard, Zap, ExternalLink, ShieldCheck, Lock, Trash2, Send, AlertCircle, MessageSquare, Phone, CheckCircle2, Pause, Play, Clock } from 'lucide-react';
+import { Loader2, Briefcase, FileText, DollarSign, Plus, CreditCard, Zap, ExternalLink, ShieldCheck, Lock, Trash2, Send, AlertCircle, MessageSquare, Phone, CheckCircle2, Pause, Play, Clock, Download } from 'lucide-react';
 import AdminLayout from '../components/AdminLayout';
 import { Profile } from '../types/auth';
 import { AdminService } from '../services/adminService'; // Use AdminService for admin functions
@@ -23,6 +23,7 @@ interface InvoiceSummary {
   amount_due: number;
   status: string;
   hosted_invoice_url: string;
+  pdf_url: string | null; // Added pdf_url
   created_at: string;
 }
 
@@ -117,7 +118,7 @@ const AdminClientDetail: React.FC = () => {
           id, business_name, phone, status, notes, owner_profile_id, stripe_customer_id, billing_email, service_status,
           profiles (id, full_name, email),
           projects (id, title, status, progress_percent),
-          invoices (id, amount_due, status, hosted_invoice_url, created_at),
+          invoices (id, amount_due, status, hosted_invoice_url, pdf_url, created_at),
           subscriptions (id, stripe_price_id, status, current_period_end, cancel_at_period_end),
           deposits (id, amount_cents, status, stripe_invoice_id, applied_to_invoice_id, created_at),
           service_pause_logs (id, action, internal_note, client_acknowledged, created_at)
@@ -530,14 +531,14 @@ const AdminClientDetail: React.FC = () => {
                         rows={2}
                         disabled={isServiceUpdating}
                     />
-                    <div className="flex gap-3">
+                    <div className="flex gap-3 flex-wrap">
                         {client.service_status !== 'paused' ? (
                             <button 
                                 onClick={() => handleServiceStatusUpdate('paused')}
                                 disabled={isServiceUpdating || client.service_status === 'completed'}
                                 className="flex-1 py-2 bg-amber-600 text-white rounded-lg text-sm font-semibold hover:bg-amber-700 transition-colors disabled:opacity-50 flex items-center justify-center gap-2"
                             >
-                                <Pause className="w-4 h-4" /> Pause Services
+                                <Pause className="w-4 h-4" /> Pause Work
                             </button>
                         ) : (
                             <button 
@@ -545,13 +546,13 @@ const AdminClientDetail: React.FC = () => {
                                 disabled={isServiceUpdating}
                                 className="flex-1 py-2 bg-emerald-600 text-white rounded-lg text-sm font-semibold hover:bg-emerald-700 transition-colors disabled:opacity-50 flex items-center justify-center gap-2"
                             >
-                                <Play className="w-4 h-4" /> Resume Services
+                                <Play className="w-4 h-4" /> Resume Work
                             </button>
                         )}
                         <button 
                             onClick={() => handleServiceStatusUpdate('completed')}
                             disabled={isServiceUpdating || client.service_status === 'completed'}
-                            className="py-2 px-4 bg-blue-600 text-white rounded-lg text-sm font-semibold hover:bg-blue-700 transition-colors disabled:opacity-50"
+                            className="flex-1 py-2 bg-blue-600 text-white rounded-lg text-sm font-semibold hover:bg-blue-700 transition-colors disabled:opacity-50"
                         >
                             Complete
                         </button>
@@ -702,6 +703,9 @@ const AdminClientDetail: React.FC = () => {
                             <p className="font-bold text-emerald-800">{getPlanName(currentSubscription.stripe_price_id)}</p>
                             <p className="text-sm text-emerald-700">Status: {currentSubscription.status}</p>
                             <p className="text-xs text-emerald-600">Renews: {currentSubscription.current_period_end ? new Date(currentSubscription.current_period_end).toLocaleDateString() : 'N/A'}</p>
+                            {currentSubscription.cancel_at_period_end && (
+                                <p className="text-xs text-red-600 font-semibold mt-2">Cancellation pending at period end.</p>
+                            )}
                         </div>
                       ) : (
                         <p className="text-slate-500 text-sm mb-4">No active maintenance subscription.</p>
@@ -940,14 +944,25 @@ const AdminClientDetail: React.FC = () => {
                               <span className={`px-2 py-0.5 rounded-full text-xs font-semibold ${getStatusColor(invoice.status)}`}>
                                 {invoice.status}
                               </span>
-                              <a 
-                                href={invoice.hosted_invoice_url} 
-                                target="_blank" 
-                                rel="noopener noreferrer" 
-                                className="text-indigo-600 hover:underline flex items-center gap-1"
-                              >
-                                View <ExternalLink className="w-3 h-3" />
-                              </a>
+                              {invoice.pdf_url && invoice.status === 'paid' ? (
+                                  <a 
+                                    href={invoice.pdf_url} 
+                                    target="_blank" 
+                                    rel="noopener noreferrer" 
+                                    className="text-emerald-600 hover:underline flex items-center gap-1"
+                                  >
+                                    Download <Download className="w-3 h-3" />
+                                  </a>
+                              ) : (
+                                  <a 
+                                    href={invoice.hosted_invoice_url} 
+                                    target="_blank" 
+                                    rel="noopener noreferrer" 
+                                    className="text-indigo-600 hover:underline flex items-center gap-1"
+                                  >
+                                    View <ExternalLink className="w-3 h-3" />
+                                  </a>
+                              )}
                             </div>
                           ))
                         ) : (

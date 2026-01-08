@@ -3,16 +3,18 @@
 import React, { useState, useEffect } from 'react';
 import { useAuth } from '../hooks/useAuth';
 import { supabase } from '../integrations/supabase/client';
-import { Loader2, DollarSign, FileText, ExternalLink, Zap, CreditCard, CheckCircle2, AlertTriangle } from 'lucide-react';
+import { Loader2, DollarSign, FileText, ExternalLink, Zap, CreditCard, CheckCircle2, AlertTriangle, Download, X } from 'lucide-react';
 import ClientLayout from '../components/ClientLayout';
 import { ClientBillingService } from '../services/clientBillingService';
 import ServiceStatusBanner from '../components/ServiceStatusBanner';
+import CancelSubscriptionModal from '../components/CancelSubscriptionModal'; // New Import
 
 interface Invoice {
   id: string;
   amount_due: number;
   status: string;
   hosted_invoice_url: string;
+  pdf_url: string | null; // Added pdf_url
   created_at: string;
 }
 
@@ -21,7 +23,7 @@ interface Subscription {
   stripe_price_id: string;
   status: string;
   current_period_end: string;
-  cancel_at_period_end: boolean;
+  cancel_at_period_end: boolean; // Added cancel_at_period_end
 }
 
 interface Deposit {
@@ -49,6 +51,11 @@ const ClientBilling: React.FC = () => {
   const [stripeCustomerId, setStripeCustomerId] = useState<string | null>(null);
   const [isClientRecordMissing, setIsClientRecordMissing] = useState(false);
   const [clientServiceStatus, setClientServiceStatus] = useState<'active' | 'paused' | 'onboarding' | 'completed'>('onboarding');
+  
+  // Cancellation Modal State
+  const [isCancelModalOpen, setIsCancelModalOpen] = useState(false);
+  const [cancellationTarget, setCancellationTarget] = useState<Subscription | null>(null);
+  const [cancellationSuccess, setCancellationSuccess] = useState(false);
 
 
   const fetchBillingData = async () => {
@@ -83,7 +90,7 @@ const ClientBilling: React.FC = () => {
     // 2. Fetch invoices for that client ID
     const { data: invoicesData, error: invoicesError } = await supabase
       .from('invoices')
-      .select('id, amount_due, status, hosted_invoice_url, created_at')
+      .select('id, amount_due, status, hosted_invoice_url, pdf_url, created_at') // Added pdf_url
       .eq('client_id', clientId)
       .order('created_at', { ascending: false });
 
@@ -96,7 +103,7 @@ const ClientBilling: React.FC = () => {
     // 3. Fetch subscriptions for that client ID
     const { data: subscriptionsData, error: subscriptionsError } = await supabase
       .from('subscriptions')
-      .select('id, stripe_price_id, status, current_period_end, cancel_at_period_end')
+      .select('id, stripe_price_id, status, current_period_end, cancel_at_period_end') // Added cancel_at_period_end
       .eq('client_id', clientId)
       .order('created_at', { ascending: false });
 
@@ -145,7 +152,7 @@ const ClientBilling: React.FC = () => {
     setIsProcessing(true);
     try {
       // We use the client ID here, but the edge function will look up the stripe_customer_id
-      const { data: clientData } = await supabase.from('clients').select('id').eq('stripe_customer_id', stripeCustomerId).single();
+      const { data: clientData } = await supabase.from('clients').select('id').eq('owner_profile_id', profile!.id).single();
       if (!clientData) throw new Error("Client ID not found for customer.");
       
       const result = await ClientBillingService.createPortalSession(clientData.id);
@@ -155,6 +162,41 @@ const ClientBilling: React.FC = () => {
     } finally {
       setIsProcessing(false);
     }
+  };
+  
+  const handleCancelSubscription = (sub: Subscription) => {
+      setCancellationTarget(sub);
+      setCancellationSuccess(false);
+      setIsCancelModalOpen(true);
+  };
+  
+  const confirmCancellation = async () => {
+      if (!cancellationTarget) return;
+      setIsProcessing(true);
+      
+      try {
+          await ClientBillingService.cancelSubscription(cancellationTarget.id);
+          setCancellationSuccess(true);
+          // Re-fetch data to update subscription status and client service status
+          await fetchBillingData();
+          
+          // Keep modal open briefly to show success message
+          setTimeout(() => {
+              setIsCancelModalOpen(false);
+              setCancellationTarget(null);
+          }, 3000);
+          
+      } catch (e: any) {
+          alert(`Cancellation failed: ${e.message}`);
+          setCancellationSuccess(false);
+          setIsCancelModalOpen(false);
+      } finally {
+          setIsProcessing(false);
+      }
+  };
+  
+  const handleDownloadInvoice = (pdfUrl: string) => {
+      window.open(pdfUrl, '_blank');
   };
 
   const getStatusColor = (status: string) => {
@@ -218,7 +260,7 @@ const ClientBilling: React.FC = () => {
                         </h2>
                         
                         {activeSubscription ? (
-                            <div className="space-y-3 mb-6">
+                            <div className="space-y-3 mb-6 p-4 bg-slate-50 rounded-lg border border-slate-200">
                                 <p className="text-lg font-bold text-slate-900">{getPlanName(activeSubscription.stripe_price_id)}</p>
                                 <p className="text-sm text-slate-600 flex justify-between">
                                     <span>Status:</span>
@@ -230,6 +272,20 @@ const ClientBilling: React.FC = () => {
                                     <span>Renews:</span>
                                     <span>{new Date(activeSubscription.current_period_end).toLocaleDateString()}</span>
                                 </p>
+                                
+                                {activeSubscription.cancel_at_period_end ? (
+                                    <div className="text-sm text-red-600 font-semibold pt-3 border-t border-slate-200 flex items-center gap-2">
+                                        <X className="w-4 h-4" /> Cancellation Pending
+                                    </div>
+                                ) : (
+                                    <button 
+                                        onClick={() => handleCancelSubscription(activeSubscription)}
+                                        disabled={isProcessing}
+                                        className="w-full py-2 mt-4 bg-red-500 text-white rounded-lg text-sm font-semibold hover:bg-red-600 transition-colors disabled:opacity-50"
+                                    >
+                                        Cancel Subscription
+                                    </button>
+                                )}
                             </div>
                         ) : (
                             <p className="text-slate-500 mb-6">No active maintenance plan found.</p>
@@ -303,14 +359,21 @@ const ClientBilling: React.FC = () => {
                                                     </span>
                                                 </td>
                                                 <td className="px-4 py-4 whitespace-nowrap text-right text-sm font-medium">
-                                                    {invoice.hosted_invoice_url ? (
+                                                    {invoice.status.toLowerCase() === 'paid' && invoice.pdf_url ? (
+                                                        <button 
+                                                            onClick={() => handleDownloadInvoice(invoice.pdf_url!)}
+                                                            className="flex items-center justify-end gap-1 text-emerald-600 hover:text-emerald-800"
+                                                        >
+                                                            Download <Download className="w-4 h-4" />
+                                                        </button>
+                                                    ) : invoice.hosted_invoice_url ? (
                                                         <a 
                                                             href={invoice.hosted_invoice_url} 
                                                             target="_blank" 
                                                             rel="noopener noreferrer" 
-                                                            className={`flex items-center justify-end gap-1 ${invoice.status.toLowerCase() === 'paid' ? 'text-emerald-600' : 'text-indigo-600 hover:text-indigo-900'}`}
+                                                            className={`flex items-center justify-end gap-1 text-indigo-600 hover:text-indigo-900`}
                                                         >
-                                                            {invoice.status.toLowerCase() === 'paid' ? 'View Receipt' : 'View/Pay'} <ExternalLink className="w-4 h-4" />
+                                                            View/Pay <ExternalLink className="w-4 h-4" />
                                                         </a>
                                                     ) : (
                                                         <span className="text-slate-400">N/A</span>
@@ -358,6 +421,18 @@ const ClientBilling: React.FC = () => {
             </div>
         )}
       </div>
+      
+      {/* Cancellation Modal */}
+      {cancellationTarget && (
+          <CancelSubscriptionModal
+              isOpen={isCancelModalOpen}
+              onClose={() => setIsCancelModalOpen(false)}
+              onConfirm={confirmCancellation}
+              planName={getPlanName(cancellationTarget.stripe_price_id)}
+              isProcessing={isProcessing}
+              cancellationSuccess={cancellationSuccess}
+          />
+      )}
     </ClientLayout>
   );
 };
