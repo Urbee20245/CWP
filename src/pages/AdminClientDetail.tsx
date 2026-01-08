@@ -754,7 +754,7 @@ const AdminClientDetail: React.FC = () => {
                 </div>
               </div>
 
-              {/* Right Column: Invoicing & Deposit History */}
+              {/* Invoice List */}
               <div className="lg:col-span-2 space-y-8">
                 
                 {/* Unapplied Credit Summary */}
