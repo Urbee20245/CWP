@@ -10,6 +10,7 @@ import { calculateSlaMetrics, SlaStatus } from '../utils/sla';
 import { format } from 'date-fns';
 import ServiceStatusBanner from '../components/ServiceStatusBanner';
 import { mapProjectDTO, ProjectDTO, MilestoneDTO, TaskDTO, FileItemDTO, ThreadDTO } from '../utils/projectMapper'; // Import DTO and Mapper
+import { ClientBillingService } from '../services/clientBillingService'; // Import ClientBillingService
 
 // Define types locally based on DTOs for clarity
 type Milestone = MilestoneDTO;
@@ -39,6 +40,7 @@ const ClientProjectDetail: React.FC = () => {
   const [documents, setDocuments] = useState<Document[]>([]);
   const [activeTab, setActiveTab] = useState<'messages' | 'tasks' | 'files' | 'milestones' | 'documents'>('messages');
   const [expandedDocId, setExpandedDocId] = useState<string | null>(null);
+  const [isPayingDeposit, setIsPayingDeposit] = useState(false);
   
   // Thread State
   const [activeThreadId, setActiveThreadId] = useState<string | null>(null);
@@ -100,7 +102,7 @@ const ClientProjectDetail: React.FC = () => {
       .order('due_date', { foreignTable: 'tasks', ascending: true })
       .order('order_index', { foreignTable: 'milestones', ascending: true })
       .order('created_at', { foreignTable: 'project_threads', ascending: false })
-      .order('created_at', { foreignTable: 'project_threads.messages', ascending: true })
+      .order('created_at', { foreignTable: 'project_threads.messages', ascending: true }) // Nested order for messages
       .single();
 
     if (error) {
@@ -309,6 +311,37 @@ const ClientProjectDetail: React.FC = () => {
           setLatestPauseLog(null); // Hide banner
       }
   };
+  
+  const handlePayDeposit = async () => {
+      if (!project || !clientId || !project.required_deposit_cents) return;
+      
+      setIsPayingDeposit(true);
+      
+      const amountCents = project.required_deposit_cents;
+      const description = `Project Deposit: ${project.title}`;
+      
+      // Construct dynamic success/cancel URLs to return to this page
+      const currentUrl = window.location.href;
+      
+      try {
+          const result = await ClientBillingService.createDepositCheckoutSession(
+              clientId,
+              project.id,
+              amountCents,
+              description,
+              currentUrl, // Success URL
+              currentUrl  // Cancel URL
+          );
+          
+          // Redirect to Stripe Checkout
+          window.location.href = result.checkout_url;
+          
+      } catch (e: any) {
+          alert(`Failed to initiate payment: ${e.message}`);
+      } finally {
+          setIsPayingDeposit(false);
+      }
+  };
 
   const completedTasks = project?.tasks.filter(t => t.status === 'done').length || 0;
   const totalTasks = project?.tasks.length || 0;
@@ -455,10 +488,23 @@ const ClientProjectDetail: React.FC = () => {
                     <p className={`text-sm font-semibold mt-2 ${project.deposit_paid ? 'text-emerald-700' : 'text-red-700'}`}>
                         Status: {project.deposit_paid ? 'PAID' : 'AWAITING PAYMENT'}
                     </p>
-                    {!project.deposit_paid && project.status === 'awaiting_deposit' && (
-                        <p className="text-xs text-red-600 mt-3">
-                            Project work cannot begin until the deposit invoice is paid. Please check your billing portal.
-                        </p>
+                    
+                    {!project.deposit_paid && (
+                        <button 
+                            onClick={handlePayDeposit}
+                            disabled={isPayingDeposit}
+                            className="mt-4 w-full py-3 bg-indigo-600 text-white rounded-lg font-semibold hover:bg-indigo-700 transition-colors disabled:opacity-50 flex items-center justify-center gap-2"
+                        >
+                            {isPayingDeposit ? (
+                                <>
+                                    <Loader2 className="w-5 h-5 animate-spin" /> Redirecting...
+                                </>
+                            ) : (
+                                <>
+                                    <DollarSign className="w-5 h-5" /> Pay Deposit Now
+                                </>
+                            )}
+                        </button>
                     )}
                 </div>
             )}
@@ -658,7 +704,7 @@ const ClientProjectDetail: React.FC = () => {
             {/* Milestones Tab */}
             {activeTab === 'milestones' && (
                 <div className="bg-white p-6 rounded-xl shadow-lg border border-slate-100">
-                    <h2 className="text-xl font-bold mb-4 flex items-center gap-2 text-slate-900 border-b border-slate-100 pb-4">
+                    <h2 className="text-xl font-bold mb-4 flex items-center gap-2 border-b border-slate-100 pb-4">
                         <DollarSign className="w-5 h-5 text-purple-600" /> Payment Milestones
                     </h2>
                     <div className="space-y-4">

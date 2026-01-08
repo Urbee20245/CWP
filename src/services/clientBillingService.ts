@@ -27,4 +27,15 @@ export const ClientBillingService = {
   cancelSubscription: async (subscriptionId: string) => {
     return invokeEdgeFunction('cancel-subscription', { subscription_id: subscriptionId });
   },
+  
+  createDepositCheckoutSession: async (clientId: string, projectId: string, amountCents: number, description: string, successUrl: string, cancelUrl: string) => {
+    return invokeEdgeFunction('stripe-api/create-deposit-checkout', { 
+        client_id: clientId, 
+        project_id: projectId,
+        amount_cents: amountCents,
+        description: description,
+        success_url: successUrl,
+        cancel_url: cancelUrl,
+    });
+  },
 };
