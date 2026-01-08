@@ -3,11 +3,11 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import { Link } from 'react-router-dom';
 import { supabase } from '../integrations/supabase/client';
-import { Users, Briefcase, DollarSign, Loader2, ArrowRight, BarChart3, Zap } from 'lucide-react';
+import { Users, Briefcase, DollarSign, Loader2, ArrowRight, BarChart3, Zap, MessageSquare } from 'lucide-react';
 import AdminLayout from '../components/AdminLayout';
 
 const AdminDashboard: React.FC = () => {
-  const [stats, setStats] = useState({ totalClients: 0, activeProjects: 0, totalRevenue: 0 });
+  const [stats, setStats] = useState({ totalClients: 0, activeProjects: 0, totalRevenue: 0, newMessages: 0 });
   const [isLoading, setIsLoading] = useState(true);
 
   const fetchData = useCallback(async () => {
@@ -27,6 +27,13 @@ const AdminDashboard: React.FC = () => {
       .from('invoices')
       .select('amount_due')
       .eq('status', 'paid');
+      
+    // Fetch New Messages Count (last 24 hours)
+    const twentyFourHoursAgo = new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString();
+    const { count: newMessagesCount } = await supabase
+      .from('messages')
+      .select('*', { count: 'exact', head: true })
+      .gte('created_at', twentyFourHoursAgo);
 
     let totalRevenue = 0;
     if (revenueData) {
@@ -37,6 +44,7 @@ const AdminDashboard: React.FC = () => {
         totalClients: totalClients || 0,
         activeProjects: activeProjectsCount || 0,
         totalRevenue: totalRevenue,
+        newMessages: newMessagesCount || 0,
     });
     setIsLoading(false);
   }, []);
@@ -49,6 +57,7 @@ const AdminDashboard: React.FC = () => {
     { title: 'Total Clients', value: stats.totalClients, icon: Users, color: 'text-indigo-600', bg: 'bg-indigo-50', link: '/admin/clients' },
     { title: 'Active Projects', value: stats.activeProjects, icon: Briefcase, color: 'text-emerald-600', bg: 'bg-emerald-50', link: '/admin/projects' },
     { title: 'Total Revenue', value: `$${stats.totalRevenue.toLocaleString(undefined, { minimumFractionDigits: 0, maximumFractionDigits: 0 })}`, icon: DollarSign, color: 'text-purple-600', bg: 'bg-purple-50', link: '/admin/billing/revenue' },
+    { title: 'New Messages (24h)', value: stats.newMessages, icon: MessageSquare, color: 'text-red-600', bg: 'bg-red-50', link: '/admin/projects' },
   ];
 
   return (
@@ -65,7 +74,7 @@ const AdminDashboard: React.FC = () => {
         ) : (
           <>
             {/* Quick Stats */}
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-12">
+            <div className="grid grid-cols-1 md:grid-cols-4 gap-6 mb-12">
               {statCards.map((card, index) => (
                 <Link to={card.link} key={index} className="bg-white p-6 rounded-xl shadow-lg border border-slate-100 hover:shadow-xl hover:border-indigo-200 transition-all block">
                   <div className="flex items-center justify-between">
