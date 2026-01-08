@@ -32,30 +32,32 @@ const SessionProvider: React.FC<SessionProviderProps> = ({ children }) => {
   }, []);
 
   useEffect(() => {
+    // 1. Handle real-time auth state changes
     const { data: authListener } = supabase.auth.onAuthStateChange(
       async (event, session) => {
         if (session?.user) {
           setUser(session.user);
+          // Ensure profile is fetched on sign in/initial session
           await fetchProfile(session.user.id);
         } else {
           setUser(null);
           setProfile(null);
         }
-        // Only set isLoading to false after the initial session check AND profile fetch attempt
-        if (event === 'INITIAL_SESSION' || event === 'SIGNED_IN' || event === 'SIGNED_OUT') {
-            setIsLoading(false);
-        }
+        // Set loading to false after processing the event
+        setIsLoading(false);
       }
     );
 
-    // Fallback check for initial session if listener doesn't fire immediately
-    supabase.auth.getSession().then(({ data: { session } }) => {
+    // 2. Initial check (in case listener is slow or missed)
+    // We use this to ensure the initial state is set correctly on mount.
+    supabase.auth.getSession().then(async ({ data: { session } }) => {
       if (session?.user) {
         setUser(session.user);
-        fetchProfile(session.user.id);
-      } else {
-        setIsLoading(false);
+        // Await profile fetch here too, to ensure initial render has profile data
+        await fetchProfile(session.user.id);
       }
+      // Set loading to false after initial check and profile fetch attempt
+      setIsLoading(false);
     });
 
     return () => {
