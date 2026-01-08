@@ -198,7 +198,6 @@ const AdminClientDetail: React.FC = () => {
         
         // 3. Send notification (Mocked server-side call)
         // NOTE: In a real app, this would be an Edge Function call to send the email securely.
-        // For now, we rely on the mock service in the shared folder.
         // await AdminService.sendServiceStatusNotification(client.profiles.email, client.business_name, action);
 
         alert(`Client service status updated to ${newStatus}! Notification sent.`);
