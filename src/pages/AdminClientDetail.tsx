@@ -3,7 +3,7 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import { useParams, Link } from 'react-router-dom';
 import { supabase } from '../integrations/supabase/client';
-import { Loader2, Briefcase, FileText, DollarSign, Plus, CreditCard, Zap, ExternalLink, ShieldCheck, Lock, Trash2, Send, AlertCircle, MessageSquare, Phone, CheckCircle2 } from 'lucide-react';
+import { Loader2, Briefcase, FileText, DollarSign, Plus, CreditCard, Zap, ExternalLink, ShieldCheck, Lock, Trash2, Send, AlertCircle, MessageSquare, Phone, CheckCircle2, Pause, Play } from 'lucide-react';
 import AdminLayout from '../components/AdminLayout';
 import { Profile } from '../types/auth';
 import { AdminService } from '../services/adminService'; // Use AdminService for admin functions
@@ -44,6 +44,8 @@ interface DepositSummary {
   created_at: string;
 }
 
+type ClientServiceStatus = 'active' | 'paused' | 'onboarding' | 'completed';
+
 interface Client {
   id: string;
   business_name: string;
@@ -53,7 +55,7 @@ interface Client {
   owner_profile_id: string;
   stripe_customer_id: string | null;
   billing_email: string | null;
-  // Removed access_override, access_override_note, access_status, billing_grace_until, billing_escalation_stage, last_billing_notice_sent
+  service_status: ClientServiceStatus; // New field
   profiles: Profile;
   projects: ProjectSummary[];
   invoices: InvoiceSummary[];
@@ -73,7 +75,7 @@ const AdminClientDetail: React.FC = () => {
   const { id } = useParams<{ id: string }>();
   const [client, setClient] = useState<Client | null>(null);
   const [isLoading, setIsLoading] = useState(true);
-  const [activeTab, setActiveTab] = useState<'projects' | 'billing' | 'notes'>('billing'); // Removed 'access' tab
+  const [activeTab, setActiveTab] = useState<'projects' | 'billing' | 'notes'>('billing');
   
   // Dialog State
   const [isProjectDialogOpen, setIsProjectDialogOpen] = useState(false);
@@ -92,7 +94,9 @@ const AdminClientDetail: React.FC = () => {
   const [depositDescription, setDepositDescription] = useState('');
   const [applyDepositToFuture, setApplyDepositToFuture] = useState(true);
   
-  // Removed Access State
+  // Service Status State
+  const [isServiceUpdating, setIsServiceUpdating] = useState(false);
+  const [adminNotes, setAdminNotes] = useState('');
 
   const fetchClientData = useCallback(async () => {
     if (!id) return;
@@ -100,7 +104,7 @@ const AdminClientDetail: React.FC = () => {
     const { data, error } = await supabase
       .from('clients')
       .select(`
-          id, business_name, phone, status, notes, owner_profile_id, stripe_customer_id, billing_email,
+          id, business_name, phone, status, notes, owner_profile_id, stripe_customer_id, billing_email, service_status,
           profiles (id, full_name, email),
           projects (id, title, status, progress_percent),
           invoices (id, amount_due, status, hosted_invoice_url, created_at),
@@ -116,7 +120,7 @@ const AdminClientDetail: React.FC = () => {
     } else {
       const clientData = data as unknown as Client;
       setClient(clientData);
-      // Removed access state initialization
+      setAdminNotes(clientData.notes || '');
     }
     setIsLoading(false);
   }, [id]);
@@ -140,6 +144,43 @@ const AdminClientDetail: React.FC = () => {
     fetchProducts();
   }, [id, fetchClientData]);
 
+  const handleServiceStatusUpdate = async (newStatus: ClientServiceStatus) => {
+    if (!client) return;
+    setIsServiceUpdating(true);
+    
+    const { error } = await supabase
+        .from('clients')
+        .update({ service_status: newStatus })
+        .eq('id', client.id);
+        
+    if (error) {
+        console.error('Error updating service status:', error);
+        alert('Failed to update service status.');
+    } else {
+        alert(`Client service status updated to ${newStatus}!`);
+        fetchClientData();
+    }
+    setIsServiceUpdating(false);
+  };
+  
+  const handleSaveNotes = async () => {
+    if (!client) return;
+    setIsServiceUpdating(true);
+    
+    const { error } = await supabase
+        .from('clients')
+        .update({ notes: adminNotes })
+        .eq('id', client.id);
+        
+    if (error) {
+        console.error('Error saving notes:', error);
+        alert('Failed to save notes.');
+    } else {
+        alert('Notes saved successfully!');
+    }
+    setIsServiceUpdating(false);
+  };
+
   const getStatusColor = (status: string) => {
     switch (status) {
       case 'active': return 'bg-emerald-100 text-emerald-800';
@@ -154,11 +195,10 @@ const AdminClientDetail: React.FC = () => {
       case 'pending': return 'bg-blue-100 text-blue-800';
       case 'failed': return 'bg-red-100 text-red-800';
       case 'applied': return 'bg-purple-100 text-purple-800';
+      case 'onboarding': return 'bg-blue-100 text-blue-800';
       default: return 'bg-slate-100 text-slate-800';
     }
   };
-  
-  // Removed getEscalationStageText
   
   const getPlanName = (priceId: string) => {
       return products.find(p => p.stripe_price_id === priceId)?.name || 'Unknown Plan';
@@ -232,8 +272,6 @@ const AdminClientDetail: React.FC = () => {
             client.id, 
             depositAmount as number, 
             depositDescription || 'Project Deposit', 
-            // We don't pass applyDepositToFuture here, as the Edge Function handles the deposit record creation,
-            // and the auto-apply logic is handled when a new invoice is created.
         );
         
         alert(`Deposit invoice created and sent! Status: ${result.status}. Client must pay the invoice.`);
@@ -292,8 +330,6 @@ const AdminClientDetail: React.FC = () => {
     setInvoiceItems(newItems);
   };
   
-  // Removed Access Handlers
-
   const overdueInvoicesCount = client?.invoices?.filter(inv => inv.status === 'past_due' || inv.status === 'open').length || 0;
   const subscriptionProducts = products.filter(p => p.billing_type === 'subscription');
   const oneTimeProducts = products.filter(p => p.billing_type === 'one_time');
@@ -390,77 +426,126 @@ const AdminClientDetail: React.FC = () => {
         {/* Tab Content */}
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
           
-          {/* Projects Tab Content */}
-          {activeTab === 'projects' && (
-            <div className="lg:col-span-3 space-y-8">
-              <div className="bg-white p-6 rounded-xl shadow-lg border border-slate-100">
+          {/* Left Column: Service Control & Notes */}
+          <div className="lg:col-span-1 space-y-8">
+            
+            {/* Service Control */}
+            <div className="bg-white p-6 rounded-xl shadow-lg border border-slate-100">
                 <h2 className="text-xl font-bold mb-4 flex items-center gap-2 text-slate-900 border-b border-slate-100 pb-4">
-                  <Briefcase className="w-5 h-5 text-emerald-600" /> Projects ({client.projects?.length || 0})
+                    <ShieldCheck className="w-5 h-5 text-indigo-600" /> Service Control
                 </h2>
-                <div className="space-y-4">
-                  {client.projects && client.projects.length > 0 ? (
-                    client.projects.map(project => (
-                      <Link 
-                        key={project.id} 
-                        to={`/admin/projects/${project.id}`}
-                        className="block p-4 border border-slate-200 rounded-lg hover:bg-slate-50 transition-colors"
-                      >
-                        <div className="flex justify-between items-center mb-2">
-                          <h3 className="font-bold text-slate-900">{project.title}</h3>
-                          <span className={`px-2 py-0.5 rounded-full text-xs font-semibold ${getStatusColor(project.status)}`}>
-                            {project.status}
-                          </span>
-                        </div>
-                        <div className="flex items-center gap-3">
-                          <div className="w-full bg-slate-200 rounded-full h-2.5">
-                            <div 
-                              className="bg-indigo-600 h-2.5 rounded-full" 
-                              style={{ width: `${project.progress_percent}%` }}
-                            ></div>
-                          </div>
-                          <span className="text-sm font-medium text-slate-600 w-10 text-right">{project.progress_percent}%</span>
-                        </div>
-                      </Link>
-                    ))
-                  ) : (
-                    <p className="text-slate-500 text-sm">No projects found for this client.</p>
-                  )}
+                
+                <div className="mb-4 p-3 rounded-lg border border-slate-200">
+                    <p className="text-xs text-slate-500 uppercase font-semibold mb-1">Current Service Status</p>
+                    <span className={`px-3 py-1 rounded-full text-sm font-bold ${getStatusColor(client.service_status)}`}>
+                        {client.service_status.replace('_', ' ')}
+                    </span>
                 </div>
-                <button 
-                  onClick={() => setIsProjectDialogOpen(true)}
-                  className="mt-6 w-full py-2 border border-slate-300 text-slate-600 rounded-lg text-sm font-semibold hover:bg-slate-100 transition-colors"
-                >
-                  <Plus className="w-4 h-4 inline mr-2" /> Add New Project
-                </button>
-              </div>
+                
+                <div className="flex gap-3">
+                    {client.service_status !== 'paused' ? (
+                        <button 
+                            onClick={() => handleServiceStatusUpdate('paused')}
+                            disabled={isServiceUpdating || client.service_status === 'completed'}
+                            className="flex-1 py-2 bg-amber-600 text-white rounded-lg text-sm font-semibold hover:bg-amber-700 transition-colors disabled:opacity-50 flex items-center justify-center gap-2"
+                        >
+                            <Pause className="w-4 h-4" /> Pause Services
+                        </button>
+                    ) : (
+                        <button 
+                            onClick={() => handleServiceStatusUpdate('active')}
+                            disabled={isServiceUpdating}
+                            className="flex-1 py-2 bg-emerald-600 text-white rounded-lg text-sm font-semibold hover:bg-emerald-700 transition-colors disabled:opacity-50 flex items-center justify-center gap-2"
+                        >
+                            <Play className="w-4 h-4" /> Resume Services
+                        </button>
+                    )}
+                    <button 
+                        onClick={() => handleServiceStatusUpdate('completed')}
+                        disabled={isServiceUpdating || client.service_status === 'completed'}
+                        className="py-2 px-4 bg-blue-600 text-white rounded-lg text-sm font-semibold hover:bg-blue-700 transition-colors disabled:opacity-50"
+                    >
+                        Complete
+                    </button>
+                </div>
+                <p className="text-xs text-slate-500 mt-3">
+                    Pausing services stops all active work (e.g., maintenance, SEO). Client portal access remains active.
+                </p>
             </div>
-          )}
-
-          {/* Notes Tab Content */}
-          {activeTab === 'notes' && (
-            <div className="lg:col-span-3 space-y-6">
-              <div className="bg-white p-6 rounded-xl shadow-lg border border-slate-100">
-                <h2 className="text-xl font-bold mb-4 flex items-center gap-2 text-slate-900">
-                  <FileText className="w-5 h-5 text-slate-500" /> Internal Notes
+            
+            {/* Notes Tab Content (Moved here for better layout) */}
+            <div className="bg-white p-6 rounded-xl shadow-lg border border-slate-100">
+                <h2 className="text-xl font-bold mb-4 flex items-center gap-2 text-slate-900 border-b border-slate-100 pb-4">
+                    <FileText className="w-5 h-5 text-slate-500" /> Internal Notes
                 </h2>
                 <textarea
-                  className="w-full h-40 p-3 border border-slate-300 rounded-lg text-sm resize-none focus:border-indigo-500 outline-none"
-                  defaultValue={client.notes || 'No notes recorded.'}
-                  placeholder="Add internal notes here..."
+                    className="w-full h-40 p-3 border border-slate-300 rounded-lg text-sm resize-none focus:border-indigo-500 outline-none"
+                    value={adminNotes}
+                    onChange={(e) => setAdminNotes(e.target.value)}
+                    placeholder="Add internal notes here..."
                 />
-                <button className="mt-3 w-full py-2 bg-indigo-600 text-white rounded-lg text-sm font-semibold hover:bg-indigo-700 transition-colors">
-                  Save Notes
+                <button 
+                    onClick={handleSaveNotes}
+                    disabled={isServiceUpdating}
+                    className="mt-3 w-full py-2 bg-indigo-600 text-white rounded-lg text-sm font-semibold hover:bg-indigo-700 transition-colors disabled:opacity-50"
+                >
+                    {isServiceUpdating ? 'Saving...' : 'Save Notes'}
                 </button>
-              </div>
             </div>
-          )}
+          </div>
+          
+          {/* Right Column: Projects & Billing */}
+          <div className="lg:col-span-2 space-y-8">
+            
+            {/* Projects Tab Content */}
+            {activeTab === 'projects' && (
+              <div className="space-y-8">
+                <div className="bg-white p-6 rounded-xl shadow-lg border border-slate-100">
+                  <h2 className="text-xl font-bold mb-4 flex items-center gap-2 text-slate-900 border-b border-slate-100 pb-4">
+                    <Briefcase className="w-5 h-5 text-emerald-600" /> Projects ({client.projects?.length || 0})
+                  </h2>
+                  <div className="space-y-4">
+                    {client.projects && client.projects.length > 0 ? (
+                      client.projects.map(project => (
+                        <Link 
+                          key={project.id} 
+                          to={`/admin/projects/${project.id}`}
+                          className="block p-4 border border-slate-200 rounded-lg hover:bg-slate-50 transition-colors"
+                        >
+                          <div className="flex justify-between items-center mb-2">
+                            <h3 className="font-bold text-slate-900">{project.title}</h3>
+                            <span className={`px-2 py-0.5 rounded-full text-xs font-semibold ${getStatusColor(project.status)}`}>
+                              {project.status}
+                            </span>
+                          </div>
+                          <div className="flex items-center gap-3">
+                            <div className="w-full bg-slate-200 rounded-full h-2.5">
+                              <div 
+                                className="bg-indigo-600 h-2.5 rounded-full" 
+                                style={{ width: `${project.progress_percent}%` }}
+                              ></div>
+                            </div>
+                            <span className="text-sm font-medium text-slate-600 w-10 text-right">{project.progress_percent}%</span>
+                          </div>
+                        </Link>
+                      ))
+                    ) : (
+                      <p className="text-slate-500 text-sm">No projects found for this client.</p>
+                    )}
+                  </div>
+                  <button 
+                    onClick={() => setIsProjectDialogOpen(true)}
+                    className="mt-6 w-full py-2 border border-slate-300 text-slate-600 rounded-lg text-sm font-semibold hover:bg-slate-100 transition-colors"
+                  >
+                    <Plus className="w-4 h-4 inline mr-2" /> Add New Project
+                  </button>
+                </div>
+              </div>
+            )}
 
-          {/* Billing Tab Content */}
-          {activeTab === 'billing' && (
-            <>
-              {/* Left Column: Customer & Subscriptions & Deposits */}
-              <div className="lg:col-span-1 space-y-6">
-                
+            {/* Billing Tab Content */}
+            {activeTab === 'billing' && (
+              <div className="space-y-8">
                 {/* Stripe Customer Status */}
                 <div className="bg-white p-6 rounded-xl shadow-lg border border-slate-100">
                   <h2 className="text-xl font-bold mb-4 flex items-center gap-2 text-slate-900">
@@ -759,8 +844,8 @@ const AdminClientDetail: React.FC = () => {
                   </div>
                 </div>
               </div>
-            </>
-          )}
+            )}
+          </div>
         </div>
       </div>
       

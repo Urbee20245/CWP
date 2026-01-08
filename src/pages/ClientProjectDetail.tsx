@@ -6,10 +6,9 @@ import { supabase } from '../integrations/supabase/client';
 import { Loader2, Briefcase, CheckCircle2, MessageSquare, FileText, Upload, Download, Send, ArrowLeft, AlertTriangle, DollarSign, Clock, ExternalLink } from 'lucide-react';
 import ClientLayout from '../components/ClientLayout';
 import { useAuth } from '../hooks/useAuth';
-// ClientBillingService is no longer needed for access checks
-// import { ClientBillingService } from '../services/clientBillingService';
 import { calculateSlaMetrics, SlaStatus } from '../utils/sla';
 import { format } from 'date-fns';
+import ServiceStatusBanner from '../components/ServiceStatusBanner';
 
 interface Milestone {
   id: string;
@@ -37,6 +36,7 @@ interface Project {
   sla_start_date: string | null;
   sla_due_date: string | null;
   sla_status: SlaStatus;
+  service_status: 'active' | 'paused' | 'awaiting_payment' | 'completed'; // New field
 }
 
 interface Task {
@@ -65,13 +65,6 @@ interface FileItem {
   profiles: { full_name: string };
 }
 
-// AccessStatus interface is no longer needed
-// interface AccessStatus {
-//   hasAccess: boolean;
-//   reason: 'active' | 'overdue' | 'no_subscription' | 'override' | 'restricted' | 'system_error' | 'grace_period';
-//   graceUntil?: string | null;
-// }
-
 const ClientProjectDetail: React.FC = () => {
   const { id } = useParams<{ id: string }>();
   const { profile } = useAuth();
@@ -80,9 +73,8 @@ const ClientProjectDetail: React.FC = () => {
   const [newMessage, setNewMessage] = useState('');
   const [fileToUpload, setFileToUpload] = useState<File | null>(null);
   const [isUploading, setIsUploading] = useState(false);
-  // Removed accessStatus state
   const [clientId, setClientId] = useState<string | null>(null);
-  const [showOverdueBanner, setShowOverdueBanner] = useState(false); // Default to false
+  const [showOverdueBanner, setShowOverdueBanner] = useState(false);
   const [slaMetrics, setSlaMetrics] = useState<ReturnType<typeof calculateSlaMetrics> | null>(null);
   const messagesEndRef = useRef<HTMLDivElement>(null);
 
@@ -122,7 +114,7 @@ const ClientProjectDetail: React.FC = () => {
       .from('projects')
       .select(`
         id, title, description, status, progress_percent, required_deposit_cents, deposit_paid,
-        sla_days, sla_start_date, sla_due_date, sla_status,
+        sla_days, sla_start_date, sla_due_date, sla_status, service_status,
         tasks (id, title, status, due_date),
         messages (id, body, created_at, sender_profile_id, profiles (full_name)),
         files (id, file_name, file_type, file_size, storage_path, created_at, profiles (full_name)),
@@ -264,8 +256,6 @@ const ClientProjectDetail: React.FC = () => {
     return 'bg-red-600';
   };
   
-  // Removed access related functions
-
   const getSlaColor = (status: SlaStatus) => {
       switch (status) {
           case 'on_track': return 'bg-emerald-100 text-emerald-800';
@@ -294,8 +284,6 @@ const ClientProjectDetail: React.FC = () => {
     );
   }
   
-  // Removed accessStatus check
-
   if (!project) {
     return (
       <ClientLayout>
@@ -316,6 +304,9 @@ const ClientProjectDetail: React.FC = () => {
           ← Back to Projects
         </Link>
         
+        {/* Service Status Banner (Non-blocking) */}
+        <ServiceStatusBanner status={project.service_status} type="project" />
+
         {/* Overdue Warning Banner (Non-blocking) */}
         {showOverdueBanner && (
             <div className="p-4 mb-8 bg-amber-50 border border-amber-200 rounded-xl flex justify-between items-center">

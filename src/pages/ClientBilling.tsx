@@ -3,9 +3,10 @@
 import React, { useState, useEffect } from 'react';
 import { useAuth } from '../hooks/useAuth';
 import { supabase } from '../integrations/supabase/client';
-import { Loader2, DollarSign, FileText, ExternalLink, Zap, CreditCard, CheckCircle2 } from 'lucide-react';
+import { Loader2, DollarSign, FileText, ExternalLink, Zap, CreditCard, CheckCircle2, AlertTriangle } from 'lucide-react';
 import ClientLayout from '../components/ClientLayout';
 import { ClientBillingService } from '../services/clientBillingService';
+import ServiceStatusBanner from '../components/ServiceStatusBanner';
 
 interface Invoice {
   id: string;
@@ -47,6 +48,8 @@ const ClientBilling: React.FC = () => {
   const [isProcessing, setIsProcessing] = useState(false);
   const [stripeCustomerId, setStripeCustomerId] = useState<string | null>(null);
   const [isClientRecordMissing, setIsClientRecordMissing] = useState(false);
+  const [clientServiceStatus, setClientServiceStatus] = useState<'active' | 'paused' | 'onboarding' | 'completed'>('onboarding');
+
 
   const fetchBillingData = async () => {
     if (!profile) return;
@@ -55,7 +58,7 @@ const ClientBilling: React.FC = () => {
     // 1. Find the client record associated with the user's profile ID
     const { data: clientData, error: clientError } = await supabase
       .from('clients')
-      .select('id, stripe_customer_id')
+      .select('id, stripe_customer_id, service_status')
       .eq('owner_profile_id', profile.id)
       .single();
 
@@ -74,6 +77,7 @@ const ClientBilling: React.FC = () => {
     
     const clientId = clientData.id;
     setStripeCustomerId(clientData.stripe_customer_id);
+    setClientServiceStatus(clientData.service_status as any);
     setIsClientRecordMissing(false);
 
     // 2. Fetch invoices for that client ID
@@ -196,6 +200,9 @@ const ClientBilling: React.FC = () => {
           <DollarSign className="w-7 h-7 text-purple-600" /> Billing & Payments
         </h1>
 
+        {/* Service Status Banner (Non-blocking) */}
+        <ServiceStatusBanner status={clientServiceStatus} type="client" />
+
         {isLoading ? (
             <div className="flex justify-center items-center h-64">
               <Loader2 className="w-6 h-6 animate-spin text-indigo-600" />
@@ -207,7 +214,7 @@ const ClientBilling: React.FC = () => {
                 <div className="lg:col-span-1 space-y-6">
                     <div className="bg-white rounded-xl shadow-lg border border-slate-100 p-6 h-fit">
                         <h2 className="text-xl font-bold text-slate-900 mb-4 flex items-center gap-2 border-b border-slate-100 pb-4">
-                            <Zap className="w-5 h-5 text-amber-600" /> Subscription Status
+                            <Zap className="w-5 h-5 text-amber-600" /> Maintenance Plans
                         </h2>
                         
                         {activeSubscription ? (
@@ -225,8 +232,12 @@ const ClientBilling: React.FC = () => {
                                 </p>
                             </div>
                         ) : (
-                            <p className="text-slate-500 mb-6">No active maintenance subscription.</p>
+                            <p className="text-slate-500 mb-6">No active maintenance plan found.</p>
                         )}
+                        
+                        <p className="text-xs text-slate-500 mb-4">
+                            Maintenance plans cover ongoing support, hosting, and updates. Billing status does not affect your access to this portal.
+                        </p>
 
                         <button 
                             onClick={handlePortalSession}
@@ -244,10 +255,10 @@ const ClientBilling: React.FC = () => {
                     {/* Unapplied Credit */}
                     <div className="bg-white rounded-xl shadow-lg border border-slate-100 p-6">
                         <h2 className="text-xl font-bold text-slate-900 mb-4 flex items-center gap-2 border-b border-slate-100 pb-4">
-                            <DollarSign className="w-5 h-5 text-emerald-600" /> Unapplied Credit
+                            <DollarSign className="w-5 h-5 text-emerald-600" /> Available Credit
                         </h2>
                         <div className="flex justify-between items-center">
-                            <p className="text-sm text-slate-600">Available Deposit Credit:</p>
+                            <p className="text-sm text-slate-600">Deposit Credit:</p>
                             <p className="text-2xl font-bold text-emerald-600">${totalUnappliedCredit.toFixed(2)}</p>
                         </div>
                         <p className="text-xs text-slate-500 mt-2">
@@ -260,8 +271,11 @@ const ClientBilling: React.FC = () => {
                 <div className="lg:col-span-2 space-y-6">
                     <div className="bg-white rounded-xl shadow-lg border border-slate-100 p-6">
                         <h2 className="text-xl font-bold text-slate-900 mb-6 border-b border-slate-100 pb-4 flex items-center gap-2">
-                            <FileText className="w-5 h-5 text-purple-600" /> Invoice History
+                            <FileText className="w-5 h-5 text-purple-600" /> Project & Service Invoices
                         </h2>
+                        <p className="text-sm text-slate-600 mb-4">
+                            Invoices reflect services provided or in progress, including project milestones and one-time fees.
+                        </p>
 
                         {invoices.length === 0 ? (
                             <div className="text-center p-8 bg-slate-50 rounded-lg">
@@ -315,6 +329,9 @@ const ClientBilling: React.FC = () => {
                         <h2 className="text-xl font-bold text-slate-900 mb-6 border-b border-slate-100 pb-4 flex items-center gap-2">
                             <CreditCard className="w-5 h-5 text-blue-600" /> Deposit Payments
                         </h2>
+                        <p className="text-sm text-slate-600 mb-4">
+                            Deposits are upfront payments that are applied as credit to future project invoices.
+                        </p>
 
                         {deposits.length === 0 ? (
                             <div className="text-center p-8 bg-slate-50 rounded-lg">

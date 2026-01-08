@@ -3,7 +3,7 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import { useParams, Link } from 'react-router-dom';
 import { supabase } from '../integrations/supabase/client';
-import { Loader2, Briefcase, CheckCircle2, MessageSquare, FileText, Upload, Trash2, Plus, ArrowLeft, Clock, AlertTriangle, Download, Send, DollarSign, ExternalLink } from 'lucide-react';
+import { Loader2, Briefcase, CheckCircle2, MessageSquare, FileText, Upload, Trash2, Plus, ArrowLeft, Clock, AlertTriangle, Download, Send, DollarSign, ExternalLink, Pause, Play } from 'lucide-react';
 import AdminLayout from '../components/AdminLayout';
 import { Profile } from '../types/auth';
 import { calculateSlaMetrics, calculateSlaDueDate, SlaStatus } from '../utils/sla';
@@ -18,6 +18,8 @@ interface Milestone {
   order_index: number;
   stripe_invoice_id: string | null;
 }
+
+type ProjectServiceStatus = 'active' | 'paused' | 'awaiting_payment' | 'completed';
 
 interface Project {
   id: string;
@@ -38,6 +40,7 @@ interface Project {
   sla_start_date: string | null;
   sla_due_date: string | null;
   sla_status: SlaStatus;
+  service_status: ProjectServiceStatus; // New field
 }
 
 interface Task {
@@ -523,6 +526,25 @@ const AdminProjectDetail: React.FC = () => {
     }
     setIsUpdating(false);
   };
+  
+  const handleUpdateServiceStatus = async (newStatus: ProjectServiceStatus) => {
+    if (!project) return;
+    setIsUpdating(true);
+    
+    const { error } = await supabase
+        .from('projects')
+        .update({ service_status: newStatus })
+        .eq('id', project.id);
+        
+    if (error) {
+        console.error('Error updating service status:', error);
+        alert('Failed to update service status.');
+    } else {
+        alert(`Project service status updated to ${newStatus}!`);
+        fetchProjectData();
+    }
+    setIsUpdating(false);
+  };
 
   const completedTasks = project?.tasks.filter(t => t.status === 'done').length || 0;
   const totalTasks = project?.tasks.length || 0;
@@ -551,6 +573,16 @@ const AdminProjectDetail: React.FC = () => {
           case 'paid': return 'bg-emerald-100 text-emerald-800';
           case 'invoiced': return 'bg-amber-100 text-amber-800';
           case 'pending':
+          default: return 'bg-slate-100 text-slate-800';
+      }
+  };
+  
+  const getServiceStatusColor = (status: ProjectServiceStatus) => {
+      switch (status) {
+          case 'active': return 'bg-emerald-100 text-emerald-800';
+          case 'paused': return 'bg-amber-100 text-amber-800';
+          case 'awaiting_payment': return 'bg-red-100 text-red-800';
+          case 'completed': return 'bg-blue-100 text-blue-800';
           default: return 'bg-slate-100 text-slate-800';
       }
   };
@@ -596,6 +628,50 @@ const AdminProjectDetail: React.FC = () => {
           {/* Left Column: Progress, SLA & Tasks */}
           <div className="lg:col-span-1 space-y-8">
             
+            {/* Service Control */}
+            <div className="bg-white p-6 rounded-xl shadow-lg border border-slate-100">
+                <h2 className="text-xl font-bold mb-4 flex items-center gap-2 text-slate-900 border-b border-slate-100 pb-4">
+                    <Briefcase className="w-5 h-5 text-indigo-600" /> Service Control
+                </h2>
+                
+                <div className="mb-4 p-3 rounded-lg border border-slate-200">
+                    <p className="text-xs text-slate-500 uppercase font-semibold mb-1">Current Service Status</p>
+                    <span className={`px-3 py-1 rounded-full text-sm font-bold ${getServiceStatusColor(project.service_status)}`}>
+                        {project.service_status.replace('_', ' ')}
+                    </span>
+                </div>
+                
+                <div className="flex gap-3 flex-wrap">
+                    {project.service_status !== 'paused' ? (
+                        <button 
+                            onClick={() => handleUpdateServiceStatus('paused')}
+                            disabled={isUpdating || project.service_status === 'completed'}
+                            className="flex-1 py-2 bg-amber-600 text-white rounded-lg text-sm font-semibold hover:bg-amber-700 transition-colors disabled:opacity-50 flex items-center justify-center gap-2"
+                        >
+                            <Pause className="w-4 h-4" /> Pause Work
+                        </button>
+                    ) : (
+                        <button 
+                            onClick={() => handleUpdateServiceStatus('active')}
+                            disabled={isUpdating}
+                            className="flex-1 py-2 bg-emerald-600 text-white rounded-lg text-sm font-semibold hover:bg-emerald-700 transition-colors disabled:opacity-50 flex items-center justify-center gap-2"
+                        >
+                            <Play className="w-4 h-4" /> Resume Work
+                        </button>
+                    )}
+                    <button 
+                        onClick={() => handleUpdateServiceStatus('awaiting_payment')}
+                        disabled={isUpdating || project.service_status === 'completed'}
+                        className="flex-1 py-2 bg-red-600 text-white rounded-lg text-sm font-semibold hover:bg-red-700 transition-colors disabled:opacity-50"
+                    >
+                        Awaiting Payment
+                    </button>
+                </div>
+                <p className="text-xs text-slate-500 mt-3">
+                    This status controls the client-facing banner and internal work flow.
+                </p>
+            </div>
+            
             {/* Project Status & Deposit Gate */}
             <div className="bg-white p-6 rounded-xl shadow-lg border border-slate-100">
                 <h2 className="text-xl font-bold mb-4">Project Status</h2>
@@ -611,7 +687,7 @@ const AdminProjectDetail: React.FC = () => {
                         <option value="draft">Draft</option>
                         <option value="awaiting_deposit">Awaiting Deposit</option>
                         <option value="active">Active</option>
-                        <option value="paused">Paused</option>
+                        <option value="paused">On Hold</option>
                         <option value="completed">Completed</option>
                     </select>
                 </div>

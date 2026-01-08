@@ -4,10 +4,9 @@ import React, { useState, useEffect } from 'react';
 import { Link } from 'react-router-dom';
 import { useAuth } from '../hooks/useAuth';
 import { supabase } from '../integrations/supabase/client';
-import { Briefcase, Loader2, LogOut, CheckCircle2, DollarSign, AlertTriangle, MessageSquare, Users } from 'lucide-react';
+import { Briefcase, Loader2, LogOut, AlertTriangle, Users } from 'lucide-react';
 import ClientLayout from '../components/ClientLayout';
-// ClientBillingService is no longer needed for access checks, but kept for billing actions if needed later.
-// import { ClientBillingService } from '../services/clientBillingService'; 
+import ServiceStatusBanner from '../components/ServiceStatusBanner';
 
 interface ProjectSummary {
   id: string;
@@ -18,21 +17,13 @@ interface ProjectSummary {
   deposit_paid: boolean;
 }
 
-// AccessStatus interface is no longer needed for gating
-// interface AccessStatus {
-//   hasAccess: boolean;
-//   reason: 'active' | 'overdue' | 'no_subscription' | 'override' | 'restricted' | 'system_error' | 'grace_period';
-//   graceUntil?: string | null;
-// }
-
 const ClientDashboard: React.FC = () => {
   const { profile, signOut } = useAuth();
   const [projects, setProjects] = useState<ProjectSummary[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [clientName, setClientName] = useState('');
-  const [clientId, setClientId] = useState<string | null>(null);
-  // Removed accessStatus state
-  const [showOverdueBanner, setShowOverdueBanner] = useState(false); // Default to false, only show if overdue invoices exist
+  const [clientServiceStatus, setClientServiceStatus] = useState<'active' | 'paused' | 'onboarding' | 'completed'>('onboarding');
+  const [showOverdueBanner, setShowOverdueBanner] = useState(false);
   const [isClientRecordMissing, setIsClientRecordMissing] = useState(false);
 
   useEffect(() => {
@@ -43,7 +34,7 @@ const ClientDashboard: React.FC = () => {
       // 1. Find the client record associated with the user's profile ID
       const { data: clientData, error: clientError } = await supabase
         .from('clients')
-        .select('id, business_name')
+        .select('id, business_name, service_status')
         .eq('owner_profile_id', profile.id)
         .single();
 
@@ -61,7 +52,7 @@ const ClientDashboard: React.FC = () => {
       }
       
       setClientName(clientData.business_name);
-      setClientId(clientData.id);
+      setClientServiceStatus(clientData.service_status as any);
       const currentClientId = clientData.id;
       setIsClientRecordMissing(false);
 
@@ -106,8 +97,6 @@ const ClientDashboard: React.FC = () => {
     return 'bg-red-600';
   };
   
-  // Removed getAccessMessage and renderAccessPanel
-
   const renderMissingClientPanel = () => (
     <div className="max-w-2xl mx-auto p-10 bg-white rounded-xl shadow-2xl border border-red-200 text-center">
       <Users className="w-16 h-16 text-red-500 mx-auto mb-6" />
@@ -121,8 +110,6 @@ const ClientDashboard: React.FC = () => {
       </button>
     </div>
   );
-
-  // Removed formatGraceDate
 
   return (
     <ClientLayout>
@@ -144,6 +131,9 @@ const ClientDashboard: React.FC = () => {
             renderMissingClientPanel()
         ) : (
             <>
+                {/* Service Status Banner (Non-blocking) */}
+                <ServiceStatusBanner status={clientServiceStatus} type="client" />
+
                 {/* Overdue Warning Banner (Non-blocking) */}
                 {showOverdueBanner && (
                     <div className="p-4 mb-8 bg-amber-50 border border-amber-200 rounded-xl flex justify-between items-center">
