@@ -3,7 +3,7 @@
 import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { useParams, Link } from 'react-router-dom';
 import { supabase } from '../integrations/supabase/client';
-import { Loader2, Briefcase, CheckCircle2, MessageSquare, FileText, Upload, Trash2, Plus, ArrowLeft, Clock, AlertTriangle, Download, Send, DollarSign, ExternalLink, Pause, Play } from 'lucide-react';
+import { Loader2, Briefcase, CheckCircle2, MessageSquare, FileText, Upload, Trash2, Plus, ArrowLeft, Clock, AlertTriangle, Download, Send, DollarSign, ExternalLink, Pause, Play, X } from 'lucide-react';
 import AdminLayout from '../components/AdminLayout';
 import { Profile } from '../types/auth';
 import { calculateSlaMetrics, calculateSlaDueDate, SlaStatus, adjustSlaDueDate } from '../utils/sla';
@@ -22,6 +22,15 @@ interface Milestone {
 
 type ProjectServiceStatus = 'active' | 'paused' | 'awaiting_payment' | 'completed';
 
+interface Thread {
+    id: string;
+    title: string;
+    status: 'open' | 'closed' | 'archived';
+    created_at: string;
+    created_by: string;
+    messages: Message[];
+}
+
 interface Project {
   id: string;
   title: string;
@@ -31,21 +40,21 @@ interface Project {
   client_id: string;
   clients: { business_name: string };
   tasks: Task[];
-  messages: Message[];
+  threads: Thread[]; // Changed from messages
   files: FileItem[];
-  milestones: Milestone[]; // New field
-  required_deposit_cents: number | null; // New field
-  deposit_paid: boolean; // New field
+  milestones: Milestone[]; 
+  required_deposit_cents: number | null; 
+  deposit_paid: boolean; 
   // SLA Fields
   sla_days: number | null;
   sla_start_date: string | null;
   sla_due_date: string | null;
   sla_status: SlaStatus;
-  service_status: ProjectServiceStatus; // New field
-  service_paused_at: string | null; // New field
-  service_resumed_at: string | null; // New field
-  sla_paused_at: string | null; // New field
-  sla_resume_offset_days: number; // New field
+  service_status: ProjectServiceStatus; 
+  service_paused_at: string | null; 
+  service_resumed_at: string | null; 
+  sla_paused_at: string | null; 
+  sla_resume_offset_days: number; 
 }
 
 interface Task {
@@ -84,7 +93,7 @@ interface PauseLog {
 
 const AdminProjectDetail: React.FC = () => {
   const { id } = useParams<{ id: string }>();
-  const { user } = useAuth(); // <-- Get user from context
+  const { user } = useAuth();
   const [project, setProject] = useState<Project | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [newProgress, setNewProgress] = useState(0);
@@ -92,6 +101,11 @@ const AdminProjectDetail: React.FC = () => {
   const [isUpdating, setIsUpdating] = useState(false);
   const [isUploading, setIsUploading] = useState(false);
   const [fileToUpload, setFileToUpload] = useState<File | null>(null);
+  
+  // Thread State
+  const [activeThreadId, setActiveThreadId] = useState<string | null>(null);
+  const [newThreadTitle, setNewThreadTitle] = useState('');
+  const [isCreatingThread, setIsCreatingThread] = useState(false);
   
   // Task State
   const [newTaskTitle, setNewTaskTitle] = useState('');
@@ -127,14 +141,18 @@ const AdminProjectDetail: React.FC = () => {
         *,
         clients (business_name, billing_email),
         tasks (id, title, status, due_date),
-        messages (id, body, created_at, sender_profile_id, profiles (full_name)),
         files (id, file_name, file_type, file_size, storage_path, created_at, profiles (full_name)),
-        milestones (id, name, amount_cents, status, order_index, stripe_invoice_id)
+        milestones (id, name, amount_cents, status, order_index, stripe_invoice_id),
+        project_threads (
+            id, title, status, created_at, created_by,
+            messages (id, body, created_at, sender_profile_id, profiles (full_name))
+        )
       `)
       .eq('id', id)
-      .order('created_at', { foreignTable: 'messages', ascending: true }) // Changed to ascending for chat view
+      .order('created_at', { foreignTable: 'messages', ascending: true })
       .order('due_date', { foreignTable: 'tasks', ascending: true })
       .order('order_index', { foreignTable: 'milestones', ascending: true })
+      .order('created_at', { foreignTable: 'project_threads', ascending: false })
       .single();
 
     if (error) {
@@ -147,6 +165,12 @@ const AdminProjectDetail: React.FC = () => {
       setSlaDays(projectData.sla_days || '');
       setSlaStartDate(projectData.sla_start_date ? format(new Date(projectData.sla_start_date), 'yyyy-MM-dd') : '');
       setRequiredDeposit(projectData.required_deposit_cents ? projectData.required_deposit_cents / 100 : '');
+      
+      // Set active thread to the first open thread, or the first thread if none are open
+      if (projectData.threads && projectData.threads.length > 0) {
+          const openThread = projectData.threads.find(t => t.status === 'open');
+          setActiveThreadId(openThread?.id || projectData.threads[0].id);
+      }
       
       // Calculate SLA metrics immediately
       if (projectData.sla_days && projectData.sla_start_date && projectData.sla_due_date) {
@@ -188,10 +212,9 @@ const AdminProjectDetail: React.FC = () => {
   }, [id]);
   
   useEffect(() => {
-    if (project?.messages) {
-        scrollToBottom();
-    }
-  }, [project?.messages]);
+    // Scroll to bottom whenever the active thread changes or new messages arrive
+    scrollToBottom();
+  }, [activeThreadId, project?.threads.find(t => t.id === activeThreadId)?.messages.length]);
 
   const handleProgressUpdate = async () => {
     if (!project) return;
@@ -260,13 +283,13 @@ const AdminProjectDetail: React.FC = () => {
 
   const handleMessageSend = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!newMessage.trim() || !project || !user) return; // <-- Check local user
+    if (!newMessage.trim() || !project || !user || !activeThreadId) return;
 
     const { error } = await supabase
       .from('messages')
       .insert({
-        project_id: project.id,
-        sender_profile_id: user.id, // <-- Use local user.id
+        thread_id: activeThreadId,
+        sender_profile_id: user.id,
         body: newMessage.trim(),
       });
 
@@ -301,7 +324,7 @@ const AdminProjectDetail: React.FC = () => {
   
   const handleTaskCreation = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!newTaskTitle.trim() || !project || !user) return; // <-- Check local user
+    if (!newTaskTitle.trim() || !project || !user) return;
     
     setIsUpdating(true);
     
@@ -312,7 +335,7 @@ const AdminProjectDetail: React.FC = () => {
             title: newTaskTitle.trim(),
             due_date: newTaskDueDate || null,
             status: 'todo',
-            created_by: user.id, // <-- Use local user.id
+            created_by: user.id,
         });
         
     if (error) {
@@ -344,7 +367,7 @@ const AdminProjectDetail: React.FC = () => {
   
   const handleFileUpload = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!fileToUpload || !project || !user) return; // <-- Check local user
+    if (!fileToUpload || !project || !user) return;
 
     setIsUploading(true);
     
@@ -370,7 +393,7 @@ const AdminProjectDetail: React.FC = () => {
       .from('files')
       .insert({
         project_id: project.id,
-        uploader_profile_id: user.id, // <-- Use local user.id
+        uploader_profile_id: user.id,
         storage_path: storagePath,
         file_name: fileToUpload.name,
         file_type: fileToUpload.type,
@@ -668,6 +691,80 @@ const AdminProjectDetail: React.FC = () => {
         setIsUpdating(false);
     }
   };
+  
+  // --- Thread Management ---
+  const handleCreateThread = async (e: React.FormEvent) => {
+      e.preventDefault();
+      if (!newThreadTitle.trim() || !project || !user) return;
+      setIsCreatingThread(true);
+      
+      try {
+          const { data, error } = await supabase
+              .from('project_threads')
+              .insert({
+                  project_id: project.id,
+                  title: newThreadTitle.trim(),
+                  created_by: user.id,
+                  status: 'open',
+              })
+              .select()
+              .single();
+              
+          if (error) throw error;
+          
+          setNewThreadTitle('');
+          setActiveThreadId(data.id);
+          fetchProjectData();
+      } catch (e: any) {
+          alert(`Failed to create thread: ${e.message}`);
+      } finally {
+          setIsCreatingThread(false);
+      }
+  };
+  
+  const handleCloseThread = async (threadId: string) => {
+      if (!window.confirm("Are you sure you want to close this thread? It will be marked as 'closed'.")) return;
+      setIsUpdating(true);
+      
+      try {
+          const { error } = await supabase
+              .from('project_threads')
+              .update({ status: 'closed' })
+              .eq('id', threadId);
+              
+          if (error) throw error;
+          
+          // Try to switch to the next open thread or the first thread
+          const nextOpenThread = project?.threads.find(t => t.id !== threadId && t.status === 'open');
+          setActiveThreadId(nextOpenThread?.id || project?.threads.find(t => t.id !== threadId)?.id || null);
+          
+          fetchProjectData();
+      } catch (e: any) {
+          alert(`Failed to close thread: ${e.message}`);
+      } finally {
+          setIsUpdating(false);
+      }
+  };
+  
+  const handleReopenThread = async (threadId: string) => {
+      setIsUpdating(true);
+      try {
+          const { error } = await supabase
+              .from('project_threads')
+              .update({ status: 'open' })
+              .eq('id', threadId);
+              
+          if (error) throw error;
+          setActiveThreadId(threadId);
+          fetchProjectData();
+      } catch (e: any) {
+          alert(`Failed to reopen thread: ${e.message}`);
+      } finally {
+          setIsUpdating(false);
+      }
+  };
+  
+  const activeThread = project?.threads.find(t => t.id === activeThreadId);
 
   const completedTasks = project?.tasks.filter(t => t.status === 'done').length || 0;
   const totalTasks = project?.tasks.length || 0;
@@ -1143,11 +1240,59 @@ const AdminProjectDetail: React.FC = () => {
             {/* Messages Thread */}
             <div className="bg-white p-6 rounded-xl shadow-lg border border-slate-100">
               <h2 className="text-xl font-bold mb-4 flex items-center gap-2 border-b border-slate-100 pb-4">
-                <MessageSquare className="w-5 h-5 text-indigo-600" /> Project Messages
+                <MessageSquare className="w-5 h-5 text-indigo-600" /> Project Threads
               </h2>
+              
+              {/* Thread Selector */}
+              <div className="flex gap-3 mb-4 overflow-x-auto pb-2 border-b border-slate-100">
+                  {project.threads.map(thread => (
+                      <button
+                          key={thread.id}
+                          onClick={() => setActiveThreadId(thread.id)}
+                          className={`flex-shrink-0 px-4 py-2 rounded-full text-sm font-semibold transition-all duration-200 ${
+                              activeThreadId === thread.id
+                                  ? 'bg-indigo-600 text-white shadow-md'
+                                  : thread.status === 'closed'
+                                      ? 'bg-slate-100 text-slate-500 hover:bg-slate-200'
+                                      : 'bg-slate-50 text-slate-700 hover:bg-slate-100'
+                          }`}
+                      >
+                          {thread.title} ({thread.messages.length})
+                          {thread.status === 'closed' && <X className="w-3 h-3 inline ml-1" />}
+                      </button>
+                  ))}
+              </div>
+              
+              {/* Active Thread Actions */}
+              {activeThread && (
+                  <div className="flex justify-between items-center mb-4 p-3 bg-slate-50 rounded-lg border border-slate-200">
+                      <h3 className="font-bold text-slate-900 text-lg">{activeThread.title}</h3>
+                      <div className="flex gap-2">
+                          {activeThread.status === 'open' ? (
+                              <button 
+                                  onClick={() => handleCloseThread(activeThread.id)}
+                                  disabled={isUpdating}
+                                  className="px-3 py-1 bg-red-100 text-red-600 rounded-lg text-xs font-semibold hover:bg-red-200 transition-colors disabled:opacity-50 flex items-center gap-1"
+                              >
+                                  <X className="w-3 h-3" /> Close Thread
+                              </button>
+                          ) : (
+                              <button 
+                                  onClick={() => handleReopenThread(activeThread.id)}
+                                  disabled={isUpdating}
+                                  className="px-3 py-1 bg-emerald-100 text-emerald-600 rounded-lg text-xs font-semibold hover:bg-emerald-200 transition-colors disabled:opacity-50 flex items-center gap-1"
+                              >
+                                  <Play className="w-3 h-3" /> Reopen Thread
+                              </button>
+                          )}
+                      </div>
+                  </div>
+              )}
+              
+              {/* Message List */}
               <div className="h-80 overflow-y-auto space-y-4 p-2 flex flex-col">
-                {project.messages.length > 0 ? (
-                  project.messages.map(message => (
+                {activeThread?.messages.length ? (
+                  activeThread.messages.map(message => (
                     <div key={message.id} className={`flex ${message.sender_profile_id === user?.id ? 'justify-end' : 'justify-start'}`}>
                         <div className={`max-w-[85%] p-3 rounded-xl text-sm relative ${message.sender_profile_id === user?.id ? 'bg-indigo-600 text-white rounded-br-none' : 'bg-slate-100 text-slate-800 rounded-tl-none'}`}>
                             <div className={`text-xs mb-1 flex justify-between items-center ${message.sender_profile_id === user?.id ? 'text-indigo-200' : 'text-slate-500'}`}>
@@ -1172,17 +1317,46 @@ const AdminProjectDetail: React.FC = () => {
                 )}
                 <div ref={messagesEndRef} />
               </div>
-              <form onSubmit={handleMessageSend} className="mt-4 flex gap-2">
-                <textarea
-                  value={newMessage}
-                  onChange={(e) => setNewMessage(e.target.value)}
-                  placeholder="Send a message to the client..."
-                  rows={2}
-                  className="flex-1 p-3 border border-slate-300 rounded-lg text-sm resize-none focus:border-indigo-500 outline-none"
-                />
-                <button type="submit" className="px-4 py-2 bg-indigo-600 text-white rounded-lg font-semibold hover:bg-indigo-700 transition-colors">
-                  Send
-                </button>
+              
+              {/* Message Input */}
+              {activeThread?.status === 'open' ? (
+                  <form onSubmit={handleMessageSend} className="mt-4 flex gap-2">
+                      <textarea
+                        value={newMessage}
+                        onChange={(e) => setNewMessage(e.target.value)}
+                        placeholder="Send a message to the client..."
+                        rows={2}
+                        className="flex-1 p-3 border border-slate-300 rounded-lg text-sm resize-none focus:border-indigo-500 outline-none"
+                      />
+                      <button type="submit" className="px-4 py-2 bg-indigo-600 text-white rounded-lg font-semibold hover:bg-indigo-700 transition-colors">
+                        Send
+                      </button>
+                  </form>
+              ) : (
+                  <div className="mt-4 p-3 bg-slate-100 text-slate-600 rounded-lg text-sm text-center">
+                      This thread is closed. Reopen it above to send messages.
+                  </div>
+              )}
+              
+              {/* New Thread Form */}
+              <form onSubmit={handleCreateThread} className="mt-6 pt-4 border-t border-slate-100 flex gap-2">
+                  <input
+                      type="text"
+                      value={newThreadTitle}
+                      onChange={(e) => setNewThreadTitle(e.target.value)}
+                      placeholder="New Thread Title (e.g., Design Feedback)"
+                      className="flex-1 p-2 border border-slate-300 rounded-lg text-sm"
+                      required
+                      disabled={isCreatingThread}
+                  />
+                  <button 
+                      type="submit"
+                      disabled={isCreatingThread || !newThreadTitle}
+                      className="px-4 py-2 bg-emerald-600 text-white rounded-lg text-sm font-semibold hover:bg-emerald-700 transition-colors disabled:opacity-50 flex items-center justify-center gap-2"
+                  >
+                      {isCreatingThread ? <Loader2 className="w-4 h-4 animate-spin" /> : <Plus className="w-4 h-4" />}
+                      New Thread
+                  </button>
               </form>
             </div>
 
