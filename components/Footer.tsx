@@ -78,7 +78,7 @@ const Footer: React.FC = () => {
             <div className="flex gap-6 items-center">
                 <Link to="/login" className="flex items-center gap-1 text-indigo-400 hover:text-white transition-colors font-bold">
                     <LogIn className="w-3 h-3" />
-                    Login
+                    Portal
                 </Link>
                 <a href="#" className="hover:text-white transition-colors">Privacy Policy</a>
                 <a href="#" className="hover:text-white transition-colors">Terms of Service</a>
