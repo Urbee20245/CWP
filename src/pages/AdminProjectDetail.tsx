@@ -9,79 +9,15 @@ import { Profile } from '../types/auth';
 import { calculateSlaMetrics, calculateSlaDueDate, SlaStatus, adjustSlaDueDate } from '../utils/sla';
 import { format, differenceInDays, parseISO } from 'date-fns';
 import { AdminService } from '../services/adminService';
-import { useAuth } from '../hooks/useAuth'; // <-- New Import
+import { useAuth } from '../hooks/useAuth';
+import { mapProjectDTO, ProjectDTO, MilestoneDTO, TaskDTO, FileItemDTO, ThreadDTO } from '../utils/projectMapper'; // Import DTO and Mapper
 
-interface Milestone {
-  id: string;
-  name: string;
-  amount_cents: number;
-  status: 'pending' | 'invoiced' | 'paid';
-  order_index: number;
-  stripe_invoice_id: string | null;
-}
-
-type ProjectServiceStatus = 'active' | 'paused' | 'awaiting_payment' | 'completed';
-
-interface Thread {
-    id: string;
-    title: string;
-    status: 'open' | 'closed' | 'archived';
-    created_at: string;
-    created_by: string;
-    messages: Message[];
-}
-
-interface Project {
-  id: string;
-  title: string;
-  description: string;
-  status: 'draft' | 'awaiting_deposit' | 'active' | 'paused' | 'completed';
-  progress_percent: number;
-  client_id: string;
-  clients: { business_name: string };
-  tasks: Task[];
-  threads: Thread[]; // Changed from messages
-  files: FileItem[];
-  milestones: Milestone[]; 
-  required_deposit_cents: number | null; 
-  deposit_paid: boolean; 
-  // SLA Fields
-  sla_days: number | null;
-  sla_start_date: string | null;
-  sla_due_date: string | null;
-  sla_status: SlaStatus;
-  service_status: ProjectServiceStatus; 
-  service_paused_at: string | null; 
-  service_resumed_at: string | null; 
-  sla_paused_at: string | null; 
-  sla_resume_offset_days: number; 
-}
-
-interface Task {
-  id: string;
-  title: string;
-  status: 'todo' | 'in_progress' | 'done' | 'blocked';
-  due_date: string | null;
-}
-
-interface Message {
-  id: string;
-  body: string;
-  sender_profile_id: string;
-  created_at: string;
-  profiles: { full_name: string };
-}
-
-interface FileItem {
-  id: string;
-  file_name: string;
-  file_type: string;
-  file_size: number;
-  storage_path: string;
-  uploader_profile_id: string;
-  created_at: string;
-  profiles: { full_name: string };
-}
+// Define types locally based on DTOs for clarity
+type Milestone = MilestoneDTO;
+type ProjectServiceStatus = ProjectDTO['service_status'];
+type Thread = ThreadDTO;
+type Task = TaskDTO;
+type FileItem = FileItemDTO;
 
 interface PauseLog {
     id: string;
@@ -94,7 +30,7 @@ interface PauseLog {
 const AdminProjectDetail: React.FC = () => {
   const { id } = useParams<{ id: string }>();
   const { user } = useAuth();
-  const [project, setProject] = useState<Project | null>(null);
+  const [project, setProject] = useState<ProjectDTO | null>(null); // Use ProjectDTO
   const [isLoading, setIsLoading] = useState(true);
   const [newProgress, setNewProgress] = useState(0);
   const [newMessage, setNewMessage] = useState('');
@@ -152,76 +88,64 @@ const AdminProjectDetail: React.FC = () => {
       .order('due_date', { foreignTable: 'tasks', ascending: true })
       .order('order_index', { foreignTable: 'milestones', ascending: true })
       .order('created_at', { foreignTable: 'project_threads', ascending: false })
-      .order('created_at', { foreignTable: 'project_threads.messages', ascending: true }) // Nested order for messages
+      .order('created_at', { foreignTable: 'project_threads.messages', ascending: true })
       .single();
 
     if (error) {
       console.error('Error fetching project details:', error);
       setProject(null);
     } else {
-      const projectData = data as unknown as Project;
-      
-      // Normalize nested arrays to ensure they are never null/undefined
-      const normalizedProject: Project = {
-          ...projectData,
-          tasks: projectData.tasks ?? [],
-          files: projectData.files ?? [],
-          milestones: projectData.milestones ?? [],
-          threads: projectData.threads ?? [],
-      };
-      
-      if (normalizedProject.threads) {
-          normalizedProject.threads.forEach(thread => {
-              if (thread.messages) {
-                  thread.messages.sort((a, b) => new Date(a.created_at).getTime() - new Date(b.created_at).getTime());
-              }
-          });
-      }
-      
-      setProject(normalizedProject);
-      setNewProgress(normalizedProject.progress_percent);
-      setSlaDays(normalizedProject.sla_days || '');
-      setSlaStartDate(normalizedProject.sla_start_date ? format(new Date(normalizedProject.sla_start_date), 'yyyy-MM-dd') : '');
-      setRequiredDeposit(normalizedProject.required_deposit_cents ? normalizedProject.required_deposit_cents / 100 : '');
-      
-      // Set active thread to the first open thread, or the first thread if none are open
-      if (normalizedProject.threads.length > 0) {
-          const openThread = normalizedProject.threads.find(t => t.status === 'open');
-          setActiveThreadId(openThread?.id || normalizedProject.threads[0].id);
-      } else {
-          setActiveThreadId(null);
-      }
-      
-      // Calculate SLA metrics immediately
-      if (normalizedProject.sla_days && normalizedProject.sla_start_date && normalizedProject.sla_due_date) {
-        const metrics = calculateSlaMetrics(
-          normalizedProject.progress_percent,
-          normalizedProject.sla_days,
-          normalizedProject.sla_start_date,
-          normalizedProject.sla_due_date,
-          normalizedProject.sla_paused_at,
-          normalizedProject.sla_resume_offset_days
-        );
-        setSlaMetrics(metrics);
-        // Update DB status if calculated status differs (optional auto-sync)
-        if (metrics.slaStatus !== normalizedProject.sla_status) {
-            await supabase.from('projects').update({ sla_status: metrics.slaStatus }).eq('id', id);
+      try {
+        // Map raw data to safe DTO
+        const projectDTO = mapProjectDTO(data);
+        setProject(projectDTO);
+        setNewProgress(projectDTO.progress_percent);
+        setSlaDays(projectDTO.sla_days || '');
+        setSlaStartDate(projectDTO.sla_start_date ? format(new Date(projectDTO.sla_start_date), 'yyyy-MM-dd') : '');
+        setRequiredDeposit(projectDTO.required_deposit_cents ? projectDTO.required_deposit_cents / 100 : '');
+        
+        // Set active thread to the first open thread, or the first thread if none are open
+        if (projectDTO.threads.length > 0) {
+            const openThread = projectDTO.threads.find(t => t.status === 'open');
+            setActiveThreadId(openThread?.id || projectDTO.threads[0].id);
+        } else {
+            setActiveThreadId(null);
         }
-      } else {
-          setSlaMetrics(null);
-      }
-      
-      // Fetch Pause Logs
-      const { data: logsData, error: logsError } = await supabase
-          .from('service_pause_logs')
-          .select('*')
-          .eq('project_id', id)
-          .order('created_at', { ascending: false });
-          
-      if (logsError) {
-          console.error('Error fetching pause logs:', logsError);
-      } else {
-          setPauseLogs(logsData as PauseLog[] ?? []);
+        
+        // Calculate SLA metrics immediately
+        if (projectDTO.sla_days && projectDTO.sla_start_date && projectDTO.sla_due_date) {
+          const metrics = calculateSlaMetrics(
+            projectDTO.progress_percent,
+            projectDTO.sla_days,
+            projectDTO.sla_start_date,
+            projectDTO.sla_due_date,
+            projectDTO.sla_paused_at,
+            projectDTO.sla_resume_offset_days
+          );
+          setSlaMetrics(metrics);
+          // Update DB status if calculated status differs (optional auto-sync)
+          if (metrics.slaStatus !== projectDTO.sla_status) {
+              await supabase.from('projects').update({ sla_status: metrics.slaStatus }).eq('id', id);
+          }
+        } else {
+            setSlaMetrics(null);
+        }
+        
+        // Fetch Pause Logs
+        const { data: logsData, error: logsError } = await supabase
+            .from('service_pause_logs')
+            .select('*')
+            .eq('project_id', id)
+            .order('created_at', { ascending: false });
+            
+        if (logsError) {
+            console.error('Error fetching pause logs:', logsError);
+        } else {
+            setPauseLogs(logsData as PauseLog[] ?? []);
+        }
+      } catch (mapError) {
+          console.error("Error mapping project DTO:", mapError);
+          setProject(null);
       }
     }
     setIsLoading(false);
@@ -234,7 +158,7 @@ const AdminProjectDetail: React.FC = () => {
   useEffect(() => {
     // Scroll to bottom whenever the active thread changes or new messages arrive
     scrollToBottom();
-  }, [activeThreadId, project?.threads?.find(t => t.id === activeThreadId)?.messages?.length]); // Safe access here
+  }, [activeThreadId, project?.threads.find(t => t.id === activeThreadId)?.messages.length]);
 
   const handleProgressUpdate = async () => {
     if (!project) return;
@@ -242,7 +166,7 @@ const AdminProjectDetail: React.FC = () => {
     
     // Rule: Project cannot reach 100% unless all milestones are paid
     if (newProgress === 100) {
-        const unpaidMilestones = (project.milestones ?? []).filter(m => m.status !== 'paid');
+        const unpaidMilestones = project.milestones.filter(m => m.status !== 'paid');
         if (unpaidMilestones.length > 0) {
             alert(`Cannot set progress to 100%. ${unpaidMilestones.length} milestones are still unpaid.`);
             setNewProgress(project.progress_percent); // Revert local state
@@ -502,7 +426,7 @@ const AdminProjectDetail: React.FC = () => {
             project_id: project.id,
             name: newMilestoneName.trim(),
             amount_cents: amountCents,
-            order_index: (project.milestones ?? []).length + 1,
+            order_index: project.milestones.length + 1,
             status: 'pending',
         });
         
@@ -593,7 +517,7 @@ const AdminProjectDetail: React.FC = () => {
     }
   };
   
-  const handleUpdateProjectStatus = async (newStatus: Project['status']) => {
+  const handleUpdateProjectStatus = async (newStatus: ProjectDTO['status']) => {
     if (!project) return;
     
     // Prevent starting if deposit is required but not paid
@@ -604,7 +528,7 @@ const AdminProjectDetail: React.FC = () => {
     
     // Prevent 100% completion if milestones are unpaid
     if (newStatus === 'completed') {
-        const unpaidMilestones = (project.milestones ?? []).filter(m => m.status !== 'paid');
+        const unpaidMilestones = project.milestones.filter(m => m.status !== 'paid');
         if (unpaidMilestones.length > 0) {
             alert(`Cannot set project to 'completed'. ${unpaidMilestones.length} milestones are still unpaid.`);
             return;
@@ -634,7 +558,7 @@ const AdminProjectDetail: React.FC = () => {
     const action = newStatus === 'paused' || newStatus === 'awaiting_payment' ? 'paused' : 'resumed';
     const now = new Date().toISOString();
     
-    let updatePayload: Partial<Project> = { service_status: newStatus };
+    let updatePayload: Partial<ProjectDTO> = { service_status: newStatus };
     let logAction: 'paused' | 'resumed' = 'paused';
     
     if (action === 'paused' && project.service_status !== 'paused' && project.service_status !== 'awaiting_payment') {
@@ -755,8 +679,8 @@ const AdminProjectDetail: React.FC = () => {
           if (error) throw error;
           
           // Try to switch to the next open thread or the first thread
-          const nextOpenThread = (project?.threads ?? []).find(t => t.id !== threadId && t.status === 'open');
-          setActiveThreadId(nextOpenThread?.id || (project?.threads ?? []).find(t => t.id !== threadId)?.id || null);
+          const nextOpenThread = project.threads.find(t => t.id !== threadId && t.status === 'open');
+          setActiveThreadId(nextOpenThread?.id || project.threads.find(t => t.id !== threadId)?.id || null);
           
           fetchProjectData();
       } catch (e: any) {
@@ -784,10 +708,10 @@ const AdminProjectDetail: React.FC = () => {
       }
   };
   
-  const activeThread = (project?.threads ?? []).find(t => t.id === activeThreadId);
+  const activeThread = project?.threads.find(t => t.id === activeThreadId);
 
-  const completedTasks = (project?.tasks ?? []).filter(t => t.status === 'done').length || 0;
-  const totalTasks = (project?.tasks ?? []).length || 0;
+  const completedTasks = project?.tasks.filter(t => t.status === 'done').length || 0;
+  const totalTasks = project?.tasks.length || 0;
   
   const getSlaColor = (status: SlaStatus) => {
       switch (status) {
@@ -951,7 +875,7 @@ const AdminProjectDetail: React.FC = () => {
                     <label className="block text-sm font-medium mb-2">Current Status</label>
                     <select
                         value={project.status}
-                        onChange={(e) => handleUpdateProjectStatus(e.target.value as Project['status'])}
+                        onChange={(e) => handleUpdateProjectStatus(e.target.value as ProjectDTO['status'])}
                         className={`w-full p-2 border border-slate-300 rounded-lg text-sm font-bold ${getMilestoneStatusColor(project.status as any)}`}
                         disabled={isUpdating}
                     >
@@ -999,7 +923,7 @@ const AdminProjectDetail: React.FC = () => {
                     ></div>
                 </div>
 
-                <p className="text-sm text-slate-600 mb-4">{(project.tasks ?? []).filter(t => t.status === 'done').length}/{(project.tasks ?? []).length} Tasks Completed</p>
+                <p className="text-sm text-slate-600 mb-4">{completedTasks}/{totalTasks} Tasks Completed</p>
 
                 <div className="mt-4">
                     <label htmlFor="progress-slider" className="block text-sm font-medium mb-2">Update Progress (0-100)</label>
@@ -1088,8 +1012,8 @@ const AdminProjectDetail: React.FC = () => {
                 <CheckCircle2 className="w-5 h-5 text-emerald-600" /> Tasks
               </h2>
               <div className="space-y-3 mb-4">
-                {(project.tasks ?? []).length > 0 ? (
-                  (project.tasks ?? []).map(task => (
+                {project.tasks.length > 0 ? (
+                  project.tasks.map(task => (
                     <div key={task.id} className="p-3 bg-slate-50 rounded-lg border border-slate-100 flex justify-between items-center">
                       <div>
                         <p className="font-medium text-sm text-slate-900">{task.title}</p>
@@ -1184,8 +1108,8 @@ const AdminProjectDetail: React.FC = () => {
 
                 {/* Milestones List */}
                 <div className="space-y-3 mb-6">
-                    {(project.milestones ?? []).length > 0 ? (
-                        (project.milestones ?? []).map(milestone => (
+                    {project.milestones.length > 0 ? (
+                        project.milestones.map(milestone => (
                             <div key={milestone.id} className="p-3 bg-slate-50 rounded-lg border border-slate-100 flex justify-between items-center">
                                 <div className="flex items-center gap-3">
                                     <span className="font-bold text-slate-900 text-sm">{milestone.order_index}. {milestone.name}</span>
@@ -1266,7 +1190,7 @@ const AdminProjectDetail: React.FC = () => {
               
               {/* Thread Selector */}
               <div className="flex gap-3 mb-4 overflow-x-auto pb-2 border-b border-slate-100">
-                  {(project.threads ?? []).map(thread => (
+                  {project.threads.map(thread => (
                       <button
                           key={thread.id}
                           onClick={() => setActiveThreadId(thread.id)}
@@ -1278,7 +1202,7 @@ const AdminProjectDetail: React.FC = () => {
                                       : 'bg-slate-50 text-slate-700 hover:bg-slate-100'
                           }`}
                       >
-                          {thread.title} ({(thread.messages ?? []).length})
+                          {thread.title} ({thread.messages.length})
                           {thread.status === 'closed' && <X className="w-3 h-3 inline ml-1" />}
                       </button>
                   ))}
@@ -1312,8 +1236,8 @@ const AdminProjectDetail: React.FC = () => {
               
               {/* Message List */}
               <div className="h-80 overflow-y-auto space-y-4 p-2 flex flex-col">
-                {(activeThread?.messages ?? []).length ? (
-                  (activeThread?.messages ?? []).map(message => (
+                {activeThread?.messages.length ? (
+                  activeThread.messages.map(message => (
                     <div key={message.id} className={`flex ${message.sender_profile_id === user?.id ? 'justify-end' : 'justify-start'}`}>
                         <div className={`max-w-[85%] p-3 rounded-xl text-sm relative ${message.sender_profile_id === user?.id ? 'bg-indigo-600 text-white rounded-br-none' : 'bg-slate-100 text-slate-800 rounded-tl-none'}`}>
                             <div className={`text-xs mb-1 flex justify-between items-center ${message.sender_profile_id === user?.id ? 'text-indigo-200' : 'text-slate-500'}`}>
@@ -1384,11 +1308,11 @@ const AdminProjectDetail: React.FC = () => {
             {/* Files Section */}
             <div className="bg-white p-6 rounded-xl shadow-lg border border-slate-100">
               <h2 className="text-xl font-bold mb-4 flex items-center gap-2 border-b border-slate-100 pb-4">
-                <FileText className="w-5 h-5 text-purple-600" /> Project Files ({(project.files ?? []).length})
+                <FileText className="w-5 h-5 text-purple-600" /> Project Files ({project.files.length})
               </h2>
               <div className="space-y-3">
-                {(project.files ?? []).length > 0 ? (
-                  (project.files ?? []).map(file => (
+                {project.files.length > 0 ? (
+                  project.files.map(file => (
                     <div key={file.id} className="flex justify-between items-center p-3 bg-slate-50 rounded-lg border border-slate-100">
                       <div className="flex items-center gap-3">
                         <FileText className="w-5 h-5 text-purple-500" />
@@ -1448,8 +1372,8 @@ const AdminProjectDetail: React.FC = () => {
           </div>
         </div>
       </div>
-    </AdminLayout>
+    </ClientLayout>
   );
 };
 
-export default AdminProjectDetail;
+export default ClientProjectDetail;

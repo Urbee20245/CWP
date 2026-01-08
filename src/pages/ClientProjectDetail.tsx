@@ -9,72 +9,13 @@ import { useAuth } from '../hooks/useAuth';
 import { calculateSlaMetrics, SlaStatus } from '../utils/sla';
 import { format } from 'date-fns';
 import ServiceStatusBanner from '../components/ServiceStatusBanner';
+import { mapProjectDTO, ProjectDTO, MilestoneDTO, TaskDTO, FileItemDTO, ThreadDTO } from '../utils/projectMapper'; // Import DTO and Mapper
 
-interface Milestone {
-  id: string;
-  name: string;
-  amount_cents: number;
-  status: 'pending' | 'invoiced' | 'paid';
-  order_index: number;
-  stripe_invoice_id: string | null;
-}
-
-interface Thread {
-    id: string;
-    title: string;
-    status: 'open' | 'closed' | 'archived';
-    created_at: string;
-    created_by: string;
-    messages: Message[];
-}
-
-interface Project {
-  id: string;
-  title: string;
-  description: string;
-  status: 'draft' | 'awaiting_deposit' | 'active' | 'paused' | 'completed';
-  progress_percent: number;
-  tasks: Task[];
-  threads: Thread[]; // Changed from messages
-  files: FileItem[];
-  milestones: Milestone[]; // New field
-  required_deposit_cents: number | null; // New field
-  deposit_paid: boolean; // New field
-  // SLA Fields
-  sla_days: number | null;
-  sla_start_date: string | null;
-  sla_due_date: string | null;
-  sla_status: SlaStatus;
-  service_status: 'active' | 'paused' | 'awaiting_payment' | 'completed'; // New field
-  sla_paused_at: string | null;
-  sla_resume_offset_days: number;
-}
-
-interface Task {
-  id: string;
-  title: string;
-  status: 'todo' | 'in_progress' | 'done' | 'blocked';
-  due_date: string | null;
-}
-
-interface Message {
-  id: string;
-  body: string;
-  sender_profile_id: string;
-  created_at: string;
-  profiles: { full_name: string };
-}
-
-interface FileItem {
-  id: string;
-  file_name: string;
-  file_type: string;
-  file_size: number;
-  storage_path: string;
-  uploader_profile_id: string;
-  created_at: string;
-  profiles: { full_name: string };
-}
+// Define types locally based on DTOs for clarity
+type Milestone = MilestoneDTO;
+type Thread = ThreadDTO;
+type Task = TaskDTO;
+type FileItem = FileItemDTO;
 
 interface PauseLog {
     id: string;
@@ -86,7 +27,7 @@ interface PauseLog {
 const ClientProjectDetail: React.FC = () => {
   const { id } = useParams<{ id: string }>();
   const { profile, user } = useAuth();
-  const [project, setProject] = useState<Project | null>(null);
+  const [project, setProject] = useState<ProjectDTO | null>(null); // Use ProjectDTO
   const [isLoading, setIsLoading] = useState(true);
   const [newMessage, setNewMessage] = useState('');
   const [fileToUpload, setFileToUpload] = useState<File | null>(null);
@@ -107,7 +48,10 @@ const ClientProjectDetail: React.FC = () => {
   const messagesEndRef = useRef<HTMLDivElement>(null);
 
   const fetchClientData = async () => {
-    if (!profile) return;
+    if (!profile) {
+        setIsLoading(false);
+        return;
+    }
     
     // 1. Get Client ID
     const { data: clientData, error: clientError } = await supabase
@@ -156,70 +100,65 @@ const ClientProjectDetail: React.FC = () => {
       .order('due_date', { foreignTable: 'tasks', ascending: true })
       .order('order_index', { foreignTable: 'milestones', ascending: true })
       .order('created_at', { foreignTable: 'project_threads', ascending: false })
-      .order('created_at', { foreignTable: 'project_threads.messages', ascending: true }) // Nested order for messages
+      .order('created_at', { foreignTable: 'project_threads.messages', ascending: true })
       .single();
 
     if (error) {
       console.error('Error fetching project details:', error);
       setProject(null);
     } else {
-      const projectData = data as unknown as Project;
-      
-      // Normalize nested arrays to ensure they are never null/undefined
-      const normalizedProject: Project = {
-          ...projectData,
-          tasks: projectData.tasks ?? [],
-          files: projectData.files ?? [],
-          milestones: projectData.milestones ?? [],
-          threads: projectData.threads ?? [],
-      };
-      
-      setProject(normalizedProject);
-      
-      // Set active thread to the first open thread, or the first thread if none are open
-      if (normalizedProject.threads.length > 0) {
-          const openThread = normalizedProject.threads.find(t => t.status === 'open');
-          setActiveThreadId(openThread?.id || normalizedProject.threads[0].id);
-      } else {
-          setActiveThreadId(null);
+      try {
+        const projectDTO = mapProjectDTO(data);
+        setProject(projectDTO);
+        
+        // Set active thread to the first open thread, or the first thread if none are open
+        if (projectDTO.threads.length > 0) {
+            const openThread = projectDTO.threads.find(t => t.status === 'open');
+            setActiveThreadId(openThread?.id || projectDTO.threads[0].id);
+        } else {
+            setActiveThreadId(null);
+        }
+        
+        // Calculate SLA metrics
+        if (projectDTO.sla_days && projectDTO.sla_start_date && projectDTO.sla_due_date) {
+          setSlaMetrics(calculateSlaMetrics(
+            projectDTO.progress_percent,
+            projectDTO.sla_days,
+            projectDTO.sla_start_date,
+            projectDTO.sla_due_date,
+            projectDTO.sla_paused_at,
+            projectDTO.sla_resume_offset_days
+          ));
+        } else {
+            setSlaMetrics(null);
+        }
+        
+        // Fetch latest pause log for acknowledgment
+        const { data: logData } = await supabase
+            .from('service_pause_logs')
+            .select('id, action, client_acknowledged, created_at')
+            .eq('project_id', id)
+            .eq('action', 'paused')
+            .eq('client_acknowledged', false)
+            .order('created_at', { ascending: false })
+            .limit(1)
+            .single();
+            
+        setLatestPauseLog(logData as PauseLog || null);
+        
+        // 4. Fetch shared documents
+        const { data: docsData } = await supabase
+            .from('documents')
+            .select('id, document_type, content, version, created_at')
+            .eq('project_id', id)
+            .eq('is_client_visible', true)
+            .order('created_at', { ascending: false });
+            
+        setDocuments(docsData as Document[] || []);
+      } catch (mapError) {
+          console.error("Error mapping project DTO:", mapError);
+          setProject(null);
       }
-      
-      // Calculate SLA metrics
-      if (normalizedProject.sla_days && normalizedProject.sla_start_date && normalizedProject.sla_due_date) {
-        setSlaMetrics(calculateSlaMetrics(
-          normalizedProject.progress_percent,
-          normalizedProject.sla_days,
-          normalizedProject.sla_start_date,
-          normalizedProject.sla_due_date,
-          normalizedProject.sla_paused_at,
-          normalizedProject.sla_resume_offset_days
-        ));
-      } else {
-          setSlaMetrics(null);
-      }
-      
-      // Fetch latest pause log for acknowledgment
-      const { data: logData } = await supabase
-          .from('service_pause_logs')
-          .select('id, action, client_acknowledged, created_at')
-          .eq('project_id', id)
-          .eq('action', 'paused')
-          .eq('client_acknowledged', false)
-          .order('created_at', { ascending: false })
-          .limit(1)
-          .single();
-          
-      setLatestPauseLog(logData as PauseLog || null);
-      
-      // 4. Fetch shared documents
-      const { data: docsData } = await supabase
-          .from('documents')
-          .select('id, document_type, content, version, created_at')
-          .eq('project_id', id)
-          .eq('is_client_visible', true)
-          .order('created_at', { ascending: false });
-          
-      setDocuments(docsData as Document[] || []);
     }
     setIsLoading(false);
   };
@@ -231,7 +170,7 @@ const ClientProjectDetail: React.FC = () => {
   useEffect(() => {
     // Scroll to bottom whenever the active thread changes or new messages arrive
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
-  }, [activeThreadId, project?.threads?.find(t => t.id === activeThreadId)?.messages?.length]);
+  }, [activeThreadId, project?.threads.find(t => t.id === activeThreadId)?.messages.length]);
 
   const handleMessageSend = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -371,8 +310,8 @@ const ClientProjectDetail: React.FC = () => {
       }
   };
 
-  const completedTasks = (project?.tasks ?? []).filter(t => t.status === 'done').length || 0;
-  const totalTasks = (project?.tasks ?? []).length || 0;
+  const completedTasks = project?.tasks.filter(t => t.status === 'done').length || 0;
+  const totalTasks = project?.tasks.length || 0;
   
   const getProgressColor = (percent: number) => {
     if (percent === 100) return 'bg-emerald-600';
@@ -409,7 +348,7 @@ const ClientProjectDetail: React.FC = () => {
     return <div dangerouslySetInnerHTML={{ __html: html }} className="prose max-w-none text-sm text-slate-700" />;
   };
   
-  const activeThread = (project?.threads ?? []).find(t => t.id === activeThreadId);
+  const activeThread = project?.threads.find(t => t.id === activeThreadId);
 
   if (isLoading) {
     return (
@@ -563,8 +502,8 @@ const ClientProjectDetail: React.FC = () => {
                 <CheckCircle2 className="w-5 h-5 text-emerald-600" /> Tasks
               </h2>
               <div className="space-y-3">
-                {(project.tasks ?? []).length > 0 ? (
-                  (project.tasks ?? []).map(task => (
+                {project.tasks.length > 0 ? (
+                  project.tasks.map(task => (
                     <div key={task.id} className="p-3 bg-slate-50 rounded-lg border border-slate-100 flex justify-between items-center">
                       <div>
                         <p className="font-medium text-sm text-slate-900">{task.title}</p>
@@ -626,7 +565,7 @@ const ClientProjectDetail: React.FC = () => {
                     
                     {/* Thread Selector */}
                     <div className="flex gap-3 mb-4 overflow-x-auto pb-2 border-b border-slate-100">
-                        {(project.threads ?? []).map(thread => (
+                        {project.threads.map(thread => (
                             <button
                                 key={thread.id}
                                 onClick={() => setActiveThreadId(thread.id)}
@@ -638,7 +577,7 @@ const ClientProjectDetail: React.FC = () => {
                                             : 'bg-slate-50 text-slate-700 hover:bg-slate-100'
                                 }`}
                             >
-                                {thread.title} ({(thread.messages ?? []).length})
+                                {thread.title} ({thread.messages.length})
                                 {thread.status === 'closed' && <X className="w-3 h-3 inline ml-1" />}
                             </button>
                         ))}
@@ -656,8 +595,8 @@ const ClientProjectDetail: React.FC = () => {
                     
                     {/* Message List */}
                     <div className="h-80 overflow-y-auto space-y-4 p-2 flex flex-col">
-                        {(activeThread?.messages ?? []).length ? (
-                        (activeThread?.messages ?? []).map(message => (
+                        {activeThread?.messages.length ? (
+                        activeThread.messages.map(message => (
                             <div key={message.id} className={`flex ${message.sender_profile_id === profile?.id ? 'justify-end' : 'justify-start'}`}>
                                 <div className={`max-w-[85%] p-3 rounded-xl text-sm ${message.sender_profile_id === profile?.id ? 'bg-indigo-600 text-white rounded-br-none' : 'bg-slate-100 text-slate-800 rounded-tl-none'}`}>
                                     <div className={`text-xs mb-1 ${message.sender_profile_id === profile?.id ? 'text-indigo-200' : 'text-slate-500'}`}>
@@ -723,8 +662,8 @@ const ClientProjectDetail: React.FC = () => {
                         <DollarSign className="w-5 h-5 text-purple-600" /> Payment Milestones
                     </h2>
                     <div className="space-y-4">
-                        {(project.milestones ?? []).length > 0 ? (
-                            (project.milestones ?? []).map(milestone => (
+                        {project.milestones.length > 0 ? (
+                            project.milestones.map(milestone => (
                                 <div key={milestone.id} className="p-3 bg-slate-50 rounded-lg border border-slate-100 flex justify-between items-center">
                                     <div className="flex items-center gap-3">
                                         <span className="font-bold text-slate-900 text-sm">{milestone.order_index}. {milestone.name}</span>
@@ -756,11 +695,11 @@ const ClientProjectDetail: React.FC = () => {
             {activeTab === 'files' && (
                 <div className="bg-white p-6 rounded-xl shadow-lg border border-slate-100">
                     <h2 className="text-xl font-bold mb-4 flex items-center gap-2 border-b border-slate-100 pb-4">
-                        <FileText className="w-5 h-5 text-purple-600" /> Project Files ({(project.files ?? []).length})
+                        <FileText className="w-5 h-5 text-purple-600" /> Project Files ({project.files.length})
                     </h2>
                     <div className="space-y-3">
-                        {(project.files ?? []).length > 0 ? (
-                        (project.files ?? []).map(file => (
+                        {project.files.length > 0 ? (
+                        project.files.map(file => (
                             <div key={file.id} className="flex justify-between items-center p-3 bg-slate-50 rounded-lg border border-slate-100">
                             <div className="flex items-center gap-3">
                                 <FileText className="w-5 h-5 text-purple-500" />
