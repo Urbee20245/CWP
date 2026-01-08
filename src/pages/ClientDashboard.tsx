@@ -6,7 +6,7 @@ import { useAuth } from '../hooks/useAuth';
 import { supabase } from '../integrations/supabase/client';
 import { Briefcase, Loader2, LogOut, CheckCircle2, DollarSign, AlertTriangle, MessageSquare } from 'lucide-react';
 import ClientLayout from '../components/ClientLayout';
-import { BillingService } from '../services/billingService';
+import { ClientBillingService } from '../services/clientBillingService'; // Corrected import path
 
 interface ProjectSummary {
   id: string;
@@ -54,7 +54,7 @@ const ClientDashboard: React.FC = () => {
 
       // 2. Check Access Status via Edge Function
       try {
-        const accessResult = await BillingService.checkClientAccess(currentClientId);
+        const accessResult = await ClientBillingService.checkClientAccess(currentClientId);
         setAccessStatus(accessResult);
         
         // Determine if we should show the non-blocking overdue banner
