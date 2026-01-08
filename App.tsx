@@ -9,11 +9,13 @@ import JetVizPage from './components/JetVizPage';
 import JetSuitePage from './components/JetSuitePage';
 import ServicesPage from './components/ServicesPage';
 import ContactPage from './components/ContactPage';
-import ProcessPage from './components/ProcessPage'; // <-- Import ProcessPage
+import ProcessPage from './components/ProcessPage';
 import SessionProvider from './src/context/SessionProvider';
 import LoginPage from './src/pages/LoginPage';
 import ProtectedRoute from './src/components/ProtectedRoute';
 import AdminDashboard from './src/pages/AdminDashboard';
+import AdminClientList from './src/pages/AdminClientList'; // <-- New Import
+import AdminProjectList from './src/pages/AdminProjectList'; // <-- New Import
 import ClientDashboard from './src/pages/ClientDashboard';
 import AdminClientDetail from './src/pages/AdminClientDetail';
 import AdminProjectDetail from './src/pages/AdminProjectDetail';
@@ -21,7 +23,7 @@ import ClientProjectDetail from './src/pages/ClientProjectDetail';
 import ClientBilling from './src/pages/ClientBilling';
 import BackOfficeRedirect from './src/pages/BackOfficeRedirect';
 import AdminBillingProducts from './src/pages/AdminBillingProducts';
-import AdminRevenueDashboard from './src/pages/AdminRevenueDashboard'; // <-- New Import
+import AdminRevenueDashboard from './src/pages/AdminRevenueDashboard';
 
 // Component that uses useLocation to conditionally render global elements
 const AppContent: React.FC = () => {
@@ -57,10 +59,12 @@ const AppContent: React.FC = () => {
         {/* Admin Routes */}
         <Route path="/admin/*" element={<ProtectedRoute allowedRoles={['admin']} />}>
           <Route path="dashboard" element={<AdminDashboard />} />
+          <Route path="clients" element={<AdminClientList />} /> {/* <-- New Client List Route */}
           <Route path="clients/:id" element={<AdminClientDetail />} />
+          <Route path="projects" element={<AdminProjectList />} /> {/* <-- New Project List Route */}
           <Route path="projects/:id" element={<AdminProjectDetail />} />
           <Route path="billing/products" element={<AdminBillingProducts />} />
-          <Route path="billing/revenue" element={<AdminRevenueDashboard />} /> {/* <-- New Route */}
+          <Route path="billing/revenue" element={<AdminRevenueDashboard />} />
         </Route>
 
         {/* Client Routes */}

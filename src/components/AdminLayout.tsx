@@ -14,9 +14,9 @@ const AdminLayout: React.FC<AdminLayoutProps> = ({ children }) => {
 
   const navItems = [
     { name: 'Dashboard', href: '/admin/dashboard', icon: Bot },
-    { name: 'Clients', href: '/admin/dashboard', icon: Users }, // Using dashboard for client list for MVP
-    { name: 'Projects', href: '/admin/dashboard', icon: Briefcase },
-    { name: 'Revenue', href: '/admin/billing/revenue', icon: BarChart3 }, // New link
+    { name: 'Clients', href: '/admin/clients', icon: Users }, // Changed to dedicated client list route
+    { name: 'Projects', href: '/admin/projects', icon: Briefcase }, // New dedicated project list route
+    { name: 'Revenue', href: '/admin/billing/revenue', icon: BarChart3 },
     { name: 'Billing Products', href: '/admin/billing/products', icon: DollarSign }, 
   ];
 
