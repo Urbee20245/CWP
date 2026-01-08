@@ -1,11 +1,12 @@
 "use client";
 
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import { Link } from 'react-router-dom';
 import { useAuth } from '../hooks/useAuth';
 import { supabase } from '../integrations/supabase/client';
 import { Users, Briefcase, DollarSign, Loader2, LogOut, Plus } from 'lucide-react';
 import AdminLayout from '../components/AdminLayout';
+import AddClientDialog from '../components/AddClientDialog';
 import { Profile } from '../types/auth';
 
 interface ClientSummary {
@@ -22,61 +23,62 @@ const AdminDashboard: React.FC = () => {
   const [clients, setClients] = useState<ClientSummary[]>([]);
   const [stats, setStats] = useState({ totalClients: 0, activeProjects: 0, totalRevenue: 0 });
   const [isLoading, setIsLoading] = useState(true);
+  const [isDialogOpen, setIsDialogOpen] = useState(false);
+
+  const fetchData = useCallback(async () => {
+    setIsLoading(true);
+    
+    // Fetch Clients and their associated profile names
+    const { data: clientsData, error: clientsError } = await supabase
+      .from('clients')
+      .select(`
+        id, business_name, status, owner_profile_id,
+        profiles (full_name),
+        projects (count)
+      `);
+
+    if (clientsError) {
+      console.error('Error fetching clients:', clientsError);
+    } else {
+      const formattedClients: ClientSummary[] = clientsData.map(client => ({
+        id: client.id,
+        business_name: client.business_name,
+        status: client.status,
+        owner_profile_id: client.owner_profile_id,
+        owner_name: (client.profiles as Profile)?.full_name || 'N/A',
+        project_count: (client.projects as any[])[0]?.count || 0,
+      }));
+      setClients(formattedClients);
+      setStats(prev => ({ ...prev, totalClients: formattedClients.length }));
+    }
+
+    // Fetch Active Projects Count
+    const { count: activeProjectsCount, error: projectsError } = await supabase
+      .from('projects')
+      .select('*', { count: 'exact', head: true })
+      .eq('status', 'active');
+    
+    if (!projectsError) {
+      setStats(prev => ({ ...prev, activeProjects: activeProjectsCount || 0 }));
+    }
+
+    // Fetch Total Revenue (Paid Invoices)
+    const { data: revenueData, error: revenueError } = await supabase
+      .from('invoices')
+      .select('amount')
+      .eq('status', 'paid');
+
+    if (!revenueError && revenueData) {
+      const totalRevenue = revenueData.reduce((sum, invoice) => sum + invoice.amount, 0) / 100; // Assuming amount is in cents
+      setStats(prev => ({ ...prev, totalRevenue }));
+    }
+
+    setIsLoading(false);
+  }, []);
 
   useEffect(() => {
-    const fetchData = async () => {
-      setIsLoading(true);
-      
-      // Fetch Clients and their associated profile names
-      const { data: clientsData, error: clientsError } = await supabase
-        .from('clients')
-        .select(`
-          id, business_name, status, owner_profile_id,
-          profiles (full_name),
-          projects (count)
-        `);
-
-      if (clientsError) {
-        console.error('Error fetching clients:', clientsError);
-      } else {
-        const formattedClients: ClientSummary[] = clientsData.map(client => ({
-          id: client.id,
-          business_name: client.business_name,
-          status: client.status,
-          owner_profile_id: client.owner_profile_id,
-          owner_name: (client.profiles as Profile)?.full_name || 'N/A',
-          project_count: (client.projects as any[])[0]?.count || 0,
-        }));
-        setClients(formattedClients);
-        setStats(prev => ({ ...prev, totalClients: formattedClients.length }));
-      }
-
-      // Fetch Active Projects Count
-      const { count: activeProjectsCount, error: projectsError } = await supabase
-        .from('projects')
-        .select('*', { count: 'exact', head: true })
-        .eq('status', 'active');
-      
-      if (!projectsError) {
-        setStats(prev => ({ ...prev, activeProjects: activeProjectsCount || 0 }));
-      }
-
-      // Fetch Total Revenue (Paid Invoices)
-      const { data: revenueData, error: revenueError } = await supabase
-        .from('invoices')
-        .select('amount')
-        .eq('status', 'paid');
-
-      if (!revenueError && revenueData) {
-        const totalRevenue = revenueData.reduce((sum, invoice) => sum + invoice.amount, 0) / 100; // Assuming amount is in cents
-        setStats(prev => ({ ...prev, totalRevenue }));
-      }
-
-      setIsLoading(false);
-    };
-
     fetchData();
-  }, []);
+  }, [fetchData]);
 
   const statCards = [
     { title: 'Total Clients', value: stats.totalClients, icon: Users, color: 'text-indigo-600', bg: 'bg-indigo-50' },
@@ -113,7 +115,10 @@ const AdminDashboard: React.FC = () => {
         <div className="bg-white rounded-xl shadow-lg border border-slate-100 p-6">
           <div className="flex justify-between items-center mb-6 border-b border-slate-100 pb-4">
             <h2 className="text-xl font-bold text-slate-900">Client Management</h2>
-            <button className="flex items-center gap-2 px-4 py-2 bg-indigo-600 text-white rounded-lg text-sm font-semibold hover:bg-indigo-700">
+            <button 
+              onClick={() => setIsDialogOpen(true)}
+              className="flex items-center gap-2 px-4 py-2 bg-indigo-600 text-white rounded-lg text-sm font-semibold hover:bg-indigo-700"
+            >
               <Plus className="w-4 h-4" /> Add Client
             </button>
           </div>
@@ -158,6 +163,12 @@ const AdminDashboard: React.FC = () => {
           )}
         </div>
       </div>
+      
+      <AddClientDialog 
+        isOpen={isDialogOpen}
+        onClose={() => setIsDialogOpen(false)}
+        onClientAdded={fetchData}
+      />
     </AdminLayout>
   );
 };
