@@ -9,6 +9,7 @@ import JetVizPage from './components/JetVizPage';
 import JetSuitePage from './components/JetSuitePage';
 import ServicesPage from './components/ServicesPage';
 import ContactPage from './components/ContactPage';
+import ProcessPage from './components/ProcessPage'; // <-- Import ProcessPage
 import SessionProvider from './src/context/SessionProvider';
 import LoginPage from './src/pages/LoginPage';
 import ProtectedRoute from './src/components/ProtectedRoute';
@@ -39,7 +40,7 @@ const AppContent: React.FC = () => {
         {/* Public Routes */}
         <Route path="/" element={<Home />} />
         <Route path="/services" element={<ServicesPage />} />
-        <Route path="/process" element={<Process />} />
+        <Route path="/process" element={<ProcessPage />} /> {/* <-- Use ProcessPage here */}
         <Route path="/contact" element={<ContactPage />} />
         <Route path="/jetsuite" element={<JetSuitePage />} />
         <Route path="/jetviz" element={<JetVizPage />} />
