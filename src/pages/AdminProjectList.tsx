@@ -64,7 +64,9 @@ const AdminProjectList: React.FC = () => {
           project.progress_percent,
           project.sla_days,
           project.sla_start_date,
-          project.sla_due_date
+          project.sla_due_date,
+          null, // Admin list doesn't need pause details
+          0
       );
       switch (metrics.slaStatus) {
           case 'breached': return 'text-red-600';
@@ -132,7 +134,7 @@ const AdminProjectList: React.FC = () => {
                           {project.sla_due_date ? (
                               <div className={`flex items-center gap-1 font-bold ${getSlaStatusColor(project)}`}>
                                   <Clock className="w-4 h-4" />
-                                  {calculateSlaMetrics(project.progress_percent, project.sla_days, project.sla_start_date, project.sla_due_date).slaStatus.replace('_', ' ')}
+                                  {calculateSlaMetrics(project.progress_percent, project.sla_days, project.sla_start_date, project.sla_due_date, null, 0).slaStatus.replace('_', ' ')}
                               </div>
                           ) : (
                               <span className="text-slate-400">N/A</span>

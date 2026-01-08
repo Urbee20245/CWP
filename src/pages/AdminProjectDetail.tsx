@@ -152,6 +152,7 @@ const AdminProjectDetail: React.FC = () => {
       .order('due_date', { foreignTable: 'tasks', ascending: true })
       .order('order_index', { foreignTable: 'milestones', ascending: true })
       .order('created_at', { foreignTable: 'project_threads', ascending: false })
+      .order('created_at', { foreignTable: 'project_threads.messages', ascending: true }) // Nested order for messages
       .single();
 
     if (error) {
@@ -161,6 +162,8 @@ const AdminProjectDetail: React.FC = () => {
       const projectData = data as unknown as Project;
       
       // Manually sort messages within each thread since Supabase doesn't support nested ordering in the select string
+      // NOTE: The .order('created_at', { foreignTable: 'project_threads.messages', ascending: true }) above should handle this, 
+      // but keeping the manual sort as a fallback/check if needed, though it's usually unnecessary with the correct .order() call.
       if (projectData.threads) {
           projectData.threads.forEach(thread => {
               if (thread.messages) {
@@ -831,6 +834,7 @@ const AdminProjectDetail: React.FC = () => {
       <AdminLayout>
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-12 text-center">
           <h1 className="text-3xl font-bold text-red-500">Project Not Found</h1>
+          <p className="text-slate-500 mt-4">The project ID provided does not exist or the database query failed.</p>
         </div>
       </AdminLayout>
     );

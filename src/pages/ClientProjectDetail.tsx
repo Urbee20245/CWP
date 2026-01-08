@@ -156,6 +156,7 @@ const ClientProjectDetail: React.FC = () => {
       .order('due_date', { foreignTable: 'tasks', ascending: true })
       .order('order_index', { foreignTable: 'milestones', ascending: true })
       .order('created_at', { foreignTable: 'project_threads', ascending: false })
+      .order('created_at', { foreignTable: 'project_threads.messages', ascending: true }) // Nested order for messages
       .single();
 
     if (error) {

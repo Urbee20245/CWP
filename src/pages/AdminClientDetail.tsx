@@ -59,6 +59,7 @@ interface Client {
   id: string;
   business_name: string;
   phone: string;
+  address: string;
   status: string; // Client status (active/inactive)
   notes: string;
   owner_profile_id: string;
@@ -117,7 +118,7 @@ const AdminClientDetail: React.FC = () => {
     const { data, error } = await supabase
       .from('clients')
       .select(`
-          id, business_name, phone, status, notes, owner_profile_id, stripe_customer_id, billing_email, service_status,
+          id, business_name, phone, address, status, notes, owner_profile_id, stripe_customer_id, billing_email, service_status,
           profiles (id, full_name, email, role),
           projects (id, title, status, progress_percent),
           invoices (id, amount_due, status, hosted_invoice_url, pdf_url, created_at),
@@ -126,6 +127,10 @@ const AdminClientDetail: React.FC = () => {
           service_pause_logs (id, action, internal_note, client_acknowledged, created_at)
       `)
       .eq('id', id)
+      .order('created_at', { foreignTable: 'projects', ascending: false })
+      .order('created_at', { foreignTable: 'invoices', ascending: false })
+      .order('created_at', { foreignTable: 'subscriptions', ascending: false })
+      .order('created_at', { foreignTable: 'deposits', ascending: false })
       .order('created_at', { foreignTable: 'service_pause_logs', ascending: false })
       .single();
 
