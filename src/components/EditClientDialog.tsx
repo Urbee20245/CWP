@@ -13,7 +13,7 @@ interface ClientData {
   notes: string;
   owner_profile_id: string;
   billing_email: string | null;
-  profiles: Profile;
+  profiles: Profile | null; // Allowing null here to match Supabase join behavior
 }
 
 interface EditClientDialogProps {
@@ -24,28 +24,36 @@ interface EditClientDialogProps {
 }
 
 const EditClientDialog: React.FC<EditClientDialogProps> = ({ isOpen, onClose, onClientUpdated, initialClientData }) => {
-  const [formData, setFormData] = useState({
-    fullName: initialClientData.profiles.full_name,
-    businessName: initialClientData.business_name,
-    phone: initialClientData.phone,
-    billingEmail: initialClientData.billing_email || initialClientData.profiles.email,
-    clientStatus: initialClientData.status,
-    profileRole: initialClientData.profiles.role,
-  });
+  
+  // Helper function to safely get profile data or use fallbacks
+  const getSafeProfileData = (data: ClientData) => {
+    // Provide a fallback Profile object if data.profiles is null
+    const profile = data.profiles || {
+        id: data.owner_profile_id,
+        email: 'N/A',
+        full_name: 'N/A (Profile Missing)',
+        role: 'client',
+        created_at: new Date().toISOString(),
+    } as Profile;
+    
+    return {
+        fullName: profile.full_name,
+        businessName: data.business_name,
+        phone: data.phone,
+        billingEmail: data.billing_email || profile.email,
+        clientStatus: data.status,
+        profileRole: profile.role,
+    };
+  };
+  
+  const [formData, setFormData] = useState(getSafeProfileData(initialClientData));
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
   // Sync state when initial data changes (e.g., when dialog opens with new client data)
   useEffect(() => {
     if (isOpen) {
-        setFormData({
-            fullName: initialClientData.profiles.full_name,
-            businessName: initialClientData.business_name,
-            phone: initialClientData.phone,
-            billingEmail: initialClientData.billing_email || initialClientData.profiles.email,
-            clientStatus: initialClientData.status,
-            profileRole: initialClientData.profiles.role,
-        });
+        setFormData(getSafeProfileData(initialClientData));
         setError(null);
     }
   }, [isOpen, initialClientData]);
