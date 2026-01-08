@@ -18,8 +18,8 @@ export default defineConfig(({ mode }) => {
         'import.meta.env.VITE_SUPABASE_URL': JSON.stringify(env.VITE_SUPABASE_URL),
         'import.meta.env.VITE_SUPABASE_ANON_KEY': JSON.stringify(env.VITE_SUPABASE_ANON_KEY),
         // Dev Admin Bypass variables
-        'import.meta.env.VITE_DEV_ADMIN_MODE': JSON.stringify(env.VITE_DEV_ADMIN_MODE),
-        'import.meta.env.VITE_DEV_ADMIN_EMAIL': JSON.stringify(env.VITE_DEV_ADMIN_EMAIL),
+        'import.meta.env.VITE_DEV_ADMIN_MODE': JSON.stringify("true"),
+        'import.meta.env.VITE_DEV_ADMIN_EMAIL': JSON.stringify("Theivsightcompany@gmail.com"),
       },
       resolve: {
         alias: {
