@@ -3,7 +3,7 @@
 import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { useParams, Link } from 'react-router-dom';
 import { supabase } from '../integrations/supabase/client';
-import { Loader2, Briefcase, CheckCircle2, MessageSquare, FileText, Upload, Trash2, Plus, ArrowLeft, Clock, AlertTriangle, Download, Send, DollarSign, ExternalLink, Pause, Play, X } from 'lucide-react';
+import { Loader2, Briefcase, CheckCircle2, MessageSquare, FileText, Upload, Trash2, Plus, ArrowLeft, Clock, AlertTriangle, Download, Send, DollarSign, ExternalLink, Pause, Play, X, Zap } from 'lucide-react';
 import AdminLayout from '../components/AdminLayout';
 import { Profile } from '../types/auth';
 import { calculateSlaMetrics, calculateSlaDueDate, SlaStatus, adjustSlaDueDate } from '../utils/sla';
@@ -25,6 +25,15 @@ interface PauseLog {
     internal_note: string | null;
     client_acknowledged: boolean;
     created_at: string;
+}
+
+interface DepositSummary {
+  id: string;
+  amount_cents: number;
+  status: 'paid' | 'pending' | 'failed' | 'applied';
+  stripe_invoice_id: string | null;
+  applied_to_invoice_id: string | null; // Use this to check if applied
+  created_at: string;
 }
 
 const AdminProjectDetail: React.FC = () => {
@@ -56,6 +65,11 @@ const AdminProjectDetail: React.FC = () => {
   const [newMilestoneName, setNewMilestoneName] = useState('');
   const [newMilestoneAmount, setNewMilestoneAmount] = useState<number | ''>('');
   const [requiredDeposit, setRequiredDeposit] = useState<number | ''>('');
+  
+  // Deposit Application State
+  const [deposits, setDeposits] = useState<DepositSummary[]>([]);
+  const [selectedDepositId, setSelectedDepositId] = useState('');
+  const [selectedMilestoneId, setSelectedMilestoneId] = useState('');
   
   // Service Control State
   const [serviceActionNote, setServiceActionNote] = useState('');
@@ -143,6 +157,20 @@ const AdminProjectDetail: React.FC = () => {
         } else {
             setPauseLogs(logsData as PauseLog[] ?? []);
         }
+        
+        // Fetch Deposits for this client
+        const { data: depositsData, error: depositsError } = await supabase
+            .from('deposits')
+            .select('*')
+            .eq('client_id', projectDTO.client_id)
+            .order('created_at', { ascending: false });
+            
+        if (depositsError) {
+            console.error('Error fetching deposits:', depositsError);
+        } else {
+            setDeposits(depositsData as DepositSummary[] ?? []);
+        }
+        
       } catch (mapError) {
           console.error("Error mapping project DTO:", mapError);
           setProject(null);
@@ -463,6 +491,25 @@ const AdminProjectDetail: React.FC = () => {
     }
   };
   
+  const handleApplyDepositToMilestone = async (e: React.FormEvent) => {
+      e.preventDefault();
+      if (!selectedDepositId || !selectedMilestoneId || !project) return;
+      
+      setIsUpdating(true);
+      
+      try {
+          await AdminService.applyDepositToMilestone(selectedDepositId, selectedMilestoneId, project.id);
+          alert('Deposit successfully applied to milestone and project progress updated!');
+          setSelectedDepositId('');
+          setSelectedMilestoneId('');
+          fetchProjectData();
+      } catch (e: any) {
+          alert(`Failed to apply deposit: ${e.message}`);
+      } finally {
+          setIsUpdating(false);
+      }
+  };
+  
   const handleUpdateDepositRequirement = async () => {
     if (!project) return;
     setIsUpdating(true);
@@ -775,6 +822,9 @@ const AdminProjectDetail: React.FC = () => {
   const isDepositRequired = project.required_deposit_cents && project.required_deposit_cents > 0;
   const isProjectActive = project.status === 'active';
   const isProjectCompleted = project.status === 'completed';
+  
+  const paidUnappliedDeposits = deposits.filter(d => d.status === 'paid' && d.applied_to_invoice_id === null);
+  const pendingMilestones = project.milestones.filter(m => m.status === 'pending');
 
   return (
     <AdminLayout>
@@ -1105,6 +1155,59 @@ const AdminProjectDetail: React.FC = () => {
                         Current Status: {project.deposit_paid ? 'Paid' : 'Unpaid'}
                     </p>
                 </div>
+                
+                {/* Deposit Application Form */}
+                {paidUnappliedDeposits.length > 0 && pendingMilestones.length > 0 && (
+                    <div className="mb-6 p-4 bg-emerald-50 border border-emerald-200 rounded-lg">
+                        <h3 className="font-bold text-sm mb-3 flex items-center gap-2 text-emerald-800">
+                            <Zap className="w-4 h-4" /> Apply Paid Deposit to Milestone
+                        </h3>
+                        <form onSubmit={handleApplyDepositToMilestone} className="space-y-3">
+                            <div>
+                                <label className="block text-xs font-medium text-slate-700 mb-1">Select Paid Deposit</label>
+                                <select
+                                    value={selectedDepositId}
+                                    onChange={(e) => setSelectedDepositId(e.target.value)}
+                                    className="w-full p-2 border border-slate-300 rounded-lg text-sm"
+                                    required
+                                    disabled={isUpdating}
+                                >
+                                    <option value="">-- Select Deposit --</option>
+                                    {paidUnappliedDeposits.map(deposit => (
+                                        <option key={deposit.id} value={deposit.id}>
+                                            ${(deposit.amount_cents / 100).toFixed(2)} - {format(new Date(deposit.created_at), 'MMM dd')}
+                                        </option>
+                                    ))}
+                                </select>
+                            </div>
+                            <div>
+                                <label className="block text-xs font-medium text-slate-700 mb-1">Select Pending Milestone</label>
+                                <select
+                                    value={selectedMilestoneId}
+                                    onChange={(e) => setSelectedMilestoneId(e.target.value)}
+                                    className="w-full p-2 border border-slate-300 rounded-lg text-sm"
+                                    required
+                                    disabled={isUpdating}
+                                >
+                                    <option value="">-- Select Milestone --</option>
+                                    {pendingMilestones.map(milestone => (
+                                        <option key={milestone.id} value={milestone.id}>
+                                            {milestone.order_index}. {milestone.name} (${(milestone.amount_cents / 100).toFixed(2)})
+                                        </option>
+                                    ))}
+                                </select>
+                            </div>
+                            <button 
+                                type="submit"
+                                disabled={isUpdating || !selectedDepositId || !selectedMilestoneId}
+                                className="w-full py-2 bg-emerald-600 text-white rounded-lg text-sm font-semibold hover:bg-emerald-700 transition-colors disabled:opacity-50 flex items-center justify-center gap-2"
+                            >
+                                {isUpdating ? <Loader2 className="w-4 h-4 animate-spin" /> : <CheckCircle2 className="w-4 h-4" />}
+                                Apply Deposit & Mark Paid
+                            </button>
+                        </form>
+                    </div>
+                )}
 
                 {/* Milestones List */}
                 <div className="space-y-3 mb-6">
@@ -1128,7 +1231,12 @@ const AdminProjectDetail: React.FC = () => {
                                             <DollarSign className="w-4 h-4" /> Invoice
                                         </button>
                                     )}
-                                    {milestone.stripe_invoice_id && (
+                                    {milestone.stripe_invoice_id && milestone.stripe_invoice_id.startsWith('DEPOSIT_APPLIED_') && (
+                                        <span className="text-purple-600 text-xs font-semibold flex items-center gap-1">
+                                            <Zap className="w-3 h-3" /> Deposit Applied
+                                        </span>
+                                    )}
+                                    {milestone.stripe_invoice_id && !milestone.stripe_invoice_id.startsWith('DEPOSIT_APPLIED_') && (
                                         <a 
                                             href={`https://dashboard.stripe.com/invoices/${milestone.stripe_invoice_id}`} 
                                             target="_blank" 

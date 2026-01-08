@@ -120,4 +120,16 @@ export const AdminService = {
   createBillingProduct: async (productData: { name: string, description: string, amount_cents: number, billing_type: 'one_time' | 'subscription' }) => {
     return invokeEdgeFunction('create-billing-product', productData);
   },
+  
+  applyDepositToMilestone: async (depositId: string, milestoneId: string, projectId: string) => {
+      const { data, error } = await supabase
+          .rpc('apply_deposit_to_milestone', {
+              p_deposit_id: depositId,
+              p_milestone_id: milestoneId,
+              p_project_id: projectId,
+          });
+          
+      if (error) throw error;
+      return data;
+  }
 };
