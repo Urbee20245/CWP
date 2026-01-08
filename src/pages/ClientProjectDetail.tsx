@@ -218,7 +218,7 @@ const ClientProjectDetail: React.FC = () => {
   useEffect(() => {
     // Scroll to bottom whenever the active thread changes or new messages arrive
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
-  }, [activeThreadId, project?.threads.find(t => t.id === activeThreadId)?.messages.length]);
+  }, [activeThreadId, project?.threads?.find(t => t.id === activeThreadId)?.messages?.length]); // Added null checks here
 
   const handleMessageSend = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -358,8 +358,8 @@ const ClientProjectDetail: React.FC = () => {
       }
   };
 
-  const completedTasks = project?.tasks.filter(t => t.status === 'done').length || 0;
-  const totalTasks = project?.tasks.length || 0;
+  const completedTasks = project?.tasks?.filter(t => t.status === 'done').length || 0;
+  const totalTasks = project?.tasks?.length || 0;
   
   const getProgressColor = (percent: number) => {
     if (percent === 100) return 'bg-emerald-600';
@@ -396,7 +396,7 @@ const ClientProjectDetail: React.FC = () => {
     return <div dangerouslySetInnerHTML={{ __html: html }} className="prose max-w-none text-sm text-slate-700" />;
   };
   
-  const activeThread = project?.threads.find(t => t.id === activeThreadId);
+  const activeThread = project?.threads?.find(t => t.id === activeThreadId);
 
   if (isLoading) {
     return (
@@ -550,7 +550,7 @@ const ClientProjectDetail: React.FC = () => {
                 <CheckCircle2 className="w-5 h-5 text-emerald-600" /> Tasks
               </h2>
               <div className="space-y-3">
-                {project.tasks.length > 0 ? (
+                {project.tasks && project.tasks.length > 0 ? (
                   project.tasks.map(task => (
                     <div key={task.id} className="p-3 bg-slate-50 rounded-lg border border-slate-100 flex justify-between items-center">
                       <div>
@@ -613,7 +613,7 @@ const ClientProjectDetail: React.FC = () => {
                     
                     {/* Thread Selector */}
                     <div className="flex gap-3 mb-4 overflow-x-auto pb-2 border-b border-slate-100">
-                        {project.threads.map(thread => (
+                        {project.threads && project.threads.map(thread => (
                             <button
                                 key={thread.id}
                                 onClick={() => setActiveThreadId(thread.id)}
@@ -643,7 +643,7 @@ const ClientProjectDetail: React.FC = () => {
                     
                     {/* Message List */}
                     <div className="h-80 overflow-y-auto space-y-4 p-2 flex flex-col">
-                        {activeThread?.messages.length ? (
+                        {activeThread?.messages?.length ? (
                         activeThread.messages.map(message => (
                             <div key={message.id} className={`flex ${message.sender_profile_id === profile?.id ? 'justify-end' : 'justify-start'}`}>
                                 <div className={`max-w-[85%] p-3 rounded-xl text-sm ${message.sender_profile_id === profile?.id ? 'bg-indigo-600 text-white rounded-br-none' : 'bg-slate-100 text-slate-800 rounded-tl-none'}`}>
@@ -710,7 +710,7 @@ const ClientProjectDetail: React.FC = () => {
                         <DollarSign className="w-5 h-5 text-purple-600" /> Payment Milestones
                     </h2>
                     <div className="space-y-4">
-                        {project.milestones.length > 0 ? (
+                        {project.milestones && project.milestones.length > 0 ? (
                             project.milestones.map(milestone => (
                                 <div key={milestone.id} className="p-3 bg-slate-50 rounded-lg border border-slate-100 flex justify-between items-center">
                                     <div className="flex items-center gap-3">
@@ -743,10 +743,10 @@ const ClientProjectDetail: React.FC = () => {
             {activeTab === 'files' && (
                 <div className="bg-white p-6 rounded-xl shadow-lg border border-slate-100">
                     <h2 className="text-xl font-bold mb-4 flex items-center gap-2 border-b border-slate-100 pb-4">
-                        <FileText className="w-5 h-5 text-purple-600" /> Project Files ({project.files.length})
+                        <FileText className="w-5 h-5 text-purple-600" /> Project Files ({project.files?.length || 0})
                     </h2>
                     <div className="space-y-3">
-                        {project.files.length > 0 ? (
+                        {project.files && project.files.length > 0 ? (
                         project.files.map(file => (
                             <div key={file.id} className="flex justify-between items-center p-3 bg-slate-50 rounded-lg border border-slate-100">
                             <div className="flex items-center gap-3">
