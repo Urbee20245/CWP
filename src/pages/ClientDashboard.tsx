@@ -4,7 +4,7 @@ import React, { useState, useEffect } from 'react';
 import { Link } from 'react-router-dom';
 import { useAuth } from '../hooks/useAuth';
 import { supabase } from '../integrations/supabase/client';
-import { Briefcase, Loader2, LogOut, CheckCircle2, DollarSign, AlertTriangle, MessageSquare } from 'lucide-react';
+import { Briefcase, Loader2, LogOut, CheckCircle2, DollarSign, AlertTriangle, MessageSquare, Users } from 'lucide-react';
 import ClientLayout from '../components/ClientLayout';
 import { ClientBillingService } from '../services/clientBillingService'; // Corrected import path
 
@@ -31,6 +31,7 @@ const ClientDashboard: React.FC = () => {
   const [clientId, setClientId] = useState<string | null>(null);
   const [accessStatus, setAccessStatus] = useState<AccessStatus>({ hasAccess: false, reason: 'restricted' });
   const [showOverdueBanner, setShowOverdueBanner] = useState(true);
+  const [isClientRecordMissing, setIsClientRecordMissing] = useState(false);
 
   useEffect(() => {
     const fetchClientData = async () => {
@@ -44,8 +45,15 @@ const ClientDashboard: React.FC = () => {
         .eq('owner_profile_id', profile.id)
         .single();
 
-      if (clientError || !clientData) {
+      if (clientError && clientError.code !== 'PGRST116') { // PGRST116 is "No rows found"
         console.error('Error fetching client record:', clientError);
+        setIsClientRecordMissing(true);
+        setIsLoading(false);
+        return;
+      }
+      
+      if (!clientData) {
+        setIsClientRecordMissing(true);
         setIsLoading(false);
         return;
       }
@@ -53,6 +61,7 @@ const ClientDashboard: React.FC = () => {
       setClientName(clientData.business_name);
       setClientId(clientData.id);
       const currentClientId = clientData.id;
+      setIsClientRecordMissing(false);
 
       // 2. Check Access Status via Edge Function
       try {
@@ -149,6 +158,20 @@ const ClientDashboard: React.FC = () => {
     </div>
   );
 
+  const renderMissingClientPanel = () => (
+    <div className="max-w-2xl mx-auto p-10 bg-white rounded-xl shadow-2xl border border-red-200 text-center">
+      <Users className="w-16 h-16 text-red-500 mx-auto mb-6" />
+      <h2 className="text-3xl font-bold text-slate-900 mb-4">Client Record Not Found</h2>
+      <p className="text-lg text-slate-600 mb-8">
+        Your user account is not currently linked to a client business record. 
+        If you believe this is an error, please contact your administrator.
+      </p>
+      <button onClick={signOut} className="px-6 py-3 bg-slate-100 text-slate-700 rounded-lg font-semibold hover:bg-slate-200 transition-colors flex items-center justify-center gap-2 mx-auto">
+        <LogOut className="w-5 h-5" /> Sign Out
+      </button>
+    </div>
+  );
+
   const formatGraceDate = (dateString: string) => {
     return new Date(dateString).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
   };
@@ -165,77 +188,81 @@ const ClientDashboard: React.FC = () => {
           </button>
         </div>
 
-        {/* Overdue Warning Banner (Non-blocking) */}
-        {showOverdueBanner && accessStatus.hasAccess && accessStatus.graceUntil && (
-            <div className="p-4 mb-8 bg-amber-50 border border-amber-200 rounded-xl flex justify-between items-center">
-                <div className="flex items-center gap-3">
-                    <AlertTriangle className="w-5 h-5 text-amber-600 flex-shrink-0" />
-                    <p className="text-sm text-amber-800">
-                        <strong>Billing Notice:</strong> Your invoice is overdue. Access will be limited if not resolved by {formatGraceDate(accessStatus.graceUntil || '')}.
-                    </p>
-                </div>
-                <button onClick={() => setShowOverdueBanner(false)} className="text-amber-600 hover:text-amber-800 text-sm font-medium flex-shrink-0">
-                    Dismiss
-                </button>
-            </div>
-        )}
-
-        <div className="bg-white p-6 rounded-xl shadow-lg border border-slate-100 mb-12">
-            <h2 className="text-xl font-bold text-slate-900 mb-2">Business: {clientName}</h2>
-            <p className="text-sm text-slate-500">Your dedicated client portal for tracking project progress and billing.</p>
-        </div>
-
         {isLoading ? (
             <div className="flex justify-center items-center h-64">
               <Loader2 className="w-6 h-6 animate-spin text-indigo-600" />
             </div>
+        ) : isClientRecordMissing ? (
+            renderMissingClientPanel()
         ) : accessStatus.hasAccess ? (
-            /* Projects List (Visible if access is granted) */
-            <div className="bg-white rounded-xl shadow-lg border border-slate-100 p-6">
-              <h2 className="text-xl font-bold text-slate-900 mb-6 flex items-center gap-2">
-                <Briefcase className="w-5 h-5 text-indigo-600" /> Your Projects
-              </h2>
+            <>
+                {/* Overdue Warning Banner (Non-blocking) */}
+                {showOverdueBanner && accessStatus.graceUntil && (
+                    <div className="p-4 mb-8 bg-amber-50 border border-amber-200 rounded-xl flex justify-between items-center">
+                        <div className="flex items-center gap-3">
+                            <AlertTriangle className="w-5 h-5 text-amber-600 flex-shrink-0" />
+                            <p className="text-sm text-amber-800">
+                                <strong>Billing Notice:</strong> Your invoice is overdue. Access will be limited if not resolved by {formatGraceDate(accessStatus.graceUntil || '')}.
+                            </p>
+                        </div>
+                        <button onClick={() => setShowOverdueBanner(false)} className="text-amber-600 hover:text-amber-800 text-sm font-medium flex-shrink-0">
+                            Dismiss
+                        </button>
+                    </div>
+                )}
+                
+                <div className="bg-white p-6 rounded-xl shadow-lg border border-slate-100 mb-12">
+                    <h2 className="text-xl font-bold text-slate-900 mb-2">Business: {clientName}</h2>
+                    <p className="text-sm text-slate-500">Your dedicated client portal for tracking project progress and billing.</p>
+                </div>
 
-              {projects.length === 0 ? (
-                <div className="text-center p-8 bg-slate-50 rounded-lg">
-                    <p className="text-slate-500">No active projects found.</p>
-                </div>
-              ) : (
-                <div className="space-y-6">
-                  {projects.map((project) => (
-                    <Link 
-                      key={project.id} 
-                      to={`/client/projects/${project.id}`}
-                      className="block p-5 border border-slate-200 rounded-xl hover:bg-indigo-50 transition-all hover:shadow-md"
-                    >
-                      <div className="flex justify-between items-start mb-3">
-                        <h3 className="text-lg font-bold text-slate-900">{project.title}</h3>
-                        <div className="flex items-center gap-2">
-                            {project.required_deposit_cents && project.required_deposit_cents > 0 && (
-                                <span className={`px-3 py-1 rounded-full text-xs font-semibold ${project.deposit_paid ? 'bg-emerald-100 text-emerald-800' : 'bg-red-100 text-red-800'}`}>
-                                    {project.deposit_paid ? 'Deposit Paid' : 'Deposit Due'}
+                {/* Projects List (Visible if access is granted) */}
+                <div className="bg-white rounded-xl shadow-lg border border-slate-100 p-6">
+                  <h2 className="text-xl font-bold text-slate-900 mb-6 flex items-center gap-2">
+                    <Briefcase className="w-5 h-5 text-indigo-600" /> Your Projects
+                  </h2>
+
+                  {projects.length === 0 ? (
+                    <div className="text-center p-8 bg-slate-50 rounded-lg">
+                        <p className="text-slate-500">No active projects found.</p>
+                    </div>
+                  ) : (
+                    <div className="space-y-6">
+                      {projects.map((project) => (
+                        <Link 
+                          key={project.id} 
+                          to={`/client/projects/${project.id}`}
+                          className="block p-5 border border-slate-200 rounded-xl hover:bg-indigo-50 transition-all hover:shadow-md"
+                        >
+                          <div className="flex justify-between items-start mb-3">
+                            <h3 className="text-lg font-bold text-slate-900">{project.title}</h3>
+                            <div className="flex items-center gap-2">
+                                {project.required_deposit_cents && project.required_deposit_cents > 0 && (
+                                    <span className={`px-3 py-1 rounded-full text-xs font-semibold ${project.deposit_paid ? 'bg-emerald-100 text-emerald-800' : 'bg-red-100 text-red-800'}`}>
+                                        {project.deposit_paid ? 'Deposit Paid' : 'Deposit Due'}
+                                    </span>
+                                )}
+                                <span className={`px-3 py-1 rounded-full text-xs font-semibold ${project.status === 'completed' ? 'bg-emerald-100 text-emerald-800' : 'bg-indigo-100 text-indigo-800'}`}>
+                                    {project.status.replace('_', ' ')}
                                 </span>
-                            )}
-                            <span className={`px-3 py-1 rounded-full text-xs font-semibold ${project.status === 'completed' ? 'bg-emerald-100 text-emerald-800' : 'bg-indigo-100 text-indigo-800'}`}>
-                                {project.status.replace('_', ' ')}
-                            </span>
-                        </div>
-                      </div>
-                      
-                      <div className="flex items-center gap-4">
-                        <div className="w-full bg-slate-200 rounded-full h-3">
-                          <div 
-                            className={`${getProgressColor(project.progress_percent)} h-3 rounded-full transition-all duration-500`} 
-                            style={{ width: `${project.progress_percent}%` }}
-                          ></div>
-                        </div>
-                        <span className="text-lg font-bold text-slate-900 w-12 text-right">{project.progress_percent}%</span>
-                      </div>
-                    </Link>
-                  ))}
+                            </div>
+                          </div>
+                          
+                          <div className="flex items-center gap-4">
+                            <div className="w-full bg-slate-200 rounded-full h-3">
+                              <div 
+                                className={`${getProgressColor(project.progress_percent)} h-3 rounded-full transition-all duration-500`} 
+                                style={{ width: `${project.progress_percent}%` }}
+                              ></div>
+                            </div>
+                            <span className="text-lg font-bold text-slate-900 w-12 text-right">{project.progress_percent}%</span>
+                          </div>
+                        </Link>
+                      ))}
+                    </div>
+                  )}
                 </div>
-              )}
-            </div>
+            </>
         ) : (
             /* Access Restricted Panel (Visible if access is denied) */
             renderAccessPanel()
