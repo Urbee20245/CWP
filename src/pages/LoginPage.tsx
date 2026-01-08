@@ -3,9 +3,8 @@
 import React, { useState } from 'react';
 import { supabase } from '../integrations/supabase/client';
 import { Bot, Loader2, LogIn, UserPlus } from 'lucide-react';
-
-// Note: We are intentionally NOT using useAuth or useNavigate here, 
-// as per user instructions to keep this page simple and redirect externally.
+import { useNavigate } from 'react-router-dom';
+import { useAuth } from '../hooks/useAuth';
 
 export default function BackOfficeLogin() {
   const [email, setEmail] = useState('');
@@ -14,6 +13,15 @@ export default function BackOfficeLogin() {
   const [error, setError] = useState<string | null>(null);
   const [isSignupMode, setIsSignupMode] = useState(false);
   const [signupSuccess, setSignupSuccess] = useState(false);
+  
+  const navigate = useNavigate();
+  const { user, isLoading } = useAuth(); // Use useAuth to check session status
+
+  // If user is already logged in and session is loaded, redirect immediately
+  if (!isLoading && user) {
+    navigate('/back-office', { replace: true });
+    return null; // Prevent rendering form while redirecting
+  }
 
   async function handleLogin(e: React.FormEvent) {
     e.preventDefault();
@@ -31,8 +39,9 @@ export default function BackOfficeLogin() {
       return;
     }
 
-    // Successful login — redirect handled by the new /back-office route guard
-    window.location.href = '/back-office';
+    // Successful login. The SessionProvider will detect the change and handle the redirect via ProtectedRoute.
+    // We navigate to the protected route which will handle the final destination (/admin/dashboard or /client/dashboard)
+    navigate('/back-office', { replace: true });
   }
 
   async function handleSignup(e: React.FormEvent) {
@@ -61,6 +70,15 @@ export default function BackOfficeLogin() {
     }
 
     setLoading(false);
+  }
+
+  if (isLoading) {
+    // Show a brief loader while checking initial session status
+    return (
+        <div className="min-h-[80vh] flex items-center justify-center pt-20">
+            <Loader2 className="w-8 h-8 animate-spin text-indigo-600" />
+        </div>
+    );
   }
 
   return (
