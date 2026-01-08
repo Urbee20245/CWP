@@ -371,6 +371,7 @@ const ClientProjectDetail: React.FC = () => {
   }
   
   const isDepositRequired = project.required_deposit_cents && project.required_deposit_cents > 0;
+  const isPaused = project.service_status === 'paused' || project.service_status === 'awaiting_payment';
 
   return (
     <ClientLayout>
@@ -688,7 +689,7 @@ const ClientProjectDetail: React.FC = () => {
             {/* Documents Tab */}
             {activeTab === 'documents' && (
                 <div className="bg-white p-6 rounded-xl shadow-lg border border-slate-100">
-                    <h2 className="text-xl font-bold mb-4 flex items-center gap-2 text-slate-900 border-b border-slate-100 pb-4">
+                    <h2 className="text-xl font-bold mb-4 flex items-center gap-2 border-b border-slate-100 pb-4">
                         <Bot className="w-5 h-5 text-emerald-600" /> Shared Documents
                     </h2>
                     

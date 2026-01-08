@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { useParams, Link } from 'react-router-dom';
 import { supabase } from '../integrations/supabase/client';
 import { Loader2, Briefcase, CheckCircle2, MessageSquare, FileText, Upload, Trash2, Plus, ArrowLeft, Clock, AlertTriangle, Download, Send, DollarSign, ExternalLink, Pause, Play } from 'lucide-react';
@@ -108,6 +108,12 @@ const AdminProjectDetail: React.FC = () => {
   // Service Control State
   const [serviceActionNote, setServiceActionNote] = useState('');
   const [pauseLogs, setPauseLogs] = useState<PauseLog[]>([]);
+  
+  const messagesEndRef = useRef<HTMLDivElement>(null);
+
+  const scrollToBottom = () => {
+    messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
+  };
 
   const fetchProjectData = async () => {
     if (!id) return;
@@ -124,7 +130,7 @@ const AdminProjectDetail: React.FC = () => {
         milestones (id, name, amount_cents, status, order_index, stripe_invoice_id)
       `)
       .eq('id', id)
-      .order('created_at', { foreignTable: 'messages', ascending: false })
+      .order('created_at', { foreignTable: 'messages', ascending: true }) // Changed to ascending for chat view
       .order('due_date', { foreignTable: 'tasks', ascending: true })
       .order('order_index', { foreignTable: 'milestones', ascending: true })
       .single();
@@ -178,6 +184,12 @@ const AdminProjectDetail: React.FC = () => {
   useEffect(() => {
     fetchProjectData();
   }, [id]);
+  
+  useEffect(() => {
+    if (project?.messages) {
+        scrollToBottom();
+    }
+  }, [project?.messages]);
 
   const handleProgressUpdate = async () => {
     if (!project) return;
@@ -1121,20 +1133,22 @@ const AdminProjectDetail: React.FC = () => {
               <h2 className="text-xl font-bold mb-4 flex items-center gap-2 border-b border-slate-100 pb-4">
                 <MessageSquare className="w-5 h-5 text-indigo-600" /> Project Messages
               </h2>
-              <div className="h-80 overflow-y-auto space-y-4 flex flex-col-reverse">
+              <div className="h-80 overflow-y-auto space-y-4 p-2 flex flex-col">
                 {project.messages.length > 0 ? (
                   project.messages.map(message => (
-                    <div key={message.id} className="p-3 bg-slate-50 rounded-lg border border-slate-100">
-                      <div className="flex justify-between items-center text-xs text-slate-500 mb-1">
-                        <span className="font-semibold text-slate-700">{message.profiles.full_name}</span>
-                        <span>{new Date(message.created_at).toLocaleString()}</span>
-                      </div>
-                      <p className="text-sm text-slate-800">{message.body}</p>
+                    <div key={message.id} className={`flex ${message.sender_profile_id === (supabase.auth.getUser() as any).data.user?.id ? 'justify-end' : 'justify-start'}`}>
+                        <div className={`max-w-[85%] p-3 rounded-xl text-sm ${message.sender_profile_id === (supabase.auth.getUser() as any).data.user?.id ? 'bg-indigo-600 text-white rounded-br-none' : 'bg-slate-100 text-slate-800 rounded-tl-none'}`}>
+                            <div className={`text-xs mb-1 ${message.sender_profile_id === (supabase.auth.getUser() as any).data.user?.id ? 'text-indigo-200' : 'text-slate-500'}`}>
+                                {message.sender_profile_id === (supabase.auth.getUser() as any).data.user?.id ? 'You' : message.profiles.full_name} - {new Date(message.created_at).toLocaleTimeString()}
+                            </div>
+                            {message.body}
+                        </div>
                     </div>
                   ))
                 ) : (
                   <div className="flex-1 flex items-center justify-center text-slate-500">Start the conversation!</div>
                 )}
+                <div ref={messagesEndRef} />
               </div>
               <form onSubmit={handleMessageSend} className="mt-4 flex gap-2">
                 <textarea
