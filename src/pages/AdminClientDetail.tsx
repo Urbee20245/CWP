@@ -69,6 +69,8 @@ interface Client {
   stripe_customer_id: string | null;
   billing_email: string | null;
   service_status: ClientServiceStatus; // New field
+  cancellation_reason: string | null; // New field
+  cancellation_effective_date: string | null; // New field
   profiles: Profile;
   projects: ProjectSummary[];
   invoices: InvoiceSummary[];
@@ -122,7 +124,7 @@ const AdminClientDetail: React.FC = () => {
     const { data, error } = await supabase
       .from('clients')
       .select(`
-          id, business_name, phone, address, status, notes, owner_profile_id, stripe_customer_id, billing_email, service_status,
+          id, business_name, phone, address, status, notes, owner_profile_id, stripe_customer_id, billing_email, service_status, cancellation_reason, cancellation_effective_date,
           profiles (id, full_name, email, role),
           projects (id, title, status, progress_percent),
           invoices (id, amount_due, status, hosted_invoice_url, pdf_url, created_at, last_reminder_sent_at, disable_reminders),
@@ -192,6 +194,9 @@ const AdminClientDetail: React.FC = () => {
                 // Only update timestamps if pausing/resuming
                 service_paused_at: action === 'paused' ? new Date().toISOString() : null,
                 service_resumed_at: action === 'resumed' ? new Date().toISOString() : null,
+                // Clear cancellation details if resuming
+                cancellation_reason: action === 'resumed' ? null : client.cancellation_reason,
+                cancellation_effective_date: action === 'resumed' ? null : client.cancellation_effective_date,
             })
             .eq('id', client.id);
             
@@ -595,6 +600,14 @@ const AdminClientDetail: React.FC = () => {
                         {client.service_status.replace('_', ' ')}
                     </span>
                 </div>
+                
+                {client.service_status === 'paused' && client.cancellation_effective_date && (
+                    <div className="mb-4 p-3 bg-red-50 border border-red-200 rounded-lg">
+                        <p className="text-xs text-red-800 uppercase font-semibold mb-1">Cancellation Details</p>
+                        <p className="text-sm text-red-700">Effective Date: {format(new Date(client.cancellation_effective_date), 'MMM dd, yyyy')}</p>
+                        <p className="text-xs text-red-600 mt-1">Reason: {client.cancellation_reason || 'N/A'}</p>
+                    </div>
+                )}
                 
                 <div className="space-y-3 mb-4">
                     <textarea

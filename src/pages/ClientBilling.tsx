@@ -7,7 +7,7 @@ import { Loader2, DollarSign, FileText, ExternalLink, Zap, CreditCard, CheckCirc
 import ClientLayout from '../components/ClientLayout';
 import { ClientBillingService } from '../services/clientBillingService';
 import ServiceStatusBanner from '../components/ServiceStatusBanner';
-import CancelSubscriptionModal from '../components/CancelSubscriptionModal'; // New Import
+import CancelSubscriptionModal from '../components/CancelSubscriptionModal';
 import { format } from 'date-fns';
 
 interface Invoice {
@@ -15,7 +15,7 @@ interface Invoice {
   amount_due: number;
   status: string;
   hosted_invoice_url: string;
-  pdf_url: string | null; // Added pdf_url
+  pdf_url: string | null;
   created_at: string;
 }
 
@@ -24,7 +24,7 @@ interface Subscription {
   stripe_price_id: string;
   status: string;
   current_period_end: string;
-  cancel_at_period_end: boolean; // Added cancel_at_period_end
+  cancel_at_period_end: boolean;
 }
 
 interface Deposit {
@@ -57,6 +57,7 @@ const ClientBilling: React.FC = () => {
   const [isCancelModalOpen, setIsCancelModalOpen] = useState(false);
   const [cancellationTarget, setCancellationTarget] = useState<Subscription | null>(null);
   const [cancellationSuccess, setCancellationSuccess] = useState(false);
+  const [cancellationEffectiveDate, setCancellationEffectiveDate] = useState<string | null>(null);
 
 
   const fetchBillingData = async () => {
@@ -66,7 +67,7 @@ const ClientBilling: React.FC = () => {
     // 1. Find the client record associated with the user's profile ID
     const { data: clientData, error: clientError } = await supabase
       .from('clients')
-      .select('id, stripe_customer_id, service_status')
+      .select('id, stripe_customer_id, service_status, cancellation_effective_date')
       .eq('owner_profile_id', profile.id)
       .single();
 
@@ -86,12 +87,13 @@ const ClientBilling: React.FC = () => {
     const clientId = clientData.id;
     setStripeCustomerId(clientData.stripe_customer_id);
     setClientServiceStatus(clientData.service_status as any);
+    setCancellationEffectiveDate(clientData.cancellation_effective_date);
     setIsClientRecordMissing(false);
 
     // 2. Fetch invoices for that client ID
     const { data: invoicesData, error: invoicesError } = await supabase
       .from('invoices')
-      .select('id, amount_due, status, hosted_invoice_url, pdf_url, created_at') // Added pdf_url
+      .select('id, amount_due, status, hosted_invoice_url, pdf_url, created_at')
       .eq('client_id', clientId)
       .order('created_at', { ascending: false });
 
@@ -104,7 +106,7 @@ const ClientBilling: React.FC = () => {
     // 3. Fetch subscriptions for that client ID
     const { data: subscriptionsData, error: subscriptionsError } = await supabase
       .from('subscriptions')
-      .select('id, stripe_price_id, status, current_period_end, cancel_at_period_end') // Added cancel_at_period_end
+      .select('id, stripe_price_id, status, current_period_end, cancel_at_period_end')
       .eq('client_id', clientId)
       .order('created_at', { ascending: false });
 
@@ -176,8 +178,11 @@ const ClientBilling: React.FC = () => {
       setIsProcessing(true);
       
       try {
-          await ClientBillingService.cancelSubscription(cancellationTarget.id);
+          const result = await ClientBillingService.cancelSubscription(cancellationTarget.id);
+          
           setCancellationSuccess(true);
+          setCancellationEffectiveDate(result.cancellation_effective_date);
+          
           // Re-fetch data to update subscription status and client service status
           await fetchBillingData();
           
@@ -275,8 +280,12 @@ const ClientBilling: React.FC = () => {
                                 </p>
                                 
                                 {activeSubscription.cancel_at_period_end ? (
-                                    <div className="text-sm text-red-600 font-semibold pt-3 border-t border-slate-200 flex items-center gap-2">
-                                        <X className="w-4 h-4" /> Cancellation Pending
+                                    <div className="text-sm text-red-600 font-semibold pt-3 border-t border-slate-200 flex flex-col items-start gap-1">
+                                        <div className="flex items-center gap-2">
+                                            <X className="w-4 h-4" /> 
+                                            <span>Cancellation Pending</span>
+                                        </div>
+                                        <span className="text-xs text-slate-500">Service ends: {cancellationEffectiveDate ? format(new Date(cancellationEffectiveDate), 'MMM dd, yyyy') : 'N/A'}</span>
                                     </div>
                                 ) : (
                                     <button 

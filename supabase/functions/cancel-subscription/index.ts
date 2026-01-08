@@ -76,11 +76,20 @@ serve(async (req) => {
       cancel_at_period_end: true,
     });
 
-    // 4. Update client service status to 'paused' (using Admin client)
+    // Determine cancellation effective date (end of current period)
+    const cancellationEffectiveDate = canceledSubscription.current_period_end 
+        ? new Date(canceledSubscription.current_period_end * 1000).toISOString() 
+        : new Date().toISOString();
+
+    // 4. Update client service status to 'paused' and log cancellation details (using Admin client)
     // This ensures the client portal shows the "Service Paused" banner immediately.
     const { error: clientUpdateError } = await supabaseAdmin
         .from('clients')
-        .update({ service_status: 'paused' })
+        .update({ 
+            service_status: 'paused',
+            cancellation_reason: 'client_requested',
+            cancellation_effective_date: cancellationEffectiveDate,
+        })
         .eq('id', clientId);
         
     if (clientUpdateError) {
@@ -94,6 +103,7 @@ serve(async (req) => {
       success: true, 
       subscription_status: canceledSubscription.status,
       cancel_at_period_end: canceledSubscription.cancel_at_period_end,
+      cancellation_effective_date: cancellationEffectiveDate,
     });
 
   } catch (error: any) {
