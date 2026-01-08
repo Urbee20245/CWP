@@ -33,7 +33,7 @@ serve(async (req) => {
   try {
     const { client_id, price_id, line_items, due_date, deposit_details, milestone_details, project_id, amount_cents, description, success_url, cancel_url } = await req.json();
 
-    if (path !== '/create-portal-session' && path !== '/create-deposit-checkout' && !client_id) {
+    if (path !== '/create-portal-session' && !client_id) {
       return errorResponse('Client ID is required.', 400);
     }
 
@@ -317,41 +317,6 @@ serve(async (req) => {
           hosted_url: finalizedInvoice.hosted_invoice_url,
           status: finalizedInvoice.status,
         });
-      }
-      
-      case '/create-deposit-checkout': {
-        if (!project_id || !amount_cents || !description || !success_url || !cancel_url) {
-            return errorResponse('Missing required checkout fields.', 400);
-        }
-        
-        const customerId = await ensureStripeCustomer();
-        
-        console.log(`[create-deposit-checkout] Creating checkout session for client ${client_id}, project ${project_id}`);
-
-        const session = await stripe.checkout.sessions.create({
-            customer: customerId,
-            mode: 'payment',
-            line_items: [{
-                price_data: {
-                    currency: 'usd',
-                    product_data: {
-                        name: description,
-                        description: `Project Deposit for ${client.business_name}`,
-                    },
-                    unit_amount: amount_cents,
-                },
-                quantity: 1,
-            }],
-            success_url: success_url,
-            cancel_url: cancel_url,
-            metadata: {
-                supabase_client_id: client_id,
-                supabase_project_id: project_id,
-                payment_type: 'deposit',
-            },
-        });
-
-        return jsonResponse({ checkout_url: session.url });
       }
       
       case '/create-milestone-invoice': {

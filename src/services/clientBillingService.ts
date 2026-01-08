@@ -29,7 +29,8 @@ export const ClientBillingService = {
   },
   
   createDepositCheckoutSession: async (clientId: string, projectId: string, amountCents: number, description: string, successUrl: string, cancelUrl: string) => {
-    return invokeEdgeFunction('stripe-api/create-deposit-checkout', { 
+    // Calling the dedicated Edge Function
+    return invokeEdgeFunction('create-deposit-checkout', { 
         client_id: clientId, 
         project_id: projectId,
         amount_cents: amountCents,
