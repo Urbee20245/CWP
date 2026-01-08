@@ -1,9 +1,9 @@
 "use client";
 
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import { useParams, Link } from 'react-router-dom';
 import { supabase } from '../integrations/supabase/client';
-import { Loader2, Briefcase, FileText, DollarSign, Plus, CreditCard, Zap, ExternalLink, ShieldCheck, Lock, Trash2, Send } from 'lucide-react';
+import { Loader2, Briefcase, FileText, DollarSign, Plus, CreditCard, Zap, ExternalLink, ShieldCheck, Lock, Trash2, Send, AlertCircle } from 'lucide-react';
 import AdminLayout from '../components/AdminLayout';
 import { Profile } from '../types/auth';
 import { BillingService } from '../services/billingService';
@@ -80,7 +80,7 @@ const AdminClientDetail: React.FC = () => {
   const [overrideNote, setOverrideNote] = useState('');
   const [isSavingAccess, setIsSavingAccess] = useState(false);
 
-  const fetchClientData = async () => {
+  const fetchClientData = useCallback(async () => {
     if (!id) return;
 
     const { data, error } = await supabase
@@ -105,7 +105,7 @@ const AdminClientDetail: React.FC = () => {
       setOverrideNote(clientData.access_override_note || '');
     }
     setIsLoading(false);
-  };
+  }, [id]);
   
   const fetchProducts = async () => {
     const { data, error } = await supabase
@@ -124,7 +124,7 @@ const AdminClientDetail: React.FC = () => {
     setIsLoading(true);
     fetchClientData();
     fetchProducts();
-  }, [id]);
+  }, [id, fetchClientData]);
 
   const getStatusColor = (status: string) => {
     switch (status) {
@@ -289,8 +289,15 @@ const AdminClientDetail: React.FC = () => {
     try {
         // Use the mock notification service for client-side simulation/admin trigger
         // Note: This uses the client-side mock, the server-side function handles real automation
-        await sendBillingNotification(client.billing_email, client.business_name, stage, graceDate);
-        alert(`Manual reminder (Stage ${stage}) sent to ${client.billing_email}.`);
+        // We need to ensure the mock function is correctly imported or defined if used client-side.
+        // Since sendBillingNotification is imported from a shared edge function file, 
+        // we should assume it's a mock or remove it if it causes issues client-side.
+        // For now, we'll use a simple alert as a placeholder for the mock service.
+        alert(`Manual reminder (Stage ${stage}) simulated for ${client.billing_email}. Grace period ends ${graceDate}.`);
+        
+        // In a real scenario, we might call a dedicated edge function to trigger the email:
+        // await BillingService.sendManualReminder(client.id, stage);
+        
     } catch (e: any) {
         alert(`Failed to send reminder: ${e.message}`);
     }
@@ -330,7 +337,7 @@ const AdminClientDetail: React.FC = () => {
           ← Back to Clients
         </Link>
         <h1 className="text-3xl font-bold text-slate-900 mb-2">{client.business_name}</h1>
-        <p className="text-slate-500 mb-8">Contact: {client.profiles.full_name} ({client.profiles.email})</p>
+        <p className="text-slate-500 mb-8">Contact: {client.profiles?.full_name || 'N/A'} ({client.profiles?.email || 'N/A'})</p>
 
         {/* Tabs Navigation */}
         <div className="border-b border-slate-200 mb-8">
@@ -386,10 +393,10 @@ const AdminClientDetail: React.FC = () => {
             <div className="lg:col-span-3 space-y-8">
               <div className="bg-white p-6 rounded-xl shadow-lg border border-slate-100">
                 <h2 className="text-xl font-bold mb-4 flex items-center gap-2 text-slate-900 border-b border-slate-100 pb-4">
-                  <Briefcase className="w-5 h-5 text-emerald-600" /> Projects ({client.projects.length})
+                  <Briefcase className="w-5 h-5 text-emerald-600" /> Projects ({client.projects?.length || 0})
                 </h2>
                 <div className="space-y-4">
-                  {client.projects.length > 0 ? (
+                  {client.projects && client.projects.length > 0 ? (
                     client.projects.map(project => (
                       <Link 
                         key={project.id} 
@@ -731,10 +738,10 @@ const AdminClientDetail: React.FC = () => {
                 {/* Invoice List */}
                 <div className="bg-white p-6 rounded-xl shadow-lg border border-slate-100">
                   <h2 className="text-xl font-bold mb-4 flex items-center gap-2 text-slate-900 border-b border-slate-100 pb-4">
-                    <FileText className="w-5 h-5 text-purple-600" /> Invoice History ({client.invoices.length})
+                    <FileText className="w-5 h-5 text-purple-600" /> Invoice History ({client.invoices?.length || 0})
                   </h2>
                   <div className="space-y-3">
-                    {client.invoices.length > 0 ? (
+                    {client.invoices && client.invoices.length > 0 ? (
                       client.invoices.sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime()).map(invoice => (
                         <div key={invoice.id} className="flex justify-between items-center text-sm p-3 bg-slate-50 rounded-lg border border-slate-100">
                           <span className="font-medium text-slate-900">${(invoice.amount_due / 100).toFixed(2)} USD</span>
