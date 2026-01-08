@@ -14,8 +14,8 @@ import SessionProvider from './src/context/SessionProvider';
 import LoginPage from './src/pages/LoginPage';
 import ProtectedRoute from './src/components/ProtectedRoute';
 import AdminDashboard from './src/pages/AdminDashboard';
-import AdminClientList from './src/pages/AdminClientList'; // <-- New Import
-import AdminProjectList from './src/pages/AdminProjectList'; // <-- New Import
+import AdminClientList from './src/pages/AdminClientList';
+import AdminProjectList from './src/pages/AdminProjectList';
 import ClientDashboard from './src/pages/ClientDashboard';
 import AdminClientDetail from './src/pages/AdminClientDetail';
 import AdminProjectDetail from './src/pages/AdminProjectDetail';
@@ -24,6 +24,7 @@ import ClientBilling from './src/pages/ClientBilling';
 import BackOfficeRedirect from './src/pages/BackOfficeRedirect';
 import AdminBillingProducts from './src/pages/AdminBillingProducts';
 import AdminRevenueDashboard from './src/pages/AdminRevenueDashboard';
+import AdminSettingsPage from './src/pages/AdminSettingsPage'; // New Import
 
 // Component that uses useLocation to conditionally render global elements
 const AppContent: React.FC = () => {
@@ -59,12 +60,13 @@ const AppContent: React.FC = () => {
         {/* Admin Routes */}
         <Route path="/admin/*" element={<ProtectedRoute allowedRoles={['admin']} />}>
           <Route path="dashboard" element={<AdminDashboard />} />
-          <Route path="clients" element={<AdminClientList />} /> {/* <-- New Client List Route */}
+          <Route path="clients" element={<AdminClientList />} />
           <Route path="clients/:id" element={<AdminClientDetail />} />
-          <Route path="projects" element={<AdminProjectList />} /> {/* <-- New Project List Route */}
+          <Route path="projects" element={<AdminProjectList />} />
           <Route path="projects/:id" element={<AdminProjectDetail />} />
           <Route path="billing/products" element={<AdminBillingProducts />} />
           <Route path="billing/revenue" element={<AdminRevenueDashboard />} />
+          <Route path="settings" element={<AdminSettingsPage />} /> {/* New Settings Route */}
         </Route>
 
         {/* Client Routes */}
