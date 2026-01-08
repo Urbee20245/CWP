@@ -1,17 +1,9 @@
 import React from 'react';
-import { BrowserRouter, Routes, Route } from 'react-router-dom';
+import { BrowserRouter, Routes, Route, useLocation } from 'react-router-dom';
 import Header from './components/Header';
-import Hero from './components/Hero';
-import ProblemSolution from './components/ProblemSolution';
-import JetOptimizer from './components/JetOptimizer';
-import JetViz from './components/JetViz';
-import Services from './components/Services';
-import TrustAuthority from './components/TrustAuthority';
-import Stats from './components/Stats';
-import Process from './components/ProcessPage';
-import Contact from './components/Contact';
 import Footer from './components/Footer';
 import VoiceAgent from './components/VoiceAgent';
+import Home from './src/pages/Home';
 import JetLocalOptimizerPage from './components/JetLocalOptimizerPage';
 import JetVizPage from './components/JetVizPage';
 import JetSuitePage from './components/JetSuitePage';
@@ -28,60 +20,63 @@ import ClientProjectDetail from './src/pages/ClientProjectDetail';
 import ClientBilling from './src/pages/ClientBilling';
 import BackOfficeRedirect from './src/pages/BackOfficeRedirect';
 
-const Home = () => (
-  <main>
-    <Hero />
-    <ProblemSolution />
-    {/* Tools Section */}
-    <JetOptimizer />
-    <JetViz />
-    <Services />
-    <TrustAuthority />
-    <Stats />
-    <Process />
-    <Contact />
-  </main>
-);
+// Component that uses useLocation to conditionally render global elements
+const AppContent: React.FC = () => {
+  const location = useLocation();
+  const isLoginPage = location.pathname === '/login';
+  
+  // Check if we are on an admin/client route (which use their own layouts)
+  const isBackOfficeRoute = location.pathname.startsWith('/admin') || location.pathname.startsWith('/client') || location.pathname.startsWith('/back-office');
+  
+  // We only want the global components (Header, Footer, VoiceAgent) on public pages, excluding login.
+  const showGlobalComponents = !isBackOfficeRoute;
+
+  return (
+    <div className="min-h-screen bg-slate-50 font-sans selection:bg-blue-100 selection:text-blue-900">
+      {showGlobalComponents && !isLoginPage && <Header />}
+      
+      <Routes>
+        {/* Public Routes */}
+        <Route path="/" element={<Home />} />
+        <Route path="/services" element={<ServicesPage />} />
+        <Route path="/process" element={<Process />} />
+        <Route path="/contact" element={<ContactPage />} />
+        <Route path="/jetsuite" element={<JetSuitePage />} />
+        <Route path="/jetviz" element={<JetVizPage />} />
+        <Route path="/jet-local-optimizer" element={<JetLocalOptimizerPage />} />
+        <Route path="/login" element={<LoginPage />} />
+        
+        {/* Protected Redirect Route */}
+        <Route path="/back-office" element={<ProtectedRoute allowedRoles={['admin', 'client']} />}>
+          <Route index element={<BackOfficeRedirect />} />
+        </Route>
+
+        {/* Admin Routes */}
+        <Route path="/admin/*" element={<ProtectedRoute allowedRoles={['admin']} />}>
+          <Route path="dashboard" element={<AdminDashboard />} />
+          <Route path="clients/:id" element={<AdminClientDetail />} />
+          <Route path="projects/:id" element={<AdminProjectDetail />} />
+        </Route>
+
+        {/* Client Routes */}
+        <Route path="/client/*" element={<ProtectedRoute allowedRoles={['client']} />}>
+          <Route path="dashboard" element={<ClientDashboard />} />
+          <Route path="projects/:id" element={<ClientProjectDetail />} />
+          <Route path="billing" element={<ClientBilling />} />
+        </Route>
+      </Routes>
+      
+      {showGlobalComponents && <Footer />}
+      {showGlobalComponents && <VoiceAgent />}
+    </div>
+  );
+};
 
 const App: React.FC = () => {
   return (
     <BrowserRouter>
       <SessionProvider>
-        <div className="min-h-screen bg-slate-50 font-sans selection:bg-blue-100 selection:text-blue-900">
-          <Header />
-          <Routes>
-            {/* Public Routes */}
-            <Route path="/" element={<Home />} />
-            <Route path="/services" element={<ServicesPage />} />
-            <Route path="/process" element={<Process />} />
-            <Route path="/contact" element={<ContactPage />} />
-            <Route path="/jetsuite" element={<JetSuitePage />} />
-            <Route path="/jetviz" element={<JetVizPage />} />
-            <Route path="/jet-local-optimizer" element={<JetLocalOptimizerPage />} />
-            <Route path="/login" element={<LoginPage />} />
-            
-            {/* New Protected Redirect Route */}
-            <Route path="/back-office" element={<ProtectedRoute allowedRoles={['admin', 'client']} />}>
-              <Route index element={<BackOfficeRedirect />} />
-            </Route>
-
-            {/* Admin Routes */}
-            <Route path="/admin/*" element={<ProtectedRoute allowedRoles={['admin']} />}>
-              <Route path="dashboard" element={<AdminDashboard />} />
-              <Route path="clients/:id" element={<AdminClientDetail />} />
-              <Route path="projects/:id" element={<AdminProjectDetail />} />
-            </Route>
-
-            {/* Client Routes */}
-            <Route path="/client/*" element={<ProtectedRoute allowedRoles={['client']} />}>
-              <Route path="dashboard" element={<ClientDashboard />} />
-              <Route path="projects/:id" element={<ClientProjectDetail />} />
-              <Route path="billing" element={<ClientBilling />} />
-            </Route>
-          </Routes>
-          <Footer />
-          <VoiceAgent />
-        </div>
+        <AppContent />
       </SessionProvider>
     </BrowserRouter>
   );

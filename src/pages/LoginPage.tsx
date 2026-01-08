@@ -82,13 +82,13 @@ export default function LoginPage() {
   }
 
   return (
-    <div className="min-h-screen bg-slate-50 pt-32 pb-12 flex justify-center">
+    <div className="min-h-screen bg-slate-50 pt-24 pb-12 flex justify-center">
       <div className="w-full max-w-md p-8 bg-white rounded-2xl shadow-xl border border-slate-200 h-fit">
         <div className="text-center mb-8">
           <div className="w-12 h-12 bg-slate-900 rounded-full flex items-center justify-center mx-auto mb-3">
             <Bot className="w-6 h-6 text-indigo-400" />
           </div>
-          <h1 className="text-2xl font-bold text-slate-900">{isSignupMode ? 'Create Account' : 'Login'}</h1>
+          <h1 className="text-2xl font-bold text-slate-900">{isSignupMode ? 'Create Account' : 'Portal Login'}</h1>
           <p className="text-sm text-slate-500">Access your client portal or admin dashboard.</p>
         </div>
 
