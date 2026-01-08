@@ -13,7 +13,13 @@ export default defineConfig(({ mode }) => {
       define: {
         'process.env.API_KEY': JSON.stringify(env.VITE_GEMINI_API_KEY || env.GEMINI_API_KEY),
         'process.env.GEMINI_API_KEY': JSON.stringify(env.VITE_GEMINI_API_KEY || env.GEMINI_API_KEY),
-        'process.env.GEMINI_MODEL': JSON.stringify(env.VITE_GEMINI_MODEL || env.GEMINI_MODEL)
+        'process.env.GEMINI_MODEL': JSON.stringify(env.VITE_GEMINI_MODEL || env.GEMINI_MODEL),
+        // Supabase variables
+        'import.meta.env.VITE_SUPABASE_URL': JSON.stringify(env.VITE_SUPABASE_URL),
+        'import.meta.env.VITE_SUPABASE_ANON_KEY': JSON.stringify(env.VITE_SUPABASE_ANON_KEY),
+        // Dev Admin Bypass variables
+        'import.meta.env.VITE_DEV_ADMIN_MODE': JSON.stringify(env.VITE_DEV_ADMIN_MODE),
+        'import.meta.env.VITE_DEV_ADMIN_EMAIL': JSON.stringify(env.VITE_DEV_ADMIN_EMAIL),
       },
       resolve: {
         alias: {
