@@ -141,8 +141,12 @@ const AdminDashboard: React.FC = () => {
                 </thead>
                 <tbody className="bg-white divide-y divide-slate-100">
                   {clients.map((client) => (
-                    <tr key={client.id} className="hover:bg-slate-50">
-                      <td className="px-4 py-4 whitespace-nowrap text-sm font-medium text-slate-900">{client.business_name}</td>
+                    <tr key={client.id} className="hover:bg-slate-50 cursor-pointer">
+                      <td className="px-4 py-4 whitespace-nowrap text-sm font-medium text-indigo-600 hover:text-indigo-800">
+                        <Link to={`/admin/clients/${client.id}`} className="block">
+                            {client.business_name}
+                        </Link>
+                      </td>
                       <td className="px-4 py-4 whitespace-nowrap text-sm text-slate-600">{client.owner_name}</td>
                       <td className="px-4 py-4 whitespace-nowrap text-sm text-slate-600">{client.project_count}</td>
                       <td className="px-4 py-4 whitespace-nowrap">
