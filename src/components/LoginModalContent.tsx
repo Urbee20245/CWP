@@ -170,7 +170,6 @@ export default function LoginModalContent({ onLoginSuccess }: LoginModalContentP
                 </div>
             </form>
         )}
-      </div>
     </div>
   );
 }
