@@ -2,7 +2,7 @@
 
 import React, { useState } from 'react';
 import { supabase } from '../integrations/supabase/client';
-import { Bot, Loader2, LogIn, UserPlus } from 'lucide-react';
+import { Loader2, LogIn, UserPlus } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../hooks/useAuth';
 
@@ -72,22 +72,14 @@ export default function LoginPage() {
     setLoading(false);
   }
 
+  // AuthLayout handles the global loading state (isLoading)
   if (isLoading) {
-    // Show a brief loader while checking initial session status
-    return (
-        <div className="min-h-[80vh] flex items-center justify-center pt-20">
-            <Loader2 className="w-8 h-8 animate-spin text-indigo-600" />
-        </div>
-    );
+    return null; 
   }
 
   return (
-    <div className="min-h-screen bg-slate-50 pt-24 pb-12 flex justify-center">
-      <div className="w-full max-w-md p-8 bg-white rounded-2xl shadow-xl border border-slate-200 h-fit">
+    <div className="w-full p-8 bg-white rounded-2xl shadow-xl border border-slate-200 h-fit">
         <div className="text-center mb-8">
-          <div className="w-12 h-12 bg-slate-900 rounded-full flex items-center justify-center mx-auto mb-3">
-            <Bot className="w-6 h-6 text-indigo-400" />
-          </div>
           <h1 className="text-2xl font-bold text-slate-900">{isSignupMode ? 'Create Account' : 'Portal Login'}</h1>
           <p className="text-sm text-slate-500">Access your client portal or admin dashboard.</p>
         </div>
@@ -165,6 +157,5 @@ export default function LoginPage() {
             </form>
         )}
       </div>
-    </div>
   );
 }
