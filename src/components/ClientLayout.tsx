@@ -15,6 +15,7 @@ const ClientLayout: React.FC<ClientLayoutProps> = ({ children }) => {
   const navItems = [
     { name: 'Dashboard', href: '/client/dashboard', icon: Briefcase },
     { name: 'Billing', href: '/client/billing', icon: DollarSign },
+    { name: 'My Profile', href: '/client/profile', icon: User }, // Added Profile Link
   ];
 
   return (

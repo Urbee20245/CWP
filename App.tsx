@@ -32,7 +32,8 @@ import NotFoundPage from './src/pages/NotFoundPage';
 import ErrorBoundary from './src/components/ErrorBoundary';
 import GlobalLoading from './src/components/GlobalLoading';
 import { useAuth } from './src/hooks/useAuth';
-import LoginPage from './src/pages/Login'; // New Import
+import LoginPage from './src/pages/Login';
+import ClientProfile from './src/pages/ClientProfile'; // New Import
 
 // Component that uses useLocation to conditionally render global elements
 const AppContent: React.FC = () => {
@@ -94,6 +95,7 @@ const AppContent: React.FC = () => {
           <Route path="dashboard" element={<ClientDashboard />} />
           <Route path="projects/:id" element={<ClientProjectDetail />} />
           <Route path="billing" element={<ClientBilling />} />
+          <Route path="profile" element={<ClientProfile />} /> {/* New Route */}
         </Route>
         
         {/* Global 404 Fallback */}
