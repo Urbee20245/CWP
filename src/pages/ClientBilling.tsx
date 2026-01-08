@@ -27,8 +27,8 @@ interface Subscription {
 interface Deposit {
   id: string;
   amount_cents: number;
-  status: 'paid' | 'pending' | 'failed';
-  is_applied: boolean;
+  status: 'paid' | 'pending' | 'failed' | 'applied';
+  applied_to_invoice_id: string | null;
   created_at: string;
 }
 
@@ -109,7 +109,7 @@ const ClientBilling: React.FC = () => {
     // 4. Fetch deposits for that client ID
     const { data: depositsData, error: depositsError } = await supabase
         .from('deposits')
-        .select('id, amount_cents, status, is_applied, created_at')
+        .select('id, amount_cents, status, applied_to_invoice_id, created_at')
         .eq('client_id', clientId)
         .order('created_at', { ascending: false });
         
@@ -179,7 +179,7 @@ const ClientBilling: React.FC = () => {
   
   const activeSubscription = subscriptions.find(sub => sub.status === 'active' || sub.status === 'trialing');
   
-  const unappliedDeposits = deposits.filter(d => d.status === 'paid' && !d.is_applied);
+  const unappliedDeposits = deposits.filter(d => d.status === 'paid' && !d.applied_to_invoice_id);
   const totalUnappliedCredit = unappliedDeposits.reduce((sum, d) => sum + d.amount_cents, 0) / 100;
 
   if (isClientRecordMissing) {
@@ -298,7 +298,7 @@ const ClientBilling: React.FC = () => {
                                                 <td className="px-4 py-4 whitespace-nowrap text-sm text-slate-600">{new Date(invoice.created_at).toLocaleDateString()}</td>
                                                 <td className="px-4 py-4 whitespace-nowrap text-sm font-medium text-slate-900">${(invoice.amount_due / 100).toFixed(2)} USD</td>
                                                 <td className="px-4 py-4 whitespace-nowrap">
-                                                    <span className={`px-2 inline-flex text-xs leading-5 font-semibold rounded-full ${getStatusColor(invoice.status)}`}>
+                                                    <span className={`px-2 py-0.5 rounded-full text-xs font-semibold ${getStatusColor(invoice.status)}`}>
                                                         {invoice.status}
                                                     </span>
                                                 </td>
@@ -345,8 +345,8 @@ const ClientBilling: React.FC = () => {
                                         <span className={`px-2 py-0.5 rounded-full text-xs font-semibold ${getStatusColor(deposit.status)}`}>
                                             {deposit.status}
                                         </span>
-                                        <span className={`px-2 py-0.5 rounded-full text-xs font-semibold ${deposit.is_applied ? 'bg-purple-100 text-purple-800' : 'bg-blue-100 text-blue-800'}`}>
-                                            {deposit.is_applied ? 'Applied' : 'Unapplied Credit'}
+                                        <span className={`px-2 py-0.5 rounded-full text-xs font-semibold ${deposit.applied_to_invoice_id ? 'bg-purple-100 text-purple-800' : 'bg-blue-100 text-blue-800'}`}>
+                                            {deposit.applied_to_invoice_id ? 'Applied' : 'Unapplied Credit'}
                                         </span>
                                         <span className="text-xs text-slate-500">{new Date(deposit.created_at).toLocaleDateString()}</span>
                                     </div>

@@ -39,8 +39,7 @@ interface DepositSummary {
   amount_cents: number;
   status: 'paid' | 'pending' | 'failed' | 'applied';
   stripe_invoice_id: string | null;
-  is_applied: boolean;
-  applied_to_invoice_id: string | null;
+  applied_to_invoice_id: string | null; // Use this to check if applied
   created_at: string;
 }
 
@@ -120,7 +119,7 @@ const AdminClientDetail: React.FC = () => {
           projects (id, title, status, progress_percent),
           invoices (id, amount_due, status, hosted_invoice_url, created_at),
           subscriptions (id, stripe_price_id, status, current_period_end, cancel_at_period_end),
-          deposits (id, amount_cents, status, stripe_invoice_id, is_applied, applied_to_invoice_id, created_at),
+          deposits (id, amount_cents, status, stripe_invoice_id, applied_to_invoice_id, created_at),
           service_pause_logs (id, action, internal_note, client_acknowledged, created_at)
       `)
       .eq('id', id)
@@ -801,7 +800,7 @@ const AdminClientDetail: React.FC = () => {
                                 ${totalUnappliedCredit.toFixed(2)} USD
                             </p>
                             <p className="text-sm text-emerald-700 mt-2">
-                                This amount includes paid and applied deposits and will be automatically applied as a credit to the next invoice created.
+                                This credit will be automatically applied to your next project invoice.
                             </p>
                         </div>
                     )}
