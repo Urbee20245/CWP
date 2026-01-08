@@ -20,6 +20,7 @@ import AdminProjectDetail from './src/pages/AdminProjectDetail';
 import ClientProjectDetail from './src/pages/ClientProjectDetail';
 import ClientBilling from './src/pages/ClientBilling';
 import BackOfficeRedirect from './src/pages/BackOfficeRedirect';
+import AdminBillingProducts from './src/pages/AdminBillingProducts'; // <-- New Import
 
 // Component that uses useLocation to conditionally render global elements
 const AppContent: React.FC = () => {
@@ -40,7 +41,7 @@ const AppContent: React.FC = () => {
         {/* Public Routes */}
         <Route path="/" element={<Home />} />
         <Route path="/services" element={<ServicesPage />} />
-        <Route path="/process" element={<ProcessPage />} /> {/* <-- Use ProcessPage here */}
+        <Route path="/process" element={<ProcessPage />} />
         <Route path="/contact" element={<ContactPage />} />
         <Route path="/jetsuite" element={<JetSuitePage />} />
         <Route path="/jetviz" element={<JetVizPage />} />
@@ -57,6 +58,7 @@ const AppContent: React.FC = () => {
           <Route path="dashboard" element={<AdminDashboard />} />
           <Route path="clients/:id" element={<AdminClientDetail />} />
           <Route path="projects/:id" element={<AdminProjectDetail />} />
+          <Route path="billing/products" element={<AdminBillingProducts />} /> {/* <-- New Route */}
         </Route>
 
         {/* Client Routes */}

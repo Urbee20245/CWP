@@ -37,5 +37,9 @@ export const BillingService = {
   
   checkClientAccess: async (clientId: string): Promise<{ hasAccess: boolean, reason: 'active' | 'overdue' | 'no_subscription' | 'override' | 'restricted' | 'system_error' }> => {
     return invokeEdgeFunction('access-check', { client_id: clientId });
+  },
+  
+  createBillingProduct: async (productData: { name: string, description: string, amount_cents: number, billing_type: 'one_time' | 'subscription' }) => {
+    return invokeEdgeFunction('create-billing-product', productData);
   }
 };

@@ -16,7 +16,7 @@ const AdminLayout: React.FC<AdminLayoutProps> = ({ children }) => {
     { name: 'Dashboard', href: '/admin/dashboard', icon: Bot },
     { name: 'Clients', href: '/admin/dashboard', icon: Users }, // Using dashboard for client list for MVP
     { name: 'Projects', href: '/admin/dashboard', icon: Briefcase },
-    { name: 'Billing', href: '/admin/dashboard', icon: DollarSign },
+    { name: 'Billing Products', href: '/admin/billing/products', icon: DollarSign }, // New link
   ];
 
   return (

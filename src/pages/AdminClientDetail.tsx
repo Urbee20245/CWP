@@ -7,7 +7,6 @@ import { Loader2, Briefcase, FileText, DollarSign, Plus, CreditCard, Zap, Extern
 import AdminLayout from '../components/AdminLayout';
 import { Profile } from '../types/auth';
 import { BillingService } from '../services/billingService';
-import { SUBSCRIPTION_PLANS } from '../config/billing';
 import { sendBillingNotification } from '../../supabase/functions/_shared/notificationService';
 
 interface Client {
@@ -54,6 +53,14 @@ interface SubscriptionSummary {
   cancel_at_period_end: boolean;
 }
 
+interface BillingProduct {
+  id: string;
+  name: string;
+  billing_type: 'one_time' | 'subscription';
+  amount_cents: number;
+  stripe_price_id: string;
+}
+
 const AdminClientDetail: React.FC = () => {
   const { id } = useParams<{ id: string }>();
   const [client, setClient] = useState<Client | null>(null);
@@ -62,7 +69,9 @@ const AdminClientDetail: React.FC = () => {
   
   // Billing State
   const [isProcessing, setIsProcessing] = useState(false);
-  const [selectedPriceId, setSelectedPriceId] = useState('');
+  const [products, setProducts] = useState<BillingProduct[]>([]);
+  const [selectedSubscriptionPriceId, setSelectedSubscriptionPriceId] = useState('');
+  const [selectedOneTimePriceId, setSelectedOneTimePriceId] = useState('');
   const [invoiceItems, setInvoiceItems] = useState([{ description: '', amount: 0 }]);
   const [invoiceDueDate, setInvoiceDueDate] = useState('');
   
@@ -97,10 +106,24 @@ const AdminClientDetail: React.FC = () => {
     }
     setIsLoading(false);
   };
+  
+  const fetchProducts = async () => {
+    const { data, error } = await supabase
+      .from('billing_products')
+      .select('id, name, billing_type, amount_cents, stripe_price_id')
+      .eq('active', true);
+      
+    if (error) {
+        console.error('Error fetching billing products:', error);
+    } else {
+        setProducts(data as BillingProduct[]);
+    }
+  };
 
   useEffect(() => {
     setIsLoading(true);
     fetchClientData();
+    fetchProducts();
   }, [id]);
 
   const getStatusColor = (status: string) => {
@@ -145,10 +168,10 @@ const AdminClientDetail: React.FC = () => {
   };
 
   const handleStartSubscription = async () => {
-    if (!client || !selectedPriceId) return;
+    if (!client || !selectedSubscriptionPriceId) return;
     setIsProcessing(true);
     try {
-      const result = await BillingService.createSubscription(client.id, selectedPriceId);
+      const result = await BillingService.createSubscription(client.id, selectedSubscriptionPriceId);
       alert(`Subscription initiated. Status: ${result.status}`);
       
       if (result.requires_action && result.hosted_invoice_url) {
@@ -198,6 +221,19 @@ const AdminClientDetail: React.FC = () => {
   };
 
   const handleAddInvoiceItem = () => {
+    // If a product is selected, use its details
+    if (selectedOneTimePriceId) {
+        const product = products.find(p => p.stripe_price_id === selectedOneTimePriceId);
+        if (product) {
+            setInvoiceItems(prev => [...prev, { 
+                description: product.name, 
+                amount: product.amount_cents / 100 
+            }]);
+            setSelectedOneTimePriceId(''); // Reset selection after adding
+            return;
+        }
+    }
+    // Otherwise, add a blank line item
     setInvoiceItems([...invoiceItems, { description: '', amount: 0 }]);
   };
 
@@ -257,6 +293,8 @@ const AdminClientDetail: React.FC = () => {
   };
 
   const overdueInvoicesCount = client?.invoices?.filter(inv => inv.status === 'past_due' || inv.status === 'open').length || 0;
+  const subscriptionProducts = products.filter(p => p.billing_type === 'subscription');
+  const oneTimeProducts = products.filter(p => p.billing_type === 'one_time');
 
   if (isLoading) {
     return (
@@ -279,7 +317,7 @@ const AdminClientDetail: React.FC = () => {
   }
 
   const currentSubscription = client.subscriptions?.find(sub => sub.status === 'active' || sub.status === 'trialing');
-  const currentPlan = currentSubscription ? SUBSCRIPTION_PLANS.find(p => p.priceId === currentSubscription.stripe_price_id) : null;
+  const currentPlan = currentSubscription ? subscriptionProducts.find(p => p.stripe_price_id === currentSubscription.stripe_price_id) : null;
 
   return (
     <AdminLayout>
@@ -576,19 +614,19 @@ const AdminClientDetail: React.FC = () => {
 
                   <h3 className="font-bold text-sm mb-2">Start New Subscription</h3>
                   <select
-                    value={selectedPriceId}
-                    onChange={(e) => setSelectedPriceId(e.target.value)}
+                    value={selectedSubscriptionPriceId}
+                    onChange={(e) => setSelectedSubscriptionPriceId(e.target.value)}
                     className="w-full p-2 border border-slate-300 rounded-lg text-sm mb-3"
                     disabled={isProcessing || !client.stripe_customer_id}
                   >
                     <option value="">Select a plan...</option>
-                    {SUBSCRIPTION_PLANS.map(plan => (
-                      <option key={plan.priceId} value={plan.priceId}>{plan.name}</option>
+                    {subscriptionProducts.map(plan => (
+                      <option key={plan.stripe_price_id} value={plan.stripe_price_id}>{plan.name} (${(plan.amount_cents / 100).toFixed(2)}/mo)</option>
                     ))}
                   </select>
                   <button 
                     onClick={handleStartSubscription}
-                    disabled={isProcessing || !selectedPriceId || !client.stripe_customer_id}
+                    disabled={isProcessing || !selectedSubscriptionPriceId || !client.stripe_customer_id}
                     className="w-full py-2 bg-emerald-600 text-white rounded-lg text-sm font-semibold hover:bg-emerald-700 transition-colors disabled:opacity-50 flex items-center justify-center gap-2"
                   >
                     {isProcessing ? <Loader2 className="w-4 h-4 animate-spin" /> : <Plus className="w-4 h-4" />}
@@ -606,6 +644,28 @@ const AdminClientDetail: React.FC = () => {
                     <DollarSign className="w-5 h-5 text-red-600" /> Create One-Time Invoice
                   </h2>
                   <form onSubmit={handleCreateInvoice} className="space-y-4">
+                    
+                    {/* Product Selector for quick add */}
+                    <div className="flex gap-3 items-center">
+                        <select
+                            value={selectedOneTimePriceId}
+                            onChange={(e) => setSelectedOneTimePriceId(e.target.value)}
+                            className="flex-1 p-2 border border-slate-300 rounded-lg text-sm"
+                            disabled={isProcessing || !client.stripe_customer_id}
+                        >
+                            <option value="">Select a one-time product to add...</option>
+                            {oneTimeProducts.map(product => (
+                                <option key={product.stripe_price_id} value={product.stripe_price_id}>
+                                    {product.name} (${(product.amount_cents / 100).toFixed(2)})
+                                </option>
+                            ))}
+                        </select>
+                        <button type="button" onClick={handleAddInvoiceItem} className="px-4 py-2 bg-indigo-600 text-white rounded-lg text-sm font-semibold hover:bg-indigo-700 transition-colors disabled:opacity-50">
+                            Add
+                        </button>
+                    </div>
+                    
+                    {/* Manual Line Items */}
                     {invoiceItems.map((item, index) => (
                       <div key={index} className="flex gap-3 items-center">
                         <input
@@ -631,7 +691,7 @@ const AdminClientDetail: React.FC = () => {
                             disabled={isProcessing}
                           />
                         </div>
-                        {invoiceItems.length > 1 && (
+                        {invoiceItems.length > 0 && (
                           <button type="button" onClick={() => handleRemoveInvoiceItem(index)} className="text-red-500 hover:text-red-700">
                             <Trash2 className="w-4 h-4" />
                           </button>
@@ -639,8 +699,8 @@ const AdminClientDetail: React.FC = () => {
                       </div>
                     ))}
                     <div className="flex justify-between">
-                        <button type="button" onClick={handleAddInvoiceItem} className="text-indigo-600 hover:text-indigo-800 text-sm font-medium flex items-center gap-1">
-                            <Plus className="w-4 h-4" /> Add Line Item
+                        <button type="button" onClick={() => handleAddInvoiceItem()} className="text-indigo-600 hover:text-indigo-800 text-sm font-medium flex items-center gap-1">
+                            <Plus className="w-4 h-4" /> Add Custom Line Item
                         </button>
                         <div className="flex items-center gap-2">
                             <label className="text-sm text-slate-600">Due Date:</label>
