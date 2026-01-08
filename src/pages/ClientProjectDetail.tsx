@@ -6,7 +6,7 @@ import { supabase } from '../integrations/supabase/client';
 import { Loader2, Briefcase, CheckCircle2, MessageSquare, FileText, Upload, Download, Send, ArrowLeft, AlertTriangle, DollarSign, Clock } from 'lucide-react';
 import ClientLayout from '../components/ClientLayout';
 import { useAuth } from '../hooks/useAuth';
-import { BillingService } from '../services/billingService';
+import { ClientBillingService } from '../services/clientBillingService';
 import { calculateSlaMetrics, SlaStatus } from '../utils/sla';
 import { format } from 'date-fns';
 
@@ -92,7 +92,7 @@ const ClientProjectDetail: React.FC = () => {
 
     // 2. Check Access Status
     try {
-        const accessResult = await BillingService.checkClientAccess(currentClientId);
+        const accessResult = await ClientBillingService.checkClientAccess(currentClientId);
         setAccessStatus(accessResult);
         
         // Determine if we should show the non-blocking overdue banner
