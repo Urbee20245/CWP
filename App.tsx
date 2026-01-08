@@ -58,7 +58,7 @@ const App: React.FC = () => {
             <Route path="/jetsuite" element={<JetSuitePage />} />
             <Route path="/jetviz" element={<JetVizPage />} />
             <Route path="/jet-local-optimizer" element={<JetLocalOptimizerPage />} />
-            <Route path="/back-office/login" element={<LoginPage />} />
+            <Route path="/login" element={<LoginPage />} />
             
             {/* New Protected Redirect Route */}
             <Route path="/back-office" element={<ProtectedRoute allowedRoles={['admin', 'client']} />}>
