@@ -143,16 +143,19 @@ const ClientProjectDetail: React.FC = () => {
       .select(`
         id, title, description, status, progress_percent, required_deposit_cents, deposit_paid,
         sla_days, sla_start_date, sla_due_date, sla_status, service_status, sla_paused_at, sla_resume_offset_days,
-        tasks (id, title, status, due_date.asc),
+        tasks (id, title, status, due_date),
         files (id, file_name, file_type, file_size, storage_path, created_at, profiles (full_name)),
-        milestones (id, name, amount_cents, status, order_index.asc, stripe_invoice_id),
+        milestones (id, name, amount_cents, status, order_index, stripe_invoice_id),
         project_threads (
-            id, title, status, created_at.desc, created_by,
-            messages (id, body, created_at.asc, sender_profile_id, profiles (full_name))
+            id, title, status, created_at, created_by,
+            messages (id, body, created_at, sender_profile_id, profiles (full_name))
         )
       `)
       .eq('id', id)
       .eq('client_id', currentClientId) // Explicitly filter by client ID for security and correctness
+      .order('due_date', { foreignTable: 'tasks', ascending: true })
+      .order('order_index', { foreignTable: 'milestones', ascending: true })
+      .order('created_at', { foreignTable: 'project_threads', ascending: false })
       .single();
 
     if (error) {
