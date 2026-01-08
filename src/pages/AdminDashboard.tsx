@@ -3,7 +3,7 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import { Link } from 'react-router-dom';
 import { supabase } from '../integrations/supabase/client';
-import { Users, Briefcase, DollarSign, Loader2, LogOut, Plus, BarChart3, Zap } from 'lucide-react';
+import { Users, Briefcase, DollarSign, Loader2, ArrowRight, BarChart3, Zap } from 'lucide-react';
 import AdminLayout from '../components/AdminLayout';
 
 const AdminDashboard: React.FC = () => {
@@ -12,24 +12,24 @@ const AdminDashboard: React.FC = () => {
 
   const fetchData = useCallback(async () => {
     // Fetch Total Clients Count
-    const { count: totalClients, error: clientsError } = await supabase
+    const { count: totalClients } = await supabase
       .from('clients')
       .select('*', { count: 'exact', head: true });
 
     // Fetch Active Projects Count
-    const { count: activeProjectsCount, error: projectsError } = await supabase
+    const { count: activeProjectsCount } = await supabase
       .from('projects')
       .select('*', { count: 'exact', head: true })
       .eq('status', 'active');
     
     // Fetch Total Revenue (Paid Invoices - simplified for dashboard)
-    const { data: revenueData, error: revenueError } = await supabase
+    const { data: revenueData } = await supabase
       .from('invoices')
       .select('amount_due')
       .eq('status', 'paid');
 
     let totalRevenue = 0;
-    if (!revenueError && revenueData) {
+    if (revenueData) {
       totalRevenue = revenueData.reduce((sum, invoice) => sum + invoice.amount_due, 0) / 100;
     }
 

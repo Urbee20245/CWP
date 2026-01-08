@@ -19,7 +19,7 @@ interface ClientSummary {
 }
 
 const AdminClientList: React.FC = () => {
-  const { profile, signOut } = useAuth();
+  const { profile } = useAuth();
   const [clients, setClients] = useState<ClientSummary[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [isDialogOpen, setIsDialogOpen] = useState(false);
@@ -73,9 +73,7 @@ const AdminClientList: React.FC = () => {
           <h1 className="text-3xl font-bold text-slate-900 flex items-center gap-3">
             <Users className="w-7 h-7 text-indigo-600" /> Client Management ({clients.length})
           </h1>
-          <button onClick={signOut} className="flex items-center gap-2 text-sm text-red-500 hover:text-red-700 md:hidden">
-            <LogOut className="w-4 h-4" /> Sign Out
-          </button>
+          {/* Removed redundant mobile sign-out button */}
         </div>
 
         {/* Clients List */}
