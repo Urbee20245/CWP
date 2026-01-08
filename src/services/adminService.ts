@@ -38,9 +38,14 @@ export const AdminService = {
     return invokeEdgeFunction('generate-document', { documentType, inputs });
   },
   
-  // --- AI Content Generation (New) ---
+  // --- AI Content Generation (Generic) ---
   generateAdminContent: async (context: any) => {
     return invokeEdgeFunction('generate-admin-content', context);
+  },
+  
+  // --- AI Email Generation (New) ---
+  generateEmail: async (emailType: string, inputs: any) => {
+    return invokeEdgeFunction('generate-email-content', { emailType, inputs });
   },
   
   // --- Email Sending ---
