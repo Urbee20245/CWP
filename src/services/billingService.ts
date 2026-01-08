@@ -41,5 +41,9 @@ export const BillingService = {
   
   createBillingProduct: async (productData: { name: string, description: string, amount_cents: number, billing_type: 'one_time' | 'subscription' }) => {
     return invokeEdgeFunction('create-billing-product', productData);
+  },
+  
+  createClientUser: async (clientData: { email: string, password: string, fullName: string, businessName: string, phone: string, billingEmail: string }) => {
+    return invokeEdgeFunction('create-client-user', clientData);
   }
 };

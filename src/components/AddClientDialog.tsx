@@ -2,7 +2,7 @@
 
 import React, { useState } from 'react';
 import { X, Loader2, UserPlus, Briefcase, Mail, Phone, AlertCircle } from 'lucide-react';
-import { supabase } from '../integrations/supabase/client';
+import { BillingService } from '../services/billingService';
 
 interface AddClientDialogProps {
   isOpen: boolean;
@@ -42,52 +42,15 @@ const AddClientDialog: React.FC<AddClientDialogProps> = ({ isOpen, onClose, onCl
     }
 
     try {
-      // 1. Create Auth User (This automatically triggers profile creation via handle_new_user function)
-      const { data: authData, error: authError } = await supabase.auth.admin.createUser({
+      // Call the secure Edge Function via BillingService
+      await BillingService.createClientUser({
         email,
         password,
-        email_confirm: true, // Confirm email immediately for admin-created users
-        user_metadata: {
-          full_name: fullName,
-          role: 'client', // Ensure the profile trigger sets the correct role
-        },
+        fullName,
+        businessName,
+        phone,
+        billingEmail,
       });
-
-      if (authError) {
-        throw new Error(authError.message);
-      }
-      
-      const newUserId = authData.user.id;
-
-      // 2. Create Client Record
-      const { error: clientError } = await supabase
-        .from('clients')
-        .insert({
-          owner_profile_id: newUserId,
-          business_name: businessName,
-          phone: phone || null,
-          billing_email: billingEmail || email,
-          status: 'active',
-          access_status: 'active',
-        });
-
-      if (clientError) {
-        // If client creation fails, we should ideally delete the auth user, but for simplicity, we log and alert.
-        console.error('Failed to create client record:', clientError);
-        throw new Error('Failed to create client record. User created, but client link failed.');
-      }
-      
-      // 3. Update the newly created profile's role to 'client' explicitly (optional, but good practice)
-      // The trigger should handle this, but we ensure the role is set correctly if needed later.
-      const { error: profileUpdateError } = await supabase
-        .from('profiles')
-        .update({ role: 'client', full_name: fullName })
-        .eq('id', newUserId);
-        
-      if (profileUpdateError) {
-          console.warn('Failed to update profile role/name:', profileUpdateError);
-      }
-
 
       alert(`Client ${businessName} and user account created successfully!`);
       onClientAdded();
