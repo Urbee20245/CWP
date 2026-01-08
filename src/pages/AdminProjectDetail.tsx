@@ -1,9 +1,9 @@
 "use client";
 
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import { useParams, Link } from 'react-router-dom';
 import { supabase } from '../integrations/supabase/client';
-import { Loader2, Briefcase, CheckCircle2, MessageSquare, FileText, Upload, Trash2, Plus, ArrowLeft, Clock, AlertTriangle, ShieldOff } from 'lucide-react';
+import { Loader2, Briefcase, CheckCircle2, MessageSquare, FileText, Upload, Trash2, Plus, ArrowLeft, Clock, AlertTriangle, Download, Send } from 'lucide-react';
 import AdminLayout from '../components/AdminLayout';
 import { Profile } from '../types/auth';
 import { calculateSlaMetrics, calculateSlaDueDate, SlaStatus } from '../utils/sla';
@@ -60,6 +60,12 @@ const AdminProjectDetail: React.FC = () => {
   const [newProgress, setNewProgress] = useState(0);
   const [newMessage, setNewMessage] = useState('');
   const [isUpdating, setIsUpdating] = useState(false);
+  const [isUploading, setIsUploading] = useState(false);
+  const [fileToUpload, setFileToUpload] = useState<File | null>(null);
+  
+  // Task State
+  const [newTaskTitle, setNewTaskTitle] = useState('');
+  const [newTaskDueDate, setNewTaskDueDate] = useState('');
   
   // SLA State
   const [slaDays, setSlaDays] = useState<number | ''>('');
@@ -193,6 +199,158 @@ const AdminProjectDetail: React.FC = () => {
       fetchProjectData();
     }
   };
+  
+  const handleTaskCreation = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!newTaskTitle.trim() || !project) return;
+    
+    setIsUpdating(true);
+    
+    const { error } = await supabase
+        .from('tasks')
+        .insert({
+            project_id: project.id,
+            title: newTaskTitle.trim(),
+            due_date: newTaskDueDate || null,
+            status: 'todo',
+            created_by: (await supabase.auth.getUser()).data.user?.id,
+        });
+        
+    if (error) {
+        console.error('Error creating task:', error);
+        alert('Failed to create task.');
+    } else {
+        setNewTaskTitle('');
+        setNewTaskDueDate('');
+        fetchProjectData();
+    }
+    setIsUpdating(false);
+  };
+  
+  const handleTaskStatusUpdate = async (taskId: string, newStatus: Task['status']) => {
+    setIsUpdating(true);
+    const { error } = await supabase
+        .from('tasks')
+        .update({ status: newStatus })
+        .eq('id', taskId);
+        
+    if (error) {
+        console.error('Error updating task status:', error);
+        alert('Failed to update task status.');
+    } else {
+        fetchProjectData();
+    }
+    setIsUpdating(false);
+  };
+  
+  const handleFileUpload = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!fileToUpload || !project) return;
+
+    setIsUploading(true);
+    
+    const user = await supabase.auth.getUser();
+    if (!user.data.user) {
+        alert("User not authenticated.");
+        setIsUploading(false);
+        return;
+    }
+    
+    // 1. Upload file to storage
+    const storagePath = `${project.client_id}/${project.id}/${Date.now()}-${fileToUpload.name}`;
+
+    const { data: uploadData, error: uploadError } = await supabase.storage
+      .from('client_files')
+      .upload(storagePath, fileToUpload, {
+        cacheControl: '3600',
+        upsert: false,
+      });
+
+    if (uploadError) {
+      console.error('Error uploading file:', uploadError);
+      alert('File upload failed.');
+      setIsUploading(false);
+      return;
+    }
+
+    // 2. Insert file record into database
+    const { error: dbError } = await supabase
+      .from('files')
+      .insert({
+        project_id: project.id,
+        uploader_profile_id: user.data.user.id,
+        storage_path: storagePath,
+        file_name: fileToUpload.name,
+        file_type: fileToUpload.type,
+        file_size: fileToUpload.size,
+      });
+
+    if (dbError) {
+      console.error('Error saving file record:', dbError);
+      // Optionally delete file from storage if DB insert fails
+      await supabase.storage.from('client_files').remove([storagePath]);
+      alert('Failed to save file record.');
+    } else {
+      setFileToUpload(null);
+      alert('File uploaded successfully!');
+      fetchProjectData();
+    }
+    setIsUploading(false);
+  };
+  
+  const handleFileDownload = async (filePath: string, fileName: string) => {
+    const { data, error } = await supabase.storage
+      .from('client_files')
+      .download(filePath);
+
+    if (error) {
+      console.error('Error downloading file:', error);
+      alert('Failed to download file.');
+      return;
+    }
+
+    const url = URL.createObjectURL(data);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = fileName;
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    URL.revokeObjectURL(url);
+  };
+  
+  const handleFileDelete = async (fileId: string, storagePath: string) => {
+    if (!window.confirm("Are you sure you want to delete this file?")) return;
+    
+    setIsUpdating(true);
+    
+    // 1. Delete from storage
+    const { error: storageError } = await supabase.storage
+        .from('client_files')
+        .remove([storagePath]);
+        
+    if (storageError) {
+        console.error('Error deleting file from storage:', storageError);
+        alert('Failed to delete file from storage.');
+        setIsUpdating(false);
+        return;
+    }
+    
+    // 2. Delete record from database
+    const { error: dbError } = await supabase
+        .from('files')
+        .delete()
+        .eq('id', fileId);
+        
+    if (dbError) {
+        console.error('Error deleting file record:', dbError);
+        alert('Failed to delete file record.');
+    } else {
+        alert('File deleted successfully!');
+        fetchProjectData();
+    }
+    setIsUpdating(false);
+  };
 
   const completedTasks = project?.tasks.filter(t => t.status === 'done').length || 0;
   const totalTasks = project?.tasks.length || 0;
@@ -202,6 +360,16 @@ const AdminProjectDetail: React.FC = () => {
           case 'on_track': return 'bg-emerald-100 text-emerald-800';
           case 'at_risk': return 'bg-amber-100 text-amber-800';
           case 'breached': return 'bg-red-100 text-red-800';
+          default: return 'bg-slate-100 text-slate-800';
+      }
+  };
+  
+  const getTaskStatusColor = (status: Task['status']) => {
+      switch (status) {
+          case 'done': return 'bg-emerald-100 text-emerald-800';
+          case 'in_progress': return 'bg-indigo-100 text-indigo-800';
+          case 'blocked': return 'bg-red-100 text-red-800';
+          case 'todo':
           default: return 'bg-slate-100 text-slate-800';
       }
   };
@@ -342,7 +510,7 @@ const AdminProjectDetail: React.FC = () => {
               <h2 className="text-xl font-bold mb-4 flex items-center gap-2 border-b border-slate-100 pb-4">
                 <CheckCircle2 className="w-5 h-5 text-emerald-600" /> Tasks
               </h2>
-              <div className="space-y-3">
+              <div className="space-y-3 mb-4">
                 {project.tasks.length > 0 ? (
                   project.tasks.map(task => (
                     <div key={task.id} className="p-3 bg-slate-50 rounded-lg border border-slate-100 flex justify-between items-center">
@@ -350,18 +518,51 @@ const AdminProjectDetail: React.FC = () => {
                         <p className="font-medium text-sm text-slate-900">{task.title}</p>
                         {task.due_date && <p className="text-xs text-slate-500 mt-0.5">Due: {new Date(task.due_date).toLocaleDateString()}</p>}
                       </div>
-                      <span className={`px-2 py-0.5 rounded-full text-xs font-semibold ${task.status === 'done' ? 'bg-emerald-100 text-emerald-800' : 'bg-amber-100 text-amber-800'}`}>
-                        {task.status.replace('_', ' ')}
-                      </span>
+                      <select
+                          value={task.status}
+                          onChange={(e) => handleTaskStatusUpdate(task.id, e.target.value as Task['status'])}
+                          className={`px-2 py-0.5 rounded-full text-xs font-semibold border-none ${getTaskStatusColor(task.status)}`}
+                          disabled={isUpdating}
+                      >
+                          <option value="todo">To Do</option>
+                          <option value="in_progress">In Progress</option>
+                          <option value="done">Done</option>
+                          <option value="blocked">Blocked</option>
+                      </select>
                     </div>
                   ))
                 ) : (
                   <p className="text-slate-500 text-sm">No tasks defined.</p>
                 )}
               </div>
-              <button className="mt-6 w-full py-2 border border-slate-300 text-slate-600 rounded-lg text-sm font-semibold hover:bg-slate-100 transition-colors">
-                <Plus className="w-4 h-4 inline mr-2" /> Add New Task
-              </button>
+              
+              {/* Add New Task Form */}
+              <form onSubmit={handleTaskCreation} className="space-y-3 pt-4 border-t border-slate-100">
+                  <h3 className="font-bold text-sm text-slate-900">Add New Task</h3>
+                  <input
+                      type="text"
+                      value={newTaskTitle}
+                      onChange={(e) => setNewTaskTitle(e.target.value)}
+                      placeholder="Task Title"
+                      className="w-full p-2 border border-slate-300 rounded-lg text-sm"
+                      required
+                      disabled={isUpdating}
+                  />
+                  <input
+                      type="date"
+                      value={newTaskDueDate}
+                      onChange={(e) => setNewTaskDueDate(e.target.value)}
+                      className="w-full p-2 border border-slate-300 rounded-lg text-sm"
+                      disabled={isUpdating}
+                  />
+                  <button 
+                    type="submit"
+                    disabled={isUpdating || !newTaskTitle}
+                    className="w-full py-2 bg-indigo-600 text-white rounded-lg text-sm font-semibold hover:bg-indigo-700 transition-colors disabled:opacity-50"
+                  >
+                    {isUpdating ? 'Adding...' : 'Add Task'}
+                  </button>
+              </form>
             </div>
           </div>
 
@@ -419,8 +620,19 @@ const AdminProjectDetail: React.FC = () => {
                         </div>
                       </div>
                       <div className="flex gap-2">
-                        <button className="text-indigo-600 hover:text-indigo-800 text-sm">Download</button>
-                        <button className="text-red-500 hover:text-red-700 text-sm"><Trash2 className="w-4 h-4" /></button>
+                        <button 
+                            onClick={() => handleFileDownload(file.storage_path, file.file_name)}
+                            className="text-indigo-600 hover:text-indigo-800 text-sm flex items-center gap-1"
+                        >
+                            <Download className="w-4 h-4" />
+                        </button>
+                        <button 
+                            onClick={() => handleFileDelete(file.id, file.storage_path)}
+                            className="text-red-500 hover:text-red-700 text-sm"
+                            disabled={isUpdating}
+                        >
+                            <Trash2 className="w-4 h-4" />
+                        </button>
                       </div>
                     </div>
                   ))
@@ -428,9 +640,32 @@ const AdminProjectDetail: React.FC = () => {
                   <p className="text-slate-500 text-sm">No files uploaded yet.</p>
                 )}
               </div>
-              <button className="mt-6 w-full py-2 border border-slate-300 text-slate-600 rounded-lg text-sm font-semibold hover:bg-slate-100 transition-colors">
-                <Upload className="w-4 h-4 inline mr-2" /> Upload File
-              </button>
+              
+              {/* File Upload Form */}
+              <form onSubmit={handleFileUpload} className="mt-6 pt-4 border-t border-slate-100">
+                <h3 className="font-bold text-slate-900 mb-3 text-sm">Upload New File</h3>
+                <input
+                  type="file"
+                  onChange={(e) => setFileToUpload(e.target.files ? e.target.files[0] : null)}
+                  className="w-full text-sm text-slate-500 file:mr-4 file:py-2 file:px-4 file:rounded-full file:border-0 file:text-sm file:font-semibold file:bg-indigo-50 file:text-indigo-700 hover:file:bg-indigo-100"
+                  required
+                />
+                <button 
+                  type="submit"
+                  disabled={isUploading || !fileToUpload}
+                  className="mt-3 w-full py-2 bg-indigo-600 text-white rounded-lg text-sm font-semibold hover:bg-indigo-700 transition-colors disabled:opacity-50 flex items-center justify-center gap-2"
+                >
+                  {isUploading ? (
+                    <>
+                      <Loader2 className="w-4 h-4 animate-spin" /> Uploading...
+                    </>
+                  ) : (
+                    <>
+                      <Upload className="w-4 h-4" /> Upload File
+                    </>
+                  )}
+                </button>
+              </form>
             </div>
           </div>
         </div>
