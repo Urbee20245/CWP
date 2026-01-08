@@ -52,15 +52,13 @@ const AdminSettingsPage: React.FC = () => {
             <p className="text-slate-600 mb-4 text-sm">
               Allows sending direct SMS messages to clients. Requires three secrets to be set in Supabase.
             </p>
-            <a 
-              href="https://supabase.com/dashboard/project/nvgumhlewbqynrhlkqhx/functions/secrets" 
-              target="_blank" 
-              rel="noopener noreferrer"
+            <Link 
+              to="/admin/settings/twilio" 
               className="inline-flex items-center gap-2 px-4 py-2 bg-slate-100 text-slate-700 rounded-lg text-sm font-semibold hover:bg-slate-200 transition-colors"
             >
-              Manage Twilio Secrets
+              View Twilio Setup
               <ExternalLink className="w-4 h-4" />
-            </a>
+            </Link>
           </div>
           
           {/* General Settings / Future Integrations */}

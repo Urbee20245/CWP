@@ -27,7 +27,8 @@ import AdminRevenueDashboard from './src/pages/AdminRevenueDashboard';
 import AdminSettingsPage from './src/pages/AdminSettingsPage';
 import AdminDocumentGenerator from './src/pages/AdminDocumentGenerator';
 import AdminEmailGenerator from './src/pages/AdminEmailGenerator';
-import AdminSmtpSettings from './src/pages/AdminSmtpSettings'; // New Import
+import AdminSmtpSettings from './src/pages/AdminSmtpSettings';
+import AdminTwilioSettings from './src/pages/AdminTwilioSettings'; // New Import
 
 // Component that uses useLocation to conditionally render global elements
 const AppContent: React.FC = () => {
@@ -70,7 +71,8 @@ const AppContent: React.FC = () => {
           <Route path="billing/products" element={<AdminBillingProducts />} />
           <Route path="billing/revenue" element={<AdminRevenueDashboard />} />
           <Route path="settings" element={<AdminSettingsPage />} />
-          <Route path="settings/smtp" element={<AdminSmtpSettings />} /> {/* New SMTP Route */}
+          <Route path="settings/smtp" element={<AdminSmtpSettings />} />
+          <Route path="settings/twilio" element={<AdminTwilioSettings />} /> {/* New Twilio Route */}
           <Route path="ai-docs" element={<AdminDocumentGenerator />} />
           <Route path="ai-email" element={<AdminEmailGenerator />} />
         </Route>
