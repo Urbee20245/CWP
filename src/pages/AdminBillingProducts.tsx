@@ -5,6 +5,7 @@ import { supabase } from '../integrations/supabase/client';
 import { Loader2, DollarSign, Plus, Zap, Clock, FileText, Trash2, Edit, AlertCircle } from 'lucide-react';
 import AdminLayout from '../components/AdminLayout';
 import { AdminService } from '../services/adminService';
+import AiContentGenerator from '../components/AiContentGenerator'; // New Import
 
 interface BillingProduct {
   id: string;
@@ -57,6 +58,10 @@ const AdminBillingProducts: React.FC = () => {
       ...prev,
       [name]: type === 'number' ? parseFloat(value) : value,
     }));
+  };
+  
+  const handleAiContentGenerated = (content: string) => {
+    setFormData(prev => ({ ...prev, description: content }));
   };
 
   const handleCreateProduct = async (e: React.FormEvent) => {
@@ -141,7 +146,7 @@ const AdminBillingProducts: React.FC = () => {
 
             <form onSubmit={handleCreateProduct} className="space-y-4">
               <div>
-                <label className="block text-sm font-medium text-slate-700 mb-1">Product Name *</label>
+                <label className="block text-sm font-bold text-slate-700 mb-1">Product Name *</label>
                 <input
                   type="text"
                   name="name"
@@ -153,7 +158,17 @@ const AdminBillingProducts: React.FC = () => {
                 />
               </div>
               <div>
-                <label className="block text-sm font-medium text-slate-700 mb-1">Description</label>
+                <div className="flex justify-between items-center">
+                    <label className="block text-sm font-bold text-slate-700 mb-1">Description</label>
+                    <AiContentGenerator
+                        entityType="billing_product"
+                        entityName={formData.name || 'New Product'}
+                        initialContent={formData.description}
+                        onGenerate={handleAiContentGenerated}
+                        pricingType={formData.billingType}
+                        price={formData.amount}
+                    />
+                </div>
                 <textarea
                   name="description"
                   value={formData.description}

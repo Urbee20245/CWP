@@ -38,6 +38,11 @@ export const AdminService = {
     return invokeEdgeFunction('generate-document', { documentType, inputs });
   },
   
+  // --- AI Content Generation (New) ---
+  generateAdminContent: async (context: any) => {
+    return invokeEdgeFunction('generate-admin-content', context);
+  },
+  
   // --- Email Sending ---
   sendEmail: async (to_email: string, subject: string, html_body: string, client_id: string | null, sent_by: string) => {
     return invokeEdgeFunction('send-email', { to_email, subject, html_body, client_id, sent_by });
