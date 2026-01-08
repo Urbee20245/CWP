@@ -33,24 +33,29 @@ serve(async (req) => {
   try {
     const { client_id, price_id, line_items, due_date } = await req.json();
 
-    if (!client_id) {
+    if (path !== '/create-portal-session' && !client_id) {
       return errorResponse('Client ID is required.', 400);
     }
 
     // 1. Get Client Data (including existing Stripe ID and email)
-    const { data: client, error: clientError } = await supabaseAdmin
-      .from('clients')
-      .select('id, business_name, billing_email, owner_profile_id, stripe_customer_id')
-      .eq('id', client_id)
-      .single();
-
-    if (clientError || !client) {
-      console.error('[stripe-api] Client lookup failed:', clientError?.message);
-      return errorResponse('Client not found.', 404);
+    let client;
+    if (client_id) {
+        const { data: clientData, error: clientError } = await supabaseAdmin
+          .from('clients')
+          .select('id, business_name, billing_email, owner_profile_id, stripe_customer_id')
+          .eq('id', client_id)
+          .single();
+        
+        if (clientError || !clientData) {
+          console.error('[stripe-api] Client lookup failed:', clientError?.message);
+          return errorResponse('Client not found.', 404);
+        }
+        client = clientData;
     }
 
-    let stripeCustomerId = client.stripe_customer_id;
-    const clientEmail = client.billing_email || client.profiles?.email;
+
+    let stripeCustomerId = client?.stripe_customer_id;
+    const clientEmail = client?.billing_email || client?.profiles?.email;
 
     // --- Helper to ensure Stripe Customer exists ---
     const ensureStripeCustomer = async () => {
