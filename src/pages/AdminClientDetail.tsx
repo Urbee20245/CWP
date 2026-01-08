@@ -520,7 +520,7 @@ const AdminClientDetail: React.FC = () => {
             </div>
           )}
 
-          {/* Billing Tab Content (Existing) */}
+          {/* Billing Tab Content (New Implementation) */}
           {activeTab === 'billing' && (
             <>
               {/* Left Column: Customer & Subscriptions */}
