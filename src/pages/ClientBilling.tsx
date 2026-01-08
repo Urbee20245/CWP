@@ -8,6 +8,7 @@ import ClientLayout from '../components/ClientLayout';
 import { ClientBillingService } from '../services/clientBillingService';
 import ServiceStatusBanner from '../components/ServiceStatusBanner';
 import CancelSubscriptionModal from '../components/CancelSubscriptionModal'; // New Import
+import { format } from 'date-fns';
 
 interface Invoice {
   id: string;
@@ -270,7 +271,7 @@ const ClientBilling: React.FC = () => {
                                 </p>
                                 <p className="text-sm text-slate-600 flex justify-between">
                                     <span>Renews:</span>
-                                    <span>{new Date(activeSubscription.current_period_end).toLocaleDateString()}</span>
+                                    <span>{format(new Date(activeSubscription.current_period_end), 'MMM dd, yyyy')}</span>
                                 </p>
                                 
                                 {activeSubscription.cancel_at_period_end ? (
@@ -351,7 +352,7 @@ const ClientBilling: React.FC = () => {
                                     <tbody className="bg-white divide-y divide-slate-100">
                                         {invoices.map((invoice) => (
                                             <tr key={invoice.id} className="hover:bg-slate-50">
-                                                <td className="px-4 py-4 whitespace-nowrap text-sm text-slate-600">{new Date(invoice.created_at).toLocaleDateString()}</td>
+                                                <td className="px-4 py-4 whitespace-nowrap text-sm text-slate-600">{format(new Date(invoice.created_at), 'MMM dd, yyyy')}</td>
                                                 <td className="px-4 py-4 whitespace-nowrap text-sm font-medium text-slate-900">${(invoice.amount_due / 100).toFixed(2)} USD</td>
                                                 <td className="px-4 py-4 whitespace-nowrap">
                                                     <span className={`px-2 py-0.5 rounded-full text-xs font-semibold ${getStatusColor(invoice.status)}`}>
@@ -364,7 +365,7 @@ const ClientBilling: React.FC = () => {
                                                             onClick={() => handleDownloadInvoice(invoice.pdf_url!)}
                                                             className="flex items-center justify-end gap-1 text-emerald-600 hover:text-emerald-800"
                                                         >
-                                                            Download <Download className="w-4 h-4" />
+                                                            Download PDF <Download className="w-4 h-4" />
                                                         </button>
                                                     ) : invoice.hosted_invoice_url ? (
                                                         <a 
@@ -411,7 +412,7 @@ const ClientBilling: React.FC = () => {
                                         <span className={`px-2 py-0.5 rounded-full text-xs font-semibold ${deposit.applied_to_invoice_id ? 'bg-purple-100 text-purple-800' : 'bg-blue-100 text-blue-800'}`}>
                                             {deposit.applied_to_invoice_id ? 'Applied' : 'Unapplied Credit'}
                                         </span>
-                                        <span className="text-xs text-slate-500">{new Date(deposit.created_at).toLocaleDateString()}</span>
+                                        <span className="text-xs text-slate-500">{format(new Date(deposit.created_at), 'MMM dd, yyyy')}</span>
                                     </div>
                                 ))}
                             </div>

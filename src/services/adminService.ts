@@ -131,5 +131,44 @@ export const AdminService = {
           
       if (error) throw error;
       return data;
+  },
+  
+  // --- Manual Invoice Actions ---
+  resendInvoiceEmail: async (invoiceId: string, clientEmail: string, clientName: string, hostedUrl: string, amount: number, sentBy: string) => {
+      const subject = `Invoice Reminder: ${clientName} - $${amount.toFixed(2)} Due`;
+      const html_body = `
+          <p>Dear ${clientName},</p>
+          <p>This is a reminder for your invoice of <strong>$${amount.toFixed(2)}</strong>.</p>
+          <p>Please click the link below to view and pay the invoice:</p>
+          <p><a href="${hostedUrl}" style="background-color: #4F46E5; color: white; padding: 10px 20px; text-decoration: none; border-radius: 8px; display: inline-block;">View & Pay Invoice</a></p>
+          <p>Thank you,<br>The Custom Websites Plus Team</p>
+      `;
+      
+      // Use the existing sendEmail function which calls the Edge Function
+      return AdminService.sendEmail(clientEmail, subject, html_body, null, sentBy);
+  },
+  
+  markInvoiceResolved: async (invoiceId: string) => {
+      const { error } = await supabase
+          .from('invoices')
+          .update({ 
+              status: 'paid', 
+              last_reminder_sent_at: new Date().toISOString(),
+              // Note: Stripe status is not updated here, only the local record.
+          })
+          .eq('id', invoiceId);
+          
+      if (error) throw error;
+      return { success: true };
+  },
+  
+  toggleInvoiceReminders: async (invoiceId: string, disable: boolean) => {
+      const { error } = await supabase
+          .from('invoices')
+          .update({ disable_reminders: disable })
+          .eq('id', invoiceId);
+          
+      if (error) throw error;
+      return { success: true };
   }
 };

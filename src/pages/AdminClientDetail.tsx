@@ -3,7 +3,7 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import { useParams, Link, useNavigate } from 'react-router-dom';
 import { supabase } from '../integrations/supabase/client';
-import { Loader2, Briefcase, FileText, DollarSign, Plus, CreditCard, Zap, ExternalLink, ShieldCheck, Lock, Trash2, Send, AlertCircle, MessageSquare, Phone, CheckCircle2, Pause, Play, Clock, Download, Edit } from 'lucide-react';
+import { Loader2, Briefcase, FileText, DollarSign, Plus, CreditCard, Zap, ExternalLink, ShieldCheck, Lock, Trash2, Send, AlertCircle, MessageSquare, Phone, CheckCircle2, Pause, Play, Clock, Download, Edit, Bell, BellOff } from 'lucide-react';
 import AdminLayout from '../components/AdminLayout';
 import { Profile } from '../types/auth';
 import { AdminService } from '../services/adminService'; // Use AdminService for admin functions
@@ -11,6 +11,7 @@ import { ClientBillingService } from '../services/clientBillingService'; // Use 
 import AddProjectDialog from '../components/AddProjectDialog';
 import SendSmsDialog from '../components/SendSmsDialog'; // Import the new dialog
 import EditClientDialog from '../components/EditClientDialog'; // New Import
+import { format } from 'date-fns';
 
 interface ProjectSummary {
   id: string;
@@ -26,6 +27,8 @@ interface InvoiceSummary {
   hosted_invoice_url: string;
   pdf_url: string | null; // Added pdf_url
   created_at: string;
+  last_reminder_sent_at: string | null; // New field
+  disable_reminders: boolean; // New field
 }
 
 interface SubscriptionSummary {
@@ -85,6 +88,7 @@ interface BillingProduct {
 const AdminClientDetail: React.FC = () => {
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
+  const { user } = useAuth();
   const [client, setClient] = useState<Client | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [activeTab, setActiveTab] = useState<'projects' | 'billing' | 'notes'>('billing');
@@ -121,7 +125,7 @@ const AdminClientDetail: React.FC = () => {
           id, business_name, phone, address, status, notes, owner_profile_id, stripe_customer_id, billing_email, service_status,
           profiles (id, full_name, email, role),
           projects (id, title, status, progress_percent),
-          invoices (id, amount_due, status, hosted_invoice_url, pdf_url, created_at),
+          invoices (id, amount_due, status, hosted_invoice_url, pdf_url, created_at, last_reminder_sent_at, disable_reminders),
           subscriptions (id, stripe_price_id, status, current_period_end, cancel_at_period_end),
           deposits (id, amount_cents, status, stripe_invoice_id, applied_to_invoice_id, created_at),
           service_pause_logs (id, action, internal_note, client_acknowledged, created_at)
@@ -254,6 +258,61 @@ const AdminClientDetail: React.FC = () => {
     } finally {
         setIsProcessing(false);
     }
+  };
+  
+  const handleResendInvoice = async (invoice: InvoiceSummary) => {
+      if (!client || !user) return;
+      
+      if (!client.profiles?.email && !client.billing_email) {
+          alert("Cannot resend invoice: Client email address is missing.");
+          return;
+      }
+      
+      setIsProcessing(true);
+      try {
+          await AdminService.resendInvoiceEmail(
+              invoice.id,
+              client.billing_email || client.profiles.email,
+              client.business_name,
+              invoice.hosted_invoice_url,
+              invoice.amount_due / 100,
+              user.id
+          );
+          alert(`Invoice ${invoice.id.substring(0, 8)} resent successfully!`);
+          fetchClientData();
+      } catch (e: any) {
+          alert(`Failed to resend invoice: ${e.message}`);
+      } finally {
+          setIsProcessing(false);
+      }
+  };
+  
+  const handleMarkInvoiceResolved = async (invoiceId: string) => {
+      if (!window.confirm("Are you sure you want to manually mark this invoice as PAID? This should only be done if payment was confirmed outside of Stripe.")) return;
+      
+      setIsProcessing(true);
+      try {
+          await AdminService.markInvoiceResolved(invoiceId);
+          alert(`Invoice ${invoiceId.substring(0, 8)} marked as PAID.`);
+          fetchClientData();
+      } catch (e: any) {
+          alert(`Failed to mark invoice resolved: ${e.message}`);
+      } finally {
+          setIsProcessing(false);
+      }
+  };
+  
+  const handleToggleReminders = async (invoice: InvoiceSummary) => {
+      setIsProcessing(true);
+      try {
+          await AdminService.toggleInvoiceReminders(invoice.id, !invoice.disable_reminders);
+          alert(`Reminders ${!invoice.disable_reminders ? 'disabled' : 'enabled'} for invoice ${invoice.id.substring(0, 8)}.`);
+          fetchClientData();
+      } catch (e: any) {
+          alert(`Failed to toggle reminders: ${e.message}`);
+      } finally {
+          setIsProcessing(false);
+      }
   };
 
   const getStatusColor = (status: string) => {
@@ -954,30 +1013,78 @@ const AdminClientDetail: React.FC = () => {
                       <div className="space-y-3">
                         {client.invoices && client.invoices.length > 0 ? (
                           client.invoices.sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime()).map(invoice => (
-                            <div key={invoice.id} className="flex justify-between items-center text-sm p-3 bg-slate-50 rounded-lg border border-slate-100">
-                              <span className="font-medium text-slate-900">${(invoice.amount_due / 100).toFixed(2)} USD</span>
-                              <span className={`px-2 py-0.5 rounded-full text-xs font-semibold ${getStatusColor(invoice.status)}`}>
-                                {invoice.status}
-                              </span>
-                              {invoice.pdf_url && invoice.status === 'paid' ? (
-                                  <a 
-                                    href={invoice.pdf_url} 
-                                    target="_blank" 
-                                    rel="noopener noreferrer" 
-                                    className="text-emerald-600 hover:underline flex items-center gap-1"
+                            <div key={invoice.id} className="flex flex-col md:flex-row justify-between items-start md:items-center text-sm p-3 bg-slate-50 rounded-lg border border-slate-100">
+                              <div className="flex-1 min-w-0">
+                                  <div className="flex items-center gap-2 mb-1">
+                                      <span className="font-medium text-slate-900">${(invoice.amount_due / 100).toFixed(2)} USD</span>
+                                      <span className={`px-2 py-0.5 rounded-full text-xs font-semibold ${getStatusColor(invoice.status)}`}>
+                                        {invoice.status}
+                                      </span>
+                                  </div>
+                                  <div className="flex items-center gap-2 text-xs text-slate-500">
+                                      <span>Created: {format(new Date(invoice.created_at), 'MMM dd, yyyy')}</span>
+                                      {invoice.last_reminder_sent_at && (
+                                          <span className="flex items-center gap-1">
+                                              • <Bell className="w-3 h-3 text-amber-500" /> Last Reminder: {format(new Date(invoice.last_reminder_sent_at), 'MMM dd')}
+                                          </span>
+                                      )}
+                                  </div>
+                              </div>
+                              <div className="flex items-center gap-2 mt-2 md:mt-0 flex-shrink-0">
+                                  {/* Reminder Toggle */}
+                                  <button 
+                                      onClick={() => handleToggleReminders(invoice)}
+                                      disabled={isProcessing || invoice.status === 'paid'}
+                                      className={`p-1 rounded-full transition-colors ${invoice.disable_reminders ? 'text-red-500 hover:bg-red-100' : 'text-emerald-500 hover:bg-emerald-100'}`}
+                                      title={invoice.disable_reminders ? 'Enable Reminders' : 'Disable Reminders'}
                                   >
-                                    Download <Download className="w-3 h-3" />
-                                  </a>
-                              ) : (
-                                  <a 
-                                    href={invoice.hosted_invoice_url} 
-                                    target="_blank" 
-                                    rel="noopener noreferrer" 
-                                    className="text-indigo-600 hover:underline flex items-center gap-1"
-                                  >
-                                    View <ExternalLink className="w-3 h-3" />
-                                  </a>
-                              )}
+                                      {invoice.disable_reminders ? <BellOff className="w-4 h-4" /> : <Bell className="w-4 h-4" />}
+                                  </button>
+                                  
+                                  {/* Resend Link */}
+                                  {(invoice.status === 'open' || invoice.status === 'past_due') && (
+                                      <button 
+                                          onClick={() => handleResendInvoice(invoice)}
+                                          disabled={isProcessing}
+                                          className="text-indigo-600 hover:text-indigo-800 text-sm flex items-center gap-1"
+                                      >
+                                          <Send className="w-4 h-4" />
+                                      </button>
+                                  )}
+                                  
+                                  {/* Mark Resolved */}
+                                  {(invoice.status === 'open' || invoice.status === 'past_due') && (
+                                      <button 
+                                          onClick={() => handleMarkInvoiceResolved(invoice.id)}
+                                          disabled={isProcessing}
+                                          className="text-emerald-600 hover:text-emerald-800 text-sm flex items-center gap-1"
+                                          title="Mark as Paid Manually"
+                                      >
+                                          <CheckCircle2 className="w-4 h-4" />
+                                      </button>
+                                  )}
+                                  
+                                  {/* View/Download */}
+                                  {invoice.pdf_url && invoice.status === 'paid' ? (
+                                      <a 
+                                        href={invoice.pdf_url} 
+                                        target="_blank" 
+                                        rel="noopener noreferrer" 
+                                        className="text-emerald-600 hover:underline flex items-center gap-1"
+                                      >
+                                        <Download className="w-4 h-4" />
+                                      </a>
+                                  ) : (
+                                      <a 
+                                        href={invoice.hosted_invoice_url} 
+                                        target="_blank" 
+                                        rel="noopener noreferrer" 
+                                        className="text-indigo-600 hover:underline flex items-center gap-1"
+                                      >
+                                        <ExternalLink className="w-4 h-4" />
+                                      </a>
+                                  )}
+                              </div>
                             </div>
                           ))
                         ) : (
