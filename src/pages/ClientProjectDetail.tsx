@@ -164,23 +164,35 @@ const ClientProjectDetail: React.FC = () => {
       setProject(null);
     } else {
       const projectData = data as unknown as Project;
-      setProject(projectData);
+      
+      // Normalize nested arrays to ensure they are never null/undefined
+      const normalizedProject: Project = {
+          ...projectData,
+          tasks: projectData.tasks ?? [],
+          files: projectData.files ?? [],
+          milestones: projectData.milestones ?? [],
+          threads: projectData.threads ?? [],
+      };
+      
+      setProject(normalizedProject);
       
       // Set active thread to the first open thread, or the first thread if none are open
-      if (projectData.threads && projectData.threads.length > 0) {
-          const openThread = projectData.threads.find(t => t.status === 'open');
-          setActiveThreadId(openThread?.id || projectData.threads[0].id);
+      if (normalizedProject.threads.length > 0) {
+          const openThread = normalizedProject.threads.find(t => t.status === 'open');
+          setActiveThreadId(openThread?.id || normalizedProject.threads[0].id);
+      } else {
+          setActiveThreadId(null);
       }
       
       // Calculate SLA metrics
-      if (projectData.sla_days && projectData.sla_start_date && projectData.sla_due_date) {
+      if (normalizedProject.sla_days && normalizedProject.sla_start_date && normalizedProject.sla_due_date) {
         setSlaMetrics(calculateSlaMetrics(
-          projectData.progress_percent,
-          projectData.sla_days,
-          projectData.sla_start_date,
-          projectData.sla_due_date,
-          projectData.sla_paused_at,
-          projectData.sla_resume_offset_days
+          normalizedProject.progress_percent,
+          normalizedProject.sla_days,
+          normalizedProject.sla_start_date,
+          normalizedProject.sla_due_date,
+          normalizedProject.sla_paused_at,
+          normalizedProject.sla_resume_offset_days
         ));
       } else {
           setSlaMetrics(null);
@@ -219,7 +231,7 @@ const ClientProjectDetail: React.FC = () => {
   useEffect(() => {
     // Scroll to bottom whenever the active thread changes or new messages arrive
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
-  }, [activeThreadId, project?.threads.find(t => t.id === activeThreadId)?.messages.length]);
+  }, [activeThreadId, project?.threads?.find(t => t.id === activeThreadId)?.messages?.length]);
 
   const handleMessageSend = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -359,8 +371,8 @@ const ClientProjectDetail: React.FC = () => {
       }
   };
 
-  const completedTasks = project?.tasks.filter(t => t.status === 'done').length || 0;
-  const totalTasks = project?.tasks.length || 0;
+  const completedTasks = (project?.tasks ?? []).filter(t => t.status === 'done').length || 0;
+  const totalTasks = (project?.tasks ?? []).length || 0;
   
   const getProgressColor = (percent: number) => {
     if (percent === 100) return 'bg-emerald-600';
@@ -397,7 +409,7 @@ const ClientProjectDetail: React.FC = () => {
     return <div dangerouslySetInnerHTML={{ __html: html }} className="prose max-w-none text-sm text-slate-700" />;
   };
   
-  const activeThread = project?.threads.find(t => t.id === activeThreadId);
+  const activeThread = (project?.threads ?? []).find(t => t.id === activeThreadId);
 
   if (isLoading) {
     return (
@@ -551,8 +563,8 @@ const ClientProjectDetail: React.FC = () => {
                 <CheckCircle2 className="w-5 h-5 text-emerald-600" /> Tasks
               </h2>
               <div className="space-y-3">
-                {project.tasks.length > 0 ? (
-                  project.tasks.map(task => (
+                {(project.tasks ?? []).length > 0 ? (
+                  (project.tasks ?? []).map(task => (
                     <div key={task.id} className="p-3 bg-slate-50 rounded-lg border border-slate-100 flex justify-between items-center">
                       <div>
                         <p className="font-medium text-sm text-slate-900">{task.title}</p>
@@ -614,7 +626,7 @@ const ClientProjectDetail: React.FC = () => {
                     
                     {/* Thread Selector */}
                     <div className="flex gap-3 mb-4 overflow-x-auto pb-2 border-b border-slate-100">
-                        {project.threads.map(thread => (
+                        {(project.threads ?? []).map(thread => (
                             <button
                                 key={thread.id}
                                 onClick={() => setActiveThreadId(thread.id)}
@@ -626,7 +638,7 @@ const ClientProjectDetail: React.FC = () => {
                                             : 'bg-slate-50 text-slate-700 hover:bg-slate-100'
                                 }`}
                             >
-                                {thread.title} ({thread.messages.length})
+                                {thread.title} ({(thread.messages ?? []).length})
                                 {thread.status === 'closed' && <X className="w-3 h-3 inline ml-1" />}
                             </button>
                         ))}
@@ -644,8 +656,8 @@ const ClientProjectDetail: React.FC = () => {
                     
                     {/* Message List */}
                     <div className="h-80 overflow-y-auto space-y-4 p-2 flex flex-col">
-                        {activeThread?.messages.length ? (
-                        activeThread.messages.map(message => (
+                        {(activeThread?.messages ?? []).length ? (
+                        (activeThread?.messages ?? []).map(message => (
                             <div key={message.id} className={`flex ${message.sender_profile_id === profile?.id ? 'justify-end' : 'justify-start'}`}>
                                 <div className={`max-w-[85%] p-3 rounded-xl text-sm ${message.sender_profile_id === profile?.id ? 'bg-indigo-600 text-white rounded-br-none' : 'bg-slate-100 text-slate-800 rounded-tl-none'}`}>
                                     <div className={`text-xs mb-1 ${message.sender_profile_id === profile?.id ? 'text-indigo-200' : 'text-slate-500'}`}>
@@ -711,8 +723,8 @@ const ClientProjectDetail: React.FC = () => {
                         <DollarSign className="w-5 h-5 text-purple-600" /> Payment Milestones
                     </h2>
                     <div className="space-y-4">
-                        {project.milestones.length > 0 ? (
-                            project.milestones.map(milestone => (
+                        {(project.milestones ?? []).length > 0 ? (
+                            (project.milestones ?? []).map(milestone => (
                                 <div key={milestone.id} className="p-3 bg-slate-50 rounded-lg border border-slate-100 flex justify-between items-center">
                                     <div className="flex items-center gap-3">
                                         <span className="font-bold text-slate-900 text-sm">{milestone.order_index}. {milestone.name}</span>
@@ -744,11 +756,11 @@ const ClientProjectDetail: React.FC = () => {
             {activeTab === 'files' && (
                 <div className="bg-white p-6 rounded-xl shadow-lg border border-slate-100">
                     <h2 className="text-xl font-bold mb-4 flex items-center gap-2 border-b border-slate-100 pb-4">
-                        <FileText className="w-5 h-5 text-purple-600" /> Project Files ({project.files.length})
+                        <FileText className="w-5 h-5 text-purple-600" /> Project Files ({(project.files ?? []).length})
                     </h2>
                     <div className="space-y-3">
-                        {project.files.length > 0 ? (
-                        project.files.map(file => (
+                        {(project.files ?? []).length > 0 ? (
+                        (project.files ?? []).map(file => (
                             <div key={file.id} className="flex justify-between items-center p-3 bg-slate-50 rounded-lg border border-slate-100">
                             <div className="flex items-center gap-3">
                                 <FileText className="w-5 h-5 text-purple-500" />
