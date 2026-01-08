@@ -152,6 +152,7 @@ const ClientProjectDetail: React.FC = () => {
         )
       `)
       .eq('id', id)
+      .eq('client_id', currentClientId) // Explicitly filter by client ID for security and correctness
       .single();
 
     if (error) {

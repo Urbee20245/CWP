@@ -4,39 +4,81 @@ import React, { useState, useEffect } from 'react';
 import ClientLayout from '../components/ClientLayout';
 import { useAuth } from '../hooks/useAuth';
 import { supabase } from '../integrations/supabase/client';
-import { User, Loader2, Save, AlertTriangle, CheckCircle2 } from 'lucide-react';
+import { User, Loader2, Save, AlertTriangle, CheckCircle2, Briefcase, Phone, MapPin } from 'lucide-react';
 import { Profile } from '../types/auth';
+
+interface ClientDetails {
+    businessName: string;
+    phone: string;
+    address: string;
+}
 
 const ClientProfile: React.FC = () => {
   const { profile, isLoading, user } = useAuth();
   const [formData, setFormData] = useState({ fullName: '', email: '' });
+  const [clientData, setClientData] = useState<ClientDetails>({ businessName: '', phone: '', address: '' });
+  const [clientId, setClientId] = useState<string | null>(null);
   const [isSaving, setIsSaving] = useState(false);
   const [saveError, setSaveError] = useState<string | null>(null);
   const [saveSuccess, setSaveSuccess] = useState(false);
+  const [isClientLoading, setIsClientLoading] = useState(true);
+
+  const fetchClientDetails = async () => {
+    if (!profile) return;
+    setIsClientLoading(true);
+
+    // 1. Fetch Client Business Details
+    const { data: clientRecord, error: clientError } = await supabase
+        .from('clients')
+        .select('id, business_name, phone, address')
+        .eq('owner_profile_id', profile.id)
+        .single();
+        
+    if (clientError && clientError.code !== 'PGRST116') {
+        console.error('Error fetching client record:', clientError);
+        setSaveError('Failed to load client business details.');
+    } else if (clientRecord) {
+        setClientId(clientRecord.id);
+        setClientData({
+            businessName: clientRecord.business_name || '',
+            phone: clientRecord.phone || '',
+            address: clientRecord.address || '',
+        });
+    }
+
+    // 2. Set Profile Details
+    setFormData({
+        fullName: profile.full_name || '',
+        email: profile.email || user?.email || '',
+    });
+    
+    setIsClientLoading(false);
+  };
 
   useEffect(() => {
     if (profile) {
-      setFormData({
-        fullName: profile.full_name || '',
-        email: profile.email || user?.email || '',
-      });
+      fetchClientDetails();
     }
-  }, [profile, user]);
+  }, [profile]);
 
-  const handleChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+  const handleProfileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     setFormData({ ...formData, [e.target.name]: e.target.value });
+  };
+  
+  const handleClientChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    setClientData({ ...clientData, [e.target.name]: e.target.value });
   };
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!profile) return;
+    if (!profile || !clientId) return;
 
     setIsSaving(true);
     setSaveError(null);
     setSaveSuccess(false);
 
     try {
-      // 1. Update the profiles table
+      // 1. Update the profiles table (Full Name)
       const { error: profileError } = await supabase
         .from('profiles')
         .update({ full_name: formData.fullName })
@@ -44,9 +86,17 @@ const ClientProfile: React.FC = () => {
 
       if (profileError) throw profileError;
       
-      // Note: Email update requires a separate flow via supabase.auth.updateUser, 
-      // which sends a confirmation email. We will skip that for simplicity here 
-      // and only allow updating the full name via the profile table.
+      // 2. Update the clients table (Business Details)
+      const { error: clientError } = await supabase
+        .from('clients')
+        .update({
+            business_name: clientData.businessName,
+            phone: clientData.phone,
+            address: clientData.address,
+        })
+        .eq('id', clientId);
+        
+      if (clientError) throw clientError;
 
       setSaveSuccess(true);
       // A full page refresh or re-fetch in SessionProvider will update the context
@@ -63,7 +113,7 @@ const ClientProfile: React.FC = () => {
     }
   };
 
-  if (isLoading) {
+  if (isLoading || isClientLoading) {
     return (
       <ClientLayout>
         <div className="min-h-[60vh] flex items-center justify-center">
@@ -77,12 +127,12 @@ const ClientProfile: React.FC = () => {
     <ClientLayout>
       <div className="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8 py-12">
         <h1 className="text-3xl font-bold text-slate-900 mb-8 flex items-center gap-3">
-          <User className="w-7 h-7 text-indigo-600" /> My Profile
+          <User className="w-7 h-7 text-indigo-600" /> My Profile & Business Details
         </h1>
 
         <div className="bg-white p-6 rounded-xl shadow-lg border border-slate-100">
           <h2 className="text-xl font-bold mb-4 border-b border-slate-100 pb-4">
-            Personal Details
+            Update Information
           </h2>
 
           {saveError && (
@@ -100,38 +150,82 @@ const ClientProfile: React.FC = () => {
           )}
 
           <form onSubmit={handleSubmit} className="space-y-6">
-            <div>
-              <label className="block text-sm font-bold text-slate-700 mb-2">Full Name</label>
-              <input
-                type="text"
-                name="fullName"
-                value={formData.fullName}
-                onChange={handleChange}
-                className="w-full px-4 py-3 border border-slate-300 rounded-xl text-sm"
-                required
-                disabled={isSaving}
-              />
+            
+            {/* User Profile Section */}
+            <div className="border border-slate-200 p-4 rounded-xl bg-slate-50">
+                <h3 className="font-bold text-slate-700 mb-3 flex items-center gap-2"><User className="w-4 h-4" /> User Account</h3>
+                <div className="grid grid-cols-2 gap-4">
+                    <div>
+                        <label className="block text-sm font-bold text-slate-700 mb-2">Full Name</label>
+                        <input
+                            type="text"
+                            name="fullName"
+                            value={formData.fullName}
+                            onChange={handleProfileChange}
+                            className="w-full px-4 py-3 border border-slate-300 rounded-xl text-sm"
+                            required
+                            disabled={isSaving}
+                        />
+                    </div>
+                    <div>
+                        <label className="block text-sm font-bold text-slate-700 mb-2">Email Address (Login)</label>
+                        <input
+                            type="email"
+                            name="email"
+                            value={formData.email}
+                            readOnly
+                            className="w-full px-4 py-3 border border-slate-300 rounded-xl text-sm bg-slate-100 text-slate-500 cursor-not-allowed"
+                            disabled={isSaving}
+                        />
+                    </div>
+                </div>
             </div>
-
-            <div>
-              <label className="block text-sm font-bold text-slate-700 mb-2">Email Address (Login)</label>
-              <input
-                type="email"
-                name="email"
-                value={formData.email}
-                // Email is read-only here, as changing it requires a separate Supabase Auth flow
-                readOnly
-                className="w-full px-4 py-3 border border-slate-300 rounded-xl text-sm bg-slate-100 text-slate-500 cursor-not-allowed"
-                disabled={isSaving}
-              />
-              <p className="text-xs text-slate-500 mt-2">
-                To change your email address, please contact support.
-              </p>
+            
+            {/* Business Details Section */}
+            <div className="border border-slate-200 p-4 rounded-xl bg-slate-50">
+                <h3 className="font-bold text-slate-700 mb-3 flex items-center gap-2"><Briefcase className="w-4 h-4" /> Business Details</h3>
+                <div className="space-y-4">
+                    <div>
+                        <label className="block text-sm font-bold text-slate-700 mb-2">Business Name</label>
+                        <input
+                            type="text"
+                            name="businessName"
+                            value={clientData.businessName}
+                            onChange={handleClientChange}
+                            className="w-full px-4 py-3 border border-slate-300 rounded-xl text-sm"
+                            required
+                            disabled={isSaving}
+                        />
+                    </div>
+                    <div>
+                        <label className="block text-sm font-bold text-slate-700 mb-2 flex items-center gap-2"><Phone className="w-4 h-4" /> Phone Number</label>
+                        <input
+                            type="tel"
+                            name="phone"
+                            value={clientData.phone}
+                            onChange={handleClientChange}
+                            className="w-full px-4 py-3 border border-slate-300 rounded-xl text-sm"
+                            disabled={isSaving}
+                        />
+                    </div>
+                    <div>
+                        <label className="block text-sm font-bold text-slate-700 mb-2 flex items-center gap-2"><MapPin className="w-4 h-4" /> Business Address</label>
+                        <input
+                            type="text"
+                            name="address"
+                            value={clientData.address}
+                            onChange={handleClientChange}
+                            placeholder="Street, City, State, Zip"
+                            className="w-full px-4 py-3 border border-slate-300 rounded-xl text-sm"
+                            disabled={isSaving}
+                        />
+                    </div>
+                </div>
             </div>
 
             <button
               type="submit"
-              disabled={isSaving}
+              disabled={isSaving || !clientId}
               className="w-full py-3 bg-indigo-600 text-white rounded-lg font-semibold hover:bg-indigo-700 transition-colors disabled:opacity-50 flex items-center justify-center gap-2"
             >
               {isSaving ? (

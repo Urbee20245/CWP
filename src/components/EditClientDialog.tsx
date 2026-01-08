@@ -1,7 +1,7 @@
 "use client";
 
 import React, { useState, useEffect } from 'react';
-import { X, Loader2, Save, Briefcase, Mail, Phone, AlertCircle, User } from 'lucide-react';
+import { X, Loader2, Save, Briefcase, Mail, Phone, AlertCircle, User, MapPin } from 'lucide-react';
 import { supabase } from '../integrations/supabase/client';
 import { Profile } from '../types/auth';
 
@@ -9,6 +9,7 @@ interface ClientData {
   id: string;
   business_name: string;
   phone: string;
+  address: string; // Added address
   status: string;
   notes: string;
   owner_profile_id: string;
@@ -40,6 +41,7 @@ const EditClientDialog: React.FC<EditClientDialogProps> = ({ isOpen, onClose, on
         fullName: profile.full_name,
         businessName: data.business_name,
         phone: data.phone,
+        address: data.address, // Include address
         billingEmail: data.billing_email || profile.email,
         clientStatus: data.status,
         profileRole: profile.role,
@@ -70,7 +72,7 @@ const EditClientDialog: React.FC<EditClientDialogProps> = ({ isOpen, onClose, on
     setIsLoading(true);
     setError(null);
 
-    const { fullName, businessName, phone, billingEmail, clientStatus, profileRole } = formData;
+    const { fullName, businessName, phone, address, billingEmail, clientStatus, profileRole } = formData;
     const { id: clientId, owner_profile_id: profileId } = initialClientData;
 
     try {
@@ -80,6 +82,7 @@ const EditClientDialog: React.FC<EditClientDialogProps> = ({ isOpen, onClose, on
         .update({
           business_name: businessName,
           phone: phone,
+          address: address, // Save address
           billing_email: billingEmail,
           status: clientStatus,
         })
@@ -204,6 +207,19 @@ const EditClientDialog: React.FC<EditClientDialogProps> = ({ isOpen, onClose, on
                   disabled={isLoading}
                 />
               </div>
+            </div>
+            
+            <div>
+                <label className="block text-sm font-bold text-slate-700 mb-2">Business Address</label>
+                <input
+                  type="text"
+                  name="address"
+                  value={formData.address}
+                  onChange={handleChange}
+                  placeholder="Street, City, State, Zip"
+                  className="w-full px-4 py-3 border border-slate-300 rounded-xl text-sm"
+                  disabled={isLoading}
+                />
             </div>
             
             <div>
