@@ -279,6 +279,26 @@ const AdminProjectDetail: React.FC = () => {
     }
   };
   
+  const handleMessageDelete = async (messageId: string) => {
+    if (!window.confirm("Are you sure you want to delete this message? This action cannot be undone.")) return;
+    
+    setIsUpdating(true);
+    
+    const { error } = await supabase
+        .from('messages')
+        .delete()
+        .eq('id', messageId);
+        
+    if (error) {
+        console.error('Error deleting message:', error);
+        alert('Failed to delete message.');
+    } else {
+        alert('Message deleted.');
+        fetchProjectData();
+    }
+    setIsUpdating(false);
+  };
+  
   const handleTaskCreation = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!newTaskTitle.trim() || !project || !user) return; // <-- Check local user
@@ -1129,9 +1149,19 @@ const AdminProjectDetail: React.FC = () => {
                 {project.messages.length > 0 ? (
                   project.messages.map(message => (
                     <div key={message.id} className={`flex ${message.sender_profile_id === user?.id ? 'justify-end' : 'justify-start'}`}>
-                        <div className={`max-w-[85%] p-3 rounded-xl text-sm ${message.sender_profile_id === user?.id ? 'bg-indigo-600 text-white rounded-br-none' : 'bg-slate-100 text-slate-800 rounded-tl-none'}`}>
-                            <div className={`text-xs mb-1 ${message.sender_profile_id === user?.id ? 'text-indigo-200' : 'text-slate-500'}`}>
-                                {message.sender_profile_id === user?.id ? 'You' : message.profiles?.full_name || 'System User'} - {new Date(message.created_at).toLocaleTimeString()}
+                        <div className={`max-w-[85%] p-3 rounded-xl text-sm relative ${message.sender_profile_id === user?.id ? 'bg-indigo-600 text-white rounded-br-none' : 'bg-slate-100 text-slate-800 rounded-tl-none'}`}>
+                            <div className={`text-xs mb-1 flex justify-between items-center ${message.sender_profile_id === user?.id ? 'text-indigo-200' : 'text-slate-500'}`}>
+                                <span>{message.sender_profile_id === user?.id ? 'You' : message.profiles?.full_name || 'System User'} - {new Date(message.created_at).toLocaleTimeString()}</span>
+                                {message.sender_profile_id === user?.id && (
+                                    <button 
+                                        onClick={() => handleMessageDelete(message.id)}
+                                        disabled={isUpdating}
+                                        className="text-red-300 hover:text-red-100 ml-3 transition-colors"
+                                        title="Delete Message"
+                                    >
+                                        <Trash2 className="w-3 h-3" />
+                                    </button>
+                                )}
                             </div>
                             {message.body}
                         </div>
