@@ -32,8 +32,7 @@ import NotFoundPage from './src/pages/NotFoundPage';
 import ErrorBoundary from './src/components/ErrorBoundary';
 import GlobalLoading from './src/components/GlobalLoading';
 import { useAuth } from './src/hooks/useAuth';
-import { ModalProvider } from './src/context/ModalProvider';
-import LoginModal from './src/components/LoginModal';
+import LoginPage from './src/pages/Login'; // New Import
 
 // Component that uses useLocation to conditionally render global elements
 const AppContent: React.FC = () => {
@@ -41,7 +40,7 @@ const AppContent: React.FC = () => {
   const { isLoading } = useAuth();
   
   // Check if we are on an admin/client route (which use their own layouts)
-  const isBackOfficeRoute = location.pathname.startsWith('/admin') || location.pathname.startsWith('/client') || location.pathname.startsWith('/back-office');
+  const isBackOfficeRoute = location.pathname.startsWith('/admin') || location.pathname.startsWith('/client') || location.pathname.startsWith('/back-office') || location.pathname === '/login';
   
   // We only want the global components (Header, Footer, VoiceAgent) on public pages.
   const showGlobalComponents = !isBackOfficeRoute;
@@ -65,6 +64,9 @@ const AppContent: React.FC = () => {
         <Route path="/jetviz" element={<JetVizPage />} />
         <Route path="/jet-local-optimizer" element={<JetLocalOptimizerPage />} />
         
+        {/* Dedicated Login Page */}
+        <Route path="/login" element={<LoginPage />} />
+        
         {/* Protected Redirect Route */}
         <Route path="/back-office" element={<ProtectedRoute allowedRoles={['admin', 'client']} />}>
           <Route index element={<BackOfficeRedirect />} />
@@ -72,7 +74,7 @@ const AppContent: React.FC = () => {
 
         {/* Admin Routes */}
         <Route path="/admin/*" element={<ProtectedRoute allowedRoles={['admin']} />}>
-          <Route index element={<Navigate to="dashboard" replace />} /> {/* FIX: Redirect /admin to /admin/dashboard */}
+          <Route index element={<Navigate to="dashboard" replace />} />
           <Route path="dashboard" element={<AdminDashboard />} />
           <Route path="clients" element={<AdminClientList />} />
           <Route path="clients/:id" element={<AdminClientDetail />} />
@@ -100,7 +102,6 @@ const AppContent: React.FC = () => {
       
       {showGlobalComponents && <Footer />}
       {showGlobalComponents && <VoiceAgent />}
-      <LoginModal />
     </div>
   );
 };
@@ -110,9 +111,8 @@ const App: React.FC = () => {
     <ErrorBoundary>
       <BrowserRouter>
         <SessionProvider>
-          <ModalProvider>
-            <AppContent />
-          </ModalProvider>
+          {/* ModalProvider is no longer needed */}
+          <AppContent />
         </SessionProvider>
       </BrowserRouter>
     </ErrorBoundary>

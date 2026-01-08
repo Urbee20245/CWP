@@ -2,13 +2,11 @@ import React, { useState, useEffect } from 'react';
 import { Menu, X, ChevronDown, Gauge, Eye, Phone, ArrowRight, Sparkles, LogIn } from 'lucide-react';
 import { NavigationLink } from '../types';
 import { Link } from 'react-router-dom';
-import { useModal } from '../src/context/ModalProvider'; // New Import
 
 const Header: React.FC = () => {
   const [isScrolled, setIsScrolled] = useState(false);
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
   const [isToolsOpen, setIsToolsOpen] = useState(false);
-  const { openLoginModal } = useModal(); // Use Modal Context
 
   // Handle scroll effect for background
   useEffect(() => {
@@ -118,7 +116,7 @@ const Header: React.FC = () => {
                         </div>
                         <div>
                             <div className="text-sm font-bold text-slate-900 group-hover/item:text-purple-700 transition-colors">JetViz</div>
-                            <div className="text-xs text-slate-500 leading-tight mt-0.5">Instant visual design comparison.</div>
+                            <div className="text-xs text-slate-500 leading-tight mt-0.5">Visual design comparison.</div>
                         </div>
                     </Link>
                     <Link 
@@ -217,13 +215,14 @@ const Header: React.FC = () => {
                     </Link>
                     
                     {/* Portal Login Link */}
-                    <button
-                      onClick={() => { setIsMobileMenuOpen(false); openLoginModal(); }}
+                    <Link
+                      to="/login"
+                      onClick={() => setIsMobileMenuOpen(false)}
                       className="w-full text-left px-4 py-3 rounded-xl hover:bg-slate-50 text-slate-700 font-semibold flex items-center gap-2"
                     >
                       <LogIn className="w-4 h-4 text-slate-500" />
                       Client Portal Login
-                    </button>
+                    </Link>
                 </div>
                 
                 {/* Mobile Tools Block */}
