@@ -1,9 +1,9 @@
 "use client";
 
 import React from 'react';
-import Header from '../../components/Header';
-import Footer from '../../components/Footer';
-import VoiceAgent from '../../components/VoiceAgent';
+import Header from './Header';
+import Footer from './Footer';
+import VoiceAgent from './VoiceAgent';
 
 interface PublicLayoutProps {
   children: React.ReactNode;
