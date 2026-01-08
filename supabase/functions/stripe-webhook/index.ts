@@ -153,38 +153,69 @@ serve(async (req) => {
 
         if (upsertError) console.error('[stripe-webhook] Invoice upsert failed:', upsertError);
         
-        // --- DEPOSIT SYNC LOGIC ---
+        // --- DEPOSIT & MILESTONE SYNC LOGIC (on payment success) ---
         if (event.type === 'invoice.payment_succeeded') {
-            const { data: depositData, error: depositError } = await supabaseAdmin
+            const paymentIntentId = invoice.payment_intent as string;
+            
+            // 1. Check if this invoice was for a DEPOSIT
+            const { data: depositData } = await supabaseAdmin
                 .from('deposits')
                 .update({ 
                     status: 'paid',
-                    stripe_payment_intent_id: invoice.payment_intent as string,
+                    stripe_payment_intent_id: paymentIntentId,
                 })
                 .eq('stripe_invoice_id', invoice.id)
-                .select()
+                .select('id, project_id')
                 .single();
             
             if (depositData) {
                 console.log(`[stripe-webhook] Deposit ${depositData.id} marked as PAID.`);
-            } else if (depositError && depositError.code !== 'PGRST116') { // PGRST116 = No rows found
-                console.error('[stripe-webhook] Deposit update failed on success:', depositError);
+                
+                // If deposit is linked to a project, update project status
+                if (depositData.project_id) {
+                    await supabaseAdmin
+                        .from('projects')
+                        .update({ 
+                            deposit_paid: true,
+                            status: 'active' // Auto-activate project
+                        })
+                        .eq('id', depositData.project_id);
+                    console.log(`[stripe-webhook] Project ${depositData.project_id} auto-activated.`);
+                }
             }
+            
+            // 2. Check if this invoice was for a MILESTONE
+            const milestoneId = invoice.metadata?.milestone_id;
+            if (milestoneId) {
+                await supabaseAdmin
+                    .from('milestones')
+                    .update({ status: 'paid' })
+                    .eq('id', milestoneId);
+                console.log(`[stripe-webhook] Milestone ${milestoneId} marked as PAID.`);
+            }
+            
         } else if (event.type === 'invoice.payment_failed') {
-            const { data: depositData, error: depositError } = await supabaseAdmin
+            // 1. Check if this invoice was for a DEPOSIT
+            const { data: depositData } = await supabaseAdmin
                 .from('deposits')
                 .update({ status: 'failed' })
                 .eq('stripe_invoice_id', invoice.id)
-                .select()
+                .select('id')
                 .single();
                 
             if (depositData) {
                 console.log(`[stripe-webhook] Deposit ${depositData.id} marked as FAILED.`);
-            } else if (depositError && depositError.code !== 'PGRST116') {
-                console.error('[stripe-webhook] Deposit update failed on failure:', depositError);
+            }
+            
+            // 2. Check if this invoice was for a MILESTONE
+            const milestoneId = invoice.metadata?.milestone_id;
+            if (milestoneId) {
+                // Optionally revert milestone status if payment fails, or keep as 'invoiced'
+                // For now, we keep it as 'invoiced' to indicate it's still due.
+                console.log(`[stripe-webhook] Milestone ${milestoneId} payment FAILED.`);
             }
         }
-        // --- END DEPOSIT SYNC LOGIC ---
+        // --- END DEPOSIT & MILESTONE SYNC LOGIC ---
         
         // --- Access Restriction Logic on Failure ---
         if (event.type === 'invoice.payment_failed' && invoice.status === 'open') {

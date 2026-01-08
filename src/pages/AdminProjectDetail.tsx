@@ -3,23 +3,36 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import { useParams, Link } from 'react-router-dom';
 import { supabase } from '../integrations/supabase/client';
-import { Loader2, Briefcase, CheckCircle2, MessageSquare, FileText, Upload, Trash2, Plus, ArrowLeft, Clock, AlertTriangle, Download, Send } from 'lucide-react';
+import { Loader2, Briefcase, CheckCircle2, MessageSquare, FileText, Upload, Trash2, Plus, ArrowLeft, Clock, AlertTriangle, Download, Send, DollarSign, ExternalLink } from 'lucide-react';
 import AdminLayout from '../components/AdminLayout';
 import { Profile } from '../types/auth';
 import { calculateSlaMetrics, calculateSlaDueDate, SlaStatus } from '../utils/sla';
 import { format } from 'date-fns';
+import { AdminService } from '../services/adminService';
+
+interface Milestone {
+  id: string;
+  name: string;
+  amount_cents: number;
+  status: 'pending' | 'invoiced' | 'paid';
+  order_index: number;
+  stripe_invoice_id: string | null;
+}
 
 interface Project {
   id: string;
   title: string;
   description: string;
-  status: string;
+  status: 'draft' | 'awaiting_deposit' | 'active' | 'paused' | 'completed';
   progress_percent: number;
   client_id: string;
   clients: { business_name: string };
   tasks: Task[];
   messages: Message[];
   files: FileItem[];
+  milestones: Milestone[]; // New field
+  required_deposit_cents: number | null; // New field
+  deposit_paid: boolean; // New field
   // SLA Fields
   sla_days: number | null;
   sla_start_date: string | null;
@@ -71,6 +84,11 @@ const AdminProjectDetail: React.FC = () => {
   const [slaDays, setSlaDays] = useState<number | ''>('');
   const [slaStartDate, setSlaStartDate] = useState<string>('');
   const [slaMetrics, setSlaMetrics] = useState<ReturnType<typeof calculateSlaMetrics> | null>(null);
+  
+  // Milestone State
+  const [newMilestoneName, setNewMilestoneName] = useState('');
+  const [newMilestoneAmount, setNewMilestoneAmount] = useState<number | ''>('');
+  const [requiredDeposit, setRequiredDeposit] = useState<number | ''>('');
 
   const fetchProjectData = async () => {
     if (!id) return;
@@ -83,11 +101,13 @@ const AdminProjectDetail: React.FC = () => {
         clients (business_name),
         tasks (id, title, status, due_date),
         messages (id, body, created_at, sender_profile_id, profiles (full_name)),
-        files (id, file_name, file_type, file_size, storage_path, created_at, profiles (full_name))
+        files (id, file_name, file_type, file_size, storage_path, created_at, profiles (full_name)),
+        milestones (id, name, amount_cents, status, order_index, stripe_invoice_id)
       `)
       .eq('id', id)
       .order('created_at', { foreignTable: 'messages', ascending: false })
       .order('due_date', { foreignTable: 'tasks', ascending: true })
+      .order('order_index', { foreignTable: 'milestones', ascending: true })
       .single();
 
     if (error) {
@@ -99,6 +119,7 @@ const AdminProjectDetail: React.FC = () => {
       setNewProgress(projectData.progress_percent);
       setSlaDays(projectData.sla_days || '');
       setSlaStartDate(projectData.sla_start_date ? format(new Date(projectData.sla_start_date), 'yyyy-MM-dd') : '');
+      setRequiredDeposit(projectData.required_deposit_cents ? projectData.required_deposit_cents / 100 : '');
       
       // Calculate SLA metrics immediately
       if (projectData.sla_days && projectData.sla_start_date && projectData.sla_due_date) {
@@ -127,6 +148,17 @@ const AdminProjectDetail: React.FC = () => {
   const handleProgressUpdate = async () => {
     if (!project) return;
     setIsUpdating(true);
+    
+    // Rule: Project cannot reach 100% unless all milestones are paid
+    if (newProgress === 100) {
+        const unpaidMilestones = project.milestones.filter(m => m.status !== 'paid');
+        if (unpaidMilestones.length > 0) {
+            alert(`Cannot set progress to 100%. ${unpaidMilestones.length} milestones are still unpaid.`);
+            setNewProgress(project.progress_percent); // Revert local state
+            setIsUpdating(false);
+            return;
+        }
+    }
     
     const { error } = await supabase
       .from('projects')
@@ -351,6 +383,146 @@ const AdminProjectDetail: React.FC = () => {
     }
     setIsUpdating(false);
   };
+  
+  // --- Milestone Handlers ---
+  const handleAddMilestone = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!newMilestoneName.trim() || !newMilestoneAmount || !project) return;
+    
+    setIsUpdating(true);
+    
+    const amountCents = Math.round(newMilestoneAmount as number * 100);
+    
+    const { error } = await supabase
+        .from('milestones')
+        .insert({
+            project_id: project.id,
+            name: newMilestoneName.trim(),
+            amount_cents: amountCents,
+            order_index: project.milestones.length + 1,
+            status: 'pending',
+        });
+        
+    if (error) {
+        console.error('Error creating milestone:', error);
+        alert('Failed to create milestone.');
+    } else {
+        setNewMilestoneName('');
+        setNewMilestoneAmount('');
+        fetchProjectData();
+    }
+    setIsUpdating(false);
+  };
+  
+  const handleInvoiceMilestone = async (milestone: Milestone) => {
+    if (!project || !project.client_id) return;
+    setIsUpdating(true);
+    
+    try {
+        const result = await AdminService.createMilestoneInvoice(
+            project.client_id,
+            milestone.id,
+            milestone.amount_cents,
+            milestone.name,
+            project.id
+        );
+        
+        alert(`Milestone '${milestone.name}' invoiced successfully! Hosted URL: ${result.hosted_url}`);
+        fetchProjectData();
+    } catch (e: any) {
+        alert(`Failed to invoice milestone: ${e.message}`);
+    } finally {
+        setIsUpdating(false);
+    }
+  };
+  
+  const handleUpdateDepositRequirement = async () => {
+    if (!project) return;
+    setIsUpdating(true);
+    
+    const depositCents = requiredDeposit ? Math.round(requiredDeposit as number * 100) : null;
+    
+    let newStatus = project.status;
+    if (depositCents && depositCents > 0 && !project.deposit_paid) {
+        newStatus = 'awaiting_deposit';
+    } else if (project.deposit_paid && project.status === 'awaiting_deposit') {
+        newStatus = 'active';
+    } else if (!depositCents && project.status === 'awaiting_deposit') {
+        newStatus = 'draft'; // If deposit requirement is removed
+    }
+    
+    const { error } = await supabase
+        .from('projects')
+        .update({ 
+            required_deposit_cents: depositCents,
+            status: newStatus
+        })
+        .eq('id', project.id);
+        
+    if (error) {
+        console.error('Error updating deposit requirement:', error);
+        alert('Failed to update deposit requirement.');
+    } else {
+        alert('Deposit requirement updated!');
+        fetchProjectData();
+    }
+    setIsUpdating(false);
+  };
+  
+  const handleSendDepositInvoice = async () => {
+    if (!project || !project.client_id || !project.required_deposit_cents) return;
+    setIsUpdating(true);
+    
+    try {
+        const result = await AdminService.createDepositInvoice(
+            project.client_id,
+            project.required_deposit_cents / 100,
+            `Required Deposit for Project: ${project.title}`,
+            project.id
+        );
+        
+        alert(`Deposit invoice sent! Client must pay via hosted URL: ${result.hosted_url}`);
+        fetchProjectData();
+    } catch (e: any) {
+        alert(`Failed to send deposit invoice: ${e.message}`);
+    } finally {
+        setIsUpdating(false);
+    }
+  };
+  
+  const handleUpdateProjectStatus = async (newStatus: Project['status']) => {
+    if (!project) return;
+    
+    // Prevent starting if deposit is required but not paid
+    if (newStatus === 'active' && project.required_deposit_cents && project.required_deposit_cents > 0 && !project.deposit_paid) {
+        alert("Cannot set project to 'active'. Deposit is required but not yet paid.");
+        return;
+    }
+    
+    // Prevent 100% completion if milestones are unpaid
+    if (newStatus === 'completed') {
+        const unpaidMilestones = project.milestones.filter(m => m.status !== 'paid');
+        if (unpaidMilestones.length > 0) {
+            alert(`Cannot set project to 'completed'. ${unpaidMilestones.length} milestones are still unpaid.`);
+            return;
+        }
+    }
+    
+    setIsUpdating(true);
+    const { error } = await supabase
+        .from('projects')
+        .update({ status: newStatus })
+        .eq('id', project.id);
+        
+    if (error) {
+        console.error('Error updating project status:', error);
+        alert('Failed to update project status.');
+    } else {
+        alert(`Project status updated to ${newStatus}!`);
+        fetchProjectData();
+    }
+    setIsUpdating(false);
+  };
 
   const completedTasks = project?.tasks.filter(t => t.status === 'done').length || 0;
   const totalTasks = project?.tasks.length || 0;
@@ -370,6 +542,15 @@ const AdminProjectDetail: React.FC = () => {
           case 'in_progress': return 'bg-indigo-100 text-indigo-800';
           case 'blocked': return 'bg-red-100 text-red-800';
           case 'todo':
+          default: return 'bg-slate-100 text-slate-800';
+      }
+  };
+  
+  const getMilestoneStatusColor = (status: Milestone['status']) => {
+      switch (status) {
+          case 'paid': return 'bg-emerald-100 text-emerald-800';
+          case 'invoiced': return 'bg-amber-100 text-amber-800';
+          case 'pending':
           default: return 'bg-slate-100 text-slate-800';
       }
   };
@@ -394,6 +575,10 @@ const AdminProjectDetail: React.FC = () => {
     );
   }
 
+  const isDepositRequired = project.required_deposit_cents && project.required_deposit_cents > 0;
+  const isProjectActive = project.status === 'active';
+  const isProjectCompleted = project.status === 'completed';
+
   return (
     <AdminLayout>
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-12">
@@ -411,45 +596,89 @@ const AdminProjectDetail: React.FC = () => {
           {/* Left Column: Progress, SLA & Tasks */}
           <div className="lg:col-span-1 space-y-8">
             
-            {/* Progress Control */}
+            {/* Project Status & Deposit Gate */}
             <div className="bg-white p-6 rounded-xl shadow-lg border border-slate-100">
-              <h2 className="text-xl font-bold mb-4">Project Progress</h2>
-              <div className="text-4xl font-bold text-indigo-600 mb-4">{project.progress_percent}%</div>
-              
-              <div className="w-full bg-slate-200 rounded-full h-3 mb-4">
-                <div 
-                  className="bg-indigo-600 h-3 rounded-full transition-all duration-500" 
-                  style={{ width: `${project.progress_percent}%` }}
-                ></div>
-              </div>
-
-              <p className="text-sm text-slate-600 mb-4">{completedTasks}/{totalTasks} Tasks Completed</p>
-
-              <div className="mt-4">
-                <label htmlFor="progress-slider" className="block text-sm font-medium mb-2">Update Progress (0-100)</label>
-                <input
-                  id="progress-slider"
-                  type="range"
-                  min="0"
-                  max="100"
-                  step="1"
-                  value={newProgress}
-                  onChange={(e) => setNewProgress(parseInt(e.target.value))}
-                  className="w-full h-2 bg-slate-200 rounded-lg appearance-none cursor-pointer range-lg"
-                />
-                <div className="flex justify-between text-xs text-slate-500 mt-1">
-                    <span>0%</span>
-                    <span>{newProgress}%</span>
-                    <span>100%</span>
+                <h2 className="text-xl font-bold mb-4">Project Status</h2>
+                
+                <div className="mb-4">
+                    <label className="block text-sm font-medium mb-2">Current Status</label>
+                    <select
+                        value={project.status}
+                        onChange={(e) => handleUpdateProjectStatus(e.target.value as Project['status'])}
+                        className={`w-full p-2 border border-slate-300 rounded-lg text-sm font-bold ${getMilestoneStatusColor(project.status as any)}`}
+                        disabled={isUpdating}
+                    >
+                        <option value="draft">Draft</option>
+                        <option value="awaiting_deposit">Awaiting Deposit</option>
+                        <option value="active">Active</option>
+                        <option value="paused">Paused</option>
+                        <option value="completed">Completed</option>
+                    </select>
                 </div>
-                <button 
-                  onClick={handleProgressUpdate}
-                  disabled={isUpdating}
-                  className="mt-4 w-full py-2 bg-emerald-600 text-white rounded-lg text-sm font-semibold hover:bg-emerald-700 transition-colors disabled:opacity-50"
-                >
-                  {isUpdating ? 'Saving...' : 'Save Progress'}
-                </button>
-              </div>
+                
+                {isDepositRequired && (
+                    <div className={`p-4 rounded-lg border ${project.deposit_paid ? 'bg-emerald-50 border-emerald-200' : 'bg-red-50 border-red-200'} mb-4`}>
+                        <h3 className="font-bold text-sm flex items-center gap-2">
+                            {project.deposit_paid ? <CheckCircle2 className="w-4 h-4 text-emerald-600" /> : <AlertTriangle className="w-4 h-4 text-red-600" />}
+                            Deposit Status
+                        </h3>
+                        <p className="text-lg font-bold mt-1">
+                            {project.deposit_paid ? 'PAID' : 'AWAITING PAYMENT'}
+                        </p>
+                        <p className="text-xs mt-1 text-slate-600">
+                            Required: ${project.required_deposit_cents ? (project.required_deposit_cents / 100).toFixed(2) : 'N/A'}
+                        </p>
+                        
+                        {!project.deposit_paid && project.status === 'awaiting_deposit' && (
+                            <button 
+                                onClick={handleSendDepositInvoice}
+                                disabled={isUpdating}
+                                className="mt-3 w-full py-2 bg-indigo-600 text-white rounded-lg text-xs font-semibold hover:bg-indigo-700 transition-colors disabled:opacity-50 flex items-center justify-center gap-2"
+                            >
+                                <DollarSign className="w-4 h-4" /> Send Deposit Invoice
+                            </button>
+                        )}
+                    </div>
+                )}
+                
+                {/* Progress Control */}
+                <h2 className="text-xl font-bold mb-4 border-t border-slate-100 pt-4">Project Progress</h2>
+                <div className="text-4xl font-bold text-indigo-600 mb-4">{project.progress_percent}%</div>
+                
+                <div className="w-full bg-slate-200 rounded-full h-3 mb-4">
+                    <div 
+                    className="bg-indigo-600 h-3 rounded-full transition-all duration-500" 
+                    style={{ width: `${project.progress_percent}%` }}
+                    ></div>
+                </div>
+
+                <p className="text-sm text-slate-600 mb-4">{completedTasks}/{totalTasks} Tasks Completed</p>
+
+                <div className="mt-4">
+                    <label htmlFor="progress-slider" className="block text-sm font-medium mb-2">Update Progress (0-100)</label>
+                    <input
+                    id="progress-slider"
+                    type="range"
+                    min="0"
+                    max="100"
+                    step="1"
+                    value={newProgress}
+                    onChange={(e) => setNewProgress(parseInt(e.target.value))}
+                    className="w-full h-2 bg-slate-200 rounded-lg appearance-none cursor-pointer range-lg"
+                    />
+                    <div className="flex justify-between text-xs text-slate-500 mt-1">
+                        <span>0%</span>
+                        <span>{newProgress}%</span>
+                        <span>100%</span>
+                    </div>
+                    <button 
+                    onClick={handleProgressUpdate}
+                    disabled={isUpdating || !isProjectActive}
+                    className="mt-4 w-full py-2 bg-emerald-600 text-white rounded-lg text-sm font-semibold hover:bg-emerald-700 transition-colors disabled:opacity-50"
+                    >
+                    {isUpdating ? 'Saving...' : 'Save Progress'}
+                    </button>
+                </div>
             </div>
             
             {/* SLA Control */}
@@ -566,9 +795,121 @@ const AdminProjectDetail: React.FC = () => {
             </div>
           </div>
 
-          {/* Right Column: Messages & Files */}
+          {/* Right Column: Messages, Files & Milestones */}
           <div className="lg:col-span-2 space-y-8">
             
+            {/* Milestones & Deposit Requirement */}
+            <div className="bg-white p-6 rounded-xl shadow-lg border border-slate-100">
+                <h2 className="text-xl font-bold mb-4 flex items-center gap-2 text-slate-900 border-b border-slate-100 pb-4">
+                    <DollarSign className="w-5 h-5 text-purple-600" /> Project Milestones
+                </h2>
+                
+                {/* Deposit Requirement Setting */}
+                <div className="mb-6 p-4 bg-slate-50 rounded-lg border border-slate-200">
+                    <h3 className="font-bold text-sm mb-2">Set Deposit Requirement</h3>
+                    <div className="flex gap-3">
+                        <div className="relative flex-1">
+                            <span className="absolute left-3 top-2.5 text-slate-500 text-sm">$</span>
+                            <input
+                                type="number"
+                                value={requiredDeposit}
+                                onChange={(e) => setRequiredDeposit(parseFloat(e.target.value) || '')}
+                                placeholder="0.00"
+                                min="0"
+                                step="0.01"
+                                className="w-full pl-6 pr-2 py-2 border border-slate-300 rounded-lg text-sm"
+                                disabled={isUpdating}
+                            />
+                        </div>
+                        <button 
+                            onClick={handleUpdateDepositRequirement}
+                            disabled={isUpdating}
+                            className="py-2 px-4 bg-indigo-600 text-white rounded-lg text-sm font-semibold hover:bg-indigo-700 transition-colors disabled:opacity-50"
+                        >
+                            Save Deposit
+                        </button>
+                    </div>
+                    <p className="text-xs text-slate-500 mt-2">
+                        Current Status: {project.deposit_paid ? 'Paid' : 'Unpaid'}
+                    </p>
+                </div>
+
+                {/* Milestones List */}
+                <div className="space-y-3 mb-6">
+                    {project.milestones.length > 0 ? (
+                        project.milestones.map(milestone => (
+                            <div key={milestone.id} className="p-3 bg-slate-50 rounded-lg border border-slate-100 flex justify-between items-center">
+                                <div className="flex items-center gap-3">
+                                    <span className="font-bold text-slate-900 text-sm">{milestone.order_index}. {milestone.name}</span>
+                                    <span className="text-sm text-slate-600">(${(milestone.amount_cents / 100).toFixed(2)})</span>
+                                </div>
+                                <div className="flex items-center gap-3">
+                                    <span className={`px-2 py-0.5 rounded-full text-xs font-semibold ${getMilestoneStatusColor(milestone.status)}`}>
+                                        {milestone.status}
+                                    </span>
+                                    {milestone.status === 'pending' && (
+                                        <button 
+                                            onClick={() => handleInvoiceMilestone(milestone)}
+                                            disabled={isUpdating}
+                                            className="text-indigo-600 hover:text-indigo-800 text-xs font-semibold flex items-center gap-1"
+                                        >
+                                            <DollarSign className="w-4 h-4" /> Invoice
+                                        </button>
+                                    )}
+                                    {milestone.stripe_invoice_id && (
+                                        <a 
+                                            href={`https://dashboard.stripe.com/invoices/${milestone.stripe_invoice_id}`} 
+                                            target="_blank" 
+                                            rel="noopener noreferrer" 
+                                            className="text-slate-500 hover:text-indigo-600 text-xs flex items-center gap-1"
+                                        >
+                                            <ExternalLink className="w-3 h-3" /> Stripe
+                                        </a>
+                                    )}
+                                </div>
+                            </div>
+                        ))
+                    ) : (
+                        <p className="text-slate-500 text-sm">No milestones defined.</p>
+                    )}
+                </div>
+                
+                {/* Add New Milestone Form */}
+                <form onSubmit={handleAddMilestone} className="space-y-3 pt-4 border-t border-slate-100">
+                    <h3 className="font-bold text-sm text-slate-900">Add New Milestone</h3>
+                    <input
+                        type="text"
+                        value={newMilestoneName}
+                        onChange={(e) => setNewMilestoneName(e.target.value)}
+                        placeholder="Milestone Name (e.g., Design Approval)"
+                        className="w-full p-2 border border-slate-300 rounded-lg text-sm"
+                        required
+                        disabled={isUpdating}
+                    />
+                    <div className="relative">
+                        <span className="absolute left-3 top-2.5 text-slate-500 text-sm">$</span>
+                        <input
+                            type="number"
+                            value={newMilestoneAmount}
+                            onChange={(e) => setNewMilestoneAmount(parseFloat(e.target.value) || '')}
+                            placeholder="Amount (USD)"
+                            min="0.01"
+                            step="0.01"
+                            className="w-full pl-6 pr-2 py-2 border border-slate-300 rounded-lg text-sm"
+                            required
+                            disabled={isUpdating}
+                        />
+                    </div>
+                    <button 
+                        type="submit"
+                        disabled={isUpdating || !newMilestoneName || !newMilestoneAmount}
+                        className="w-full py-2 bg-indigo-600 text-white rounded-lg text-sm font-semibold hover:bg-indigo-700 transition-colors disabled:opacity-50"
+                    >
+                        {isUpdating ? 'Adding...' : 'Add Milestone'}
+                    </button>
+                </form>
+            </div>
+
             {/* Messages Thread */}
             <div className="bg-white p-6 rounded-xl shadow-lg border border-slate-100">
               <h2 className="text-xl font-bold mb-4 flex items-center gap-2 border-b border-slate-100 pb-4">

@@ -3,22 +3,34 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { useParams, Link } from 'react-router-dom';
 import { supabase } from '../integrations/supabase/client';
-import { Loader2, Briefcase, CheckCircle2, MessageSquare, FileText, Upload, Download, Send, ArrowLeft, AlertTriangle, DollarSign, Clock } from 'lucide-react';
+import { Loader2, Briefcase, CheckCircle2, MessageSquare, FileText, Upload, Download, Send, ArrowLeft, AlertTriangle, DollarSign, Clock, ExternalLink } from 'lucide-react';
 import ClientLayout from '../components/ClientLayout';
 import { useAuth } from '../hooks/useAuth';
 import { ClientBillingService } from '../services/clientBillingService';
 import { calculateSlaMetrics, SlaStatus } from '../utils/sla';
 import { format } from 'date-fns';
 
+interface Milestone {
+  id: string;
+  name: string;
+  amount_cents: number;
+  status: 'pending' | 'invoiced' | 'paid';
+  order_index: number;
+  stripe_invoice_id: string | null;
+}
+
 interface Project {
   id: string;
   title: string;
   description: string;
-  status: string;
+  status: 'draft' | 'awaiting_deposit' | 'active' | 'paused' | 'completed';
   progress_percent: number;
   tasks: Task[];
   messages: Message[];
   files: FileItem[];
+  milestones: Milestone[]; // New field
+  required_deposit_cents: number | null; // New field
+  deposit_paid: boolean; // New field
   // SLA Fields
   sla_days: number | null;
   sla_start_date: string | null;
@@ -128,14 +140,17 @@ const ClientProjectDetail: React.FC = () => {
     const { data, error } = await supabase
       .from('projects')
       .select(`
-        id, title, description, status, progress_percent, sla_days, sla_start_date, sla_due_date, sla_status,
+        id, title, description, status, progress_percent, required_deposit_cents, deposit_paid,
+        sla_days, sla_start_date, sla_due_date, sla_status,
         tasks (id, title, status, due_date),
         messages (id, body, created_at, sender_profile_id, profiles (full_name)),
-        files (id, file_name, file_type, file_size, storage_path, created_at, profiles (full_name))
+        files (id, file_name, file_type, file_size, storage_path, created_at, profiles (full_name)),
+        milestones (id, name, amount_cents, status, order_index, stripe_invoice_id)
       `)
       .eq('id', id)
       .order('created_at', { foreignTable: 'messages', ascending: true })
       .order('due_date', { foreignTable: 'tasks', ascending: true })
+      .order('order_index', { foreignTable: 'milestones', ascending: true })
       .single();
 
     if (error) {
@@ -318,6 +333,15 @@ const ClientProjectDetail: React.FC = () => {
           default: return 'bg-slate-100 text-slate-800';
       }
   };
+  
+  const getMilestoneStatusColor = (status: Milestone['status']) => {
+      switch (status) {
+          case 'paid': return 'bg-emerald-100 text-emerald-800';
+          case 'invoiced': return 'bg-amber-100 text-amber-800';
+          case 'pending':
+          default: return 'bg-slate-100 text-slate-800';
+      }
+  };
 
   if (isLoading) {
     return (
@@ -351,6 +375,8 @@ const ClientProjectDetail: React.FC = () => {
       </ClientLayout>
     );
   }
+  
+  const isDepositRequired = project.required_deposit_cents && project.required_deposit_cents > 0;
 
   return (
     <ClientLayout>
@@ -399,6 +425,26 @@ const ClientProjectDetail: React.FC = () => {
 
               <p className="text-sm text-slate-600">{completedTasks}/{totalTasks} Tasks Completed</p>
             </div>
+            
+            {/* Deposit Status */}
+            {isDepositRequired && (
+                <div className={`p-6 rounded-xl border ${project.deposit_paid ? 'bg-emerald-50 border-emerald-200' : 'bg-red-50 border-red-200'} shadow-lg`}>
+                    <h2 className="text-xl font-bold mb-2 flex items-center gap-2">
+                        <DollarSign className="w-5 h-5" /> Deposit Required
+                    </h2>
+                    <p className="text-lg font-bold mt-1 text-slate-900">
+                        Required: ${project.required_deposit_cents ? (project.required_deposit_cents / 100).toFixed(2) : 'N/A'}
+                    </p>
+                    <p className={`text-sm font-semibold mt-2 ${project.deposit_paid ? 'text-emerald-700' : 'text-red-700'}`}>
+                        Status: {project.deposit_paid ? 'PAID' : 'AWAITING PAYMENT'}
+                    </p>
+                    {!project.deposit_paid && project.status === 'awaiting_deposit' && (
+                        <p className="text-xs text-red-600 mt-3">
+                            Project work cannot begin until the deposit invoice is paid. Please check your billing portal.
+                        </p>
+                    )}
+                </div>
+            )}
             
             {/* SLA Status (Client View) */}
             {project.sla_due_date && slaMetrics && (
@@ -452,8 +498,40 @@ const ClientProjectDetail: React.FC = () => {
             </div>
           </div>
 
-          {/* Right Column: Messages & Files */}
+          {/* Right Column: Messages, Files & Milestones */}
           <div className="lg:col-span-2 space-y-8">
+            
+            {/* Milestones */}
+            {project.milestones.length > 0 && (
+                <div className="bg-white p-6 rounded-xl shadow-lg border border-slate-100">
+                    <h2 className="text-xl font-bold mb-4 flex items-center gap-2 text-slate-900 border-b border-slate-100 pb-4">
+                        <DollarSign className="w-5 h-5 text-purple-600" /> Payment Milestones
+                    </h2>
+                    <div className="space-y-4">
+                        {project.milestones.map(milestone => (
+                            <div key={milestone.id} className="p-3 bg-slate-50 rounded-lg border border-slate-100 flex justify-between items-center">
+                                <div className="flex items-center gap-3">
+                                    <span className="font-bold text-slate-900 text-sm">{milestone.order_index}. {milestone.name}</span>
+                                    <span className="text-sm text-slate-600">(${(milestone.amount_cents / 100).toFixed(2)})</span>
+                                </div>
+                                <div className="flex items-center gap-3">
+                                    <span className={`px-2 py-0.5 rounded-full text-xs font-semibold ${getMilestoneStatusColor(milestone.status)}`}>
+                                        {milestone.status}
+                                    </span>
+                                    {milestone.stripe_invoice_id && milestone.status !== 'paid' && (
+                                        <Link 
+                                            to="/client/billing" 
+                                            className="text-red-600 hover:text-red-800 text-xs font-semibold flex items-center gap-1"
+                                        >
+                                            <ExternalLink className="w-3 h-3" /> Pay Now
+                                        </Link>
+                                    )}
+                                </div>
+                            </div>
+                        ))}
+                    </div>
+                </div>
+            )}
             
             {/* Messages Thread */}
             <div className="bg-white p-6 rounded-xl shadow-lg border border-slate-100">

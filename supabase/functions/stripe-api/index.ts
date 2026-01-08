@@ -31,7 +31,7 @@ serve(async (req) => {
   );
 
   try {
-    const { client_id, price_id, line_items, due_date, deposit_details } = await req.json();
+    const { client_id, price_id, line_items, due_date, deposit_details, milestone_details } = await req.json();
 
     if (path !== '/create-portal-session' && !client_id) {
       return errorResponse('Client ID is required.', 400);
@@ -88,6 +88,47 @@ serve(async (req) => {
       stripeCustomerId = customer.id;
       return stripeCustomerId;
     };
+    
+    // --- Helper to apply unapplied deposits as credit ---
+    const applyUnappliedDeposits = async (customerId: string, newInvoiceId: string) => {
+        const { data: depositsToApply, error: depositFetchError } = await supabaseAdmin
+            .from('deposits')
+            .select('id, amount_cents')
+            .eq('client_id', client_id)
+            .eq('status', 'paid')
+            .is('applied_to_invoice_id', null)
+            .order('created_at', { ascending: true });
+
+        if (depositFetchError) {
+            console.error('[stripe-api] Error fetching deposits to apply:', depositFetchError);
+            return;
+        }
+        
+        if (depositsToApply && depositsToApply.length > 0) {
+            console.log(`[stripe-api] Applying ${depositsToApply.length} unapplied deposits as credit.`);
+            
+            for (const deposit of depositsToApply) {
+                // 1. Create a negative invoice item (credit)
+                await stripe.invoiceItems.create({
+                    customer: customerId,
+                    unit_amount: -deposit.amount_cents, // Negative amount for credit
+                    currency: 'usd',
+                    description: `Deposit Credit Applied (ID: ${deposit.id})`,
+                    invoice: newInvoiceId,
+                });
+                
+                // 2. Update deposit status in DB
+                await supabaseAdmin
+                    .from('deposits')
+                    .update({ 
+                        status: 'applied', 
+                        applied_to_invoice_id: newInvoiceId 
+                    })
+                    .eq('id', deposit.id);
+            }
+        }
+    };
+
 
     // --- Route Handling ---
     switch (path) {
@@ -106,6 +147,11 @@ serve(async (req) => {
           payment_behavior: 'default_incomplete',
           expand: ['latest_invoice.payment_intent'],
         });
+        
+        // If an invoice was created immediately, apply deposits to it
+        if (subscription.latest_invoice && typeof subscription.latest_invoice !== 'string') {
+            await applyUnappliedDeposits(customerId, subscription.latest_invoice.id);
+        }
 
         // If payment is required, return the invoice URL
         if (subscription.latest_invoice && typeof subscription.latest_invoice !== 'string') {
@@ -132,7 +178,17 @@ serve(async (req) => {
         if (!line_items || line_items.length === 0) return errorResponse('Line items are required.', 400);
         const customerId = await ensureStripeCustomer();
 
-        // 1. Create Invoice Items
+        // 1. Create Invoice
+        const invoice = await stripe.invoices.create({
+          customer: customerId,
+          collection_method: 'send_invoice',
+          days_until_due: due_date ? Math.ceil((new Date(due_date).getTime() - Date.now()) / (1000 * 60 * 60 * 24)) : 7,
+        });
+        
+        // 2. Apply deposits as credit to the new invoice
+        await applyUnappliedDeposits(customerId, invoice.id);
+
+        // 3. Create Invoice Items
         for (const item of line_items) {
           await stripe.invoiceItems.create({
             customer: customerId,
@@ -141,20 +197,14 @@ serve(async (req) => {
               product_data: { name: item.description },
               unit_amount: item.amount * 100, // Convert to cents
             },
+            invoice: invoice.id, // Attach to the specific invoice
           });
         }
 
-        // 2. Create Invoice
-        const invoice = await stripe.invoices.create({
-          customer: customerId,
-          collection_method: 'send_invoice',
-          days_until_due: due_date ? Math.ceil((new Date(due_date).getTime() - Date.now()) / (1000 * 60 * 60 * 24)) : 7,
-        });
-
-        // 3. Finalize and Send
+        // 4. Finalize and Send
         const finalizedInvoice = await stripe.invoices.sendInvoice(invoice.id);
 
-        // 4. Store in Supabase (Webhook will handle the final status update, but we store the initial record)
+        // 5. Store in Supabase (Webhook will handle the final status update, but we store the initial record)
         const { error: invoiceInsertError } = await supabaseAdmin
           .from('invoices')
           .insert({
@@ -184,7 +234,7 @@ serve(async (req) => {
             return errorResponse('Deposit amount and description are required.', 400);
         }
         const customerId = await ensureStripeCustomer();
-        const { amount, description, apply_to_future } = deposit_details;
+        const { amount, description, project_id } = deposit_details;
         const amountCents = Math.round(amount * 100);
         
         // 1. Create initial deposit record (status: pending)
@@ -192,9 +242,9 @@ serve(async (req) => {
             .from('deposits')
             .insert({
                 client_id: client.id,
+                project_id: project_id || null, // Link to project if provided
                 amount_cents: amountCents,
                 status: 'pending',
-                is_applied: !apply_to_future, // If not applied to future, it's a direct payment, not a credit
             })
             .select()
             .single();
@@ -205,14 +255,14 @@ serve(async (req) => {
         }
         
         // 2. Create Stripe Invoice Item
-        await stripe.invoiceItems.create({
+        const invoiceItem = await stripe.invoiceItems.create({
             customer: customerId,
             price_data: {
                 currency: 'usd',
                 product_data: { name: `Deposit: ${description}` },
                 unit_amount: amountCents,
             },
-            description: `Deposit for future services (${depositRecord.id})`,
+            description: `Deposit for project ${project_id ? project_id : 'services'} (Deposit ID: ${depositRecord.id})`,
         });
         
         // 3. Create and Finalize Invoice
@@ -221,7 +271,13 @@ serve(async (req) => {
             collection_method: 'send_invoice',
             auto_advance: true, // Automatically transition to open/paid
             days_until_due: 0, // Due immediately
+            metadata: {
+                deposit_id: depositRecord.id,
+            },
         });
+        
+        // Attach invoice item to the new invoice
+        await stripe.invoiceItems.update(invoiceItem.id, { invoice: invoice.id });
         
         const finalizedInvoice = await stripe.invoices.sendInvoice(invoice.id);
         
@@ -230,7 +286,6 @@ serve(async (req) => {
             .from('deposits')
             .update({
                 stripe_invoice_id: finalizedInvoice.id,
-                // Payment intent ID will be updated by the webhook (invoice.payment_succeeded)
             })
             .eq('id', depositRecord.id);
             
@@ -258,6 +313,77 @@ serve(async (req) => {
 
         return jsonResponse({ 
           deposit_id: depositRecord.id,
+          invoice_id: finalizedInvoice.id,
+          hosted_url: finalizedInvoice.hosted_invoice_url,
+          status: finalizedInvoice.status,
+        });
+      }
+      
+      case '/create-milestone-invoice': {
+        if (!milestone_details || !milestone_details.milestone_id || !milestone_details.amount_cents || !milestone_details.description) {
+            return errorResponse('Milestone details are required.', 400);
+        }
+        const customerId = await ensureStripeCustomer();
+        const { milestone_id, amount_cents, description, project_id } = milestone_details;
+        
+        // 1. Create Invoice
+        const invoice = await stripe.invoices.create({
+          customer: customerId,
+          collection_method: 'send_invoice',
+          days_until_due: 7, // Default 7 days for milestones
+          metadata: {
+              milestone_id: milestone_id,
+              project_id: project_id,
+          },
+        });
+        
+        // 2. Apply deposits as credit to the new invoice
+        await applyUnappliedDeposits(customerId, invoice.id);
+
+        // 3. Create Invoice Item for milestone
+        await stripe.invoiceItems.create({
+            customer: customerId,
+            price_data: {
+                currency: 'usd',
+                product_data: { name: description },
+                unit_amount: amount_cents,
+            },
+            description: `Milestone: ${description}`,
+            invoice: invoice.id,
+        });
+
+        // 4. Finalize and Send
+        const finalizedInvoice = await stripe.invoices.sendInvoice(invoice.id);
+        
+        // 5. Update Milestone status and store invoice ID
+        await supabaseAdmin
+            .from('milestones')
+            .update({ 
+                status: 'invoiced', 
+                stripe_invoice_id: finalizedInvoice.id 
+            })
+            .eq('id', milestone_id);
+
+        // 6. Store Invoice in Supabase
+        const { error: invoiceInsertError } = await supabaseAdmin
+          .from('invoices')
+          .insert({
+            client_id: client.id,
+            stripe_invoice_id: finalizedInvoice.id,
+            status: finalizedInvoice.status,
+            hosted_invoice_url: finalizedInvoice.hosted_invoice_url,
+            pdf_url: finalizedInvoice.invoice_pdf,
+            amount_due: finalizedInvoice.amount_due,
+            currency: finalizedInvoice.currency,
+            due_date: finalizedInvoice.due_date ? new Date(finalizedInvoice.due_date * 1000).toISOString() : null,
+          });
+
+        if (invoiceInsertError) {
+          console.error('[stripe-api] Failed to insert initial milestone invoice record:', invoiceInsertError);
+        }
+
+        return jsonResponse({ 
+          milestone_id: milestone_id,
           invoice_id: finalizedInvoice.id,
           hosted_url: finalizedInvoice.hosted_invoice_url,
           status: finalizedInvoice.status,

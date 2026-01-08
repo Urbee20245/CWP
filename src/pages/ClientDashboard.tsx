@@ -13,6 +13,8 @@ interface ProjectSummary {
   title: string;
   status: string;
   progress_percent: number;
+  required_deposit_cents: number | null;
+  deposit_paid: boolean;
 }
 
 interface AccessStatus {
@@ -84,7 +86,7 @@ const ClientDashboard: React.FC = () => {
       // We fetch projects regardless of access status here, but the UI will gate display.
       const { data: projectsData, error: projectsError } = await supabase
         .from('projects')
-        .select('id, title, status, progress_percent')
+        .select('id, title, status, progress_percent, required_deposit_cents, deposit_paid')
         .eq('client_id', currentClientId)
         .order('created_at', { ascending: false });
 
@@ -208,9 +210,16 @@ const ClientDashboard: React.FC = () => {
                     >
                       <div className="flex justify-between items-start mb-3">
                         <h3 className="text-lg font-bold text-slate-900">{project.title}</h3>
-                        <span className={`px-3 py-1 rounded-full text-xs font-semibold ${project.status === 'completed' ? 'bg-emerald-100 text-emerald-800' : 'bg-indigo-100 text-indigo-800'}`}>
-                          {project.status}
-                        </span>
+                        <div className="flex items-center gap-2">
+                            {project.required_deposit_cents && project.required_deposit_cents > 0 && (
+                                <span className={`px-3 py-1 rounded-full text-xs font-semibold ${project.deposit_paid ? 'bg-emerald-100 text-emerald-800' : 'bg-red-100 text-red-800'}`}>
+                                    {project.deposit_paid ? 'Deposit Paid' : 'Deposit Due'}
+                                </span>
+                            )}
+                            <span className={`px-3 py-1 rounded-full text-xs font-semibold ${project.status === 'completed' ? 'bg-emerald-100 text-emerald-800' : 'bg-indigo-100 text-indigo-800'}`}>
+                                {project.status.replace('_', ' ')}
+                            </span>
+                        </div>
                       </div>
                       
                       <div className="flex items-center gap-4">
