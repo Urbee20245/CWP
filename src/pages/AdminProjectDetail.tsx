@@ -9,6 +9,7 @@ import { Profile } from '../types/auth';
 import { calculateSlaMetrics, calculateSlaDueDate, SlaStatus, adjustSlaDueDate } from '../utils/sla';
 import { format, differenceInDays, parseISO } from 'date-fns';
 import { AdminService } from '../services/adminService';
+import { useAuth } from '../hooks/useAuth'; // <-- New Import
 
 interface Milestone {
   id: string;
@@ -83,6 +84,7 @@ interface PauseLog {
 
 const AdminProjectDetail: React.FC = () => {
   const { id } = useParams<{ id: string }>();
+  const { user } = useAuth(); // <-- Get user from context
   const [project, setProject] = useState<Project | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [newProgress, setNewProgress] = useState(0);
@@ -258,16 +260,13 @@ const AdminProjectDetail: React.FC = () => {
 
   const handleMessageSend = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!newMessage.trim() || !project) return;
-
-    const user = await supabase.auth.getUser();
-    if (!user.data.user) return;
+    if (!newMessage.trim() || !project || !user) return; // <-- Check local user
 
     const { error } = await supabase
       .from('messages')
       .insert({
         project_id: project.id,
-        sender_profile_id: user.data.user.id,
+        sender_profile_id: user.id, // <-- Use local user.id
         body: newMessage.trim(),
       });
 
@@ -282,7 +281,7 @@ const AdminProjectDetail: React.FC = () => {
   
   const handleTaskCreation = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!newTaskTitle.trim() || !project) return;
+    if (!newTaskTitle.trim() || !project || !user) return; // <-- Check local user
     
     setIsUpdating(true);
     
@@ -293,7 +292,7 @@ const AdminProjectDetail: React.FC = () => {
             title: newTaskTitle.trim(),
             due_date: newTaskDueDate || null,
             status: 'todo',
-            created_by: (await supabase.auth.getUser()).data.user?.id,
+            created_by: user.id, // <-- Use local user.id
         });
         
     if (error) {
@@ -325,16 +324,9 @@ const AdminProjectDetail: React.FC = () => {
   
   const handleFileUpload = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!fileToUpload || !project) return;
+    if (!fileToUpload || !project || !user) return; // <-- Check local user
 
     setIsUploading(true);
-    
-    const user = await supabase.auth.getUser();
-    if (!user.data.user) {
-        alert("User not authenticated.");
-        setIsUploading(false);
-        return;
-    }
     
     // 1. Upload file to storage
     const storagePath = `${project.client_id}/${project.id}/${Date.now()}-${fileToUpload.name}`;
@@ -358,7 +350,7 @@ const AdminProjectDetail: React.FC = () => {
       .from('files')
       .insert({
         project_id: project.id,
-        uploader_profile_id: user.data.user.id,
+        uploader_profile_id: user.id, // <-- Use local user.id
         storage_path: storagePath,
         file_name: fileToUpload.name,
         file_type: fileToUpload.type,
@@ -1136,10 +1128,10 @@ const AdminProjectDetail: React.FC = () => {
               <div className="h-80 overflow-y-auto space-y-4 p-2 flex flex-col">
                 {project.messages.length > 0 ? (
                   project.messages.map(message => (
-                    <div key={message.id} className={`flex ${message.sender_profile_id === (supabase.auth.getUser() as any).data.user?.id ? 'justify-end' : 'justify-start'}`}>
-                        <div className={`max-w-[85%] p-3 rounded-xl text-sm ${message.sender_profile_id === (supabase.auth.getUser() as any).data.user?.id ? 'bg-indigo-600 text-white rounded-br-none' : 'bg-slate-100 text-slate-800 rounded-tl-none'}`}>
-                            <div className={`text-xs mb-1 ${message.sender_profile_id === (supabase.auth.getUser() as any).data.user?.id ? 'text-indigo-200' : 'text-slate-500'}`}>
-                                {message.sender_profile_id === (supabase.auth.getUser() as any).data.user?.id ? 'You' : message.profiles.full_name} - {new Date(message.created_at).toLocaleTimeString()}
+                    <div key={message.id} className={`flex ${message.sender_profile_id === user?.id ? 'justify-end' : 'justify-start'}`}>
+                        <div className={`max-w-[85%] p-3 rounded-xl text-sm ${message.sender_profile_id === user?.id ? 'bg-indigo-600 text-white rounded-br-none' : 'bg-slate-100 text-slate-800 rounded-tl-none'}`}>
+                            <div className={`text-xs mb-1 ${message.sender_profile_id === user?.id ? 'text-indigo-200' : 'text-slate-500'}`}>
+                                {message.sender_profile_id === user?.id ? 'You' : message.profiles.full_name} - {new Date(message.created_at).toLocaleTimeString()}
                             </div>
                             {message.body}
                         </div>
