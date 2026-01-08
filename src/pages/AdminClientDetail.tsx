@@ -8,6 +8,7 @@ import AdminLayout from '../components/AdminLayout';
 import { Profile } from '../types/auth';
 import { BillingService } from '../services/billingService';
 import { sendBillingNotification } from '../../supabase/functions/_shared/notificationService';
+import AddProjectDialog from '../components/AddProjectDialog'; // Import the new dialog
 
 interface Client {
   id: string;
@@ -66,6 +67,9 @@ const AdminClientDetail: React.FC = () => {
   const [client, setClient] = useState<Client | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [activeTab, setActiveTab] = useState<'projects' | 'billing' | 'notes' | 'access'>('projects');
+  
+  // Dialog State
+  const [isProjectDialogOpen, setIsProjectDialogOpen] = useState(false);
   
   // Billing State
   const [isProcessing, setIsProcessing] = useState(false);
@@ -287,16 +291,8 @@ const AdminClientDetail: React.FC = () => {
     const graceDate = client.billing_grace_until ? new Date(client.billing_grace_until).toLocaleDateString() : 'N/A';
     
     try {
-        // Use the mock notification service for client-side simulation/admin trigger
-        // Note: This uses the client-side mock, the server-side function handles real automation
-        // We need to ensure the mock function is correctly imported or defined if used client-side.
-        // Since sendBillingNotification is imported from a shared edge function file, 
-        // we should assume it's a mock or remove it if it causes issues client-side.
         // For now, we'll use a simple alert as a placeholder for the mock service.
         alert(`Manual reminder (Stage ${stage}) simulated for ${client.billing_email}. Grace period ends ${graceDate}.`);
-        
-        // In a real scenario, we might call a dedicated edge function to trigger the email:
-        // await BillingService.sendManualReminder(client.id, stage);
         
     } catch (e: any) {
         alert(`Failed to send reminder: ${e.message}`);
@@ -424,7 +420,10 @@ const AdminClientDetail: React.FC = () => {
                     <p className="text-slate-500 text-sm">No projects found for this client.</p>
                   )}
                 </div>
-                <button className="mt-6 w-full py-2 border border-slate-300 text-slate-600 rounded-lg text-sm font-semibold hover:bg-slate-100 transition-colors">
+                <button 
+                  onClick={() => setIsProjectDialogOpen(true)}
+                  className="mt-6 w-full py-2 border border-slate-300 text-slate-600 rounded-lg text-sm font-semibold hover:bg-slate-100 transition-colors"
+                >
                   <Plus className="w-4 h-4 inline mr-2" /> Add New Project
                 </button>
               </div>
@@ -768,6 +767,17 @@ const AdminClientDetail: React.FC = () => {
           )}
         </div>
       </div>
+      
+      {/* Add Project Dialog */}
+      {client && (
+        <AddProjectDialog
+          isOpen={isProjectDialogOpen}
+          onClose={() => setIsProjectDialogOpen(false)}
+          onProjectAdded={fetchClientData}
+          clientId={client.id}
+          clientName={client.business_name}
+        />
+      )}
     </AdminLayout>
   );
 };
