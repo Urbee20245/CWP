@@ -29,7 +29,7 @@ export const AdminService = {
     return invokeEdgeFunction('send-sms', { to, body });
   },
   
-  // --- Billing (Moved from BillingService) ---
+  // --- Billing ---
   createStripeCustomer: async (clientId: string) => {
     return invokeEdgeFunction('stripe-api/create-customer', { client_id: clientId });
   },
@@ -40,6 +40,17 @@ export const AdminService = {
 
   createInvoice: async (clientId: string, lineItems: Array<{ description: string, amount: number }>, dueDate?: string) => {
     return invokeEdgeFunction('stripe-api/create-invoice', { client_id: clientId, line_items: lineItems, due_date: dueDate });
+  },
+  
+  createDepositInvoice: async (clientId: string, amount: number, description: string, applyToFuture: boolean) => {
+    return invokeEdgeFunction('stripe-api/create-deposit-invoice', { 
+        client_id: clientId, 
+        deposit_details: {
+            amount,
+            description,
+            apply_to_future: applyToFuture,
+        }
+    });
   },
 
   createPortalSession: async (clientId: string) => {

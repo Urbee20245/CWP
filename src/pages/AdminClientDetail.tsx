@@ -3,34 +3,13 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import { useParams, Link } from 'react-router-dom';
 import { supabase } from '../integrations/supabase/client';
-import { Loader2, Briefcase, FileText, DollarSign, Plus, CreditCard, Zap, ExternalLink, ShieldCheck, Lock, Trash2, Send, AlertCircle, MessageSquare, Phone } from 'lucide-react';
+import { Loader2, Briefcase, FileText, DollarSign, Plus, CreditCard, Zap, ExternalLink, ShieldCheck, Lock, Trash2, Send, AlertCircle, MessageSquare, Phone, CheckCircle2 } from 'lucide-react';
 import AdminLayout from '../components/AdminLayout';
 import { Profile } from '../types/auth';
 import { AdminService } from '../services/adminService'; // Use AdminService for admin functions
 import { ClientBillingService } from '../services/clientBillingService'; // Use ClientBillingService for client functions
 import AddProjectDialog from '../components/AddProjectDialog';
 import SendSmsDialog from '../components/SendSmsDialog'; // Import the new dialog
-
-interface Client {
-  id: string;
-  business_name: string;
-  phone: string;
-  status: string;
-  notes: string;
-  owner_profile_id: string;
-  stripe_customer_id: string | null;
-  billing_email: string | null;
-  access_override: boolean;
-  access_override_note: string | null;
-  access_status: string;
-  billing_grace_until: string | null;
-  billing_escalation_stage: number;
-  last_billing_notice_sent: string | null;
-  profiles: Profile;
-  projects: ProjectSummary[];
-  invoices: InvoiceSummary[];
-  subscriptions: SubscriptionSummary[];
-}
 
 interface ProjectSummary {
   id: string;
@@ -55,6 +34,38 @@ interface SubscriptionSummary {
   cancel_at_period_end: boolean;
 }
 
+interface DepositSummary {
+  id: string;
+  amount_cents: number;
+  status: 'paid' | 'pending' | 'failed';
+  stripe_invoice_id: string | null;
+  is_applied: boolean;
+  applied_to_invoice_id: string | null;
+  created_at: string;
+}
+
+interface Client {
+  id: string;
+  business_name: string;
+  phone: string;
+  status: string;
+  notes: string;
+  owner_profile_id: string;
+  stripe_customer_id: string | null;
+  billing_email: string | null;
+  access_override: boolean;
+  access_override_note: string | null;
+  access_status: string;
+  billing_grace_until: string | null;
+  billing_escalation_stage: number;
+  last_billing_notice_sent: string | null;
+  profiles: Profile;
+  projects: ProjectSummary[];
+  invoices: InvoiceSummary[];
+  subscriptions: SubscriptionSummary[];
+  deposits: DepositSummary[]; // New field
+}
+
 interface BillingProduct {
   id: string;
   name: string;
@@ -67,11 +78,11 @@ const AdminClientDetail: React.FC = () => {
   const { id } = useParams<{ id: string }>();
   const [client, setClient] = useState<Client | null>(null);
   const [isLoading, setIsLoading] = useState(true);
-  const [activeTab, setActiveTab] = useState<'projects' | 'billing' | 'notes' | 'access'>('projects');
+  const [activeTab, setActiveTab] = useState<'projects' | 'billing' | 'notes' | 'access'>('billing'); // Default to billing for deposit feature
   
   // Dialog State
   const [isProjectDialogOpen, setIsProjectDialogOpen] = useState(false);
-  const [isSmsDialogOpen, setIsSmsDialogOpen] = useState(false); // New SMS dialog state
+  const [isSmsDialogOpen, setIsSmsDialogOpen] = useState(false); 
   
   // Billing State
   const [isProcessing, setIsProcessing] = useState(false);
@@ -80,6 +91,11 @@ const AdminClientDetail: React.FC = () => {
   const [selectedOneTimePriceId, setSelectedOneTimePriceId] = useState('');
   const [invoiceItems, setInvoiceItems] = useState([{ description: '', amount: 0 }]);
   const [invoiceDueDate, setInvoiceDueDate] = useState('');
+  
+  // Deposit State
+  const [depositAmount, setDepositAmount] = useState<number | ''>('');
+  const [depositDescription, setDepositDescription] = useState('');
+  const [applyDepositToFuture, setApplyDepositToFuture] = useState(true);
   
   // Access State
   const [overrideEnabled, setOverrideEnabled] = useState(false);
@@ -96,7 +112,8 @@ const AdminClientDetail: React.FC = () => {
           profiles (id, full_name, email),
           projects (id, title, status, progress_percent),
           invoices (id, amount_due, status, hosted_invoice_url, created_at),
-          subscriptions (id, stripe_price_id, status, current_period_end, cancel_at_period_end)
+          subscriptions (id, stripe_price_id, status, current_period_end, cancel_at_period_end),
+          deposits (id, amount_cents, status, stripe_invoice_id, is_applied, applied_to_invoice_id, created_at)
       `)
       .eq('id', id)
       .single();
@@ -143,6 +160,8 @@ const AdminClientDetail: React.FC = () => {
       case 'restricted': return 'bg-red-100 text-red-800';
       case 'override': return 'bg-purple-100 text-purple-800';
       case 'grace_period': return 'bg-yellow-100 text-yellow-800';
+      case 'pending': return 'bg-blue-100 text-blue-800';
+      case 'failed': return 'bg-red-100 text-red-800';
       default: return 'bg-slate-100 text-slate-800';
     }
   };
@@ -214,6 +233,33 @@ const AdminClientDetail: React.FC = () => {
       alert(`Failed to create invoice: ${e.message}`);
     } finally {
       setIsProcessing(false);
+    }
+  };
+  
+  const handleCollectDeposit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!client || !depositAmount || depositAmount <= 0) {
+        alert('Please enter a valid deposit amount.');
+        return;
+    }
+    setIsProcessing(true);
+    try {
+        const result = await AdminService.createDepositInvoice(
+            client.id, 
+            depositAmount as number, 
+            depositDescription || 'Project Deposit', 
+            applyDepositToFuture
+        );
+        
+        alert(`Deposit invoice created and sent! Status: ${result.status}. Client must pay the invoice.`);
+        setDepositAmount('');
+        setDepositDescription('');
+        setApplyDepositToFuture(true);
+        fetchClientData();
+    } catch (e: any) {
+        alert(`Failed to collect deposit: ${e.message}`);
+    } finally {
+        setIsProcessing(false);
     }
   };
 
@@ -304,6 +350,9 @@ const AdminClientDetail: React.FC = () => {
   const overdueInvoicesCount = client?.invoices?.filter(inv => inv.status === 'past_due' || inv.status === 'open').length || 0;
   const subscriptionProducts = products.filter(p => p.billing_type === 'subscription');
   const oneTimeProducts = products.filter(p => p.billing_type === 'one_time');
+  
+  const unappliedDeposits = client?.deposits?.filter(d => d.status === 'paid' && !d.is_applied) || [];
+  const totalUnappliedCredit = unappliedDeposits.reduce((sum, d) => sum + d.amount_cents, 0) / 100;
 
   if (isLoading) {
     return (
@@ -591,7 +640,7 @@ const AdminClientDetail: React.FC = () => {
           {/* Billing Tab Content (New Implementation) */}
           {activeTab === 'billing' && (
             <>
-              {/* Left Column: Customer & Subscriptions */}
+              {/* Left Column: Customer & Subscriptions & Deposits */}
               <div className="lg:col-span-1 space-y-6">
                 
                 {/* Stripe Customer Status */}
@@ -663,10 +712,82 @@ const AdminClientDetail: React.FC = () => {
                     Start Subscription
                   </button>
                 </div>
+                
+                {/* Deposit Collection */}
+                <div className="bg-white p-6 rounded-xl shadow-lg border border-slate-100">
+                    <h2 className="text-xl font-bold mb-4 flex items-center gap-2 text-slate-900 border-b border-slate-100 pb-4">
+                        <DollarSign className="w-5 h-5 text-blue-600" /> Collect Deposit
+                    </h2>
+                    <form onSubmit={handleCollectDeposit} className="space-y-4">
+                        <div>
+                            <label className="block text-sm font-medium text-slate-700 mb-1">Deposit Amount (USD) *</label>
+                            <div className="relative">
+                                <span className="absolute left-3 top-2.5 text-slate-500 text-sm">$</span>
+                                <input
+                                    type="number"
+                                    value={depositAmount}
+                                    onChange={(e) => setDepositAmount(parseFloat(e.target.value) || '')}
+                                    className="w-full pl-6 pr-2 py-2 border border-slate-300 rounded-lg text-sm"
+                                    required
+                                    min="0.01"
+                                    step="0.01"
+                                    disabled={isProcessing || !client.stripe_customer_id}
+                                />
+                            </div>
+                        </div>
+                        <div>
+                            <label className="block text-sm font-medium text-slate-700 mb-1">Description (Optional)</label>
+                            <input
+                                type="text"
+                                value={depositDescription}
+                                onChange={(e) => setDepositDescription(e.target.value)}
+                                placeholder="e.g., Project Kickoff Fee"
+                                className="w-full p-2 border border-slate-300 rounded-lg text-sm"
+                                disabled={isProcessing || !client.stripe_customer_id}
+                            />
+                        </div>
+                        <div className="flex items-center gap-2">
+                            <input
+                                id="apply-future"
+                                type="checkbox"
+                                checked={applyDepositToFuture}
+                                onChange={(e) => setApplyDepositToFuture(e.target.checked)}
+                                className="w-4 h-4 text-indigo-600 border-slate-300 rounded focus:ring-indigo-500"
+                                disabled={isProcessing || !client.stripe_customer_id}
+                            />
+                            <label htmlFor="apply-future" className="text-sm font-medium text-slate-700">
+                                Apply as credit to future invoice
+                            </label>
+                        </div>
+                        <button 
+                            type="submit"
+                            disabled={isProcessing || !depositAmount || !client.stripe_customer_id}
+                            className="w-full py-2 bg-blue-600 text-white rounded-lg text-sm font-semibold hover:bg-blue-700 transition-colors disabled:opacity-50 flex items-center justify-center gap-2"
+                        >
+                            {isProcessing ? <Loader2 className="w-4 h-4 animate-spin" /> : <DollarSign className="w-4 h-4" />}
+                            Collect Deposit
+                        </button>
+                    </form>
+                </div>
               </div>
 
-              {/* Right Column: Invoicing */}
+              {/* Right Column: Invoicing & Deposit History */}
               <div className="lg:col-span-2 space-y-8">
+                
+                {/* Unapplied Credit Summary */}
+                {totalUnappliedCredit > 0 && (
+                    <div className="bg-emerald-50 p-4 rounded-xl border border-emerald-200">
+                        <h3 className="text-lg font-bold text-emerald-800 flex items-center gap-2">
+                            <CheckCircle2 className="w-5 h-5" /> Unapplied Credit Available
+                        </h3>
+                        <p className="text-2xl font-bold text-emerald-600 mt-1">
+                            ${totalUnappliedCredit.toFixed(2)} USD
+                        </p>
+                        <p className="text-sm text-emerald-700 mt-2">
+                            This amount will be automatically applied as a credit to the next invoice created.
+                        </p>
+                    </div>
+                )}
                 
                 {/* Create Invoice Form */}
                 <div className="bg-white p-6 rounded-xl shadow-lg border border-slate-100">
@@ -752,6 +873,40 @@ const AdminClientDetail: React.FC = () => {
                       Create & Send Invoice
                     </button>
                   </form>
+                </div>
+                
+                {/* Deposit History */}
+                <div className="bg-white p-6 rounded-xl shadow-lg border border-slate-100">
+                  <h2 className="text-xl font-bold mb-4 flex items-center gap-2 text-slate-900 border-b border-slate-100 pb-4">
+                    <CreditCard className="w-5 h-5 text-blue-600" /> Deposit History ({client.deposits?.length || 0})
+                  </h2>
+                  <div className="space-y-3">
+                    {client.deposits && client.deposits.length > 0 ? (
+                      client.deposits.sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime()).map(deposit => (
+                        <div key={deposit.id} className="flex justify-between items-center text-sm p-3 bg-slate-50 rounded-lg border border-slate-100">
+                          <span className="font-medium text-slate-900">${(deposit.amount_cents / 100).toFixed(2)} USD</span>
+                          <span className={`px-2 py-0.5 rounded-full text-xs font-semibold ${getStatusColor(deposit.status)}`}>
+                            {deposit.status}
+                          </span>
+                          <span className={`px-2 py-0.5 rounded-full text-xs font-semibold ${deposit.is_applied ? 'bg-purple-100 text-purple-800' : 'bg-blue-100 text-blue-800'}`}>
+                            {deposit.is_applied ? 'Applied' : 'Unapplied Credit'}
+                          </span>
+                          {deposit.stripe_invoice_id && (
+                              <a 
+                                href={`https://dashboard.stripe.com/invoices/${deposit.stripe_invoice_id}`} 
+                                target="_blank" 
+                                rel="noopener noreferrer" 
+                                className="text-indigo-600 hover:underline flex items-center gap-1"
+                              >
+                                View Invoice <ExternalLink className="w-3 h-3" />
+                              </a>
+                          )}
+                        </div>
+                      ))
+                    ) : (
+                      <p className="text-slate-500 text-sm">No deposits recorded.</p>
+                    )}
+                  </div>
                 </div>
 
                 {/* Invoice List */}

@@ -31,7 +31,7 @@ serve(async (req) => {
   );
 
   try {
-    const { client_id, price_id, line_items, due_date } = await req.json();
+    const { client_id, price_id, line_items, due_date, deposit_details } = await req.json();
 
     if (path !== '/create-portal-session' && !client_id) {
       return errorResponse('Client ID is required.', 400);
@@ -173,6 +173,91 @@ serve(async (req) => {
         }
 
         return jsonResponse({ 
+          invoice_id: finalizedInvoice.id,
+          hosted_url: finalizedInvoice.hosted_invoice_url,
+          status: finalizedInvoice.status,
+        });
+      }
+      
+      case '/create-deposit-invoice': {
+        if (!deposit_details || !deposit_details.amount || !deposit_details.description) {
+            return errorResponse('Deposit amount and description are required.', 400);
+        }
+        const customerId = await ensureStripeCustomer();
+        const { amount, description, apply_to_future } = deposit_details;
+        const amountCents = Math.round(amount * 100);
+        
+        // 1. Create initial deposit record (status: pending)
+        const { data: depositRecord, error: depositInsertError } = await supabaseAdmin
+            .from('deposits')
+            .insert({
+                client_id: client.id,
+                amount_cents: amountCents,
+                status: 'pending',
+                is_applied: !apply_to_future, // If not applied to future, it's a direct payment, not a credit
+            })
+            .select()
+            .single();
+            
+        if (depositInsertError) {
+            console.error('[stripe-api] Failed to insert deposit record:', depositInsertError);
+            return errorResponse('Failed to create deposit record.', 500);
+        }
+        
+        // 2. Create Stripe Invoice Item
+        await stripe.invoiceItems.create({
+            customer: customerId,
+            price_data: {
+                currency: 'usd',
+                product_data: { name: `Deposit: ${description}` },
+                unit_amount: amountCents,
+            },
+            description: `Deposit for future services (${depositRecord.id})`,
+        });
+        
+        // 3. Create and Finalize Invoice
+        const invoice = await stripe.invoices.create({
+            customer: customerId,
+            collection_method: 'send_invoice',
+            auto_advance: true, // Automatically transition to open/paid
+            days_until_due: 0, // Due immediately
+        });
+        
+        const finalizedInvoice = await stripe.invoices.sendInvoice(invoice.id);
+        
+        // 4. Update deposit record with Stripe IDs
+        const { error: depositUpdateError } = await supabaseAdmin
+            .from('deposits')
+            .update({
+                stripe_invoice_id: finalizedInvoice.id,
+                // Payment intent ID will be updated by the webhook (invoice.payment_succeeded)
+            })
+            .eq('id', depositRecord.id);
+            
+        if (depositUpdateError) {
+            console.error('[stripe-api] Failed to update deposit record with invoice ID:', depositUpdateError);
+        }
+        
+        // 5. Store Invoice in Supabase (for history)
+        const { error: invoiceInsertError } = await supabaseAdmin
+          .from('invoices')
+          .insert({
+            client_id: client.id,
+            stripe_invoice_id: finalizedInvoice.id,
+            status: finalizedInvoice.status,
+            hosted_invoice_url: finalizedInvoice.hosted_invoice_url,
+            pdf_url: finalizedInvoice.invoice_pdf,
+            amount_due: finalizedInvoice.amount_due,
+            currency: finalizedInvoice.currency,
+            due_date: finalizedInvoice.due_date ? new Date(finalizedInvoice.due_date * 1000).toISOString() : null,
+          });
+
+        if (invoiceInsertError) {
+          console.error('[stripe-api] Failed to insert initial deposit invoice record:', invoiceInsertError);
+        }
+
+        return jsonResponse({ 
+          deposit_id: depositRecord.id,
           invoice_id: finalizedInvoice.id,
           hosted_url: finalizedInvoice.hosted_invoice_url,
           status: finalizedInvoice.status,

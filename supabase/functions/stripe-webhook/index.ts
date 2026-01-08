@@ -153,6 +153,39 @@ serve(async (req) => {
 
         if (upsertError) console.error('[stripe-webhook] Invoice upsert failed:', upsertError);
         
+        // --- DEPOSIT SYNC LOGIC ---
+        if (event.type === 'invoice.payment_succeeded') {
+            const { data: depositData, error: depositError } = await supabaseAdmin
+                .from('deposits')
+                .update({ 
+                    status: 'paid',
+                    stripe_payment_intent_id: invoice.payment_intent as string,
+                })
+                .eq('stripe_invoice_id', invoice.id)
+                .select()
+                .single();
+            
+            if (depositData) {
+                console.log(`[stripe-webhook] Deposit ${depositData.id} marked as PAID.`);
+            } else if (depositError && depositError.code !== 'PGRST116') { // PGRST116 = No rows found
+                console.error('[stripe-webhook] Deposit update failed on success:', depositError);
+            }
+        } else if (event.type === 'invoice.payment_failed') {
+            const { data: depositData, error: depositError } = await supabaseAdmin
+                .from('deposits')
+                .update({ status: 'failed' })
+                .eq('stripe_invoice_id', invoice.id)
+                .select()
+                .single();
+                
+            if (depositData) {
+                console.log(`[stripe-webhook] Deposit ${depositData.id} marked as FAILED.`);
+            } else if (depositError && depositError.code !== 'PGRST116') {
+                console.error('[stripe-webhook] Deposit update failed on failure:', depositError);
+            }
+        }
+        // --- END DEPOSIT SYNC LOGIC ---
+        
         // --- Access Restriction Logic on Failure ---
         if (event.type === 'invoice.payment_failed' && invoice.status === 'open') {
             const GRACE_PERIOD_DAYS = 7;
