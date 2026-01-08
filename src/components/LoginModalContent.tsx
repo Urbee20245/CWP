@@ -5,8 +5,13 @@ import { supabase } from '../integrations/supabase/client';
 import { Bot, Loader2, LogIn, UserPlus } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../hooks/useAuth';
+import { useModal } from '../context/ModalProvider';
 
-export default function LoginPage() {
+interface LoginModalContentProps {
+    onLoginSuccess: () => void;
+}
+
+export default function LoginModalContent({ onLoginSuccess }: LoginModalContentProps) {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [loading, setLoading] = useState(false);
@@ -15,12 +20,14 @@ export default function LoginPage() {
   const [signupSuccess, setSignupSuccess] = useState(false);
   
   const navigate = useNavigate();
-  const { user, isLoading } = useAuth(); // Use useAuth to check session status
+  const { user, isLoading } = useAuth(); 
+  const { closeLoginModal } = useModal();
 
   // If user is already logged in and session is loaded, redirect immediately
   if (!isLoading && user) {
+    closeLoginModal();
     navigate('/back-office', { replace: true });
-    return null; // Prevent rendering form while redirecting
+    return null; 
   }
 
   async function handleLogin(e: React.FormEvent) {
@@ -39,8 +46,9 @@ export default function LoginPage() {
       return;
     }
 
-    // Successful login. The SessionProvider will detect the change and handle the redirect via ProtectedRoute.
-    // We navigate to the protected route which will handle the final destination (/admin/dashboard or /client/dashboard)
+    // Successful login. Close modal and let SessionProvider handle the redirect.
+    onLoginSuccess();
+    closeLoginModal();
     navigate('/back-office', { replace: true });
   }
 
@@ -73,17 +81,15 @@ export default function LoginPage() {
   }
 
   if (isLoading) {
-    // Show a brief loader while checking initial session status
     return (
-        <div className="min-h-[80vh] flex items-center justify-center pt-20">
+        <div className="flex items-center justify-center h-64">
             <Loader2 className="w-8 h-8 animate-spin text-indigo-600" />
         </div>
     );
   }
 
   return (
-    <div className="min-h-screen bg-slate-50 pt-24 pb-12 flex justify-center">
-      <div className="w-full max-w-md p-8 bg-white rounded-2xl shadow-xl border border-slate-200 h-fit">
+    <div className="w-full max-w-md mx-auto">
         <div className="text-center mb-8">
           <div className="w-12 h-12 bg-slate-900 rounded-full flex items-center justify-center mx-auto mb-3">
             <Bot className="w-6 h-6 text-indigo-400" />

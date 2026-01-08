@@ -11,7 +11,6 @@ import ServicesPage from './components/ServicesPage';
 import ContactPage from './components/ContactPage';
 import ProcessPage from './components/ProcessPage';
 import SessionProvider from './src/context/SessionProvider';
-import LoginPage from './src/pages/LoginPage';
 import ProtectedRoute from './src/components/ProtectedRoute';
 import AdminDashboard from './src/pages/AdminDashboard';
 import AdminClientList from './src/pages/AdminClientList';
@@ -29,22 +28,22 @@ import AdminDocumentGenerator from './src/pages/AdminDocumentGenerator';
 import AdminEmailGenerator from './src/pages/AdminEmailGenerator';
 import AdminSmtpSettings from './src/pages/AdminSmtpSettings';
 import AdminTwilioSettings from './src/pages/AdminTwilioSettings';
-import NotFoundPage from './src/pages/NotFoundPage'; // New Import
-import ErrorBoundary from './src/components/ErrorBoundary'; // New Import
-import GlobalLoading from './src/components/GlobalLoading'; // New Import
-import { useAuth } from './src/hooks/useAuth'; // New Import
+import NotFoundPage from './src/pages/NotFoundPage';
+import ErrorBoundary from './src/components/ErrorBoundary';
+import GlobalLoading from './src/components/GlobalLoading';
+import { useAuth } from './src/hooks/useAuth';
+import { ModalProvider } from './src/context/ModalProvider'; // New Import
+import LoginModal from './src/components/LoginModal'; // New Import
 
 // Component that uses useLocation to conditionally render global elements
 const AppContent: React.FC = () => {
   const location = useLocation();
-  const { isLoading } = useAuth(); // Use auth state for global loading check
-  
-  const isLoginPage = location.pathname === '/login';
+  const { isLoading } = useAuth();
   
   // Check if we are on an admin/client route (which use their own layouts)
   const isBackOfficeRoute = location.pathname.startsWith('/admin') || location.pathname.startsWith('/client') || location.pathname.startsWith('/back-office');
   
-  // We only want the global components (Header, Footer, VoiceAgent) on public pages, excluding login.
+  // We only want the global components (Header, Footer, VoiceAgent) on public pages.
   const showGlobalComponents = !isBackOfficeRoute;
 
   // Show global loading screen if session is still initializing
@@ -54,7 +53,7 @@ const AppContent: React.FC = () => {
 
   return (
     <div className="min-h-screen bg-slate-50 font-sans selection:bg-blue-100 selection:text-blue-900">
-      {showGlobalComponents && !isLoginPage && <Header />}
+      {showGlobalComponents && <Header />}
       
       <Routes>
         {/* Public Routes */}
@@ -65,7 +64,6 @@ const AppContent: React.FC = () => {
         <Route path="/jetsuite" element={<JetSuitePage />} />
         <Route path="/jetviz" element={<JetVizPage />} />
         <Route path="/jet-local-optimizer" element={<JetLocalOptimizerPage />} />
-        <Route path="/login" element={<LoginPage />} />
         
         {/* Protected Redirect Route */}
         <Route path="/back-office" element={<ProtectedRoute allowedRoles={['admin', 'client']} />}>
@@ -95,12 +93,13 @@ const AppContent: React.FC = () => {
           <Route path="billing" element={<ClientBilling />} />
         </Route>
         
-        {/* Global 404 Fallback (Step 1) */}
+        {/* Global 404 Fallback */}
         <Route path="*" element={<NotFoundPage />} />
       </Routes>
       
       {showGlobalComponents && <Footer />}
       {showGlobalComponents && <VoiceAgent />}
+      <LoginModal />
     </div>
   );
 };
@@ -110,7 +109,9 @@ const App: React.FC = () => {
     <ErrorBoundary>
       <BrowserRouter>
         <SessionProvider>
-          <AppContent />
+          <ModalProvider>
+            <AppContent />
+          </ModalProvider>
         </SessionProvider>
       </BrowserRouter>
     </ErrorBoundary>

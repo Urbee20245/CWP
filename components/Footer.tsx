@@ -2,8 +2,11 @@ import React from 'react';
 import { Facebook, Instagram, Twitter, Linkedin, MapPin, Mail, Phone, LogIn } from 'lucide-react';
 import { NavigationLink } from '../types';
 import { Link } from 'react-router-dom';
+import { useModal } from '../src/context/ModalProvider'; // New Import
 
 const Footer: React.FC = () => {
+  const { openLoginModal } = useModal(); // Use Modal Context
+  
   return (
     <footer className="bg-slate-900 text-slate-300 pt-20 pb-10 border-t border-slate-800">
       <div className="max-w-7xl mx-auto px-6">
@@ -76,10 +79,10 @@ const Footer: React.FC = () => {
         <div className="border-t border-slate-800 pt-8 flex flex-col md:flex-row justify-between items-center gap-4 text-xs text-slate-500">
             <p>© 2025 Custom Websites Plus. Built by <a href="https://jetautomations.ai" target="_blank" rel="noopener noreferrer" className="text-indigo-400 hover:text-indigo-300 transition-colors">Jetautomations.AI</a></p>
             <div className="flex gap-6 items-center">
-                <Link to="/login" className="flex items-center gap-1 text-indigo-400 hover:text-white transition-colors font-bold">
+                <button onClick={openLoginModal} className="flex items-center gap-1 text-indigo-400 hover:text-white transition-colors font-bold">
                     <LogIn className="w-3 h-3" />
                     Portal
-                </Link>
+                </button>
                 <a href="#" className="hover:text-white transition-colors">Privacy Policy</a>
                 <a href="#" className="hover:text-white transition-colors">Terms of Service</a>
                 <a href="#" className="hover:text-white transition-colors">Sitemap</a>
