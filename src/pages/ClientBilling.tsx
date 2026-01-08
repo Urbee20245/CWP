@@ -5,7 +5,7 @@ import { useAuth } from '../hooks/useAuth';
 import { supabase } from '../integrations/supabase/client';
 import { Loader2, DollarSign, FileText, ExternalLink, Zap, CreditCard } from 'lucide-react';
 import ClientLayout from '../components/ClientLayout';
-import { BillingService } from '../services/billingService';
+import { ClientBillingService } from '../services/clientBillingService';
 
 interface Invoice {
   id: string;
@@ -113,7 +113,7 @@ const ClientBilling: React.FC = () => {
       const { data: clientData } = await supabase.from('clients').select('id').eq('stripe_customer_id', stripeCustomerId).single();
       if (!clientData) throw new Error("Client ID not found for customer.");
       
-      const result = await BillingService.createPortalSession(clientData.id);
+      const result = await ClientBillingService.createPortalSession(clientData.id);
       window.open(result.portal_url, '_blank');
     } catch (e: any) {
       alert(`Failed to open portal: ${e.message}`);

@@ -2,7 +2,7 @@
 
 import React, { useState } from 'react';
 import { X, Loader2, UserPlus, Briefcase, Mail, Phone, AlertCircle } from 'lucide-react';
-import { BillingService } from '../services/billingService';
+import { AdminService } from '../services/adminService';
 
 interface AddClientDialogProps {
   isOpen: boolean;
@@ -42,8 +42,8 @@ const AddClientDialog: React.FC<AddClientDialogProps> = ({ isOpen, onClose, onCl
     }
 
     try {
-      // Call the secure Edge Function via BillingService
-      await BillingService.createClientUser({
+      // Call the secure Edge Function via AdminService
+      await AdminService.createClientUser({
         email,
         password,
         fullName,

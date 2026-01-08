@@ -18,7 +18,18 @@ const invokeEdgeFunction = async (functionName: string, payload: any) => {
   return data;
 };
 
-export const BillingService = {
+export const AdminService = {
+  // --- Client Management ---
+  createClientUser: async (clientData: { email: string, password: string, fullName: string, businessName: string, phone: string, billingEmail: string }) => {
+    return invokeEdgeFunction('create-client-user', clientData);
+  },
+  
+  // --- Twilio SMS ---
+  sendSms: async (to: string, body: string) => {
+    return invokeEdgeFunction('send-sms', { to, body });
+  },
+  
+  // --- Billing (Moved from BillingService) ---
   createStripeCustomer: async (clientId: string) => {
     return invokeEdgeFunction('stripe-api/create-customer', { client_id: clientId });
   },
@@ -35,15 +46,7 @@ export const BillingService = {
     return invokeEdgeFunction('stripe-api/create-portal-session', { client_id: clientId });
   },
   
-  checkClientAccess: async (clientId: string): Promise<{ hasAccess: boolean, reason: 'active' | 'overdue' | 'no_subscription' | 'override' | 'restricted' | 'system_error' | 'grace_period', graceUntil?: string | null }> => {
-    return invokeEdgeFunction('access-check', { client_id: clientId });
-  },
-  
   createBillingProduct: async (productData: { name: string, description: string, amount_cents: number, billing_type: 'one_time' | 'subscription' }) => {
     return invokeEdgeFunction('create-billing-product', productData);
   },
-  
-  createClientUser: async (clientData: { email: string, password: string, fullName: string, businessName: string, phone: string, billingEmail: string }) => {
-    return invokeEdgeFunction('create-client-user', clientData);
-  }
 };

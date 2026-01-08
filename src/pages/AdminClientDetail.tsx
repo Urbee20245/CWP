@@ -3,12 +3,13 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import { useParams, Link } from 'react-router-dom';
 import { supabase } from '../integrations/supabase/client';
-import { Loader2, Briefcase, FileText, DollarSign, Plus, CreditCard, Zap, ExternalLink, ShieldCheck, Lock, Trash2, Send, AlertCircle } from 'lucide-react';
+import { Loader2, Briefcase, FileText, DollarSign, Plus, CreditCard, Zap, ExternalLink, ShieldCheck, Lock, Trash2, Send, AlertCircle, MessageSquare, Phone } from 'lucide-react';
 import AdminLayout from '../components/AdminLayout';
 import { Profile } from '../types/auth';
-import { BillingService } from '../services/billingService';
-import { sendBillingNotification } from '../../supabase/functions/_shared/notificationService';
-import AddProjectDialog from '../components/AddProjectDialog'; // Import the new dialog
+import { AdminService } from '../services/adminService'; // Use AdminService for admin functions
+import { ClientBillingService } from '../services/clientBillingService'; // Use ClientBillingService for client functions
+import AddProjectDialog from '../components/AddProjectDialog';
+import SendSmsDialog from '../components/SendSmsDialog'; // Import the new dialog
 
 interface Client {
   id: string;
@@ -70,6 +71,7 @@ const AdminClientDetail: React.FC = () => {
   
   // Dialog State
   const [isProjectDialogOpen, setIsProjectDialogOpen] = useState(false);
+  const [isSmsDialogOpen, setIsSmsDialogOpen] = useState(false); // New SMS dialog state
   
   // Billing State
   const [isProcessing, setIsProcessing] = useState(false);
@@ -165,7 +167,7 @@ const AdminClientDetail: React.FC = () => {
     if (!client) return;
     setIsProcessing(true);
     try {
-      await BillingService.createStripeCustomer(client.id);
+      await AdminService.createStripeCustomer(client.id);
       alert('Stripe Customer created successfully!');
       fetchClientData();
     } catch (e: any) {
@@ -179,7 +181,7 @@ const AdminClientDetail: React.FC = () => {
     if (!client || !selectedSubscriptionPriceId) return;
     setIsProcessing(true);
     try {
-      const result = await BillingService.createSubscription(client.id, selectedSubscriptionPriceId);
+      const result = await AdminService.createSubscription(client.id, selectedSubscriptionPriceId);
       alert(`Subscription initiated. Status: ${result.status}`);
       
       if (result.requires_action && result.hosted_invoice_url) {
@@ -203,7 +205,7 @@ const AdminClientDetail: React.FC = () => {
     }
     setIsProcessing(true);
     try {
-      const result = await BillingService.createInvoice(client.id, invoiceItems, invoiceDueDate);
+      const result = await AdminService.createInvoice(client.id, invoiceItems, invoiceDueDate);
       alert(`Invoice created and sent! Status: ${result.status}`);
       setInvoiceItems([{ description: '', amount: 0 }]);
       setInvoiceDueDate('');
@@ -219,7 +221,7 @@ const AdminClientDetail: React.FC = () => {
     if (!client || !client.stripe_customer_id) return;
     setIsProcessing(true);
     try {
-      const result = await BillingService.createPortalSession(client.id);
+      const result = await AdminService.createPortalSession(client.id);
       window.open(result.portal_url, '_blank');
     } catch (e: any) {
       alert(`Failed to create portal session: ${e.message}`);
@@ -330,10 +332,28 @@ const AdminClientDetail: React.FC = () => {
     <AdminLayout>
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-12">
         <Link to="/admin/dashboard" className="text-indigo-600 hover:text-indigo-800 text-sm font-medium mb-4 block">
-          ← Back to Clients
+          ← Back to Dashboard
         </Link>
         <h1 className="text-3xl font-bold text-slate-900 mb-2">{client.business_name}</h1>
         <p className="text-slate-500 mb-8">Contact: {client.profiles?.full_name || 'N/A'} ({client.profiles?.email || 'N/A'})</p>
+        
+        {/* Quick Actions Bar */}
+        <div className="flex gap-4 mb-8">
+            <button 
+                onClick={() => setIsSmsDialogOpen(true)}
+                disabled={!client.phone}
+                className="flex items-center gap-2 px-4 py-2 bg-indigo-600 text-white rounded-lg text-sm font-semibold hover:bg-indigo-700 disabled:bg-slate-400 transition-colors"
+            >
+                <Phone className="w-4 h-4" /> Send SMS
+            </button>
+            <a 
+                href={`mailto:${client.profiles?.email}`}
+                className="flex items-center gap-2 px-4 py-2 bg-slate-100 text-slate-700 rounded-lg text-sm font-semibold hover:bg-slate-200 transition-colors"
+            >
+                <MessageSquare className="w-4 h-4" /> Send Email
+            </a>
+        </div>
+
 
         {/* Tabs Navigation */}
         <div className="border-b border-slate-200 mb-8">
@@ -776,6 +796,16 @@ const AdminClientDetail: React.FC = () => {
           onProjectAdded={fetchClientData}
           clientId={client.id}
           clientName={client.business_name}
+        />
+      )}
+      
+      {/* Send SMS Dialog */}
+      {client && (
+        <SendSmsDialog
+          isOpen={isSmsDialogOpen}
+          onClose={() => setIsSmsDialogOpen(false)}
+          clientName={client.business_name}
+          clientPhone={client.phone}
         />
       )}
     </AdminLayout>

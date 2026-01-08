@@ -4,7 +4,7 @@ import React, { useState, useEffect, useCallback } from 'react';
 import { supabase } from '../integrations/supabase/client';
 import { Loader2, DollarSign, Plus, Zap, Clock, FileText, Trash2, Edit, AlertCircle } from 'lucide-react';
 import AdminLayout from '../components/AdminLayout';
-import { BillingService } from '../services/billingService';
+import { AdminService } from '../services/adminService';
 
 interface BillingProduct {
   id: string;
@@ -74,7 +74,7 @@ const AdminBillingProducts: React.FC = () => {
     }
 
     try {
-      await BillingService.createBillingProduct({
+      await AdminService.createBillingProduct({
         name,
         description,
         amount_cents: amountCents,
