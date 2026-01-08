@@ -20,6 +20,7 @@ export default defineConfig(({ mode }) => {
         // Dev Admin Bypass variables
         'import.meta.env.VITE_DEV_ADMIN_MODE': JSON.stringify("true"),
         'import.meta.env.VITE_DEV_ADMIN_EMAIL': JSON.stringify("Theivsightcompany@gmail.com"),
+        'import.meta.env.VITE_DEV_FORCE_ROLE': JSON.stringify("admin"),
       },
       resolve: {
         alias: {

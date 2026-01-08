@@ -14,20 +14,28 @@ interface SessionProviderProps {
 // Read environment variables for dev bypass
 const DEV_ADMIN_MODE = import.meta.env.VITE_DEV_ADMIN_MODE === 'true';
 const DEV_ADMIN_EMAIL = import.meta.env.VITE_DEV_ADMIN_EMAIL;
+const DEV_FORCE_ROLE = import.meta.env.VITE_DEV_FORCE_ROLE as 'admin' | 'client' | undefined;
 
 // Helper function to check and generate synthetic admin profile
-const checkDevAdminBypass = (user: User | null): Profile | null => {
+const checkDevAdminBypass = (user: User | null, fetchedProfile: Profile | null): Profile | null => {
     if (DEV_ADMIN_MODE && user && user.email === DEV_ADMIN_EMAIL) {
-        console.log("Dev Admin Bypass Active: Granting Admin Profile.");
-        return {
-            id: user.id,
-            email: user.email,
-            full_name: 'Dev Admin',
-            role: 'admin',
-            created_at: new Date().toISOString(),
-        } as Profile;
+        if (fetchedProfile) {
+            // Profile exists, use it
+            return fetchedProfile;
+        }
+        
+        if (DEV_FORCE_ROLE) {
+            console.warn(`Dev Admin Bypass Active: Profile missing. Forcing role to '${DEV_FORCE_ROLE}'.`);
+            return {
+                id: user.id,
+                email: user.email,
+                full_name: 'Dev Admin (Forced)',
+                role: DEV_FORCE_ROLE,
+                created_at: new Date().toISOString(),
+            } as Profile;
+        }
     }
-    return null;
+    return fetchedProfile;
 };
 
 
@@ -36,22 +44,20 @@ const SessionProvider: React.FC<SessionProviderProps> = ({ children }) => {
   const [profile, setProfile] = useState<Profile | null>(null);
   const [isLoading, setIsLoading] = useState(true);
 
-  const fetchProfile = useCallback(async (userId: string) => {
+  const fetchProfile = useCallback(async (userId: string): Promise<Profile | null> => {
     // Use maybeSingle() to handle cases where a user exists but no profile record has been created yet.
     const { data, error } = await supabase
       .from('profiles')
       .select('*')
       .eq('id', userId)
-      .maybeSingle(); // Changed from .single()
+      .maybeSingle();
 
     if (error) {
       console.error('Error fetching profile:', error);
-      setProfile(null);
-    } else if (data) {
-      setProfile(data as Profile);
-    } else {
-      setProfile(null);
+      return null;
     }
+    
+    return data as Profile | null;
   }, []);
 
   useEffect(() => {
@@ -60,34 +66,30 @@ const SessionProvider: React.FC<SessionProviderProps> = ({ children }) => {
         if (session?.user) {
             setUser(session.user);
             
-            // 2. Apply dev-admin bypass BEFORE profile fetching
-            const syntheticProfile = checkDevAdminBypass(session.user);
+            // 1. Fetch profile from Supabase
+            const fetchedProfile = await fetchProfile(session.user.id);
             
-            if (syntheticProfile) {
-                setProfile(syntheticProfile);
-            } else {
-                // 4. Only fetch profile from Supabase if bypass is NOT active
-                await fetchProfile(session.user.id);
-            }
+            // 2. Apply dev-admin bypass logic
+            const finalProfile = checkDevAdminBypass(session.user, fetchedProfile);
+            
+            setProfile(finalProfile);
         } else {
             setUser(null);
             setProfile(null);
         }
-        // 6. Ensure isLoading is always set to false
+        // 3. Ensure isLoading is always set to false after all checks
         setIsLoading(false);
     };
 
-    // 1. Resolve Supabase session first (Initial check)
+    // Initial check
     supabase.auth.getSession().then(({ data: { session } }) => {
         loadSession(session);
     });
 
-    // 1. Handle real-time auth state changes
+    // Handle real-time auth state changes
     const { data: authListener } = supabase.auth.onAuthStateChange(
       async (event, session) => {
-        // Only handle explicit sign in/out events to avoid double-handling INITIAL_SESSION
         if (event === 'SIGNED_IN' || event === 'SIGNED_OUT') {
-            // Set isLoading=true briefly to show the spinner during the transition
             setIsLoading(true); 
             loadSession(session);
         }
