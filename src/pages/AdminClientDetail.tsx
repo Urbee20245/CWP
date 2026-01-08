@@ -624,303 +624,307 @@ const AdminClientDetail: React.FC = () => {
 
             {/* Billing Tab Content */}
             {activeTab === 'billing' && (
-              <div className="space-y-8">
-                {/* Stripe Customer Status */}
-                <div className="bg-white p-6 rounded-xl shadow-lg border border-slate-100">
-                  <h2 className="text-xl font-bold mb-4 flex items-center gap-2 text-slate-900">
-                    <CreditCard className="w-5 h-5 text-indigo-600" /> Stripe Customer
-                  </h2>
-                  {client.stripe_customer_id ? (
-                    <>
-                      <p className="text-sm text-emerald-600 font-semibold mb-4">✅ Customer ID Linked</p>
-                      <p className="text-xs text-slate-500 truncate mb-4">ID: {client.stripe_customer_id}</p>
-                      <button 
-                        onClick={handlePortalSession}
-                        disabled={isProcessing}
-                        className="w-full py-2 bg-purple-600 text-white rounded-lg text-sm font-semibold hover:bg-purple-700 transition-colors disabled:opacity-50 flex items-center justify-center gap-2"
+              <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
+                
+                {/* Column 1 (1/3 width) */}
+                <div className="lg:col-span-1 space-y-8">
+                    {/* Stripe Customer Status */}
+                    <div className="bg-white p-6 rounded-xl shadow-lg border border-slate-100">
+                      <h2 className="text-xl font-bold mb-4 flex items-center gap-2 text-slate-900">
+                        <CreditCard className="w-5 h-5 text-indigo-600" /> Stripe Customer
+                      </h2>
+                      {client.stripe_customer_id ? (
+                        <>
+                          <p className="text-sm text-emerald-600 font-semibold mb-4">✅ Customer ID Linked</p>
+                          <p className="text-xs text-slate-500 truncate mb-4">ID: {client.stripe_customer_id}</p>
+                          <button 
+                            onClick={handlePortalSession}
+                            disabled={isProcessing}
+                            className="w-full py-2 bg-purple-600 text-white rounded-lg text-sm font-semibold hover:bg-purple-700 transition-colors disabled:opacity-50 flex items-center justify-center gap-2"
+                          >
+                            <ExternalLink className="w-4 h-4" /> Manage Portal
+                          </button>
+                        </>
+                      ) : (
+                        <>
+                          <p className="text-sm text-amber-600 font-semibold mb-4">⚠️ Customer ID Missing</p>
+                          <p className="text-xs text-slate-500 mb-4">Customer will be created automatically upon first invoice/subscription.</p>
+                          <button 
+                            onClick={handleCreateCustomer}
+                            disabled={isProcessing}
+                            className="w-full py-2 bg-indigo-600 text-white rounded-lg text-sm font-semibold hover:bg-indigo-700 transition-colors disabled:opacity-50 flex items-center justify-center gap-2"
+                          >
+                            {isProcessing ? <Loader2 className="w-4 h-4 animate-spin" /> : <Plus className="w-4 h-4" />}
+                            Create Stripe Customer Now
+                          </button>
+                        </>
+                      )}
+                    </div>
+
+                    {/* Subscriptions (Maintenance Only) */}
+                    <div className="bg-white p-6 rounded-xl shadow-lg border border-slate-100">
+                      <h2 className="text-xl font-bold mb-4 flex items-center gap-2 text-slate-900 border-b border-slate-100 pb-4">
+                        <Zap className="w-5 h-5 text-amber-600" /> Maintenance Subscriptions
+                      </h2>
+                      
+                      {currentSubscription ? (
+                        <div className="p-4 bg-emerald-50 border border-emerald-200 rounded-lg mb-4">
+                            <p className="font-bold text-emerald-800">{getPlanName(currentSubscription.stripe_price_id)}</p>
+                            <p className="text-sm text-emerald-700">Status: {currentSubscription.status}</p>
+                            <p className="text-xs text-emerald-600">Renews: {currentSubscription.current_period_end ? new Date(currentSubscription.current_period_end).toLocaleDateString() : 'N/A'}</p>
+                        </div>
+                      ) : (
+                        <p className="text-slate-500 text-sm mb-4">No active maintenance subscription.</p>
+                      )}
+
+                      <h3 className="font-bold text-sm mb-2">Start New Subscription</h3>
+                      <select
+                        value={selectedSubscriptionPriceId}
+                        onChange={(e) => setSelectedSubscriptionPriceId(e.target.value)}
+                        className="w-full p-2 border border-slate-300 rounded-lg text-sm mb-3"
+                        disabled={isProcessing || !client.stripe_customer_id}
                       >
-                        <ExternalLink className="w-4 h-4" /> Manage Portal
-                      </button>
-                    </>
-                  ) : (
-                    <>
-                      <p className="text-sm text-amber-600 font-semibold mb-4">⚠️ Customer ID Missing</p>
-                      <p className="text-xs text-slate-500 mb-4">Customer will be created automatically upon first invoice/subscription.</p>
+                        <option value="">Select a plan...</option>
+                        {subscriptionProducts.map(plan => (
+                          <option key={plan.stripe_price_id} value={plan.stripe_price_id}>{plan.name} (${(plan.amount_cents / 100).toFixed(2)}/mo)</option>
+                        ))}
+                      </select>
                       <button 
-                        onClick={handleCreateCustomer}
-                        disabled={isProcessing}
-                        className="w-full py-2 bg-indigo-600 text-white rounded-lg text-sm font-semibold hover:bg-indigo-700 transition-colors disabled:opacity-50 flex items-center justify-center gap-2"
+                        onClick={handleStartSubscription}
+                        disabled={isProcessing || !selectedSubscriptionPriceId || !client.stripe_customer_id}
+                        className="w-full py-2 bg-emerald-600 text-white rounded-lg text-sm font-semibold hover:bg-emerald-700 transition-colors disabled:opacity-50 flex items-center justify-center gap-2"
                       >
                         {isProcessing ? <Loader2 className="w-4 h-4 animate-spin" /> : <Plus className="w-4 h-4" />}
-                        Create Stripe Customer Now
+                        Start Subscription
                       </button>
-                    </>
-                  )}
-                </div>
-
-                {/* Subscriptions (Maintenance Only) */}
-                <div className="bg-white p-6 rounded-xl shadow-lg border border-slate-100">
-                  <h2 className="text-xl font-bold mb-4 flex items-center gap-2 text-slate-900 border-b border-slate-100 pb-4">
-                    <Zap className="w-5 h-5 text-amber-600" /> Maintenance Subscriptions
-                  </h2>
-                  
-                  {currentSubscription ? (
-                    <div className="p-4 bg-emerald-50 border border-emerald-200 rounded-lg mb-4">
-                        <p className="font-bold text-emerald-800">{getPlanName(currentSubscription.stripe_price_id)}</p>
-                        <p className="text-sm text-emerald-700">Status: {currentSubscription.status}</p>
-                        <p className="text-xs text-emerald-600">Renews: {currentSubscription.current_period_end ? new Date(currentSubscription.current_period_end).toLocaleDateString() : 'N/A'}</p>
                     </div>
-                  ) : (
-                    <p className="text-slate-500 text-sm mb-4">No active maintenance subscription.</p>
-                  )}
-
-                  <h3 className="font-bold text-sm mb-2">Start New Subscription</h3>
-                  <select
-                    value={selectedSubscriptionPriceId}
-                    onChange={(e) => setSelectedSubscriptionPriceId(e.target.value)}
-                    className="w-full p-2 border border-slate-300 rounded-lg text-sm mb-3"
-                    disabled={isProcessing || !client.stripe_customer_id}
-                  >
-                    <option value="">Select a plan...</option>
-                    {subscriptionProducts.map(plan => (
-                      <option key={plan.stripe_price_id} value={plan.stripe_price_id}>{plan.name} (${(plan.amount_cents / 100).toFixed(2)}/mo)</option>
-                    ))}
-                  </select>
-                  <button 
-                    onClick={handleStartSubscription}
-                    disabled={isProcessing || !selectedSubscriptionPriceId || !client.stripe_customer_id}
-                    className="w-full py-2 bg-emerald-600 text-white rounded-lg text-sm font-semibold hover:bg-emerald-700 transition-colors disabled:opacity-50 flex items-center justify-center gap-2"
-                  >
-                    {isProcessing ? <Loader2 className="w-4 h-4 animate-spin" /> : <Plus className="w-4 h-4" />}
-                    Start Subscription
-                  </button>
-                </div>
-                
-                {/* Deposit Collection */}
-                <div className="bg-white p-6 rounded-xl shadow-lg border border-slate-100">
-                    <h2 className="text-xl font-bold mb-4 flex items-center gap-2 text-slate-900 border-b border-slate-100 pb-4">
-                        <DollarSign className="w-5 h-5 text-blue-600" /> Collect Deposit
-                    </h2>
-                    <form onSubmit={handleCollectDeposit} className="space-y-4">
-                        <div>
-                            <label className="block text-sm font-medium text-slate-700 mb-1">Deposit Amount (USD) *</label>
-                            <div className="relative">
-                                <span className="absolute left-3 top-2.5 text-slate-500 text-sm">$</span>
+                    
+                    {/* Deposit Collection */}
+                    <div className="bg-white p-6 rounded-xl shadow-lg border border-slate-100">
+                        <h2 className="text-xl font-bold mb-4 flex items-center gap-2 text-slate-900 border-b border-slate-100 pb-4">
+                            <DollarSign className="w-5 h-5 text-blue-600" /> Collect Deposit
+                        </h2>
+                        <form onSubmit={handleCollectDeposit} className="space-y-4">
+                            <div>
+                                <label className="block text-sm font-medium text-slate-700 mb-1">Deposit Amount (USD) *</label>
+                                <div className="relative">
+                                    <span className="absolute left-3 top-2.5 text-slate-500 text-sm">$</span>
+                                    <input
+                                        type="number"
+                                        value={depositAmount}
+                                        onChange={(e) => setDepositAmount(parseFloat(e.target.value) || '')}
+                                        className="w-full pl-6 pr-2 py-2 border border-slate-300 rounded-lg text-sm"
+                                        required
+                                        min="0.01"
+                                        step="0.01"
+                                        disabled={isProcessing}
+                                    />
+                                </div>
+                            </div>
+                            <div>
+                                <label className="block text-sm font-medium text-slate-700 mb-1">Description (Optional)</label>
                                 <input
-                                    type="number"
-                                    value={depositAmount}
-                                    onChange={(e) => setDepositAmount(parseFloat(e.target.value) || '')}
-                                    className="w-full pl-6 pr-2 py-2 border border-slate-300 rounded-lg text-sm"
-                                    required
-                                    min="0.01"
-                                    step="0.01"
+                                    type="text"
+                                    value={depositDescription}
+                                    onChange={(e) => setDepositDescription(e.target.value)}
+                                    placeholder="e.g., Project Kickoff Fee"
+                                    className="w-full p-2 border border-slate-300 rounded-lg text-sm"
+                                    disabled={isProcessing}
+                                />
+                            </div>
+                            <div className="flex items-center gap-2">
+                                <input
+                                    id="apply-future"
+                                    type="checkbox"
+                                    checked={applyDepositToFuture}
+                                    onChange={(e) => setApplyDepositToFuture(e.target.checked)}
+                                    className="w-4 h-4 text-indigo-600 border-slate-300 rounded focus:ring-indigo-500"
+                                    disabled={isProcessing}
+                                />
+                                <label htmlFor="apply-future" className="text-sm font-medium text-slate-700">
+                                    Apply as credit to future invoice
+                                </label>
+                            </div>
+                            <button 
+                                type="submit"
+                                disabled={isProcessing || !depositAmount}
+                                className="w-full py-2 bg-blue-600 text-white rounded-lg text-sm font-semibold hover:bg-blue-700 transition-colors disabled:opacity-50 flex items-center justify-center gap-2"
+                            >
+                                {isProcessing ? <Loader2 className="w-4 h-4 animate-spin" /> : <DollarSign className="w-4 h-4" />}
+                                Collect Deposit
+                            </button>
+                        </form>
+                    </div>
+                </div>
+
+                {/* Column 2 (2/3 width) */}
+                <div className="lg:col-span-2 space-y-8">
+                    
+                    {/* Unapplied Credit Summary */}
+                    {totalUnappliedCredit > 0 && (
+                        <div className="bg-emerald-50 p-4 rounded-xl border border-emerald-200">
+                            <h3 className="text-lg font-bold text-emerald-800 flex items-center gap-2">
+                                <CheckCircle2 className="w-5 h-5" /> Total Credit Available
+                            </h3>
+                            <p className="text-2xl font-bold text-emerald-600 mt-1">
+                                ${totalUnappliedCredit.toFixed(2)} USD
+                            </p>
+                            <p className="text-sm text-emerald-700 mt-2">
+                                This amount includes paid and applied deposits and will be automatically applied as a credit to the next invoice created.
+                            </p>
+                        </div>
+                    )}
+                    
+                    {/* Create Invoice Form */}
+                    <div className="bg-white p-6 rounded-xl shadow-lg border border-slate-100">
+                      <h2 className="text-xl font-bold mb-4 flex items-center gap-2 text-slate-900 border-b border-slate-100 pb-4">
+                        <DollarSign className="w-5 h-5 text-red-600" /> Create One-Time Invoice
+                      </h2>
+                      <form onSubmit={handleCreateInvoice} className="space-y-4">
+                        
+                        {/* Product Selector for quick add */}
+                        <div className="flex gap-3 items-center">
+                            <select
+                                value={selectedOneTimePriceId}
+                                onChange={(e) => setSelectedOneTimePriceId(e.target.value)}
+                                className="flex-1 p-2 border border-slate-300 rounded-lg text-sm"
+                                disabled={isProcessing}
+                            >
+                                <option value="">Select a one-time product to add...</option>
+                                {oneTimeProducts.map(product => (
+                                    <option key={product.stripe_price_id} value={product.stripe_price_id}>
+                                        {product.name} (${(product.amount_cents / 100).toFixed(2)})
+                                    </option>
+                                ))}
+                            </select>
+                            <button type="button" onClick={handleAddInvoiceItem} className="px-4 py-2 bg-indigo-600 text-white rounded-lg text-sm font-semibold hover:bg-indigo-700 transition-colors disabled:opacity-50">
+                                Add
+                            </button>
+                        </div>
+                        
+                        {/* Manual Line Items */}
+                        {invoiceItems.map((item, index) => (
+                          <div key={index} className="flex gap-3 items-center">
+                            <input
+                              type="text"
+                              placeholder="Item Description"
+                              value={item.description}
+                              onChange={(e) => handleInvoiceItemChange(index, 'description', e.target.value)}
+                              className="flex-1 p-2 border border-slate-300 rounded-lg text-sm"
+                              required
+                              disabled={isProcessing}
+                            />
+                            <div className="relative w-24">
+                              <span className="absolute left-3 top-2.5 text-slate-500 text-sm">$</span>
+                              <input
+                                type="number"
+                                placeholder="Amount"
+                                value={item.amount || ''}
+                                onChange={(e) => handleInvoiceItemChange(index, 'amount', e.target.value)}
+                                className="w-full pl-6 pr-2 py-2 border border-slate-300 rounded-lg text-sm"
+                                required
+                                min="0.01"
+                                step="0.01"
+                                disabled={isProcessing}
+                              />
+                            </div>
+                            {invoiceItems.length > 0 && (
+                              <button type="button" onClick={() => handleRemoveInvoiceItem(index)} className="text-red-500 hover:text-red-700">
+                                <Trash2 className="w-4 h-4" />
+                              </button>
+                            )}
+                          </div>
+                        ))}
+                        <div className="flex justify-between">
+                            <button type="button" onClick={() => handleAddInvoiceItem()} className="text-indigo-600 hover:text-indigo-800 text-sm font-medium flex items-center gap-1">
+                                <Plus className="w-4 h-4" /> Add Custom Line Item
+                            </button>
+                            <div className="flex items-center gap-2">
+                                <label className="text-sm text-slate-600">Due Date:</label>
+                                <input
+                                    type="date"
+                                    value={invoiceDueDate}
+                                    onChange={(e) => setInvoiceDueDate(e.target.value)}
+                                    className="p-2 border border-slate-300 rounded-lg text-sm"
                                     disabled={isProcessing}
                                 />
                             </div>
                         </div>
-                        <div>
-                            <label className="block text-sm font-medium text-slate-700 mb-1">Description (Optional)</label>
-                            <input
-                                type="text"
-                                value={depositDescription}
-                                onChange={(e) => setDepositDescription(e.target.value)}
-                                placeholder="e.g., Project Kickoff Fee"
-                                className="w-full p-2 border border-slate-300 rounded-lg text-sm"
-                                disabled={isProcessing}
-                            />
-                        </div>
-                        <div className="flex items-center gap-2">
-                            <input
-                                id="apply-future"
-                                type="checkbox"
-                                checked={applyDepositToFuture}
-                                onChange={(e) => setApplyDepositToFuture(e.target.checked)}
-                                className="w-4 h-4 text-indigo-600 border-slate-300 rounded focus:ring-indigo-500"
-                                disabled={isProcessing}
-                            />
-                            <label htmlFor="apply-future" className="text-sm font-medium text-slate-700">
-                                Apply as credit to future invoice
-                            </label>
-                        </div>
                         <button 
-                            type="submit"
-                            disabled={isProcessing || !depositAmount}
-                            className="w-full py-2 bg-blue-600 text-white rounded-lg text-sm font-semibold hover:bg-blue-700 transition-colors disabled:opacity-50 flex items-center justify-center gap-2"
-                        >
-                            {isProcessing ? <Loader2 className="w-4 h-4 animate-spin" /> : <DollarSign className="w-4 h-4" />}
-                            Collect Deposit
-                        </button>
-                    </form>
-                </div>
-              </div>
-
-              {/* Right Column: Invoicing & Deposit History */}
-              <div className="lg:col-span-2 space-y-8">
-                
-                {/* Unapplied Credit Summary */}
-                {totalUnappliedCredit > 0 && (
-                    <div className="bg-emerald-50 p-4 rounded-xl border border-emerald-200">
-                        <h3 className="text-lg font-bold text-emerald-800 flex items-center gap-2">
-                            <CheckCircle2 className="w-5 h-5" /> Total Credit Available
-                        </h3>
-                        <p className="text-2xl font-bold text-emerald-600 mt-1">
-                            ${totalUnappliedCredit.toFixed(2)} USD
-                        </p>
-                        <p className="text-sm text-emerald-700 mt-2">
-                            This amount includes paid and applied deposits and will be automatically applied as a credit to the next invoice created.
-                        </p>
-                    </div>
-                )}
-                
-                {/* Create Invoice Form */}
-                <div className="bg-white p-6 rounded-xl shadow-lg border border-slate-100">
-                  <h2 className="text-xl font-bold mb-4 flex items-center gap-2 text-slate-900 border-b border-slate-100 pb-4">
-                    <DollarSign className="w-5 h-5 text-red-600" /> Create One-Time Invoice
-                  </h2>
-                  <form onSubmit={handleCreateInvoice} className="space-y-4">
-                    
-                    {/* Product Selector for quick add */}
-                    <div className="flex gap-3 items-center">
-                        <select
-                            value={selectedOneTimePriceId}
-                            onChange={(e) => setSelectedOneTimePriceId(e.target.value)}
-                            className="flex-1 p-2 border border-slate-300 rounded-lg text-sm"
-                            disabled={isProcessing}
-                        >
-                            <option value="">Select a one-time product to add...</option>
-                            {oneTimeProducts.map(product => (
-                                <option key={product.stripe_price_id} value={product.stripe_price_id}>
-                                    {product.name} (${(product.amount_cents / 100).toFixed(2)})
-                                </option>
-                            ))}
-                        </select>
-                        <button type="button" onClick={handleAddInvoiceItem} className="px-4 py-2 bg-indigo-600 text-white rounded-lg text-sm font-semibold hover:bg-indigo-700 transition-colors disabled:opacity-50">
-                            Add
-                        </button>
-                    </div>
-                    
-                    {/* Manual Line Items */}
-                    {invoiceItems.map((item, index) => (
-                      <div key={index} className="flex gap-3 items-center">
-                        <input
-                          type="text"
-                          placeholder="Item Description"
-                          value={item.description}
-                          onChange={(e) => handleInvoiceItemChange(index, 'description', e.target.value)}
-                          className="flex-1 p-2 border border-slate-300 rounded-lg text-sm"
-                          required
+                          type="submit"
                           disabled={isProcessing}
-                        />
-                        <div className="relative w-24">
-                          <span className="absolute left-3 top-2.5 text-slate-500 text-sm">$</span>
-                          <input
-                            type="number"
-                            placeholder="Amount"
-                            value={item.amount || ''}
-                            onChange={(e) => handleInvoiceItemChange(index, 'amount', e.target.value)}
-                            className="w-full pl-6 pr-2 py-2 border border-slate-300 rounded-lg text-sm"
-                            required
-                            min="0.01"
-                            step="0.01"
-                            disabled={isProcessing}
-                          />
-                        </div>
-                        {invoiceItems.length > 0 && (
-                          <button type="button" onClick={() => handleRemoveInvoiceItem(index)} className="text-red-500 hover:text-red-700">
-                            <Trash2 className="w-4 h-4" />
-                          </button>
+                          className="w-full py-3 bg-red-600 text-white rounded-lg font-semibold hover:bg-red-700 transition-colors disabled:opacity-50 flex items-center justify-center gap-2"
+                        >
+                          {isProcessing ? <Loader2 className="w-5 h-5 animate-spin" /> : <DollarSign className="w-5 h-5" />}
+                          Create & Send Invoice
+                        </button>
+                      </form>
+                    </div>
+                    
+                    {/* Deposit History */}
+                    <div className="bg-white p-6 rounded-xl shadow-lg border border-slate-100">
+                      <h2 className="text-xl font-bold mb-4 flex items-center gap-2 text-slate-900 border-b border-slate-100 pb-4">
+                        <CreditCard className="w-5 h-5 text-blue-600" /> Deposit History ({client.deposits?.length || 0})
+                      </h2>
+                      <div className="space-y-3">
+                        {client.deposits && client.deposits.length > 0 ? (
+                          client.deposits.sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime()).map(deposit => (
+                            <div key={deposit.id} className="flex justify-between items-center text-sm p-3 bg-slate-50 rounded-lg border border-slate-100">
+                              <span className="font-medium text-slate-900">${(deposit.amount_cents / 100).toFixed(2)} USD</span>
+                              <span className={`px-2 py-0.5 rounded-full text-xs font-semibold ${getStatusColor(deposit.status)}`}>
+                                {deposit.status}
+                              </span>
+                              {deposit.applied_to_invoice_id && (
+                                  <span className={`px-2 py-0.5 rounded-full text-xs font-semibold ${getStatusColor('applied')}`}>
+                                    Applied
+                                  </span>
+                              )}
+                              {deposit.stripe_invoice_id && (
+                                  <a 
+                                    href={`https://dashboard.stripe.com/invoices/${deposit.stripe_invoice_id}`} 
+                                    target="_blank" 
+                                    rel="noopener noreferrer" 
+                                    className="text-indigo-600 hover:underline flex items-center gap-1"
+                                  >
+                                    View Invoice <ExternalLink className="w-3 h-3" />
+                                  </a>
+                              )}
+                            </div>
+                          ))
+                        ) : (
+                          <p className="text-slate-500 text-sm">No deposits recorded.</p>
                         )}
                       </div>
-                    ))}
-                    <div className="flex justify-between">
-                        <button type="button" onClick={() => handleAddInvoiceItem()} className="text-indigo-600 hover:text-indigo-800 text-sm font-medium flex items-center gap-1">
-                            <Plus className="w-4 h-4" /> Add Custom Line Item
-                        </button>
-                        <div className="flex items-center gap-2">
-                            <label className="text-sm text-slate-600">Due Date:</label>
-                            <input
-                                type="date"
-                                value={invoiceDueDate}
-                                onChange={(e) => setInvoiceDueDate(e.target.value)}
-                                className="p-2 border border-slate-300 rounded-lg text-sm"
-                                disabled={isProcessing}
-                            />
-                        </div>
                     </div>
-                    <button 
-                      type="submit"
-                      disabled={isProcessing}
-                      className="w-full py-3 bg-red-600 text-white rounded-lg font-semibold hover:bg-red-700 transition-colors disabled:opacity-50 flex items-center justify-center gap-2"
-                    >
-                      {isProcessing ? <Loader2 className="w-5 h-5 animate-spin" /> : <DollarSign className="w-5 h-5" />}
-                      Create & Send Invoice
-                    </button>
-                  </form>
-                </div>
-                
-                {/* Deposit History */}
-                <div className="bg-white p-6 rounded-xl shadow-lg border border-slate-100">
-                  <h2 className="text-xl font-bold mb-4 flex items-center gap-2 text-slate-900 border-b border-slate-100 pb-4">
-                    <CreditCard className="w-5 h-5 text-blue-600" /> Deposit History ({client.deposits?.length || 0})
-                  </h2>
-                  <div className="space-y-3">
-                    {client.deposits && client.deposits.length > 0 ? (
-                      client.deposits.sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime()).map(deposit => (
-                        <div key={deposit.id} className="flex justify-between items-center text-sm p-3 bg-slate-50 rounded-lg border border-slate-100">
-                          <span className="font-medium text-slate-900">${(deposit.amount_cents / 100).toFixed(2)} USD</span>
-                          <span className={`px-2 py-0.5 rounded-full text-xs font-semibold ${getStatusColor(deposit.status)}`}>
-                            {deposit.status}
-                          </span>
-                          {deposit.applied_to_invoice_id && (
-                              <span className={`px-2 py-0.5 rounded-full text-xs font-semibold ${getStatusColor('applied')}`}>
-                                Applied
+
+                    {/* Invoice List */}
+                    <div className="bg-white p-6 rounded-xl shadow-lg border border-slate-100">
+                      <h2 className="text-xl font-bold mb-4 flex items-center gap-2 text-slate-900 border-b border-slate-100 pb-4">
+                        <FileText className="w-5 h-5 text-purple-600" /> Invoice History ({client.invoices?.length || 0})
+                      </h2>
+                      <div className="space-y-3">
+                        {client.invoices && client.invoices.length > 0 ? (
+                          client.invoices.sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime()).map(invoice => (
+                            <div key={invoice.id} className="flex justify-between items-center text-sm p-3 bg-slate-50 rounded-lg border border-slate-100">
+                              <span className="font-medium text-slate-900">${(invoice.amount_due / 100).toFixed(2)} USD</span>
+                              <span className={`px-2 py-0.5 rounded-full text-xs font-semibold ${getStatusColor(invoice.status)}`}>
+                                {invoice.status}
                               </span>
-                          )}
-                          {deposit.stripe_invoice_id && (
                               <a 
-                                href={`https://dashboard.stripe.com/invoices/${deposit.stripe_invoice_id}`} 
+                                href={invoice.hosted_invoice_url} 
                                 target="_blank" 
                                 rel="noopener noreferrer" 
                                 className="text-indigo-600 hover:underline flex items-center gap-1"
                               >
-                                View Invoice <ExternalLink className="w-3 h-3" />
+                                View <ExternalLink className="w-3 h-3" />
                               </a>
-                          )}
-                        </div>
-                      ))
-                    ) : (
-                      <p className="text-slate-500 text-sm">No deposits recorded.</p>
-                    )}
-                  </div>
-                </div>
-
-                {/* Invoice List */}
-                <div className="bg-white p-6 rounded-xl shadow-lg border border-slate-100">
-                  <h2 className="text-xl font-bold mb-4 flex items-center gap-2 text-slate-900 border-b border-slate-100 pb-4">
-                    <FileText className="w-5 h-5 text-purple-600" /> Invoice History ({client.invoices?.length || 0})
-                  </h2>
-                  <div className="space-y-3">
-                    {client.invoices && client.invoices.length > 0 ? (
-                      client.invoices.sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime()).map(invoice => (
-                        <div key={invoice.id} className="flex justify-between items-center text-sm p-3 bg-slate-50 rounded-lg border border-slate-100">
-                          <span className="font-medium text-slate-900">${(invoice.amount_due / 100).toFixed(2)} USD</span>
-                          <span className={`px-2 py-0.5 rounded-full text-xs font-semibold ${getStatusColor(invoice.status)}`}>
-                            {invoice.status}
-                          </span>
-                          <a 
-                            href={invoice.hosted_invoice_url} 
-                            target="_blank" 
-                            rel="noopener noreferrer" 
-                            className="text-indigo-600 hover:underline flex items-center gap-1"
-                          >
-                            View <ExternalLink className="w-3 h-3" />
-                          </a>
-                        </div>
-                      ))
-                    ) : (
-                      <p className="text-slate-500 text-sm">No invoices found.</p>
-                    )}
-                  </div>
+                            </div>
+                          ))
+                        ) : (
+                          <p className="text-slate-500 text-sm">No invoices found.</p>
+                        )}
+                      </div>
+                    </div>
                 </div>
               </div>
             )}
