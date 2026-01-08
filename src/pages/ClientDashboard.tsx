@@ -6,7 +6,8 @@ import { useAuth } from '../hooks/useAuth';
 import { supabase } from '../integrations/supabase/client';
 import { Briefcase, Loader2, LogOut, CheckCircle2, DollarSign, AlertTriangle, MessageSquare, Users } from 'lucide-react';
 import ClientLayout from '../components/ClientLayout';
-import { ClientBillingService } from '../services/clientBillingService'; // Corrected import path
+// ClientBillingService is no longer needed for access checks, but kept for billing actions if needed later.
+// import { ClientBillingService } from '../services/clientBillingService'; 
 
 interface ProjectSummary {
   id: string;
@@ -17,11 +18,12 @@ interface ProjectSummary {
   deposit_paid: boolean;
 }
 
-interface AccessStatus {
-  hasAccess: boolean;
-  reason: 'active' | 'overdue' | 'no_subscription' | 'override' | 'restricted' | 'system_error' | 'grace_period';
-  graceUntil?: string | null;
-}
+// AccessStatus interface is no longer needed for gating
+// interface AccessStatus {
+//   hasAccess: boolean;
+//   reason: 'active' | 'overdue' | 'no_subscription' | 'override' | 'restricted' | 'system_error' | 'grace_period';
+//   graceUntil?: string | null;
+// }
 
 const ClientDashboard: React.FC = () => {
   const { profile, signOut } = useAuth();
@@ -29,8 +31,8 @@ const ClientDashboard: React.FC = () => {
   const [isLoading, setIsLoading] = useState(true);
   const [clientName, setClientName] = useState('');
   const [clientId, setClientId] = useState<string | null>(null);
-  const [accessStatus, setAccessStatus] = useState<AccessStatus>({ hasAccess: false, reason: 'restricted' });
-  const [showOverdueBanner, setShowOverdueBanner] = useState(true);
+  // Removed accessStatus state
+  const [showOverdueBanner, setShowOverdueBanner] = useState(false); // Default to false, only show if overdue invoices exist
   const [isClientRecordMissing, setIsClientRecordMissing] = useState(false);
 
   useEffect(() => {
@@ -63,36 +65,20 @@ const ClientDashboard: React.FC = () => {
       const currentClientId = clientData.id;
       setIsClientRecordMissing(false);
 
-      // 2. Check Access Status via Edge Function
-      try {
-        const accessResult = await ClientBillingService.checkClientAccess(currentClientId);
-        setAccessStatus(accessResult);
-        
-        // Determine if we should show the non-blocking overdue banner
-        if (accessResult.reason === 'grace_period' || (accessResult.hasAccess && accessResult.reason === 'override')) {
-            // If access is overridden, we still check for overdue invoices to show a warning
-            const { data: overdueInvoices } = await supabase
-                .from('invoices')
-                .select('id')
-                .eq('client_id', currentClientId)
-                .in('status', ['open', 'past_due', 'unpaid']);
-            
-            if (overdueInvoices && overdueInvoices.length > 0) {
-                setShowOverdueBanner(true);
-            } else {
-                setShowOverdueBanner(false);
-            }
-        } else {
-             setShowOverdueBanner(false);
-        }
-
-      } catch (e) {
-        console.error("Failed to check access:", e);
-        setAccessStatus({ hasAccess: false, reason: 'system_error' });
+      // 2. Check for Overdue Invoices (for non-blocking banner only)
+      const { data: overdueInvoices } = await supabase
+          .from('invoices')
+          .select('id')
+          .eq('client_id', currentClientId)
+          .in('status', ['open', 'past_due', 'unpaid']);
+          
+      if (overdueInvoices && overdueInvoices.length > 0) {
+          setShowOverdueBanner(true);
+      } else {
+          setShowOverdueBanner(false);
       }
 
-      // 3. Fetch projects only if access is granted (or if we are still loading/checking)
-      // We fetch projects regardless of access status here, but the UI will gate display.
+      // 3. Fetch projects (always accessible)
       const { data: projectsData, error: projectsError } = await supabase
         .from('projects')
         .select('id, title, status, progress_percent, required_deposit_cents, deposit_paid')
@@ -120,43 +106,7 @@ const ClientDashboard: React.FC = () => {
     return 'bg-red-600';
   };
   
-  const getAccessMessage = (reason: AccessStatus['reason']) => {
-    switch (reason) {
-      case 'overdue':
-        return "Your account has an overdue invoice. Please resolve billing to regain access to your project dashboard.";
-      case 'no_subscription':
-        return "An active service plan is required to access your project dashboard. Please contact support or check your billing status.";
-      case 'grace_period':
-        return "Your invoice is overdue. Access is currently maintained during the grace period, but will be restricted if not resolved.";
-      case 'restricted':
-      case 'system_error':
-      default:
-        return "Access is currently restricted. Please contact support for assistance.";
-    }
-  };
-
-  const renderAccessPanel = () => (
-    <div className="max-w-2xl mx-auto p-10 bg-white rounded-xl shadow-2xl border border-red-200 text-center">
-      <AlertTriangle className="w-16 h-16 text-red-500 mx-auto mb-6" />
-      <h2 className="text-3xl font-bold text-slate-900 mb-4">Access Temporarily Restricted</h2>
-      <p className="text-lg text-slate-600 mb-8">{getAccessMessage(accessStatus.reason)}</p>
-      
-      <div className="flex flex-col sm:flex-row gap-4 justify-center">
-        <Link
-          to="/client/billing"
-          className="px-6 py-3 bg-red-600 text-white rounded-lg font-semibold hover:bg-red-700 transition-colors flex items-center justify-center gap-2"
-        >
-          <DollarSign className="w-5 h-5" /> View & Pay Invoice
-        </Link>
-        <a
-          href="mailto:hello@customwebsitesplus.com"
-          className="px-6 py-3 bg-slate-100 text-slate-700 rounded-lg font-semibold hover:bg-slate-200 transition-colors flex items-center justify-center gap-2"
-        >
-          <MessageSquare className="w-5 h-5" /> Contact Support
-        </a>
-      </div>
-    </div>
-  );
+  // Removed getAccessMessage and renderAccessPanel
 
   const renderMissingClientPanel = () => (
     <div className="max-w-2xl mx-auto p-10 bg-white rounded-xl shadow-2xl border border-red-200 text-center">
@@ -172,9 +122,7 @@ const ClientDashboard: React.FC = () => {
     </div>
   );
 
-  const formatGraceDate = (dateString: string) => {
-    return new Date(dateString).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
-  };
+  // Removed formatGraceDate
 
   return (
     <ClientLayout>
@@ -194,20 +142,20 @@ const ClientDashboard: React.FC = () => {
             </div>
         ) : isClientRecordMissing ? (
             renderMissingClientPanel()
-        ) : accessStatus.hasAccess ? (
+        ) : (
             <>
                 {/* Overdue Warning Banner (Non-blocking) */}
-                {showOverdueBanner && accessStatus.graceUntil && (
+                {showOverdueBanner && (
                     <div className="p-4 mb-8 bg-amber-50 border border-amber-200 rounded-xl flex justify-between items-center">
                         <div className="flex items-center gap-3">
                             <AlertTriangle className="w-5 h-5 text-amber-600 flex-shrink-0" />
                             <p className="text-sm text-amber-800">
-                                <strong>Billing Notice:</strong> Your invoice is overdue. Access will be limited if not resolved by {formatGraceDate(accessStatus.graceUntil || '')}.
+                                <strong>Billing Notice:</strong> You have one or more overdue invoices. Please visit the billing section to resolve.
                             </p>
                         </div>
-                        <button onClick={() => setShowOverdueBanner(false)} className="text-amber-600 hover:text-amber-800 text-sm font-medium flex-shrink-0">
-                            Dismiss
-                        </button>
+                        <Link to="/client/billing" className="text-amber-600 hover:text-amber-800 text-sm font-medium flex-shrink-0">
+                            View Billing
+                        </Link>
                     </div>
                 )}
                 
@@ -216,7 +164,7 @@ const ClientDashboard: React.FC = () => {
                     <p className="text-sm text-slate-500">Your dedicated client portal for tracking project progress and billing.</p>
                 </div>
 
-                {/* Projects List (Visible if access is granted) */}
+                {/* Projects List (Always visible if client record exists) */}
                 <div className="bg-white rounded-xl shadow-lg border border-slate-100 p-6">
                   <h2 className="text-xl font-bold text-slate-900 mb-6 flex items-center gap-2">
                     <Briefcase className="w-5 h-5 text-indigo-600" /> Your Projects
@@ -263,9 +211,6 @@ const ClientDashboard: React.FC = () => {
                   )}
                 </div>
             </>
-        ) : (
-            /* Access Restricted Panel (Visible if access is denied) */
-            renderAccessPanel()
         )}
       </div>
     </ClientLayout>

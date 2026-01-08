@@ -37,7 +37,7 @@ interface SubscriptionSummary {
 interface DepositSummary {
   id: string;
   amount_cents: number;
-  status: 'paid' | 'pending' | 'failed';
+  status: 'paid' | 'pending' | 'failed' | 'applied';
   stripe_invoice_id: string | null;
   is_applied: boolean;
   applied_to_invoice_id: string | null;
@@ -48,22 +48,17 @@ interface Client {
   id: string;
   business_name: string;
   phone: string;
-  status: string;
+  status: string; // Client status (active/inactive)
   notes: string;
   owner_profile_id: string;
   stripe_customer_id: string | null;
   billing_email: string | null;
-  access_override: boolean;
-  access_override_note: string | null;
-  access_status: string;
-  billing_grace_until: string | null;
-  billing_escalation_stage: number;
-  last_billing_notice_sent: string | null;
+  // Removed access_override, access_override_note, access_status, billing_grace_until, billing_escalation_stage, last_billing_notice_sent
   profiles: Profile;
   projects: ProjectSummary[];
   invoices: InvoiceSummary[];
   subscriptions: SubscriptionSummary[];
-  deposits: DepositSummary[]; // New field
+  deposits: DepositSummary[];
 }
 
 interface BillingProduct {
@@ -78,7 +73,7 @@ const AdminClientDetail: React.FC = () => {
   const { id } = useParams<{ id: string }>();
   const [client, setClient] = useState<Client | null>(null);
   const [isLoading, setIsLoading] = useState(true);
-  const [activeTab, setActiveTab] = useState<'projects' | 'billing' | 'notes' | 'access'>('billing'); // Default to billing for deposit feature
+  const [activeTab, setActiveTab] = useState<'projects' | 'billing' | 'notes'>('billing'); // Removed 'access' tab
   
   // Dialog State
   const [isProjectDialogOpen, setIsProjectDialogOpen] = useState(false);
@@ -97,10 +92,7 @@ const AdminClientDetail: React.FC = () => {
   const [depositDescription, setDepositDescription] = useState('');
   const [applyDepositToFuture, setApplyDepositToFuture] = useState(true);
   
-  // Access State
-  const [overrideEnabled, setOverrideEnabled] = useState(false);
-  const [overrideNote, setOverrideNote] = useState('');
-  const [isSavingAccess, setIsSavingAccess] = useState(false);
+  // Removed Access State
 
   const fetchClientData = useCallback(async () => {
     if (!id) return;
@@ -108,7 +100,7 @@ const AdminClientDetail: React.FC = () => {
     const { data, error } = await supabase
       .from('clients')
       .select(`
-          *,
+          id, business_name, phone, status, notes, owner_profile_id, stripe_customer_id, billing_email,
           profiles (id, full_name, email),
           projects (id, title, status, progress_percent),
           invoices (id, amount_due, status, hosted_invoice_url, created_at),
@@ -124,8 +116,7 @@ const AdminClientDetail: React.FC = () => {
     } else {
       const clientData = data as unknown as Client;
       setClient(clientData);
-      setOverrideEnabled(clientData.access_override);
-      setOverrideNote(clientData.access_override_note || '');
+      // Removed access state initialization
     }
     setIsLoading(false);
   }, [id]);
@@ -162,19 +153,12 @@ const AdminClientDetail: React.FC = () => {
       case 'grace_period': return 'bg-yellow-100 text-yellow-800';
       case 'pending': return 'bg-blue-100 text-blue-800';
       case 'failed': return 'bg-red-100 text-red-800';
+      case 'applied': return 'bg-purple-100 text-purple-800';
       default: return 'bg-slate-100 text-slate-800';
     }
   };
   
-  const getEscalationStageText = (stage: number) => {
-    switch (stage) {
-        case 0: return 'None';
-        case 1: return 'Reminder Sent (Day 1)';
-        case 2: return 'Final Notice Sent (Day 5)';
-        case 3: return 'Access Restricted';
-        default: return 'Unknown';
-    }
-  };
+  // Removed getEscalationStageText
   
   const getPlanName = (priceId: string) => {
       return products.find(p => p.stripe_price_id === priceId)?.name || 'Unknown Plan';
@@ -248,7 +232,8 @@ const AdminClientDetail: React.FC = () => {
             client.id, 
             depositAmount as number, 
             depositDescription || 'Project Deposit', 
-            applyDepositToFuture
+            // We don't pass applyDepositToFuture here, as the Edge Function handles the deposit record creation,
+            // and the auto-apply logic is handled when a new invoice is created.
         );
         
         alert(`Deposit invoice created and sent! Status: ${result.status}. Client must pay the invoice.`);
@@ -259,7 +244,7 @@ const AdminClientDetail: React.FC = () => {
     } catch (e: any) {
         alert(`Failed to collect deposit: ${e.message}`);
     } finally {
-        setIsProcessing(false);
+      setIsProcessing(false);
     }
   };
 
@@ -307,51 +292,13 @@ const AdminClientDetail: React.FC = () => {
     setInvoiceItems(newItems);
   };
   
-  // --- Access Handlers ---
-  const handleSaveAccessOverride = async () => {
-    if (!client) return;
-    setIsSavingAccess(true);
-    
-    const { error } = await supabase
-      .from('clients')
-      .update({ 
-        access_override: overrideEnabled,
-        access_override_note: overrideNote.trim() || null,
-      })
-      .eq('id', client.id);
-
-    if (error) {
-      console.error('Error saving access override:', error);
-      alert('Failed to save access settings.');
-    } else {
-      alert('Access settings saved successfully!');
-      fetchClientData();
-    }
-    setIsSavingAccess(false);
-  };
-  
-  const handleSendManualReminder = async (stage: 1 | 2) => {
-    if (!client || !client.billing_email) {
-        alert("Client email is missing.");
-        return;
-    }
-    
-    const graceDate = client.billing_grace_until ? new Date(client.billing_grace_until).toLocaleDateString() : 'N/A';
-    
-    try {
-        // For now, we'll use a simple alert as a placeholder for the mock service.
-        alert(`Manual reminder (Stage ${stage}) simulated for ${client.billing_email}. Grace period ends ${graceDate}.`);
-        
-    } catch (e: any) {
-        alert(`Failed to send reminder: ${e.message}`);
-    }
-  };
+  // Removed Access Handlers
 
   const overdueInvoicesCount = client?.invoices?.filter(inv => inv.status === 'past_due' || inv.status === 'open').length || 0;
   const subscriptionProducts = products.filter(p => p.billing_type === 'subscription');
   const oneTimeProducts = products.filter(p => p.billing_type === 'one_time');
   
-  const unappliedDeposits = client?.deposits?.filter(d => d.status === 'paid' && !d.is_applied) || [];
+  const unappliedDeposits = client?.deposits?.filter(d => d.status === 'paid' || d.status === 'applied') || [];
   const totalUnappliedCredit = unappliedDeposits.reduce((sum, d) => sum + d.amount_cents, 0) / 100;
 
   if (isLoading) {
@@ -369,19 +316,19 @@ const AdminClientDetail: React.FC = () => {
       <AdminLayout>
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-12 text-center">
           <h1 className="text-3xl font-bold text-red-500">Client Not Found</h1>
+          <p className="text-slate-500 mt-4">The client ID provided does not exist or the database query failed.</p>
         </div>
       </AdminLayout>
     );
   }
 
   const currentSubscription = client.subscriptions?.find(sub => sub.status === 'active' || sub.status === 'trialing');
-  const currentPlan = currentSubscription ? subscriptionProducts.find(p => p.stripe_price_id === currentSubscription.stripe_price_id) : null;
 
   return (
     <AdminLayout>
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-12">
-        <Link to="/admin/dashboard" className="text-indigo-600 hover:text-indigo-800 text-sm font-medium mb-4 block">
-          ← Back to Dashboard
+        <Link to="/admin/clients" className="text-indigo-600 hover:text-indigo-800 text-sm font-medium mb-4 block">
+          ← Back to Client List
         </Link>
         <h1 className="text-3xl font-bold text-slate-900 mb-2">{client.business_name}</h1>
         <p className="text-slate-500 mb-8">Contact: {client.profiles?.full_name || 'N/A'} ({client.profiles?.email || 'N/A'})</p>
@@ -436,16 +383,6 @@ const AdminClientDetail: React.FC = () => {
               }`}
             >
               Notes
-            </button>
-            <button
-              onClick={() => setActiveTab('access')}
-              className={`whitespace-nowrap py-4 px-1 border-b-2 font-medium text-sm transition-colors ${
-                activeTab === 'access'
-                  ? 'border-indigo-600 text-indigo-600'
-                  : 'border-transparent text-slate-500 hover:text-slate-700 hover:border-slate-300'
-              }`}
-            >
-              Access Control
             </button>
           </nav>
         </div>
@@ -518,126 +455,7 @@ const AdminClientDetail: React.FC = () => {
             </div>
           )}
 
-          {/* Access Control Tab Content */}
-          {activeTab === 'access' && (
-            <div className="lg:col-span-3 space-y-6">
-                <div className="bg-white p-6 rounded-xl shadow-lg border border-slate-100">
-                    <h2 className="text-xl font-bold mb-4 flex items-center gap-2 text-slate-900 border-b border-slate-100 pb-4">
-                        <Lock className="w-5 h-5 text-indigo-600" /> Access Control
-                    </h2>
-                    
-                    <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-6">
-                        <div className="p-4 bg-slate-50 rounded-lg border border-slate-200">
-                            <p className="text-xs text-slate-500 uppercase font-semibold mb-1">Current Access Status</p>
-                            <span className={`px-3 py-1 rounded-full text-sm font-bold ${getStatusColor(client.access_status)}`}>
-                                {client.access_status.replace('_', ' ')}
-                            </span>
-                        </div>
-                        <div className="p-4 bg-slate-50 rounded-lg border border-slate-200">
-                            <p className="text-xs text-slate-500 uppercase font-semibold mb-1">Overdue Invoices</p>
-                            <p className="text-xl font-bold text-red-600">{overdueInvoicesCount}</p>
-                        </div>
-                        <div className="p-4 bg-slate-50 rounded-lg border border-slate-200">
-                            <p className="text-xs text-slate-500 uppercase font-semibold mb-1">Override Status</p>
-                            <p className={`text-xl font-bold ${client.access_override ? 'text-purple-600' : 'text-slate-500'}`}>
-                                {client.access_override ? 'ENABLED' : 'DISABLED'}
-                            </p>
-                        </div>
-                    </div>
-                    
-                    {/* Automation Status */}
-                    <div className="p-4 bg-slate-50 rounded-xl border border-slate-200 mb-6">
-                        <h3 className="font-bold text-slate-900 mb-3 flex items-center gap-2">
-                            <Zap className="w-5 h-5 text-amber-600" /> Automation Status
-                        </h3>
-                        <div className="grid grid-cols-2 gap-4 text-sm">
-                            <div>
-                                <p className="text-xs text-slate-500 uppercase font-semibold mb-1">Escalation Stage</p>
-                                <p className="font-medium text-slate-800">{getEscalationStageText(client.billing_escalation_stage)} ({client.billing_escalation_stage}/3)</p>
-                            </div>
-                            <div>
-                                <p className="text-xs text-slate-500 uppercase font-semibold mb-1">Grace Period Ends</p>
-                                <p className="font-medium text-slate-800">
-                                    {client.billing_grace_until ? new Date(client.billing_grace_until).toLocaleDateString() : 'N/A'}
-                                </p>
-                            </div>
-                            <div className="col-span-2">
-                                <p className="text-xs text-slate-500 uppercase font-semibold mb-1">Last Notice Sent</p>
-                                <p className="font-medium text-slate-800">
-                                    {client.last_billing_notice_sent ? new Date(client.last_billing_notice_sent).toLocaleString() : 'Never'}
-                                </p>
-                            </div>
-                        </div>
-                        
-                        {/* Manual Reminder Buttons */}
-                        {overdueInvoicesCount > 0 && client.billing_escalation_stage < 3 && (
-                            <div className="mt-4 pt-4 border-t border-slate-200 flex gap-3">
-                                <button 
-                                    onClick={() => handleSendManualReminder(1)}
-                                    className="flex-1 py-2 bg-indigo-500 text-white rounded-lg text-xs font-semibold hover:bg-indigo-600 transition-colors flex items-center justify-center gap-2"
-                                >
-                                    <Send className="w-4 h-4" /> Send Stage 1
-                                </button>
-                                <button 
-                                    onClick={() => handleSendManualReminder(2)}
-                                    className="flex-1 py-2 bg-red-500 text-white rounded-lg text-xs font-semibold hover:bg-red-600 transition-colors flex items-center justify-center gap-2"
-                                >
-                                    <Send className="w-4 h-4" /> Send Stage 2
-                                </button>
-                            </div>
-                        )}
-                    </div>
-
-
-                    <div className="p-4 bg-indigo-50 border border-indigo-200 rounded-xl mb-6">
-                        <h3 className="font-bold text-indigo-800 mb-2 flex items-center gap-2">
-                            <ShieldCheck className="w-5 h-5" /> Override Billing Restrictions
-                        </h3>
-                        <p className="text-sm text-indigo-700 mb-4">
-                            Grant client access to the portal regardless of their current subscription or invoice status.
-                        </p>
-                        
-                        <div className="flex items-center justify-between p-3 bg-white rounded-lg border border-slate-200">
-                            <span className="font-medium text-slate-700">Enable Access Override</span>
-                            <label className="relative inline-flex items-center cursor-pointer">
-                                <input 
-                                    type="checkbox" 
-                                    checked={overrideEnabled} 
-                                    onChange={(e) => setOverrideEnabled(e.target.checked)} 
-                                    className="sr-only peer" 
-                                />
-                                <div className="w-11 h-6 bg-slate-200 peer-focus:outline-none peer-focus:ring-4 peer-focus:ring-indigo-300 rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-slate-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-indigo-600"></div>
-                            </label>
-                        </div>
-                    </div>
-
-                    <div className="mb-6">
-                        <label htmlFor="override-note" className="block text-sm font-bold text-slate-700 mb-2">
-                            Override Note (Admin Only)
-                        </label>
-                        <textarea
-                            id="override-note"
-                            rows={3}
-                            value={overrideNote}
-                            onChange={(e) => setOverrideNote(e.target.value)}
-                            placeholder="Reason for override (e.g., 'Good faith extension', 'Internal project')"
-                            className="w-full p-3 border border-slate-300 rounded-lg text-sm resize-none focus:border-indigo-500 outline-none"
-                        />
-                    </div>
-
-                    <button 
-                        onClick={handleSaveAccessOverride}
-                        disabled={isSavingAccess}
-                        className="w-full py-3 bg-indigo-600 text-white rounded-lg font-semibold hover:bg-indigo-700 transition-colors disabled:opacity-50 flex items-center justify-center gap-2"
-                    >
-                        {isSavingAccess ? <Loader2 className="w-5 h-5 animate-spin" /> : <ShieldCheck className="w-5 h-5" />}
-                        Save Access Settings
-                    </button>
-                </div>
-            </div>
-          )}
-
-          {/* Billing Tab Content (New Implementation) */}
+          {/* Billing Tab Content */}
           {activeTab === 'billing' && (
             <>
               {/* Left Column: Customer & Subscriptions & Deposits */}
@@ -662,33 +480,34 @@ const AdminClientDetail: React.FC = () => {
                     </>
                   ) : (
                     <>
-                      <p className="text-sm text-red-600 font-semibold mb-4">❌ Customer ID Missing</p>
+                      <p className="text-sm text-amber-600 font-semibold mb-4">⚠️ Customer ID Missing</p>
+                      <p className="text-xs text-slate-500 mb-4">Customer will be created automatically upon first invoice/subscription.</p>
                       <button 
                         onClick={handleCreateCustomer}
                         disabled={isProcessing}
                         className="w-full py-2 bg-indigo-600 text-white rounded-lg text-sm font-semibold hover:bg-indigo-700 transition-colors disabled:opacity-50 flex items-center justify-center gap-2"
                       >
                         {isProcessing ? <Loader2 className="w-4 h-4 animate-spin" /> : <Plus className="w-4 h-4" />}
-                        Create Stripe Customer
+                        Create Stripe Customer Now
                       </button>
                     </>
                   )}
                 </div>
 
-                {/* Subscriptions */}
+                {/* Subscriptions (Maintenance Only) */}
                 <div className="bg-white p-6 rounded-xl shadow-lg border border-slate-100">
                   <h2 className="text-xl font-bold mb-4 flex items-center gap-2 text-slate-900 border-b border-slate-100 pb-4">
-                    <Zap className="w-5 h-5 text-amber-600" /> Subscriptions
+                    <Zap className="w-5 h-5 text-amber-600" /> Maintenance Subscriptions
                   </h2>
                   
                   {currentSubscription ? (
                     <div className="p-4 bg-emerald-50 border border-emerald-200 rounded-lg mb-4">
-                        <p className="font-bold text-emerald-800">{currentPlan?.name || 'Unknown Plan'}</p>
+                        <p className="font-bold text-emerald-800">{getPlanName(currentSubscription.stripe_price_id)}</p>
                         <p className="text-sm text-emerald-700">Status: {currentSubscription.status}</p>
-                        <p className="text-xs text-emerald-600">Renews: {new Date(currentSubscription.current_period_end).toLocaleDateString()}</p>
+                        <p className="text-xs text-emerald-600">Renews: {currentSubscription.current_period_end ? new Date(currentSubscription.current_period_end).toLocaleDateString() : 'N/A'}</p>
                     </div>
                   ) : (
-                    <p className="text-slate-500 text-sm mb-4">No active subscription.</p>
+                    <p className="text-slate-500 text-sm mb-4">No active maintenance subscription.</p>
                   )}
 
                   <h3 className="font-bold text-sm mb-2">Start New Subscription</h3>
@@ -731,7 +550,7 @@ const AdminClientDetail: React.FC = () => {
                                     required
                                     min="0.01"
                                     step="0.01"
-                                    disabled={isProcessing || !client.stripe_customer_id}
+                                    disabled={isProcessing}
                                 />
                             </div>
                         </div>
@@ -743,7 +562,7 @@ const AdminClientDetail: React.FC = () => {
                                 onChange={(e) => setDepositDescription(e.target.value)}
                                 placeholder="e.g., Project Kickoff Fee"
                                 className="w-full p-2 border border-slate-300 rounded-lg text-sm"
-                                disabled={isProcessing || !client.stripe_customer_id}
+                                disabled={isProcessing}
                             />
                         </div>
                         <div className="flex items-center gap-2">
@@ -753,7 +572,7 @@ const AdminClientDetail: React.FC = () => {
                                 checked={applyDepositToFuture}
                                 onChange={(e) => setApplyDepositToFuture(e.target.checked)}
                                 className="w-4 h-4 text-indigo-600 border-slate-300 rounded focus:ring-indigo-500"
-                                disabled={isProcessing || !client.stripe_customer_id}
+                                disabled={isProcessing}
                             />
                             <label htmlFor="apply-future" className="text-sm font-medium text-slate-700">
                                 Apply as credit to future invoice
@@ -761,7 +580,7 @@ const AdminClientDetail: React.FC = () => {
                         </div>
                         <button 
                             type="submit"
-                            disabled={isProcessing || !depositAmount || !client.stripe_customer_id}
+                            disabled={isProcessing || !depositAmount}
                             className="w-full py-2 bg-blue-600 text-white rounded-lg text-sm font-semibold hover:bg-blue-700 transition-colors disabled:opacity-50 flex items-center justify-center gap-2"
                         >
                             {isProcessing ? <Loader2 className="w-4 h-4 animate-spin" /> : <DollarSign className="w-4 h-4" />}
@@ -778,13 +597,13 @@ const AdminClientDetail: React.FC = () => {
                 {totalUnappliedCredit > 0 && (
                     <div className="bg-emerald-50 p-4 rounded-xl border border-emerald-200">
                         <h3 className="text-lg font-bold text-emerald-800 flex items-center gap-2">
-                            <CheckCircle2 className="w-5 h-5" /> Unapplied Credit Available
+                            <CheckCircle2 className="w-5 h-5" /> Total Credit Available
                         </h3>
                         <p className="text-2xl font-bold text-emerald-600 mt-1">
                             ${totalUnappliedCredit.toFixed(2)} USD
                         </p>
                         <p className="text-sm text-emerald-700 mt-2">
-                            This amount will be automatically applied as a credit to the next invoice created.
+                            This amount includes paid and applied deposits and will be automatically applied as a credit to the next invoice created.
                         </p>
                     </div>
                 )}
@@ -802,7 +621,7 @@ const AdminClientDetail: React.FC = () => {
                             value={selectedOneTimePriceId}
                             onChange={(e) => setSelectedOneTimePriceId(e.target.value)}
                             className="flex-1 p-2 border border-slate-300 rounded-lg text-sm"
-                            disabled={isProcessing || !client.stripe_customer_id}
+                            disabled={isProcessing}
                         >
                             <option value="">Select a one-time product to add...</option>
                             {oneTimeProducts.map(product => (
@@ -866,7 +685,7 @@ const AdminClientDetail: React.FC = () => {
                     </div>
                     <button 
                       type="submit"
-                      disabled={isProcessing || !client.stripe_customer_id}
+                      disabled={isProcessing}
                       className="w-full py-3 bg-red-600 text-white rounded-lg font-semibold hover:bg-red-700 transition-colors disabled:opacity-50 flex items-center justify-center gap-2"
                     >
                       {isProcessing ? <Loader2 className="w-5 h-5 animate-spin" /> : <DollarSign className="w-5 h-5" />}
@@ -888,9 +707,11 @@ const AdminClientDetail: React.FC = () => {
                           <span className={`px-2 py-0.5 rounded-full text-xs font-semibold ${getStatusColor(deposit.status)}`}>
                             {deposit.status}
                           </span>
-                          <span className={`px-2 py-0.5 rounded-full text-xs font-semibold ${deposit.is_applied ? 'bg-purple-100 text-purple-800' : 'bg-blue-100 text-blue-800'}`}>
-                            {deposit.is_applied ? 'Applied' : 'Unapplied Credit'}
-                          </span>
+                          {deposit.applied_to_invoice_id && (
+                              <span className={`px-2 py-0.5 rounded-full text-xs font-semibold ${getStatusColor('applied')}`}>
+                                Applied
+                              </span>
+                          )}
                           {deposit.stripe_invoice_id && (
                               <a 
                                 href={`https://dashboard.stripe.com/invoices/${deposit.stripe_invoice_id}`} 

@@ -102,7 +102,7 @@ serve(async (req) => {
       case 'checkout.session.completed': {
         if (!client_id) break;
         
-        // Auto-Recovery Logic: Clear flags and restore access
+        // Auto-Recovery Logic: Clear flags (only billing related, NOT access)
         const { data: client, error: clientFetchError } = await supabaseAdmin
             .from('clients')
             .select('business_name, billing_email')
@@ -113,9 +113,7 @@ serve(async (req) => {
             await supabaseAdmin
                 .from('clients')
                 .update({
-                    access_status: 'active',
-                    billing_escalation_stage: 0,
-                    billing_grace_until: null,
+                    // Removed access_status, billing_escalation_stage, billing_grace_until
                     last_billing_notice_sent: null,
                 })
                 .eq('id', client_id);
@@ -124,7 +122,7 @@ serve(async (req) => {
             if (client.billing_email) {
                 await sendBillingNotification(client.billing_email, client.business_name, 3);
             }
-            console.log(`[stripe-webhook] Access restored for client ${client_id} due to successful payment.`);
+            console.log(`[stripe-webhook] Billing flags reset for client ${client_id} due to successful payment.`);
         }
         
         // Fall through to invoice handling
@@ -211,29 +209,12 @@ serve(async (req) => {
             const milestoneId = invoice.metadata?.milestone_id;
             if (milestoneId) {
                 // Optionally revert milestone status if payment fails, or keep as 'invoiced'
-                // For now, we keep it as 'invoiced' to indicate it's still due.
                 console.log(`[stripe-webhook] Milestone ${milestoneId} payment FAILED.`);
             }
         }
         // --- END DEPOSIT & MILESTONE SYNC LOGIC ---
         
-        // --- Access Restriction Logic on Failure ---
-        if (event.type === 'invoice.payment_failed' && invoice.status === 'open') {
-            const GRACE_PERIOD_DAYS = 7;
-            const dueDate = invoice.due_date ? new Date(invoice.due_date * 1000) : new Date();
-            const graceUntil = new Date(dueDate.getTime() + GRACE_PERIOD_DAYS * 24 * 60 * 60 * 1000).toISOString();
-            
-            await supabaseAdmin
-                .from('clients')
-                .update({
-                    access_status: 'grace',
-                    billing_escalation_stage: 1, // Start escalation
-                    billing_grace_until: graceUntil,
-                    last_billing_notice_sent: new Date().toISOString(),
-                })
-                .eq('id', client_id);
-            console.log(`[stripe-webhook] Client ${client_id} entered grace period due to payment failure.`);
-        }
+        // Removed Access Restriction Logic on Failure
         
         break;
       }
@@ -259,16 +240,16 @@ serve(async (req) => {
 
         if (upsertError) console.error('[stripe-webhook] Subscription upsert failed:', upsertError);
         
-        // Also update client record with the latest active subscription ID and access status
+        // Update client record with the latest active subscription ID (for reference, not access)
         if (subscription.status === 'active' || subscription.status === 'trialing') {
             await supabaseAdmin
                 .from('clients')
-                .update({ stripe_subscription_id: subscription.id, access_status: 'active' }) // Auto-restore access on active subscription
+                .update({ stripe_subscription_id: subscription.id })
                 .eq('id', client_id);
         } else if (event.type === 'customer.subscription.deleted' || subscription.status === 'canceled') {
              await supabaseAdmin
                 .from('clients')
-                .update({ stripe_subscription_id: null, access_status: 'restricted' }) // Restrict access on cancellation/deletion
+                .update({ stripe_subscription_id: null })
                 .eq('id', client_id);
         }
         break;

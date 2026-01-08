@@ -20,9 +20,10 @@ const invokeEdgeFunction = async (functionName: string, payload: any) => {
 
 export const ClientBillingService = {
   
-  checkClientAccess: async (clientId: string): Promise<{ hasAccess: boolean, reason: 'active' | 'overdue' | 'no_subscription' | 'override' | 'restricted' | 'system_error' | 'grace_period', graceUntil?: string | null }> => {
-    return invokeEdgeFunction('access-check', { client_id: clientId });
-  },
+  // Removed checkClientAccess as client access is no longer billing-gated.
+  // checkClientAccess: async (clientId: string): Promise<{ hasAccess: boolean, reason: 'active' | 'overdue' | 'no_subscription' | 'override' | 'restricted' | 'system_error' | 'grace_period', graceUntil?: string | null }> => {
+  //   return invokeEdgeFunction('access-check', { client_id: clientId });
+  // },
   
   createPortalSession: async (clientId: string) => {
     return invokeEdgeFunction('stripe-api/create-portal-session', { client_id: clientId });

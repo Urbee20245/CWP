@@ -42,7 +42,8 @@ const AddClientDialog: React.FC<AddClientDialogProps> = ({ isOpen, onClose, onCl
     }
 
     try {
-      // Call the secure Edge Function via AdminService
+      // Call the secure Edge Function via AdminService to create Auth User and Client Record
+      // NOTE: Stripe customer creation is now deferred until the first billing action.
       await AdminService.createClientUser({
         email,
         password,

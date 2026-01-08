@@ -46,6 +46,7 @@ const ClientBilling: React.FC = () => {
   const [isLoading, setIsLoading] = useState(true);
   const [isProcessing, setIsProcessing] = useState(false);
   const [stripeCustomerId, setStripeCustomerId] = useState<string | null>(null);
+  const [isClientRecordMissing, setIsClientRecordMissing] = useState(false);
 
   const fetchBillingData = async () => {
     if (!profile) return;
@@ -58,14 +59,22 @@ const ClientBilling: React.FC = () => {
       .eq('owner_profile_id', profile.id)
       .single();
 
-    if (clientError || !clientData) {
-      console.error('Error fetching client record:', clientError);
-      setIsLoading(false);
-      return;
+    if (clientError && clientError.code !== 'PGRST116') {
+        console.error('Error fetching client record:', clientError);
+        setIsClientRecordMissing(true);
+        setIsLoading(false);
+        return;
+    }
+    
+    if (!clientData) {
+        setIsClientRecordMissing(true);
+        setIsLoading(false);
+        return;
     }
     
     const clientId = clientData.id;
     setStripeCustomerId(clientData.stripe_customer_id);
+    setIsClientRecordMissing(false);
 
     // 2. Fetch invoices for that client ID
     const { data: invoicesData, error: invoicesError } = await supabase
@@ -126,7 +135,7 @@ const ClientBilling: React.FC = () => {
 
   const handlePortalSession = async () => {
     if (!stripeCustomerId) {
-        alert("Stripe customer record not found. Please contact support.");
+        alert("Stripe customer record not found. Please contact support or wait for your first invoice.");
         return;
     }
     setIsProcessing(true);
@@ -155,6 +164,7 @@ const ClientBilling: React.FC = () => {
       case 'draft': return 'bg-blue-100 text-blue-800';
       case 'canceled':
       case 'failed': return 'bg-red-100 text-red-800';
+      case 'applied': return 'bg-purple-100 text-purple-800';
       default: return 'bg-slate-100 text-slate-800';
     }
   };
@@ -167,6 +177,17 @@ const ClientBilling: React.FC = () => {
   
   const unappliedDeposits = deposits.filter(d => d.status === 'paid' && !d.is_applied);
   const totalUnappliedCredit = unappliedDeposits.reduce((sum, d) => sum + d.amount_cents, 0) / 100;
+
+  if (isClientRecordMissing) {
+      return (
+          <ClientLayout>
+              <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-12 text-center">
+                  <h1 className="text-3xl font-bold text-red-500">Client Record Missing</h1>
+                  <p className="text-slate-500 mt-4">Your user account is not linked to a client business record. Please contact your administrator.</p>
+              </div>
+          </ClientLayout>
+      );
+  }
 
   return (
     <ClientLayout>
@@ -204,7 +225,7 @@ const ClientBilling: React.FC = () => {
                                 </p>
                             </div>
                         ) : (
-                            <p className="text-slate-500 mb-6">You do not have an active subscription.</p>
+                            <p className="text-slate-500 mb-6">No active maintenance subscription.</p>
                         )}
 
                         <button 
