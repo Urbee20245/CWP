@@ -29,6 +29,7 @@ interface InvoiceSummary {
   created_at: string;
   last_reminder_sent_at: string | null; // New field
   disable_reminders: boolean; // New field
+  stripe_invoice_id: string; // ADDED for audit/resend verification
 }
 
 interface SubscriptionSummary {
@@ -127,7 +128,7 @@ const AdminClientDetail: React.FC = () => {
           id, business_name, phone, address, status, notes, owner_profile_id, stripe_customer_id, billing_email, service_status, cancellation_reason, cancellation_effective_date,
           profiles (id, full_name, email, role),
           projects (id, title, status, progress_percent),
-          invoices (id, amount_due, status, hosted_invoice_url, pdf_url, created_at, last_reminder_sent_at, disable_reminders),
+          invoices (id, amount_due, status, hosted_invoice_url, pdf_url, created_at, last_reminder_sent_at, disable_reminders, stripe_invoice_id),
           subscriptions (id, stripe_price_id, status, current_period_end, cancel_at_period_end),
           deposits (id, amount_cents, status, stripe_invoice_id, applied_to_invoice_id, created_at),
           service_pause_logs (id, action, internal_note, client_acknowledged, created_at)
@@ -468,6 +469,11 @@ const AdminClientDetail: React.FC = () => {
       newItems[index].description = value as string;
     }
     setInvoiceItems(newItems);
+  };
+  
+  // Helper to check if an invoice ID corresponds to a deposit
+  const isDepositInvoice = (stripeInvoiceId: string) => {
+      return client?.deposits?.some(d => d.stripe_invoice_id === stripeInvoiceId) || false;
   };
   
   const overdueInvoicesCount = client?.invoices?.filter(inv => inv.status === 'past_due' || inv.status === 'open').length || 0;
@@ -914,7 +920,7 @@ const AdminClientDetail: React.FC = () => {
                                 <option value="">Select a one-time product to add...</option>
                                 {oneTimeProducts.map(product => (
                                     <option key={product.stripe_price_id} value={product.stripe_price_id}>
-                                        {product.name} (${(product.amount_cents / 100).toFixed(2)})
+                                        {product.name} (${(product.amount_cents / 100).toFixed(2)}/mo)
                                     </option>
                                 ))}
                             </select>
@@ -1033,6 +1039,11 @@ const AdminClientDetail: React.FC = () => {
                                       <span className={`px-2 py-0.5 rounded-full text-xs font-semibold ${getStatusColor(invoice.status)}`}>
                                         {invoice.status}
                                       </span>
+                                      {isDepositInvoice(invoice.stripe_invoice_id) && (
+                                          <span className="px-2 py-0.5 rounded-full text-xs font-semibold bg-blue-100 text-blue-800">
+                                              Deposit
+                                          </span>
+                                      )}
                                   </div>
                                   <div className="flex items-center gap-2 text-xs text-slate-500">
                                       <span>Created: {format(new Date(invoice.created_at), 'MMM dd, yyyy')}</span>
