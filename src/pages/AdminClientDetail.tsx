@@ -3,13 +3,14 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import { useParams, Link, useNavigate } from 'react-router-dom';
 import { supabase } from '../integrations/supabase/client';
-import { Loader2, Briefcase, FileText, DollarSign, Plus, CreditCard, Zap, ExternalLink, ShieldCheck, Lock, Trash2, Send, AlertCircle, MessageSquare, Phone, CheckCircle2, Pause, Play, Clock, Download } from 'lucide-react';
+import { Loader2, Briefcase, FileText, DollarSign, Plus, CreditCard, Zap, ExternalLink, ShieldCheck, Lock, Trash2, Send, AlertCircle, MessageSquare, Phone, CheckCircle2, Pause, Play, Clock, Download, Edit } from 'lucide-react';
 import AdminLayout from '../components/AdminLayout';
 import { Profile } from '../types/auth';
 import { AdminService } from '../services/adminService'; // Use AdminService for admin functions
 import { ClientBillingService } from '../services/clientBillingService'; // Use ClientBillingService for client functions
 import AddProjectDialog from '../components/AddProjectDialog';
 import SendSmsDialog from '../components/SendSmsDialog'; // Import the new dialog
+import EditClientDialog from '../components/EditClientDialog'; // New Import
 
 interface ProjectSummary {
   id: string;
@@ -90,6 +91,7 @@ const AdminClientDetail: React.FC = () => {
   // Dialog State
   const [isProjectDialogOpen, setIsProjectDialogOpen] = useState(false);
   const [isSmsDialogOpen, setIsSmsDialogOpen] = useState(false); 
+  const [isEditDialogOpen, setIsEditDialogOpen] = useState(false); // New State
   
   // Billing State
   const [isProcessing, setIsProcessing] = useState(false);
@@ -116,7 +118,7 @@ const AdminClientDetail: React.FC = () => {
       .from('clients')
       .select(`
           id, business_name, phone, status, notes, owner_profile_id, stripe_customer_id, billing_email, service_status,
-          profiles (id, full_name, email),
+          profiles (id, full_name, email, role),
           projects (id, title, status, progress_percent),
           invoices (id, amount_due, status, hosted_invoice_url, pdf_url, created_at),
           subscriptions (id, stripe_price_id, status, current_period_end, cancel_at_period_end),
@@ -337,13 +339,13 @@ const AdminClientDetail: React.FC = () => {
     }
     setIsProcessing(true);
     try {
-        const result = await AdminService.createDepositInvoice(
+        await AdminService.createDepositInvoice(
             client.id, 
             depositAmount as number, 
             depositDescription || 'Project Deposit', 
         );
         
-        alert(`Deposit invoice created and sent! Status: ${result.status}. Client must pay the invoice.`);
+        alert(`Deposit invoice created and sent! Client must pay the invoice.`);
         setDepositAmount('');
         setDepositDescription('');
         setApplyDepositToFuture(true);
@@ -438,13 +440,21 @@ const AdminClientDetail: React.FC = () => {
         
         <div className="flex justify-between items-center mb-2">
             <h1 className="text-3xl font-bold text-slate-900">{client.business_name}</h1>
-            <button 
-                onClick={handleDeleteClient}
-                disabled={isProcessing}
-                className="flex items-center gap-2 px-4 py-2 bg-red-50 text-red-600 rounded-lg text-sm font-semibold hover:bg-red-100 disabled:opacity-50 transition-colors"
-            >
-                <Trash2 className="w-4 h-4" /> Delete Client
-            </button>
+            <div className="flex gap-3">
+                <button 
+                    onClick={() => setIsEditDialogOpen(true)}
+                    className="flex items-center gap-2 px-4 py-2 bg-slate-100 text-slate-700 rounded-lg text-sm font-semibold hover:bg-slate-200 transition-colors"
+                >
+                    <Edit className="w-4 h-4" /> Edit Details
+                </button>
+                <button 
+                    onClick={handleDeleteClient}
+                    disabled={isProcessing}
+                    className="flex items-center gap-2 px-4 py-2 bg-red-50 text-red-600 rounded-lg text-sm font-semibold hover:bg-red-100 disabled:opacity-50 transition-colors"
+                >
+                    <Trash2 className="w-4 h-4" /> Delete Client
+                </button>
+            </div>
         </div>
         
         <p className="text-slate-500 mb-8">Contact: {client.profiles?.full_name || 'N/A'} ({client.profiles?.email || 'N/A'})</p>
@@ -995,6 +1005,16 @@ const AdminClientDetail: React.FC = () => {
           onClose={() => setIsSmsDialogOpen(false)}
           clientName={client.business_name}
           clientPhone={client.phone}
+        />
+      )}
+      
+      {/* Edit Client Dialog */}
+      {client && (
+        <EditClientDialog
+          isOpen={isEditDialogOpen}
+          onClose={() => setIsEditDialogOpen(false)}
+          onClientUpdated={fetchClientData}
+          initialClientData={client}
         />
       )}
     </AdminLayout>
