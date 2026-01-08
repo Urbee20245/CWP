@@ -44,6 +44,7 @@ serve(async (req) => {
       return errorResponse('Unauthorized: User not authenticated.', 401);
     }
     
+    // Use RLS to ensure the user owns the client record
     const { data: clientData, error: clientError } = await supabase
         .from('clients')
         .select('id, stripe_subscription_id')
@@ -56,7 +57,7 @@ serve(async (req) => {
     
     const clientId = clientData.id;
 
-    // 2. Verify the subscription belongs to this client
+    // 2. Verify the subscription belongs to this client (using Admin client for security/consistency)
     const { data: subData, error: subError } = await supabaseAdmin
         .from('subscriptions')
         .select('id, client_id')
@@ -70,12 +71,13 @@ serve(async (req) => {
 
     console.log(`[cancel-subscription] Canceling Stripe subscription ${subscription_id} for client ${clientId}`);
 
-    // 3. Call Stripe API to cancel at period end
+    // 3. Call Stripe API to cancel at period end (Non-negotiable rule)
     const canceledSubscription = await stripe.subscriptions.update(subscription_id, {
       cancel_at_period_end: true,
     });
 
     // 4. Update client service status to 'paused' (using Admin client)
+    // This ensures the client portal shows the "Service Paused" banner immediately.
     const { error: clientUpdateError } = await supabaseAdmin
         .from('clients')
         .update({ service_status: 'paused' })
@@ -83,7 +85,6 @@ serve(async (req) => {
         
     if (clientUpdateError) {
         console.error('[cancel-subscription] Failed to update client service status:', clientUpdateError);
-        // Note: We proceed with success response as Stripe cancellation succeeded.
     }
     
     // 5. Send notification to admin (mocked)
