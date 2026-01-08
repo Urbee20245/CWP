@@ -150,6 +150,10 @@ const AdminClientDetail: React.FC = () => {
         default: return 'Unknown';
     }
   };
+  
+  const getPlanName = (priceId: string) => {
+      return products.find(p => p.stripe_price_id === priceId)?.name || 'Unknown Plan';
+  };
 
   // --- Billing Handlers ---
 
@@ -604,7 +608,7 @@ const AdminClientDetail: React.FC = () => {
                   
                   {currentSubscription ? (
                     <div className="p-4 bg-emerald-50 border border-emerald-200 rounded-lg mb-4">
-                        <p className="font-bold text-emerald-800">{currentPlan?.name || 'Unknown Plan'}</p>
+                        <p className="font-bold text-emerald-800">{getPlanName(currentSubscription.stripe_price_id)}</p>
                         <p className="text-sm text-emerald-700">Status: {currentSubscription.status}</p>
                         <p className="text-xs text-emerald-600">Renews: {new Date(currentSubscription.current_period_end).toLocaleDateString()}</p>
                     </div>

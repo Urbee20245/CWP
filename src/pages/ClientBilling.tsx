@@ -6,7 +6,6 @@ import { supabase } from '../integrations/supabase/client';
 import { Loader2, DollarSign, FileText, ExternalLink, Zap, CreditCard } from 'lucide-react';
 import ClientLayout from '../components/ClientLayout';
 import { BillingService } from '../services/billingService';
-import { SUBSCRIPTION_PLANS } from '../config/billing';
 
 interface Invoice {
   id: string;
@@ -24,64 +23,80 @@ interface Subscription {
   cancel_at_period_end: boolean;
 }
 
+interface BillingProduct {
+  id: string;
+  name: string;
+  stripe_price_id: string;
+}
+
 const ClientBilling: React.FC = () => {
   const { profile } = useAuth();
   const [invoices, setInvoices] = useState<Invoice[]>([]);
   const [subscriptions, setSubscriptions] = useState<Subscription[]>([]);
+  const [products, setProducts] = useState<BillingProduct[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [isProcessing, setIsProcessing] = useState(false);
   const [stripeCustomerId, setStripeCustomerId] = useState<string | null>(null);
 
-  useEffect(() => {
-    const fetchBillingData = async () => {
-      if (!profile) return;
-      setIsLoading(true);
+  const fetchBillingData = async () => {
+    if (!profile) return;
+    setIsLoading(true);
 
-      // 1. Find the client record associated with the user's profile ID
-      const { data: clientData, error: clientError } = await supabase
-        .from('clients')
-        .select('id, stripe_customer_id')
-        .eq('owner_profile_id', profile.id)
-        .single();
+    // 1. Find the client record associated with the user's profile ID
+    const { data: clientData, error: clientError } = await supabase
+      .from('clients')
+      .select('id, stripe_customer_id')
+      .eq('owner_profile_id', profile.id)
+      .single();
 
-      if (clientError || !clientData) {
-        console.error('Error fetching client record:', clientError);
-        setIsLoading(false);
-        return;
-      }
-      
-      const clientId = clientData.id;
-      setStripeCustomerId(clientData.stripe_customer_id);
-
-      // 2. Fetch invoices for that client ID
-      const { data: invoicesData, error: invoicesError } = await supabase
-        .from('invoices')
-        .select('id, amount_due, status, hosted_invoice_url, created_at')
-        .eq('client_id', clientId)
-        .order('created_at', { ascending: false });
-
-      if (invoicesError) {
-        console.error('Error fetching invoices:', invoicesError);
-      } else {
-        setInvoices(invoicesData || []);
-      }
-      
-      // 3. Fetch subscriptions for that client ID
-      const { data: subscriptionsData, error: subscriptionsError } = await supabase
-        .from('subscriptions')
-        .select('id, stripe_price_id, status, current_period_end, cancel_at_period_end')
-        .eq('client_id', clientId)
-        .order('created_at', { ascending: false });
-
-      if (subscriptionsError) {
-        console.error('Error fetching subscriptions:', subscriptionsError);
-      } else {
-        setSubscriptions(subscriptionsData || []);
-      }
-
+    if (clientError || !clientData) {
+      console.error('Error fetching client record:', clientError);
       setIsLoading(false);
-    };
+      return;
+    }
+    
+    const clientId = clientData.id;
+    setStripeCustomerId(clientData.stripe_customer_id);
 
+    // 2. Fetch invoices for that client ID
+    const { data: invoicesData, error: invoicesError } = await supabase
+      .from('invoices')
+      .select('id, amount_due, status, hosted_invoice_url, created_at')
+      .eq('client_id', clientId)
+      .order('created_at', { ascending: false });
+
+    if (invoicesError) {
+      console.error('Error fetching invoices:', invoicesError);
+    } else {
+      setInvoices(invoicesData || []);
+    }
+    
+    // 3. Fetch subscriptions for that client ID
+    const { data: subscriptionsData, error: subscriptionsError } = await supabase
+      .from('subscriptions')
+      .select('id, stripe_price_id, status, current_period_end, cancel_at_period_end')
+      .eq('client_id', clientId)
+      .order('created_at', { ascending: false });
+
+    if (subscriptionsError) {
+      console.error('Error fetching subscriptions:', subscriptionsError);
+    } else {
+      setSubscriptions(subscriptionsData || []);
+    }
+    
+    // 4. Fetch billing products to map price IDs to names
+    const { data: productsData } = await supabase
+        .from('billing_products')
+        .select('name, stripe_price_id');
+        
+    if (productsData) {
+        setProducts(productsData as BillingProduct[]);
+    }
+
+    setIsLoading(false);
+  };
+
+  useEffect(() => {
     if (profile) {
       fetchBillingData();
     }
@@ -94,7 +109,11 @@ const ClientBilling: React.FC = () => {
     }
     setIsProcessing(true);
     try {
-      const result = await BillingService.createPortalSession(stripeCustomerId);
+      // We use the client ID here, but the edge function will look up the stripe_customer_id
+      const { data: clientData } = await supabase.from('clients').select('id').eq('stripe_customer_id', stripeCustomerId).single();
+      if (!clientData) throw new Error("Client ID not found for customer.");
+      
+      const result = await BillingService.createPortalSession(clientData.id);
       window.open(result.portal_url, '_blank');
     } catch (e: any) {
       alert(`Failed to open portal: ${e.message}`);
@@ -116,8 +135,11 @@ const ClientBilling: React.FC = () => {
     }
   };
   
+  const getPlanName = (priceId: string) => {
+      return products.find(p => p.stripe_price_id === priceId)?.name || 'Unknown Plan';
+  };
+  
   const activeSubscription = subscriptions.find(sub => sub.status === 'active' || sub.status === 'trialing');
-  const currentPlan = activeSubscription ? SUBSCRIPTION_PLANS.find(p => p.priceId === activeSubscription.stripe_price_id) : null;
 
   return (
     <ClientLayout>
@@ -141,7 +163,7 @@ const ClientBilling: React.FC = () => {
                     
                     {activeSubscription ? (
                         <div className="space-y-3 mb-6">
-                            <p className="text-lg font-bold text-slate-900">{currentPlan?.name || 'Unknown Plan'}</p>
+                            <p className="text-lg font-bold text-slate-900">{getPlanName(activeSubscription.stripe_price_id)}</p>
                             <p className="text-sm text-slate-600 flex justify-between">
                                 <span>Status:</span>
                                 <span className={`px-2 py-0.5 rounded-full text-xs font-semibold ${getStatusColor(activeSubscription.status)}`}>

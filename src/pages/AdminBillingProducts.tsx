@@ -33,6 +33,7 @@ const AdminBillingProducts: React.FC = () => {
 
   const fetchProducts = useCallback(async () => {
     setIsLoading(true);
+    // Fetch all products, including inactive ones, for admin view
     const { data, error } = await supabase
       .from('billing_products')
       .select('*')
@@ -90,6 +91,29 @@ const AdminBillingProducts: React.FC = () => {
     }
   };
   
+  const handleToggleActive = async (product: BillingProduct) => {
+    const newActiveStatus = !product.active;
+    const confirmMessage = newActiveStatus 
+        ? `Are you sure you want to reactivate '${product.name}'? It will be available for new sales.`
+        : `Are you sure you want to archive '${product.name}'? It will NOT affect existing subscriptions but cannot be used for new sales.`;
+        
+    if (!window.confirm(confirmMessage)) return;
+    
+    // Note: We only update the Supabase record. Stripe product status is managed separately 
+    // but for CWP's internal use, the Supabase 'active' flag controls visibility in the UI.
+    const { error } = await supabase
+        .from('billing_products')
+        .update({ active: newActiveStatus })
+        .eq('id', product.id);
+        
+    if (error) {
+        console.error('Error updating product status:', error);
+        alert('Failed to update product status.');
+    } else {
+        fetchProducts();
+    }
+  };
+
   const getStatusColor = (active: boolean) => active ? 'bg-emerald-100 text-emerald-800' : 'bg-red-100 text-red-800';
   const getTypeIcon = (type: 'one_time' | 'subscription') => type === 'subscription' ? <Zap className="w-4 h-4" /> : <Clock className="w-4 h-4" />;
 
@@ -202,7 +226,7 @@ const AdminBillingProducts: React.FC = () => {
                                 <div className="flex items-center gap-2 mb-1">
                                     <span className="font-bold text-slate-900 truncate">{product.name}</span>
                                     <span className={`px-2 py-0.5 rounded-full text-xs font-semibold ${getStatusColor(product.active)}`}>
-                                        {product.active ? 'Active' : 'Inactive'}
+                                        {product.active ? 'Active' : 'Archived'}
                                     </span>
                                 </div>
                                 <p className="text-xs text-slate-500 truncate">{product.description}</p>
@@ -215,11 +239,11 @@ const AdminBillingProducts: React.FC = () => {
                                         <span>{product.billing_type === 'subscription' ? 'Monthly' : 'One-Time'}</span>
                                     </div>
                                 </div>
-                                <button className="text-indigo-600 hover:text-indigo-800 p-1 rounded-full hover:bg-indigo-100">
-                                    <Edit className="w-4 h-4" />
-                                </button>
-                                <button className="text-red-500 hover:text-red-700 p-1 rounded-full hover:bg-red-100">
-                                    <Trash2 className="w-4 h-4" />
+                                <button 
+                                    onClick={() => handleToggleActive(product)}
+                                    className={`p-1 rounded-full transition-colors ${product.active ? 'text-red-500 hover:bg-red-100' : 'text-emerald-500 hover:bg-emerald-100'}`}
+                                >
+                                    {product.active ? <Trash2 className="w-4 h-4" /> : <Zap className="w-4 h-4" />}
                                 </button>
                             </div>
                         </div>
