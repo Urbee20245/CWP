@@ -75,6 +75,8 @@ const ContactPage: React.FC = () => {
 
   const serviceOptions = [
     'Complete Website Rebuild',
+    'Website Application',
+    'Custom CRM Build',
     'SEO Optimization',
     'AI Chatbot Integration',
     'Mobile Optimization',
