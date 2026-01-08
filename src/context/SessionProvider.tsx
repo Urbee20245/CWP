@@ -63,22 +63,28 @@ const SessionProvider: React.FC<SessionProviderProps> = ({ children }) => {
   useEffect(() => {
     // Function to handle session and profile loading logic
     const loadSession = async (session: Session | null) => {
-        if (session?.user) {
-            setUser(session.user);
-            
-            // 1. Fetch profile from Supabase
-            const fetchedProfile = await fetchProfile(session.user.id);
-            
-            // 2. Apply dev-admin bypass logic
-            const finalProfile = checkDevAdminBypass(session.user, fetchedProfile);
-            
-            setProfile(finalProfile);
-        } else {
-            setUser(null);
-            setProfile(null);
+        try {
+            if (session?.user) {
+                setUser(session.user);
+                
+                // 1. Fetch profile from Supabase
+                const fetchedProfile = await fetchProfile(session.user.id);
+                
+                // 2. Apply dev-admin bypass logic
+                const finalProfile = checkDevAdminBypass(session.user, fetchedProfile);
+                
+                setProfile(finalProfile);
+            } else {
+                setUser(null);
+                setProfile(null);
+            }
+        } catch (e) {
+            console.error("Error during session loading:", e);
+            // Even if an error occurs, we must stop loading to render the UI
+        } finally {
+            // 3. Ensure isLoading is always set to false after all checks
+            setIsLoading(false);
         }
-        // 3. Ensure isLoading is always set to false after all checks
-        setIsLoading(false);
     };
 
     // Initial check
@@ -90,6 +96,7 @@ const SessionProvider: React.FC<SessionProviderProps> = ({ children }) => {
     const { data: authListener } = supabase.auth.onAuthStateChange(
       async (event, session) => {
         if (event === 'SIGNED_IN' || event === 'SIGNED_OUT') {
+            // Set loading true temporarily during state transition
             setIsLoading(true); 
             loadSession(session);
         }

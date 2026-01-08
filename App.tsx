@@ -28,11 +28,17 @@ import AdminSettingsPage from './src/pages/AdminSettingsPage';
 import AdminDocumentGenerator from './src/pages/AdminDocumentGenerator';
 import AdminEmailGenerator from './src/pages/AdminEmailGenerator';
 import AdminSmtpSettings from './src/pages/AdminSmtpSettings';
-import AdminTwilioSettings from './src/pages/AdminTwilioSettings'; // New Import
+import AdminTwilioSettings from './src/pages/AdminTwilioSettings';
+import NotFoundPage from './src/pages/NotFoundPage'; // New Import
+import ErrorBoundary from './src/components/ErrorBoundary'; // New Import
+import GlobalLoading from './src/components/GlobalLoading'; // New Import
+import { useAuth } from './src/hooks/useAuth'; // New Import
 
 // Component that uses useLocation to conditionally render global elements
 const AppContent: React.FC = () => {
   const location = useLocation();
+  const { isLoading } = useAuth(); // Use auth state for global loading check
+  
   const isLoginPage = location.pathname === '/login';
   
   // Check if we are on an admin/client route (which use their own layouts)
@@ -40,6 +46,11 @@ const AppContent: React.FC = () => {
   
   // We only want the global components (Header, Footer, VoiceAgent) on public pages, excluding login.
   const showGlobalComponents = !isBackOfficeRoute;
+
+  // Show global loading screen if session is still initializing
+  if (isLoading) {
+    return <GlobalLoading />;
+  }
 
   return (
     <div className="min-h-screen bg-slate-50 font-sans selection:bg-blue-100 selection:text-blue-900">
@@ -72,7 +83,7 @@ const AppContent: React.FC = () => {
           <Route path="billing/revenue" element={<AdminRevenueDashboard />} />
           <Route path="settings" element={<AdminSettingsPage />} />
           <Route path="settings/smtp" element={<AdminSmtpSettings />} />
-          <Route path="settings/twilio" element={<AdminTwilioSettings />} /> {/* New Twilio Route */}
+          <Route path="settings/twilio" element={<AdminTwilioSettings />} />
           <Route path="ai-docs" element={<AdminDocumentGenerator />} />
           <Route path="ai-email" element={<AdminEmailGenerator />} />
         </Route>
@@ -83,6 +94,9 @@ const AppContent: React.FC = () => {
           <Route path="projects/:id" element={<ClientProjectDetail />} />
           <Route path="billing" element={<ClientBilling />} />
         </Route>
+        
+        {/* Global 404 Fallback (Step 1) */}
+        <Route path="*" element={<NotFoundPage />} />
       </Routes>
       
       {showGlobalComponents && <Footer />}
@@ -93,11 +107,13 @@ const AppContent: React.FC = () => {
 
 const App: React.FC = () => {
   return (
-    <BrowserRouter>
-      <SessionProvider>
-        <AppContent />
-      </SessionProvider>
-    </BrowserRouter>
+    <ErrorBoundary>
+      <BrowserRouter>
+        <SessionProvider>
+          <AppContent />
+        </SessionProvider>
+      </BrowserRouter>
+    </ErrorBoundary>
   );
 };
 
