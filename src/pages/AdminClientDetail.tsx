@@ -1,7 +1,7 @@
 "use client";
 
 import React, { useState, useEffect, useCallback } from 'react';
-import { useParams, Link } from 'react-router-dom';
+import { useParams, Link, useNavigate } from 'react-router-dom';
 import { supabase } from '../integrations/supabase/client';
 import { Loader2, Briefcase, FileText, DollarSign, Plus, CreditCard, Zap, ExternalLink, ShieldCheck, Lock, Trash2, Send, AlertCircle, MessageSquare, Phone, CheckCircle2, Pause, Play, Clock } from 'lucide-react';
 import AdminLayout from '../components/AdminLayout';
@@ -82,6 +82,7 @@ interface BillingProduct {
 
 const AdminClientDetail: React.FC = () => {
   const { id } = useParams<{ id: string }>();
+  const navigate = useNavigate();
   const [client, setClient] = useState<Client | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [activeTab, setActiveTab] = useState<'projects' | 'billing' | 'notes'>('billing');
@@ -227,6 +228,25 @@ const AdminClientDetail: React.FC = () => {
         alert('Notes saved successfully!');
     }
     setIsServiceUpdating(false);
+  };
+  
+  const handleDeleteClient = async () => {
+    if (!client) return;
+    
+    if (!window.confirm(`WARNING: Are you absolutely sure you want to delete client ${client.business_name}? This action is irreversible and will delete ALL associated data (projects, invoices, user account, etc.).`)) {
+        return;
+    }
+    
+    setIsProcessing(true);
+    try {
+        await AdminService.deleteClientUser(client.id, client.owner_profile_id);
+        alert(`Client ${client.business_name} successfully deleted.`);
+        navigate('/admin/clients', { replace: true });
+    } catch (e: any) {
+        alert(`Failed to delete client: ${e.message}`);
+    } finally {
+        setIsProcessing(false);
+    }
   };
 
   const getStatusColor = (status: string) => {
@@ -415,7 +435,18 @@ const AdminClientDetail: React.FC = () => {
         <Link to="/admin/clients" className="text-indigo-600 hover:text-indigo-800 text-sm font-medium mb-4 block">
           ← Back to Client List
         </Link>
-        <h1 className="text-3xl font-bold text-slate-900 mb-2">{client.business_name}</h1>
+        
+        <div className="flex justify-between items-center mb-2">
+            <h1 className="text-3xl font-bold text-slate-900">{client.business_name}</h1>
+            <button 
+                onClick={handleDeleteClient}
+                disabled={isProcessing}
+                className="flex items-center gap-2 px-4 py-2 bg-red-50 text-red-600 rounded-lg text-sm font-semibold hover:bg-red-100 disabled:opacity-50 transition-colors"
+            >
+                <Trash2 className="w-4 h-4" /> Delete Client
+            </button>
+        </div>
+        
         <p className="text-slate-500 mb-8">Contact: {client.profiles?.full_name || 'N/A'} ({client.profiles?.email || 'N/A'})</p>
         
         {/* Quick Actions Bar */}

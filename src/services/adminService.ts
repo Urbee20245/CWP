@@ -24,6 +24,10 @@ export const AdminService = {
     return invokeEdgeFunction('create-client-user', clientData);
   },
   
+  deleteClientUser: async (clientId: string, userId: string) => {
+    return invokeEdgeFunction('delete-client-user', { clientId, userId });
+  },
+  
   // --- Twilio SMS ---
   sendSms: async (to: string, body: string) => {
     return invokeEdgeFunction('send-sms', { to, body });
