@@ -32,3 +32,43 @@ export async function sendBillingNotification(
   
   return { success: true, subject };
 }
+
+export async function sendServiceStatusNotification(
+    clientEmail: string,
+    clientName: string,
+    action: 'paused' | 'resumed',
+    projectTitle?: string
+) {
+    let subject = '';
+    let body = '';
+    const target = projectTitle ? `on project: ${projectTitle}` : 'on your account';
+
+    if (action === 'paused') {
+        subject = `Important: Service Temporarily Paused ${target}`;
+        body = `Dear ${clientName},
+
+Active work ${target} has been temporarily paused by our team. Your client portal remains fully accessible, and you can view all project details, files, and billing history.
+
+No action is required unless noted by your project manager. Please contact us if you have any questions.
+
+Thank you,
+The Custom Websites Plus Team`;
+    } else if (action === 'resumed') {
+        subject = `Update: Service Resumed ${target}`;
+        body = `Dear ${clientName},
+
+Active work ${target} has now resumed. We appreciate your patience and look forward to continuing your project.
+
+You can track the latest progress in your client portal.
+
+Thank you,
+The Custom Websites Plus Team`;
+    } else {
+        return { success: false, message: 'Invalid action' };
+    }
+
+    console.log(`[notificationService] Sending service status email to ${clientEmail} (${action}): ${subject}`);
+    // In a real app, call email API here.
+    
+    return { success: true, subject };
+}

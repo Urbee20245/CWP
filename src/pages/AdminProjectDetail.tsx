@@ -6,8 +6,8 @@ import { supabase } from '../integrations/supabase/client';
 import { Loader2, Briefcase, CheckCircle2, MessageSquare, FileText, Upload, Trash2, Plus, ArrowLeft, Clock, AlertTriangle, Download, Send, DollarSign, ExternalLink, Pause, Play } from 'lucide-react';
 import AdminLayout from '../components/AdminLayout';
 import { Profile } from '../types/auth';
-import { calculateSlaMetrics, calculateSlaDueDate, SlaStatus } from '../utils/sla';
-import { format } from 'date-fns';
+import { calculateSlaMetrics, calculateSlaDueDate, SlaStatus, adjustSlaDueDate } from '../utils/sla';
+import { format, differenceInDays, parseISO } from 'date-fns';
 import { AdminService } from '../services/adminService';
 
 interface Milestone {
@@ -41,6 +41,10 @@ interface Project {
   sla_due_date: string | null;
   sla_status: SlaStatus;
   service_status: ProjectServiceStatus; // New field
+  service_paused_at: string | null; // New field
+  service_resumed_at: string | null; // New field
+  sla_paused_at: string | null; // New field
+  sla_resume_offset_days: number; // New field
 }
 
 interface Task {
@@ -69,6 +73,14 @@ interface FileItem {
   profiles: { full_name: string };
 }
 
+interface PauseLog {
+    id: string;
+    action: 'paused' | 'resumed';
+    internal_note: string | null;
+    client_acknowledged: boolean;
+    created_at: string;
+}
+
 const AdminProjectDetail: React.FC = () => {
   const { id } = useParams<{ id: string }>();
   const [project, setProject] = useState<Project | null>(null);
@@ -92,6 +104,10 @@ const AdminProjectDetail: React.FC = () => {
   const [newMilestoneName, setNewMilestoneName] = useState('');
   const [newMilestoneAmount, setNewMilestoneAmount] = useState<number | ''>('');
   const [requiredDeposit, setRequiredDeposit] = useState<number | ''>('');
+  
+  // Service Control State
+  const [serviceActionNote, setServiceActionNote] = useState('');
+  const [pauseLogs, setPauseLogs] = useState<PauseLog[]>([]);
 
   const fetchProjectData = async () => {
     if (!id) return;
@@ -101,7 +117,7 @@ const AdminProjectDetail: React.FC = () => {
       .from('projects')
       .select(`
         *,
-        clients (business_name),
+        clients (business_name, billing_email),
         tasks (id, title, status, due_date),
         messages (id, body, created_at, sender_profile_id, profiles (full_name)),
         files (id, file_name, file_type, file_size, storage_path, created_at, profiles (full_name)),
@@ -130,7 +146,9 @@ const AdminProjectDetail: React.FC = () => {
           projectData.progress_percent,
           projectData.sla_days,
           projectData.sla_start_date,
-          projectData.sla_due_date
+          projectData.sla_due_date,
+          projectData.sla_paused_at,
+          projectData.sla_resume_offset_days
         );
         setSlaMetrics(metrics);
         // Update DB status if calculated status differs (optional auto-sync)
@@ -139,6 +157,19 @@ const AdminProjectDetail: React.FC = () => {
         }
       } else {
           setSlaMetrics(null);
+      }
+      
+      // Fetch Pause Logs
+      const { data: logsData, error: logsError } = await supabase
+          .from('service_pause_logs')
+          .select('*')
+          .eq('project_id', id)
+          .order('created_at', { ascending: false });
+          
+      if (logsError) {
+          console.error('Error fetching pause logs:', logsError);
+      } else {
+          setPauseLogs(logsData as PauseLog[]);
       }
     }
     setIsLoading(false);
@@ -197,7 +228,9 @@ const AdminProjectDetail: React.FC = () => {
           sla_days: days,
           sla_start_date: new Date(slaStartDate).toISOString(),
           sla_due_date: newSlaDueDate,
-          sla_status: 'on_track' // Reset status on manual update
+          sla_status: 'on_track', // Reset status on manual update
+          sla_resume_offset_days: 0, // Reset offset days
+          sla_paused_at: null,
       })
       .eq('id', project.id);
 
@@ -528,22 +561,88 @@ const AdminProjectDetail: React.FC = () => {
   };
   
   const handleUpdateServiceStatus = async (newStatus: ProjectServiceStatus) => {
-    if (!project) return;
+    if (!project || !project.sla_due_date || !project.sla_start_date) return;
     setIsUpdating(true);
     
-    const { error } = await supabase
-        .from('projects')
-        .update({ service_status: newStatus })
-        .eq('id', project.id);
+    const action = newStatus === 'paused' || newStatus === 'awaiting_payment' ? 'paused' : 'resumed';
+    const now = new Date().toISOString();
+    
+    let updatePayload: Partial<Project> = { service_status: newStatus };
+    let logAction: 'paused' | 'resumed' = 'paused';
+    
+    if (action === 'paused' && project.service_status !== 'paused' && project.service_status !== 'awaiting_payment') {
+        // PAUSE LOGIC
+        logAction = 'paused';
+        updatePayload = {
+            ...updatePayload,
+            service_paused_at: now,
+            sla_paused_at: now,
+        };
+    } else if (action === 'resumed' && (project.service_status === 'paused' || project.service_status === 'awaiting_payment')) {
+        // RESUME LOGIC
+        logAction = 'resumed';
         
-    if (error) {
-        console.error('Error updating service status:', error);
-        alert('Failed to update service status.');
+        if (project.sla_paused_at) {
+            const pausedTime = parseISO(project.sla_paused_at);
+            const currentPauseDurationDays = differenceInDays(parseISO(now), pausedTime);
+            const newOffsetDays = project.sla_resume_offset_days + currentPauseDurationDays;
+            
+            const newDueDate = adjustSlaDueDate(project.sla_due_date, currentPauseDurationDays);
+            
+            updatePayload = {
+                ...updatePayload,
+                service_resumed_at: now,
+                sla_paused_at: null,
+                sla_resume_offset_days: newOffsetDays,
+                sla_due_date: newDueDate,
+            };
+            alert(`SLA adjusted by ${currentPauseDurationDays} days. New Due Date: ${format(parseISO(newDueDate), 'MMM dd, yyyy')}`);
+        } else {
+            updatePayload = {
+                ...updatePayload,
+                service_resumed_at: now,
+                sla_paused_at: null,
+            };
+        }
     } else {
-        alert(`Project service status updated to ${newStatus}!`);
-        fetchProjectData();
+        // Status change without pause/resume action (e.g., active -> completed)
+        logAction = newStatus === 'completed' ? 'resumed' : 'paused'; // Placeholder action for log
     }
-    setIsUpdating(false);
+
+    try {
+        // 1. Update project status and SLA fields
+        const { error: updateError } = await supabase
+            .from('projects')
+            .update(updatePayload)
+            .eq('id', project.id);
+            
+        if (updateError) throw updateError;
+
+        // 2. Log the action
+        const { error: logError } = await supabase
+            .from('service_pause_logs')
+            .insert({
+                client_id: project.client_id,
+                project_id: project.id,
+                action: logAction,
+                internal_note: serviceActionNote,
+            });
+            
+        if (logError) console.error('Error logging service action:', logError);
+        
+        // 3. Send notification (Mocked server-side call)
+        // NOTE: In a real app, this would be an Edge Function call to send the email securely.
+        // const clientEmail = (project.clients as any).billing_email || (project.clients as any).profiles.email;
+        // await AdminService.sendServiceStatusNotification(clientEmail, project.clients.business_name, logAction, project.title);
+
+        setServiceActionNote('');
+        fetchProjectData();
+    } catch (e: any) {
+        console.error('Error updating service status:', e);
+        alert('Failed to update service status.');
+    } finally {
+        setIsUpdating(false);
+    }
   };
 
   const completedTasks = project?.tasks.filter(t => t.status === 'done').length || 0;
@@ -641,35 +740,65 @@ const AdminProjectDetail: React.FC = () => {
                     </span>
                 </div>
                 
-                <div className="flex gap-3 flex-wrap">
-                    {project.service_status !== 'paused' ? (
+                <div className="space-y-3 mb-4">
+                    <textarea
+                        className="w-full p-2 border border-slate-300 rounded-lg text-sm resize-none focus:border-indigo-500 outline-none"
+                        value={serviceActionNote}
+                        onChange={(e) => setServiceActionNote(e.target.value)}
+                        placeholder="Internal note for pause/resume action (optional)"
+                        rows={2}
+                        disabled={isUpdating}
+                    />
+                    <div className="flex gap-3 flex-wrap">
+                        {project.service_status !== 'paused' && project.service_status !== 'awaiting_payment' ? (
+                            <button 
+                                onClick={() => handleUpdateServiceStatus('paused')}
+                                disabled={isUpdating || project.service_status === 'completed'}
+                                className="flex-1 py-2 bg-amber-600 text-white rounded-lg text-sm font-semibold hover:bg-amber-700 transition-colors disabled:opacity-50 flex items-center justify-center gap-2"
+                            >
+                                <Pause className="w-4 h-4" /> Pause Work
+                            </button>
+                        ) : (
+                            <button 
+                                onClick={() => handleUpdateServiceStatus('active')}
+                                disabled={isUpdating}
+                                className="flex-1 py-2 bg-emerald-600 text-white rounded-lg text-sm font-semibold hover:bg-emerald-700 transition-colors disabled:opacity-50 flex items-center justify-center gap-2"
+                            >
+                                <Play className="w-4 h-4" /> Resume Work
+                            </button>
+                        )}
                         <button 
-                            onClick={() => handleUpdateServiceStatus('paused')}
+                            onClick={() => handleUpdateServiceStatus('awaiting_payment')}
                             disabled={isUpdating || project.service_status === 'completed'}
-                            className="flex-1 py-2 bg-amber-600 text-white rounded-lg text-sm font-semibold hover:bg-amber-700 transition-colors disabled:opacity-50 flex items-center justify-center gap-2"
+                            className="flex-1 py-2 bg-red-600 text-white rounded-lg text-sm font-semibold hover:bg-red-700 transition-colors disabled:opacity-50"
                         >
-                            <Pause className="w-4 h-4" /> Pause Work
+                            Awaiting Payment
                         </button>
-                    ) : (
-                        <button 
-                            onClick={() => handleUpdateServiceStatus('active')}
-                            disabled={isUpdating}
-                            className="flex-1 py-2 bg-emerald-600 text-white rounded-lg text-sm font-semibold hover:bg-emerald-700 transition-colors disabled:opacity-50 flex items-center justify-center gap-2"
-                        >
-                            <Play className="w-4 h-4" /> Resume Work
-                        </button>
-                    )}
-                    <button 
-                        onClick={() => handleUpdateServiceStatus('awaiting_payment')}
-                        disabled={isUpdating || project.service_status === 'completed'}
-                        className="flex-1 py-2 bg-red-600 text-white rounded-lg text-sm font-semibold hover:bg-red-700 transition-colors disabled:opacity-50"
-                    >
-                        Awaiting Payment
-                    </button>
+                    </div>
                 </div>
-                <p className="text-xs text-slate-500 mt-3">
-                    This status controls the client-facing banner and internal work flow.
-                </p>
+                
+                <h3 className="text-sm font-bold text-slate-900 mb-3 border-t border-slate-100 pt-4 flex items-center gap-2">
+                    <Clock className="w-4 h-4 text-slate-500" /> Service History
+                </h3>
+                <div className="max-h-40 overflow-y-auto space-y-2">
+                    {pauseLogs && pauseLogs.length > 0 ? (
+                        pauseLogs.map(log => (
+                            <div key={log.id} className={`p-2 rounded-lg text-xs border ${log.action === 'paused' ? 'bg-amber-50 border-amber-200' : 'bg-emerald-50 border-emerald-200'}`}>
+                                <div className="flex justify-between items-center">
+                                    <span className="font-bold uppercase">{log.action}</span>
+                                    <span className="text-slate-500">{new Date(log.created_at).toLocaleDateString()}</span>
+                                </div>
+                                {log.internal_note && <p className="text-slate-700 mt-1 italic">Note: {log.internal_note}</p>}
+                                <div className="flex items-center gap-1 mt-1">
+                                    <CheckCircle2 className={`w-3 h-3 ${log.client_acknowledged ? 'text-emerald-600' : 'text-slate-400'}`} />
+                                    <span className="text-slate-600">{log.client_acknowledged ? 'Client Acknowledged' : 'Awaiting Client Ack'}</span>
+                                </div>
+                            </div>
+                        ))
+                    ) : (
+                        <p className="text-xs text-slate-500">No service history recorded.</p>
+                    )}
+                </div>
             </div>
             
             {/* Project Status & Deposit Gate */}
@@ -772,6 +901,7 @@ const AdminProjectDetail: React.FC = () => {
                       <p className="text-sm text-slate-600 mt-2">Due: {format(new Date(project.sla_due_date), 'MMM dd, yyyy')}</p>
                       <p className="text-sm text-slate-600">Expected Progress: {slaMetrics.expectedProgress}%</p>
                       <p className="text-sm text-slate-600">Days Remaining: {slaMetrics.daysRemaining}</p>
+                      <p className="text-xs text-slate-500 mt-2">Paused Days Offset: {project.sla_resume_offset_days}</p>
                   </div>
               ) : (
                   <p className="text-sm text-slate-500 mb-4">SLA not configured.</p>

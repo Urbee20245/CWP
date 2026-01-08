@@ -1,4 +1,4 @@
-import { differenceInDays, parseISO, isPast, isBefore } from 'date-fns';
+import { differenceInDays, parseISO, isPast, isBefore, differenceInMilliseconds } from 'date-fns';
 
 export type SlaStatus = 'on_track' | 'at_risk' | 'breached';
 
@@ -6,6 +6,7 @@ interface SlaMetrics {
   slaStatus: SlaStatus;
   daysRemaining: number;
   expectedProgress: number;
+  totalActiveDays: number;
 }
 
 /**
@@ -14,13 +15,17 @@ interface SlaMetrics {
  * @param slaDays Total days allocated for the SLA.
  * @param slaStartDate The date the SLA officially started.
  * @param slaDueDate The calculated date the SLA is due.
+ * @param slaPausedAt Timestamp when SLA was last paused.
+ * @param slaResumeOffsetDays Total days paused previously.
  * @returns SlaMetrics object.
  */
 export function calculateSlaMetrics(
   progressPercent: number,
   slaDays: number | null,
   slaStartDate: string | null,
-  slaDueDate: string | null
+  slaDueDate: string | null,
+  slaPausedAt: string | null,
+  slaResumeOffsetDays: number
 ): SlaMetrics {
   const now = new Date();
   
@@ -30,35 +35,46 @@ export function calculateSlaMetrics(
       slaStatus: 'on_track',
       daysRemaining: 0,
       expectedProgress: 0,
+      totalActiveDays: 0,
     };
   }
 
   const start = parseISO(slaStartDate);
   const due = parseISO(slaDueDate);
 
-  // 1. Check for Breached Status
+  // 1. Calculate total active duration (excluding current pause)
+  let totalPausedDays = slaResumeOffsetDays;
+  
+  // If currently paused, calculate the duration of the current pause
+  if (slaPausedAt) {
+      const pausedTime = parseISO(slaPausedAt);
+      const currentPauseDurationMs = differenceInMilliseconds(now, pausedTime);
+      totalPausedDays += Math.ceil(currentPauseDurationMs / (1000 * 60 * 60 * 24));
+  }
+  
+  // Total duration of the project including pauses
+  const totalCalendarDays = differenceInDays(due, start);
+  
+  // Total active working days elapsed since start
+  const totalActiveDays = Math.max(0, differenceInDays(now, start) - totalPausedDays);
+  
+  // 2. Check for Breached Status
   if (isPast(due) && progressPercent < 100) {
     return {
       slaStatus: 'breached',
       daysRemaining: differenceInDays(due, now), // Will be negative
       expectedProgress: 100,
+      totalActiveDays: totalActiveDays,
     };
   }
   
-  // 2. Calculate time elapsed and expected progress
-  const totalDurationDays = differenceInDays(due, start);
-  const elapsedDays = differenceInDays(now, start);
-  
-  // If elapsed time is negative (started in future), treat as 0 elapsed
-  const actualElapsedDays = Math.max(0, elapsedDays);
-
-  // Calculate expected progress based on linear timeline
+  // 3. Calculate expected progress based on active timeline
   let expectedProgress = 0;
-  if (totalDurationDays > 0) {
-    expectedProgress = Math.min(100, (actualElapsedDays / totalDurationDays) * 100);
+  if (slaDays > 0) {
+    expectedProgress = Math.min(100, (totalActiveDays / slaDays) * 100);
   }
   
-  // 3. Determine Status
+  // 4. Determine Status
   let slaStatus: SlaStatus = 'on_track';
   
   if (progressPercent < expectedProgress - 10) { // 10% buffer for 'at_risk'
@@ -77,6 +93,7 @@ export function calculateSlaMetrics(
     slaStatus,
     daysRemaining: differenceInDays(due, now),
     expectedProgress: Math.round(expectedProgress),
+    totalActiveDays: totalActiveDays,
   };
 }
 
@@ -87,4 +104,16 @@ export function calculateSlaDueDate(startDate: string, slaDays: number): string 
     const start = parseISO(startDate);
     const dueDate = new Date(start.getTime() + slaDays * 24 * 60 * 60 * 1000);
     return dueDate.toISOString();
+}
+
+/**
+ * Calculates the new SLA Due Date after a pause/resume cycle.
+ * @param originalDueDate The original due date (before any offsets).
+ * @param totalOffsetDays The total number of days the SLA has been paused.
+ * @returns The new, adjusted due date string.
+ */
+export function adjustSlaDueDate(originalDueDate: string, totalOffsetDays: number): string {
+    const originalDue = parseISO(originalDueDate);
+    const newDueDate = new Date(originalDue.getTime() + totalOffsetDays * 24 * 60 * 60 * 1000);
+    return newDueDate.toISOString();
 }

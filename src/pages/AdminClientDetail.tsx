@@ -3,7 +3,7 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import { useParams, Link } from 'react-router-dom';
 import { supabase } from '../integrations/supabase/client';
-import { Loader2, Briefcase, FileText, DollarSign, Plus, CreditCard, Zap, ExternalLink, ShieldCheck, Lock, Trash2, Send, AlertCircle, MessageSquare, Phone, CheckCircle2, Pause, Play } from 'lucide-react';
+import { Loader2, Briefcase, FileText, DollarSign, Plus, CreditCard, Zap, ExternalLink, ShieldCheck, Lock, Trash2, Send, AlertCircle, MessageSquare, Phone, CheckCircle2, Pause, Play, Clock } from 'lucide-react';
 import AdminLayout from '../components/AdminLayout';
 import { Profile } from '../types/auth';
 import { AdminService } from '../services/adminService'; // Use AdminService for admin functions
@@ -44,6 +44,14 @@ interface DepositSummary {
   created_at: string;
 }
 
+interface PauseLog {
+    id: string;
+    action: 'paused' | 'resumed';
+    internal_note: string | null;
+    client_acknowledged: boolean;
+    created_at: string;
+}
+
 type ClientServiceStatus = 'active' | 'paused' | 'onboarding' | 'completed';
 
 interface Client {
@@ -61,6 +69,7 @@ interface Client {
   invoices: InvoiceSummary[];
   subscriptions: SubscriptionSummary[];
   deposits: DepositSummary[];
+  pause_logs: PauseLog[]; // New field
 }
 
 interface BillingProduct {
@@ -97,6 +106,7 @@ const AdminClientDetail: React.FC = () => {
   // Service Status State
   const [isServiceUpdating, setIsServiceUpdating] = useState(false);
   const [adminNotes, setAdminNotes] = useState('');
+  const [serviceActionNote, setServiceActionNote] = useState(''); // Note for pause/resume action
 
   const fetchClientData = useCallback(async () => {
     if (!id) return;
@@ -109,9 +119,11 @@ const AdminClientDetail: React.FC = () => {
           projects (id, title, status, progress_percent),
           invoices (id, amount_due, status, hosted_invoice_url, created_at),
           subscriptions (id, stripe_price_id, status, current_period_end, cancel_at_period_end),
-          deposits (id, amount_cents, status, stripe_invoice_id, is_applied, applied_to_invoice_id, created_at)
+          deposits (id, amount_cents, status, stripe_invoice_id, is_applied, applied_to_invoice_id, created_at),
+          service_pause_logs (id, action, internal_note, client_acknowledged, created_at)
       `)
       .eq('id', id)
+      .order('created_at', { foreignTable: 'service_pause_logs', ascending: false })
       .single();
 
     if (error) {
@@ -148,19 +160,56 @@ const AdminClientDetail: React.FC = () => {
     if (!client) return;
     setIsServiceUpdating(true);
     
-    const { error } = await supabase
-        .from('clients')
-        .update({ service_status: newStatus })
-        .eq('id', client.id);
-        
-    if (error) {
-        console.error('Error updating service status:', error);
-        alert('Failed to update service status.');
-    } else {
-        alert(`Client service status updated to ${newStatus}!`);
-        fetchClientData();
+    const action = newStatus === 'paused' ? 'paused' : 'resumed';
+    
+    if (action === 'paused' && client.service_status === 'paused') {
+        setIsServiceUpdating(false);
+        return;
     }
-    setIsServiceUpdating(false);
+    if (action === 'resumed' && client.service_status !== 'paused') {
+        setIsServiceUpdating(false);
+        return;
+    }
+
+    try {
+        // 1. Update client status and timestamps
+        const { error: updateError } = await supabase
+            .from('clients')
+            .update({ 
+                service_status: newStatus,
+                // Only update timestamps if pausing/resuming
+                service_paused_at: action === 'paused' ? new Date().toISOString() : null,
+                service_resumed_at: action === 'resumed' ? new Date().toISOString() : null,
+            })
+            .eq('id', client.id);
+            
+        if (updateError) throw updateError;
+
+        // 2. Log the action
+        const { error: logError } = await supabase
+            .from('service_pause_logs')
+            .insert({
+                client_id: client.id,
+                action: action,
+                internal_note: serviceActionNote,
+            });
+            
+        if (logError) console.error('Error logging service action:', logError);
+        
+        // 3. Send notification (Mocked server-side call)
+        // NOTE: In a real app, this would be an Edge Function call to send the email securely.
+        // For now, we rely on the mock service in the shared folder.
+        // await AdminService.sendServiceStatusNotification(client.profiles.email, client.business_name, action);
+
+        alert(`Client service status updated to ${newStatus}! Notification sent.`);
+        setServiceActionNote('');
+        fetchClientData();
+    } catch (e: any) {
+        console.error('Error updating service status:', e);
+        alert('Failed to update service status.');
+    } finally {
+        setIsServiceUpdating(false);
+    }
   };
   
   const handleSaveNotes = async () => {
@@ -196,6 +245,7 @@ const AdminClientDetail: React.FC = () => {
       case 'failed': return 'bg-red-100 text-red-800';
       case 'applied': return 'bg-purple-100 text-purple-800';
       case 'onboarding': return 'bg-blue-100 text-blue-800';
+      case 'resumed': return 'bg-emerald-100 text-emerald-800';
       default: return 'bg-slate-100 text-slate-800';
     }
   };
@@ -442,35 +492,65 @@ const AdminClientDetail: React.FC = () => {
                     </span>
                 </div>
                 
-                <div className="flex gap-3">
-                    {client.service_status !== 'paused' ? (
+                <div className="space-y-3 mb-4">
+                    <textarea
+                        className="w-full p-2 border border-slate-300 rounded-lg text-sm resize-none focus:border-indigo-500 outline-none"
+                        value={serviceActionNote}
+                        onChange={(e) => setServiceActionNote(e.target.value)}
+                        placeholder="Internal note for pause/resume action (optional)"
+                        rows={2}
+                        disabled={isServiceUpdating}
+                    />
+                    <div className="flex gap-3">
+                        {client.service_status !== 'paused' ? (
+                            <button 
+                                onClick={() => handleServiceStatusUpdate('paused')}
+                                disabled={isServiceUpdating || client.service_status === 'completed'}
+                                className="flex-1 py-2 bg-amber-600 text-white rounded-lg text-sm font-semibold hover:bg-amber-700 transition-colors disabled:opacity-50 flex items-center justify-center gap-2"
+                            >
+                                <Pause className="w-4 h-4" /> Pause Services
+                            </button>
+                        ) : (
+                            <button 
+                                onClick={() => handleServiceStatusUpdate('active')}
+                                disabled={isServiceUpdating}
+                                className="flex-1 py-2 bg-emerald-600 text-white rounded-lg text-sm font-semibold hover:bg-emerald-700 transition-colors disabled:opacity-50 flex items-center justify-center gap-2"
+                            >
+                                <Play className="w-4 h-4" /> Resume Services
+                            </button>
+                        )}
                         <button 
-                            onClick={() => handleServiceStatusUpdate('paused')}
+                            onClick={() => handleServiceStatusUpdate('completed')}
                             disabled={isServiceUpdating || client.service_status === 'completed'}
-                            className="flex-1 py-2 bg-amber-600 text-white rounded-lg text-sm font-semibold hover:bg-amber-700 transition-colors disabled:opacity-50 flex items-center justify-center gap-2"
+                            className="py-2 px-4 bg-blue-600 text-white rounded-lg text-sm font-semibold hover:bg-blue-700 transition-colors disabled:opacity-50"
                         >
-                            <Pause className="w-4 h-4" /> Pause Services
+                            Complete
                         </button>
-                    ) : (
-                        <button 
-                            onClick={() => handleServiceStatusUpdate('active')}
-                            disabled={isServiceUpdating}
-                            className="flex-1 py-2 bg-emerald-600 text-white rounded-lg text-sm font-semibold hover:bg-emerald-700 transition-colors disabled:opacity-50 flex items-center justify-center gap-2"
-                        >
-                            <Play className="w-4 h-4" /> Resume Services
-                        </button>
-                    )}
-                    <button 
-                        onClick={() => handleServiceStatusUpdate('completed')}
-                        disabled={isServiceUpdating || client.service_status === 'completed'}
-                        className="py-2 px-4 bg-blue-600 text-white rounded-lg text-sm font-semibold hover:bg-blue-700 transition-colors disabled:opacity-50"
-                    >
-                        Complete
-                    </button>
+                    </div>
                 </div>
-                <p className="text-xs text-slate-500 mt-3">
-                    Pausing services stops all active work (e.g., maintenance, SEO). Client portal access remains active.
-                </p>
+                
+                <h3 className="text-sm font-bold text-slate-900 mb-3 border-t border-slate-100 pt-4 flex items-center gap-2">
+                    <Clock className="w-4 h-4 text-slate-500" /> Service History
+                </h3>
+                <div className="max-h-40 overflow-y-auto space-y-2">
+                    {client.pause_logs && client.pause_logs.length > 0 ? (
+                        client.pause_logs.map(log => (
+                            <div key={log.id} className={`p-2 rounded-lg text-xs border ${log.action === 'paused' ? 'bg-amber-50 border-amber-200' : 'bg-emerald-50 border-emerald-200'}`}>
+                                <div className="flex justify-between items-center">
+                                    <span className="font-bold uppercase">{log.action}</span>
+                                    <span className="text-slate-500">{new Date(log.created_at).toLocaleDateString()}</span>
+                                </div>
+                                {log.internal_note && <p className="text-slate-700 mt-1 italic">Note: {log.internal_note}</p>}
+                                <div className="flex items-center gap-1 mt-1">
+                                    <CheckCircle2 className={`w-3 h-3 ${log.client_acknowledged ? 'text-emerald-600' : 'text-slate-400'}`} />
+                                    <span className="text-slate-600">{log.client_acknowledged ? 'Client Acknowledged' : 'Awaiting Client Ack'}</span>
+                                </div>
+                            </div>
+                        ))
+                    ) : (
+                        <p className="text-xs text-slate-500">No service history recorded.</p>
+                    )}
+                </div>
             </div>
             
             {/* Notes Tab Content (Moved here for better layout) */}

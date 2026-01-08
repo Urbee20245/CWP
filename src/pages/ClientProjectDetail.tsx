@@ -37,6 +37,8 @@ interface Project {
   sla_due_date: string | null;
   sla_status: SlaStatus;
   service_status: 'active' | 'paused' | 'awaiting_payment' | 'completed'; // New field
+  sla_paused_at: string | null;
+  sla_resume_offset_days: number;
 }
 
 interface Task {
@@ -65,6 +67,13 @@ interface FileItem {
   profiles: { full_name: string };
 }
 
+interface PauseLog {
+    id: string;
+    action: 'paused' | 'resumed';
+    client_acknowledged: boolean;
+    created_at: string;
+}
+
 const ClientProjectDetail: React.FC = () => {
   const { id } = useParams<{ id: string }>();
   const { profile } = useAuth();
@@ -76,6 +85,7 @@ const ClientProjectDetail: React.FC = () => {
   const [clientId, setClientId] = useState<string | null>(null);
   const [showOverdueBanner, setShowOverdueBanner] = useState(false);
   const [slaMetrics, setSlaMetrics] = useState<ReturnType<typeof calculateSlaMetrics> | null>(null);
+  const [latestPauseLog, setLatestPauseLog] = useState<PauseLog | null>(null);
   const messagesEndRef = useRef<HTMLDivElement>(null);
 
   const fetchClientData = async () => {
@@ -114,7 +124,7 @@ const ClientProjectDetail: React.FC = () => {
       .from('projects')
       .select(`
         id, title, description, status, progress_percent, required_deposit_cents, deposit_paid,
-        sla_days, sla_start_date, sla_due_date, sla_status, service_status,
+        sla_days, sla_start_date, sla_due_date, sla_status, service_status, sla_paused_at, sla_resume_offset_days,
         tasks (id, title, status, due_date),
         messages (id, body, created_at, sender_profile_id, profiles (full_name)),
         files (id, file_name, file_type, file_size, storage_path, created_at, profiles (full_name)),
@@ -139,11 +149,26 @@ const ClientProjectDetail: React.FC = () => {
           projectData.progress_percent,
           projectData.sla_days,
           projectData.sla_start_date,
-          projectData.sla_due_date
+          projectData.sla_due_date,
+          projectData.sla_paused_at,
+          projectData.sla_resume_offset_days
         ));
       } else {
           setSlaMetrics(null);
       }
+      
+      // Fetch latest pause log for acknowledgment
+      const { data: logData } = await supabase
+          .from('service_pause_logs')
+          .select('id, action, client_acknowledged, created_at')
+          .eq('project_id', id)
+          .eq('action', 'paused')
+          .eq('client_acknowledged', false)
+          .order('created_at', { ascending: false })
+          .limit(1)
+          .single();
+          
+      setLatestPauseLog(logData as PauseLog || null);
     }
     setIsLoading(false);
   };
@@ -245,6 +270,25 @@ const ClientProjectDetail: React.FC = () => {
     document.body.removeChild(a);
     URL.revokeObjectURL(url);
   };
+  
+  const handleAcknowledgePause = async () => {
+      if (!latestPauseLog) return;
+      
+      const { error } = await supabase
+          .from('service_pause_logs')
+          .update({ 
+              client_acknowledged: true,
+              client_acknowledged_at: new Date().toISOString()
+          })
+          .eq('id', latestPauseLog.id);
+          
+      if (error) {
+          console.error('Error acknowledging pause:', error);
+          alert('Failed to acknowledge pause.');
+      } else {
+          setLatestPauseLog(null); // Hide banner
+      }
+  };
 
   const completedTasks = project?.tasks.filter(t => t.status === 'done').length || 0;
   const totalTasks = project?.tasks.length || 0;
@@ -296,6 +340,7 @@ const ClientProjectDetail: React.FC = () => {
   }
   
   const isDepositRequired = project.required_deposit_cents && project.required_deposit_cents > 0;
+  const isPaused = project.service_status === 'paused' || project.service_status === 'awaiting_payment';
 
   return (
     <ClientLayout>
@@ -306,6 +351,24 @@ const ClientProjectDetail: React.FC = () => {
         
         {/* Service Status Banner (Non-blocking) */}
         <ServiceStatusBanner status={project.service_status} type="project" />
+
+        {/* Client Acknowledgment Banner */}
+        {isPaused && latestPauseLog && !latestPauseLog.client_acknowledged && (
+            <div className="p-4 mb-8 bg-indigo-50 border border-indigo-200 rounded-xl flex justify-between items-center">
+                <div className="flex items-center gap-3">
+                    <AlertTriangle className="w-5 h-5 text-indigo-600 flex-shrink-0" />
+                    <p className="text-sm text-indigo-800">
+                        <strong>Action Required:</strong> Please acknowledge the service pause.
+                    </p>
+                </div>
+                <button 
+                    onClick={handleAcknowledgePause}
+                    className="text-indigo-600 hover:text-indigo-800 text-sm font-medium flex-shrink-0 px-4 py-2 bg-white rounded-lg border border-indigo-300 hover:bg-indigo-100"
+                >
+                    <CheckCircle2 className="w-4 h-4 inline mr-1" /> Acknowledge
+                </button>
+            </div>
+        )}
 
         {/* Overdue Warning Banner (Non-blocking) */}
         {showOverdueBanner && (
@@ -391,6 +454,12 @@ const ClientProjectDetail: React.FC = () => {
                                 {slaMetrics.daysRemaining}
                             </p>
                         </div>
+                        {project.sla_paused_at && (
+                            <div className="flex justify-between items-center text-xs text-amber-600 pt-2 border-t border-slate-100">
+                                <span>SLA Paused Since:</span>
+                                <span>{format(new Date(project.sla_paused_at), 'MMM dd')}</span>
+                            </div>
+                        )}
                     </div>
                 </div>
             )}
