@@ -2,9 +2,14 @@
 
 import React, { useState } from 'react';
 import { supabase } from '../integrations/supabase/client';
-import { Bot, Loader2, LogIn, UserPlus, ArrowLeft } from 'lucide-react';
+import { Bot, Loader2, LogIn, UserPlus, ArrowLeft, AlertTriangle } from 'lucide-react';
 import { useNavigate, Link } from 'react-router-dom';
 import { useAuth } from '../hooks/useAuth';
+import ReCAPTCHA from 'react-google-recaptcha';
+import { AuthService } from '../services/authService';
+
+// NOTE: This key must be set in .env.local or Vercel environment variables
+const RECAPTCHA_SITE_KEY = import.meta.env.VITE_RECAPTCHA_SITE_KEY;
 
 export default function LoginPage() {
   const [email, setEmail] = useState('');
@@ -13,6 +18,7 @@ export default function LoginPage() {
   const [error, setError] = useState<string | null>(null);
   const [isSignupMode, setIsSignupMode] = useState(false);
   const [signupSuccess, setSignupSuccess] = useState(false);
+  const [recaptchaToken, setRecaptchaToken] = useState<string | null>(null);
   
   const navigate = useNavigate();
   const { user, isLoading } = useAuth(); 
@@ -22,25 +28,33 @@ export default function LoginPage() {
     navigate('/back-office', { replace: true });
     return null; 
   }
+  
+  const handleRecaptchaChange = (token: string | null) => {
+    setRecaptchaToken(token);
+    if (error) setError(null); // Clear error when user interacts with reCAPTCHA
+  };
 
   async function handleLogin(e: React.FormEvent) {
     e.preventDefault();
     setLoading(true);
     setError(null);
 
-    const { error } = await supabase.auth.signInWithPassword({
-      email,
-      password,
-    });
-
-    if (error) {
-      setError(error.message);
-      setLoading(false);
-      return;
+    if (!recaptchaToken) {
+        setError("Please complete the security check.");
+        setLoading(false);
+        return;
     }
 
-    // Successful login. SessionProvider handles the final redirect.
-    navigate('/back-office', { replace: true });
+    try {
+        // Use secure Edge Function for reCAPTCHA verification + login
+        await AuthService.secureLogin(email, password, recaptchaToken);
+        
+        // Successful login. SessionProvider handles the final redirect.
+        navigate('/back-office', { replace: true });
+    } catch (e: any) {
+        setError(e.message || "Login failed. Check credentials or try again.");
+        setLoading(false);
+    }
   }
 
   async function handleSignup(e: React.FormEvent) {
@@ -48,26 +62,31 @@ export default function LoginPage() {
     setLoading(true);
     setError(null);
     setSignupSuccess(false);
-
-    const { error } = await supabase.auth.signUp({
-      email,
-      password,
-      options: {
-        data: {
-            full_name: email.split('@')[0],
-        }
-      }
-    });
-
-    if (error) {
-      setError(error.message);
-    } else {
-      setSignupSuccess(true);
-      setEmail('');
-      setPassword('');
+    
+    if (!recaptchaToken) {
+        setError("Please complete the security check.");
+        setLoading(false);
+        return;
     }
 
-    setLoading(false);
+    try {
+        // Use secure Edge Function for reCAPTCHA verification + signup
+        const result = await AuthService.secureSignup(email, password, recaptchaToken);
+        
+        if (result.data.user && !result.data.session) {
+            // Successful signup, but email confirmation required
+            setSignupSuccess(true);
+            setEmail('');
+            setPassword('');
+        } else {
+            // Should not happen if email confirmation is enabled, but handle direct sign-in if it occurs
+            navigate('/back-office', { replace: true });
+        }
+    } catch (e: any) {
+        setError(e.message || "Signup failed. Please try again.");
+    } finally {
+        setLoading(false);
+    }
   }
 
   if (isLoading) {
@@ -104,7 +123,8 @@ export default function LoginPage() {
             ) : (
                 <form onSubmit={isSignupMode ? handleSignup : handleLogin} className="space-y-6">
                     {error && (
-                        <div className="p-3 bg-red-100 border border-red-300 text-red-800 rounded-lg text-sm">
+                        <div className="p-3 bg-red-100 border border-red-300 text-red-800 rounded-lg text-sm flex items-center gap-2">
+                            <AlertTriangle className="w-4 h-4" />
                             {error}
                         </div>
                     )}
@@ -134,10 +154,26 @@ export default function LoginPage() {
                             disabled={loading}
                         />
                     </div>
+                    
+                    {/* ReCAPTCHA Component */}
+                    <div className="flex justify-center">
+                        {RECAPTCHA_SITE_KEY ? (
+                            <ReCAPTCHA
+                                sitekey={RECAPTCHA_SITE_KEY}
+                                onChange={handleRecaptchaChange}
+                                onExpired={() => setRecaptchaToken(null)}
+                                theme="light"
+                            />
+                        ) : (
+                            <div className="p-3 bg-amber-50 border border-amber-200 rounded-lg text-sm text-amber-800">
+                                ⚠️ ReCAPTCHA Key Missing. Set VITE_RECAPTCHA_SITE_KEY.
+                            </div>
+                        )}
+                    </div>
 
                     <button
                         type="submit"
-                        disabled={loading}
+                        disabled={loading || !recaptchaToken}
                         className="w-full py-4 bg-gradient-to-r from-indigo-600 to-purple-600 text-white rounded-xl font-bold text-lg hover:shadow-xl hover:shadow-indigo-200 transition-all disabled:opacity-50 flex items-center justify-center gap-2"
                     >
                         {loading ? (
