@@ -1131,7 +1131,7 @@ const AdminProjectDetail: React.FC = () => {
                     <div key={message.id} className={`flex ${message.sender_profile_id === user?.id ? 'justify-end' : 'justify-start'}`}>
                         <div className={`max-w-[85%] p-3 rounded-xl text-sm ${message.sender_profile_id === user?.id ? 'bg-indigo-600 text-white rounded-br-none' : 'bg-slate-100 text-slate-800 rounded-tl-none'}`}>
                             <div className={`text-xs mb-1 ${message.sender_profile_id === user?.id ? 'text-indigo-200' : 'text-slate-500'}`}>
-                                {message.sender_profile_id === user?.id ? 'You' : message.profiles.full_name} - {new Date(message.created_at).toLocaleTimeString()}
+                                {message.sender_profile_id === user?.id ? 'You' : message.profiles?.full_name || 'System User'} - {new Date(message.created_at).toLocaleTimeString()}
                             </div>
                             {message.body}
                         </div>
