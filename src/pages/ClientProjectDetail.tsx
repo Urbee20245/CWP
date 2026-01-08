@@ -3,7 +3,7 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { useParams, Link } from 'react-router-dom';
 import { supabase } from '../integrations/supabase/client';
-import { Loader2, Briefcase, CheckCircle2, MessageSquare, FileText, Upload, Download, Send, ArrowLeft, AlertTriangle, DollarSign, Clock, ExternalLink } from 'lucide-react';
+import { Loader2, Briefcase, CheckCircle2, MessageSquare, FileText, Upload, Download, Send, ArrowLeft, AlertTriangle, DollarSign, Clock, ExternalLink, Bot, ChevronDown, ChevronUp } from 'lucide-react';
 import ClientLayout from '../components/ClientLayout';
 import { useAuth } from '../hooks/useAuth';
 import { calculateSlaMetrics, SlaStatus } from '../utils/sla';
@@ -74,6 +74,14 @@ interface PauseLog {
     created_at: string;
 }
 
+interface Document {
+    id: string;
+    document_type: string;
+    content: string;
+    version: number;
+    created_at: string;
+}
+
 const ClientProjectDetail: React.FC = () => {
   const { id } = useParams<{ id: string }>();
   const { profile } = useAuth();
@@ -86,6 +94,9 @@ const ClientProjectDetail: React.FC = () => {
   const [showOverdueBanner, setShowOverdueBanner] = useState(false);
   const [slaMetrics, setSlaMetrics] = useState<ReturnType<typeof calculateSlaMetrics> | null>(null);
   const [latestPauseLog, setLatestPauseLog] = useState<PauseLog | null>(null);
+  const [documents, setDocuments] = useState<Document[]>([]);
+  const [activeTab, setActiveTab] = useState<'messages' | 'tasks' | 'files' | 'milestones' | 'documents'>('messages');
+  const [expandedDocId, setExpandedDocId] = useState<string | null>(null);
   const messagesEndRef = useRef<HTMLDivElement>(null);
 
   const fetchClientData = async () => {
@@ -169,6 +180,16 @@ const ClientProjectDetail: React.FC = () => {
           .single();
           
       setLatestPauseLog(logData as PauseLog || null);
+      
+      // 4. Fetch shared documents
+      const { data: docsData } = await supabase
+          .from('documents')
+          .select('id, document_type, content, version, created_at')
+          .eq('project_id', id)
+          .eq('is_client_visible', true)
+          .order('created_at', { ascending: false });
+          
+      setDocuments(docsData as Document[] || []);
     }
     setIsLoading(false);
   };
@@ -317,6 +338,16 @@ const ClientProjectDetail: React.FC = () => {
           default: return 'bg-slate-100 text-slate-800';
       }
   };
+  
+  const renderDocumentContent = (content: string) => {
+    // Simple markdown to HTML conversion for display
+    let html = content;
+    html = html.replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>'); // Bold
+    html = html.replace(/## (.*)/g, '<h2>$1</h2>'); // H2
+    html = html.replace(/### (.*)/g, '<h3>$1</h3>'); // H3
+    html = html.replace(/\n/g, '<br/>'); // Newlines
+    return <div dangerouslySetInnerHTML={{ __html: html }} className="prose max-w-none text-sm text-slate-700" />;
+  };
 
   if (isLoading) {
     return (
@@ -340,7 +371,6 @@ const ClientProjectDetail: React.FC = () => {
   }
   
   const isDepositRequired = project.required_deposit_cents && project.required_deposit_cents > 0;
-  const isPaused = project.service_status === 'paused' || project.service_status === 'awaiting_payment';
 
   return (
     <ClientLayout>
@@ -489,131 +519,210 @@ const ClientProjectDetail: React.FC = () => {
             </div>
           </div>
 
-          {/* Right Column: Messages, Files & Milestones */}
+          {/* Right Column: Tabs */}
           <div className="lg:col-span-2 space-y-8">
             
-            {/* Milestones */}
-            {project.milestones.length > 0 && (
+            {/* Tabs Navigation */}
+            <div className="border-b border-slate-200">
+                <nav className="-mb-px flex space-x-8">
+                    <button
+                        onClick={() => setActiveTab('messages')}
+                        className={`whitespace-nowrap py-4 px-1 border-b-2 font-medium text-sm transition-colors ${activeTab === 'messages' ? 'border-indigo-600 text-indigo-600' : 'border-transparent text-slate-500 hover:text-slate-700 hover:border-slate-300'}`}
+                    >
+                        Messages
+                    </button>
+                    <button
+                        onClick={() => setActiveTab('milestones')}
+                        className={`whitespace-nowrap py-4 px-1 border-b-2 font-medium text-sm transition-colors ${activeTab === 'milestones' ? 'border-indigo-600 text-indigo-600' : 'border-transparent text-slate-500 hover:text-slate-700 hover:border-slate-300'}`}
+                    >
+                        Milestones
+                    </button>
+                    <button
+                        onClick={() => setActiveTab('files')}
+                        className={`whitespace-nowrap py-4 px-1 border-b-2 font-medium text-sm transition-colors ${activeTab === 'files' ? 'border-indigo-600 text-indigo-600' : 'border-transparent text-slate-500 hover:text-slate-700 hover:border-slate-300'}`}
+                    >
+                        Files
+                    </button>
+                    <button
+                        onClick={() => setActiveTab('documents')}
+                        className={`whitespace-nowrap py-4 px-1 border-b-2 font-medium text-sm transition-colors ${activeTab === 'documents' ? 'border-indigo-600 text-indigo-600' : 'border-transparent text-slate-500 hover:text-slate-700 hover:border-slate-300'}`}
+                    >
+                        Documents ({documents.length})
+                    </button>
+                </nav>
+            </div>
+            
+            {/* Tab Content */}
+            
+            {/* Messages Tab */}
+            {activeTab === 'messages' && (
+                <div className="bg-white p-6 rounded-xl shadow-lg border border-slate-100">
+                    <h2 className="text-xl font-bold mb-4 flex items-center gap-2 border-b border-slate-100 pb-4">
+                        <MessageSquare className="w-5 h-5 text-indigo-600" /> Project Messages
+                    </h2>
+                    <div className="h-80 overflow-y-auto space-y-4 p-2 flex flex-col">
+                        {project.messages.length > 0 ? (
+                        project.messages.map(message => (
+                            <div key={message.id} className={`flex ${message.sender_profile_id === profile?.id ? 'justify-end' : 'justify-start'}`}>
+                                <div className={`max-w-[85%] p-3 rounded-xl text-sm ${message.sender_profile_id === profile?.id ? 'bg-indigo-600 text-white rounded-br-none' : 'bg-slate-100 text-slate-800 rounded-tl-none'}`}>
+                                    <div className={`text-xs mb-1 ${message.sender_profile_id === profile?.id ? 'text-indigo-200' : 'text-slate-500'}`}>
+                                        {message.sender_profile_id === profile?.id ? 'You' : message.profiles.full_name} - {new Date(message.created_at).toLocaleTimeString()}
+                                    </div>
+                                    {message.body}
+                                </div>
+                            </div>
+                        ))
+                        ) : (
+                        <div className="flex-1 flex items-center justify-center text-slate-500">Start the conversation!</div>
+                        )}
+                        <div ref={messagesEndRef} />
+                    </div>
+                    <form onSubmit={handleMessageSend} className="mt-4 flex gap-2">
+                        <textarea
+                        value={newMessage}
+                        onChange={(e) => setNewMessage(e.target.value)}
+                        placeholder="Send a message to the team..."
+                        rows={2}
+                        className="flex-1 p-3 border border-slate-300 rounded-lg text-sm resize-none focus:border-indigo-500 outline-none"
+                        />
+                        <button type="submit" className="px-4 py-2 bg-indigo-600 text-white rounded-lg font-semibold hover:bg-indigo-700 transition-colors">
+                        <Send className="w-5 h-5" />
+                        </button>
+                    </form>
+                </div>
+            )}
+            
+            {/* Milestones Tab */}
+            {activeTab === 'milestones' && (
                 <div className="bg-white p-6 rounded-xl shadow-lg border border-slate-100">
                     <h2 className="text-xl font-bold mb-4 flex items-center gap-2 text-slate-900 border-b border-slate-100 pb-4">
                         <DollarSign className="w-5 h-5 text-purple-600" /> Payment Milestones
                     </h2>
                     <div className="space-y-4">
-                        {project.milestones.map(milestone => (
-                            <div key={milestone.id} className="p-3 bg-slate-50 rounded-lg border border-slate-100 flex justify-between items-center">
-                                <div className="flex items-center gap-3">
-                                    <span className="font-bold text-slate-900 text-sm">{milestone.order_index}. {milestone.name}</span>
-                                    <span className="text-sm text-slate-600">(${(milestone.amount_cents / 100).toFixed(2)})</span>
+                        {project.milestones.length > 0 ? (
+                            project.milestones.map(milestone => (
+                                <div key={milestone.id} className="p-3 bg-slate-50 rounded-lg border border-slate-100 flex justify-between items-center">
+                                    <div className="flex items-center gap-3">
+                                        <span className="font-bold text-slate-900 text-sm">{milestone.order_index}. {milestone.name}</span>
+                                        <span className="text-sm text-slate-600">(${(milestone.amount_cents / 100).toFixed(2)})</span>
+                                    </div>
+                                    <div className="flex items-center gap-3">
+                                        <span className={`px-2 py-0.5 rounded-full text-xs font-semibold ${getMilestoneStatusColor(milestone.status)}`}>
+                                            {milestone.status}
+                                        </span>
+                                        {milestone.stripe_invoice_id && milestone.status !== 'paid' && (
+                                            <Link 
+                                                to="/client/billing" 
+                                                className="text-red-600 hover:text-red-800 text-xs font-semibold flex items-center gap-1"
+                                            >
+                                                <ExternalLink className="w-3 h-3" /> Pay Now
+                                            </Link>
+                                        )}
+                                    </div>
                                 </div>
-                                <div className="flex items-center gap-3">
-                                    <span className={`px-2 py-0.5 rounded-full text-xs font-semibold ${getMilestoneStatusColor(milestone.status)}`}>
-                                        {milestone.status}
-                                    </span>
-                                    {milestone.stripe_invoice_id && milestone.status !== 'paid' && (
-                                        <Link 
-                                            to="/client/billing" 
-                                            className="text-red-600 hover:text-red-800 text-xs font-semibold flex items-center gap-1"
-                                        >
-                                            <ExternalLink className="w-3 h-3" /> Pay Now
-                                        </Link>
-                                    )}
-                                </div>
-                            </div>
-                        ))}
+                            ))
+                        ) : (
+                            <div className="text-center p-8 bg-slate-50 rounded-lg text-slate-500">No payment milestones defined for this project.</div>
+                        )}
                     </div>
                 </div>
             )}
             
-            {/* Messages Thread */}
-            <div className="bg-white p-6 rounded-xl shadow-lg border border-slate-100">
-              <h2 className="text-xl font-bold mb-4 flex items-center gap-2 border-b border-slate-100 pb-4">
-                <MessageSquare className="w-5 h-5 text-indigo-600" /> Project Messages
-              </h2>
-              <div className="h-80 overflow-y-auto space-y-4 p-2 flex flex-col">
-                {project.messages.length > 0 ? (
-                  project.messages.map(message => (
-                    <div key={message.id} className={`flex ${message.sender_profile_id === profile?.id ? 'justify-end' : 'justify-start'}`}>
-                        <div className={`max-w-[85%] p-3 rounded-xl text-sm ${message.sender_profile_id === profile?.id ? 'bg-indigo-600 text-white rounded-br-none' : 'bg-slate-100 text-slate-800 rounded-tl-none'}`}>
-                            <div className={`text-xs mb-1 ${message.sender_profile_id === profile?.id ? 'text-indigo-200' : 'text-slate-500'}`}>
-                                {message.sender_profile_id === profile?.id ? 'You' : message.profiles.full_name} - {new Date(message.created_at).toLocaleTimeString()}
+            {/* Files Tab */}
+            {activeTab === 'files' && (
+                <div className="bg-white p-6 rounded-xl shadow-lg border border-slate-100">
+                    <h2 className="text-xl font-bold mb-4 flex items-center gap-2 border-b border-slate-100 pb-4">
+                        <FileText className="w-5 h-5 text-purple-600" /> Project Files ({project.files.length})
+                    </h2>
+                    <div className="space-y-3">
+                        {project.files.length > 0 ? (
+                        project.files.map(file => (
+                            <div key={file.id} className="flex justify-between items-center p-3 bg-slate-50 rounded-lg border border-slate-100">
+                            <div className="flex items-center gap-3">
+                                <FileText className="w-5 h-5 text-purple-500" />
+                                <div>
+                                <p className="font-medium text-sm text-slate-900">{file.file_name}</p>
+                                <p className="text-xs text-slate-500">{file.file_type} | {(file.file_size / 1024 / 1024).toFixed(2)} MB</p>
+                                </div>
                             </div>
-                            {message.body}
-                        </div>
+                            <button 
+                                onClick={() => handleFileDownload(file.storage_path, file.file_name)}
+                                className="text-indigo-600 hover:text-indigo-800 text-sm flex items-center gap-1"
+                            >
+                                <Download className="w-4 h-4" /> Download
+                            </button>
+                            </div>
+                        ))
+                        ) : (
+                        <p className="text-slate-500 text-sm">No files uploaded yet.</p>
+                        )}
                     </div>
-                  ))
-                ) : (
-                  <div className="flex-1 flex items-center justify-center text-slate-500">Start the conversation!</div>
-                )}
-                <div ref={messagesEndRef} />
-              </div>
-              <form onSubmit={handleMessageSend} className="mt-4 flex gap-2">
-                <textarea
-                  value={newMessage}
-                  onChange={(e) => setNewMessage(e.target.value)}
-                  placeholder="Send a message to the team..."
-                  rows={2}
-                  className="flex-1 p-3 border border-slate-300 rounded-lg text-sm resize-none focus:border-indigo-500 outline-none"
-                />
-                <button type="submit" className="px-4 py-2 bg-indigo-600 text-white rounded-lg font-semibold hover:bg-indigo-700 transition-colors">
-                  <Send className="w-5 h-5" />
-                </button>
-              </form>
-            </div>
-
-            {/* Files Section */}
-            <div className="bg-white p-6 rounded-xl shadow-lg border border-slate-100">
-              <h2 className="text-xl font-bold mb-4 flex items-center gap-2 border-b border-slate-100 pb-4">
-                <FileText className="w-5 h-5 text-purple-600" /> Project Files ({project.files.length})
-              </h2>
-              <div className="space-y-3">
-                {project.files.length > 0 ? (
-                  project.files.map(file => (
-                    <div key={file.id} className="flex justify-between items-center p-3 bg-slate-50 rounded-lg border border-slate-100">
-                      <div className="flex items-center gap-3">
-                        <FileText className="w-5 h-5 text-purple-500" />
-                        <div>
-                          <p className="font-medium text-sm text-slate-900">{file.file_name}</p>
-                          <p className="text-xs text-slate-500">{file.file_type} | {(file.file_size / 1024 / 1024).toFixed(2)} MB</p>
+                    
+                    <form onSubmit={handleFileUpload} className="mt-6 pt-4 border-t border-slate-100">
+                        <h3 className="font-bold text-slate-900 mb-3 text-sm">Upload New File</h3>
+                        <input
+                        type="file"
+                        onChange={(e) => setFileToUpload(e.target.files ? e.target.files[0] : null)}
+                        className="w-full text-sm text-slate-500 file:mr-4 file:py-2 file:px-4 file:rounded-full file:border-0 file:text-sm file:font-semibold file:bg-indigo-50 file:text-indigo-700 hover:file:bg-indigo-100"
+                        required
+                        />
+                        <button 
+                        type="submit"
+                        disabled={isUploading || !fileToUpload}
+                        className="mt-3 w-full py-2 bg-indigo-600 text-white rounded-lg text-sm font-semibold hover:bg-indigo-700 transition-colors disabled:opacity-50 flex items-center justify-center gap-2"
+                        >
+                        {isUploading ? (
+                            <>
+                            <Loader2 className="w-4 h-4 animate-spin" /> Uploading...
+                            </>
+                        ) : (
+                            <>
+                            <Upload className="w-4 h-4" /> Upload File
+                            </>
+                        )}
+                        </button>
+                    </form>
+                </div>
+            )}
+            
+            {/* Documents Tab */}
+            {activeTab === 'documents' && (
+                <div className="bg-white p-6 rounded-xl shadow-lg border border-slate-100">
+                    <h2 className="text-xl font-bold mb-4 flex items-center gap-2 text-slate-900 border-b border-slate-100 pb-4">
+                        <Bot className="w-5 h-5 text-emerald-600" /> Shared Documents
+                    </h2>
+                    
+                    {documents.length === 0 ? (
+                        <div className="text-center p-8 bg-slate-50 rounded-lg text-slate-500">
+                            No legal drafts or documents have been shared by the admin team yet.
                         </div>
-                      </div>
-                      <button 
-                        onClick={() => handleFileDownload(file.storage_path, file.file_name)}
-                        className="text-indigo-600 hover:text-indigo-800 text-sm flex items-center gap-1"
-                      >
-                        <Download className="w-4 h-4" /> Download
-                      </button>
-                    </div>
-                  ))
-                ) : (
-                  <p className="text-slate-500 text-sm">No files uploaded yet.</p>
-                )}
-              </div>
-              
-              <form onSubmit={handleFileUpload} className="mt-6 pt-4 border-t border-slate-100">
-                <h3 className="font-bold text-slate-900 mb-3 text-sm">Upload New File</h3>
-                <input
-                  type="file"
-                  onChange={(e) => setFileToUpload(e.target.files ? e.target.files[0] : null)}
-                  className="w-full text-sm text-slate-500 file:mr-4 file:py-2 file:px-4 file:rounded-full file:border-0 file:text-sm file:font-semibold file:bg-indigo-50 file:text-indigo-700 hover:file:bg-indigo-100"
-                  required
-                />
-                <button 
-                  type="submit"
-                  disabled={isUploading || !fileToUpload}
-                  className="mt-3 w-full py-2 bg-indigo-600 text-white rounded-lg text-sm font-semibold hover:bg-indigo-700 transition-colors disabled:opacity-50 flex items-center justify-center gap-2"
-                >
-                  {isUploading ? (
-                    <>
-                      <Loader2 className="w-4 h-4 animate-spin" /> Uploading...
-                    </>
-                  ) : (
-                    <>
-                      <Upload className="w-4 h-4" /> Upload File
-                    </>
-                  )}
-                </button>
-              </form>
-            </div>
+                    ) : (
+                        <div className="space-y-4">
+                            {documents.map(doc => (
+                                <div key={doc.id} className="p-4 bg-slate-50 rounded-lg border border-slate-200">
+                                    <div className="flex justify-between items-center">
+                                        <p className="font-bold text-slate-900">{doc.document_type} (v{doc.version})</p>
+                                        <p className="text-xs text-slate-500">{format(new Date(doc.created_at), 'MMM dd, yyyy')}</p>
+                                    </div>
+                                    
+                                    {expandedDocId === doc.id && (
+                                        <div className="mt-4 p-3 bg-white border border-slate-200 rounded-lg">
+                                            {renderDocumentContent(doc.content)}
+                                        </div>
+                                    )}
+                                    <button 
+                                        onClick={() => setExpandedDocId(expandedDocId === doc.id ? null : doc.id)}
+                                        className="mt-2 text-xs text-indigo-600 hover:text-indigo-800 font-medium flex items-center gap-1"
+                                    >
+                                        {expandedDocId === doc.id ? 'Hide Document' : 'View Document'}
+                                        {expandedDocId === doc.id ? <ChevronUp className="w-3 h-3" /> : <ChevronDown className="w-3 h-3" />}
+                                    </button>
+                                </div>
+                            ))}
+                        </div>
+                    )}
+                </div>
+            )}
           </div>
         </div>
       </div>

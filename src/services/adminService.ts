@@ -29,6 +29,11 @@ export const AdminService = {
     return invokeEdgeFunction('send-sms', { to, body });
   },
   
+  // --- AI Document Generation ---
+  generateDocument: async (documentType: string, inputs: any) => {
+    return invokeEdgeFunction('generate-document', { documentType, inputs });
+  },
+  
   // --- Billing ---
   createStripeCustomer: async (clientId: string) => {
     return invokeEdgeFunction('stripe-api/create-customer', { client_id: clientId });

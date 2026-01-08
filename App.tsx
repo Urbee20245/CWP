@@ -24,7 +24,8 @@ import ClientBilling from './src/pages/ClientBilling';
 import BackOfficeRedirect from './src/pages/BackOfficeRedirect';
 import AdminBillingProducts from './src/pages/AdminBillingProducts';
 import AdminRevenueDashboard from './src/pages/AdminRevenueDashboard';
-import AdminSettingsPage from './src/pages/AdminSettingsPage'; // New Import
+import AdminSettingsPage from './src/pages/AdminSettingsPage';
+import AdminDocumentGenerator from './src/pages/AdminDocumentGenerator'; // New Import
 
 // Component that uses useLocation to conditionally render global elements
 const AppContent: React.FC = () => {
@@ -66,7 +67,8 @@ const AppContent: React.FC = () => {
           <Route path="projects/:id" element={<AdminProjectDetail />} />
           <Route path="billing/products" element={<AdminBillingProducts />} />
           <Route path="billing/revenue" element={<AdminRevenueDashboard />} />
-          <Route path="settings" element={<AdminSettingsPage />} /> {/* New Settings Route */}
+          <Route path="settings" element={<AdminSettingsPage />} />
+          <Route path="ai-docs" element={<AdminDocumentGenerator />} /> {/* New AI Docs Route */}
         </Route>
 
         {/* Client Routes */}
