@@ -1,5 +1,8 @@
 import React from 'react';
 import { BrowserRouter, Routes, Route, useLocation } from 'react-router-dom';
+import Header from './components/Header';
+import Footer from './components/Footer';
+import VoiceAgent from './components/VoiceAgent';
 import Home from './src/pages/Home';
 import JetLocalOptimizerPage from './components/JetLocalOptimizerPage';
 import JetVizPage from './components/JetVizPage';
@@ -26,16 +29,23 @@ import AdminDocumentGenerator from './src/pages/AdminDocumentGenerator';
 import AdminEmailGenerator from './src/pages/AdminEmailGenerator';
 import AdminSmtpSettings from './src/pages/AdminSmtpSettings';
 import AdminTwilioSettings from './src/pages/AdminTwilioSettings';
-import NotFoundPage from './src/pages/NotFoundPage';
-import ErrorBoundary from './src/components/ErrorBoundary';
-import GlobalLoading from './src/components/GlobalLoading';
-import { useAuth } from './src/hooks/useAuth';
-import PublicLayout from './src/components/PublicLayout'; // New Import
-import AuthLayout from './src/components/AuthLayout'; // New Import
+import NotFoundPage from './src/pages/NotFoundPage'; // New Import
+import ErrorBoundary from './src/components/ErrorBoundary'; // New Import
+import GlobalLoading from './src/components/GlobalLoading'; // New Import
+import { useAuth } from './src/hooks/useAuth'; // New Import
 
 // Component that uses useLocation to conditionally render global elements
 const AppContent: React.FC = () => {
-  const { isLoading } = useAuth();
+  const location = useLocation();
+  const { isLoading } = useAuth(); // Use auth state for global loading check
+  
+  const isLoginPage = location.pathname === '/login';
+  
+  // Check if we are on an admin/client route (which use their own layouts)
+  const isBackOfficeRoute = location.pathname.startsWith('/admin') || location.pathname.startsWith('/client') || location.pathname.startsWith('/back-office');
+  
+  // We only want the global components (Header, Footer, VoiceAgent) on public pages, excluding login.
+  const showGlobalComponents = !isBackOfficeRoute;
 
   // Show global loading screen if session is still initializing
   if (isLoading) {
@@ -44,29 +54,25 @@ const AppContent: React.FC = () => {
 
   return (
     <div className="min-h-screen bg-slate-50 font-sans selection:bg-blue-100 selection:text-blue-900">
+      {showGlobalComponents && !isLoginPage && <Header />}
+      
       <Routes>
-        {/* Public Routes (Wrapped in PublicLayout) */}
-        <Route element={<PublicLayout />}>
-          <Route path="/" element={<Home />} />
-          <Route path="/services" element={<ServicesPage />} />
-          <Route path="/process" element={<ProcessPage />} />
-          <Route path="/contact" element={<ContactPage />} />
-          <Route path="/jetsuite" element={<JetSuitePage />} />
-          <Route path="/jetviz" element={<JetVizPage />} />
-          <Route path="/jet-local-optimizer" element={<JetLocalOptimizerPage />} />
-        </Route>
+        {/* Public Routes */}
+        <Route path="/" element={<Home />} />
+        <Route path="/services" element={<ServicesPage />} />
+        <Route path="/process" element={<ProcessPage />} />
+        <Route path="/contact" element={<ContactPage />} />
+        <Route path="/jetsuite" element={<JetSuitePage />} />
+        <Route path="/jetviz" element={<JetVizPage />} />
+        <Route path="/jet-local-optimizer" element={<JetLocalOptimizerPage />} />
+        <Route path="/login" element={<LoginPage />} />
         
-        {/* Auth Routes (Wrapped in AuthLayout) */}
-        <Route element={<AuthLayout />}>
-          <Route path="/login" element={<LoginPage />} />
-        </Route>
-        
-        {/* Protected Redirect Route (Uses AuthLayout for initial check/redirect) */}
+        {/* Protected Redirect Route */}
         <Route path="/back-office" element={<ProtectedRoute allowedRoles={['admin', 'client']} />}>
           <Route index element={<BackOfficeRedirect />} />
         </Route>
 
-        {/* Admin Routes (Use AdminLayout internally) */}
+        {/* Admin Routes */}
         <Route path="/admin/*" element={<ProtectedRoute allowedRoles={['admin']} />}>
           <Route path="dashboard" element={<AdminDashboard />} />
           <Route path="clients" element={<AdminClientList />} />
@@ -82,16 +88,19 @@ const AppContent: React.FC = () => {
           <Route path="ai-email" element={<AdminEmailGenerator />} />
         </Route>
 
-        {/* Client Routes (Use ClientLayout internally) */}
+        {/* Client Routes */}
         <Route path="/client/*" element={<ProtectedRoute allowedRoles={['client']} />}>
           <Route path="dashboard" element={<ClientDashboard />} />
           <Route path="projects/:id" element={<ClientProjectDetail />} />
           <Route path="billing" element={<ClientBilling />} />
         </Route>
         
-        {/* Global 404 Fallback */}
+        {/* Global 404 Fallback (Step 1) */}
         <Route path="*" element={<NotFoundPage />} />
       </Routes>
+      
+      {showGlobalComponents && <Footer />}
+      {showGlobalComponents && <VoiceAgent />}
     </div>
   );
 };
