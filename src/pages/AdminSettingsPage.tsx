@@ -2,18 +2,11 @@
 
 import React from 'react';
 import AdminLayout from '../components/AdminLayout';
-import { Settings, MessageSquare, Shield, ExternalLink, CheckCircle2, AlertTriangle } from 'lucide-react';
+import { Settings, MessageSquare, Shield, ExternalLink, CheckCircle2, AlertTriangle, Mail, DollarSign } from 'lucide-react';
+import { Link } from 'react-router-dom';
 
 const AdminSettingsPage: React.FC = () => {
   
-  // NOTE: We cannot read Deno environment variables (secrets) from the client side, 
-  // so we provide instructions on where to set them.
-  const twilioSecrets = [
-    { name: 'TWILIO_ACCOUNT_SID', description: 'Your Twilio Account SID.' },
-    { name: 'TWILIO_AUTH_TOKEN', description: 'Your Twilio Auth Token.' },
-    { name: 'TWILIO_PHONE_NUMBER', description: 'Your Twilio phone number (e.g., +14045551234).' },
-  ];
-
   return (
     <AdminLayout>
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-12">
@@ -23,45 +16,49 @@ const AdminSettingsPage: React.FC = () => {
 
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
           
-          {/* Integration Card: Twilio SMS */}
+          {/* Integration Card: SMTP Email */}
           <div className="lg:col-span-2 bg-white p-6 rounded-xl shadow-lg border border-slate-100">
             <h2 className="text-xl font-bold text-slate-900 mb-4 flex items-center gap-2 border-b border-slate-100 pb-4">
-              <MessageSquare className="w-5 h-5 text-emerald-600" /> Twilio SMS Integration
+              <Mail className="w-5 h-5 text-indigo-600" /> Email (SMTP) Configuration
             </h2>
             
             <p className="text-slate-600 mb-6">
-              This integration allows you to send direct SMS messages to clients from their detail page. It requires secure configuration via Supabase Edge Function Secrets.
+              Configure your external SMTP provider (e.g., SendGrid, Postmark, Gmail) to enable direct email sending from the system.
             </p>
             
             <div className="p-4 bg-red-50 border border-red-200 rounded-xl mb-6">
                 <h3 className="font-bold text-red-800 mb-2 flex items-center gap-2">
-                    <AlertTriangle className="w-5 h-5" /> Configuration Required
+                    <AlertTriangle className="w-5 h-5" /> Encryption Key Required
                 </h3>
                 <p className="text-sm text-red-700">
-                    The SMS feature will fail if the following secrets are not set in your Supabase project.
+                    For security, you must set the secret <code className="font-mono text-xs bg-red-200 px-1 rounded">SMTP_ENCRYPTION_KEY</code> in Supabase Secrets to encrypt SMTP passwords.
                 </p>
             </div>
 
-            <h3 className="font-bold text-slate-900 mb-3 flex items-center gap-2">
-                <Shield className="w-5 h-5 text-indigo-600" /> Required Secrets
-            </h3>
-            
-            <ul className="space-y-3 mb-6">
-              {twilioSecrets.map((secret, index) => (
-                <li key={index} className="p-3 bg-slate-50 rounded-lg border border-slate-200">
-                  <code className="font-mono text-sm font-bold text-slate-800">{secret.name}</code>
-                  <p className="text-xs text-slate-500 mt-1">{secret.description}</p>
-                </li>
-              ))}
-            </ul>
-            
+            <Link 
+              to="/admin/settings/smtp" 
+              className="inline-flex items-center gap-2 px-4 py-2 bg-indigo-600 text-white rounded-lg text-sm font-semibold hover:bg-indigo-700 transition-colors"
+            >
+              Configure SMTP Settings
+              <ExternalLink className="w-4 h-4" />
+            </Link>
+          </div>
+          
+          {/* Integration Card: Twilio SMS */}
+          <div className="lg:col-span-1 bg-white p-6 rounded-xl shadow-lg border border-slate-100">
+            <h2 className="text-xl font-bold text-slate-900 mb-4 flex items-center gap-2 border-b border-slate-100 pb-4">
+              <MessageSquare className="w-5 h-5 text-emerald-600" /> Twilio SMS
+            </h2>
+            <p className="text-slate-600 mb-4 text-sm">
+              Allows sending direct SMS messages to clients. Requires three secrets to be set in Supabase.
+            </p>
             <a 
               href="https://supabase.com/dashboard/project/nvgumhlewbqynrhlkqhx/functions/secrets" 
               target="_blank" 
               rel="noopener noreferrer"
-              className="inline-flex items-center gap-2 px-4 py-2 bg-indigo-600 text-white rounded-lg text-sm font-semibold hover:bg-indigo-700 transition-colors"
+              className="inline-flex items-center gap-2 px-4 py-2 bg-slate-100 text-slate-700 rounded-lg text-sm font-semibold hover:bg-slate-200 transition-colors"
             >
-              Go to Supabase Secrets Manager
+              Manage Twilio Secrets
               <ExternalLink className="w-4 h-4" />
             </a>
           </div>
@@ -70,15 +67,15 @@ const AdminSettingsPage: React.FC = () => {
           <div className="lg:col-span-1 space-y-6">
             <div className="bg-white p-6 rounded-xl shadow-lg border border-slate-100">
                 <h3 className="text-xl font-bold text-slate-900 mb-4 flex items-center gap-2 border-b border-slate-100 pb-4">
-                    <CheckCircle2 className="w-5 h-5 text-indigo-600" /> Future Integrations
+                    <DollarSign className="w-5 h-5 text-purple-600" /> Billing Secrets
                 </h3>
                 <ul className="space-y-3 text-sm text-slate-600">
-                    <li>• Google Gemini API Key</li>
-                    <li>• Stripe Webhook Secret</li>
-                    <li>• Vercel Deployment Hooks</li>
+                    <li>• STRIPE_SECRET_KEY</li>
+                    <li>• STRIPE_WEBHOOK_SECRET</li>
+                    <li>• STRIPE_CUSTOMER_PORTAL_RETURN_URL</li>
                 </ul>
                 <p className="text-xs text-slate-400 mt-4">
-                    Use this page to manage all third-party connections as your application grows.
+                    These secrets are required for all Stripe API calls and webhooks.
                 </p>
             </div>
           </div>

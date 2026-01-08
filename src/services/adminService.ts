@@ -38,6 +38,35 @@ export const AdminService = {
     return invokeEdgeFunction('generate-document', { documentType, inputs });
   },
   
+  // --- Email Sending ---
+  sendEmail: async (to_email: string, subject: string, html_body: string, client_id: string | null, sent_by: string) => {
+    return invokeEdgeFunction('send-email', { to_email, subject, html_body, client_id, sent_by });
+  },
+  
+  // --- SMTP Configuration ---
+  getSmtpSettings: async () => {
+    const { data, error } = await supabase
+        .from('smtp_settings')
+        .select('*')
+        .limit(1)
+        .single();
+    
+    if (error && error.code !== 'PGRST116') throw error; // Ignore 'No rows found'
+    return data;
+  },
+  
+  saveSmtpSettings: async (settings: any) => {
+    // Use upsert to ensure only one record exists
+    const { data, error } = await supabase
+        .from('smtp_settings')
+        .upsert(settings, { onConflict: 'id' })
+        .select()
+        .single();
+        
+    if (error) throw error;
+    return data;
+  },
+  
   // --- Billing ---
   createStripeCustomer: async (clientId: string) => {
     return invokeEdgeFunction('stripe-api/create-customer', { client_id: clientId });

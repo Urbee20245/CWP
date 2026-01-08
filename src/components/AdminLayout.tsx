@@ -3,7 +3,7 @@
 import React from 'react';
 import { useAuth } from '../hooks/useAuth';
 import { Link } from 'react-router-dom';
-import { Users, Briefcase, DollarSign, LogOut, Bot, BarChart3, Settings, FileText } from 'lucide-react';
+import { Users, Briefcase, DollarSign, LogOut, Bot, BarChart3, Settings, FileText, Mail } from 'lucide-react';
 
 interface AdminLayoutProps {
   children: React.ReactNode;
@@ -18,7 +18,8 @@ const AdminLayout: React.FC<AdminLayoutProps> = ({ children }) => {
     { name: 'Projects', href: '/admin/projects', icon: Briefcase }, // New dedicated project list route
     { name: 'Revenue', href: '/admin/billing/revenue', icon: BarChart3 },
     { name: 'Billing Products', href: '/admin/billing/products', icon: DollarSign }, 
-    { name: 'AI Docs', href: '/admin/ai-docs', icon: FileText }, // New AI Docs link
+    { name: 'AI Docs', href: '/admin/ai-docs', icon: FileText },
+    { name: 'AI Email', href: '/admin/ai-email', icon: Mail }, // New AI Email link
     { name: 'Settings', href: '/admin/settings', icon: Settings }, // New Settings link
   ];
 
