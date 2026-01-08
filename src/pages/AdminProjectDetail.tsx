@@ -1372,8 +1372,8 @@ const AdminProjectDetail: React.FC = () => {
           </div>
         </div>
       </div>
-    </ClientLayout>
+    </AdminLayout>
   );
 };
 
-export default ClientProjectDetail;
+export default AdminProjectDetail;
