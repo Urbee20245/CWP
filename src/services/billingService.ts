@@ -35,7 +35,7 @@ export const BillingService = {
     return invokeEdgeFunction('stripe-api/create-portal-session', { client_id: clientId });
   },
   
-  checkClientAccess: async (clientId: string): Promise<{ hasAccess: boolean, reason: 'active' | 'overdue' | 'no_subscription' | 'override' | 'restricted' | 'system_error' }> => {
+  checkClientAccess: async (clientId: string): Promise<{ hasAccess: boolean, reason: 'active' | 'overdue' | 'no_subscription' | 'override' | 'restricted' | 'system_error' | 'grace_period', graceUntil?: string | null }> => {
     return invokeEdgeFunction('access-check', { client_id: clientId });
   },
   

@@ -85,7 +85,7 @@ const ClientDashboard: React.FC = () => {
       const { data: projectsData, error: projectsError } = await supabase
         .from('projects')
         .select('id, title, status, progress_percent')
-        .eq('client_id', clientId)
+        .eq('client_id', currentClientId)
         .order('created_at', { ascending: false });
 
       if (projectsError) {
@@ -164,7 +164,7 @@ const ClientDashboard: React.FC = () => {
         </div>
 
         {/* Overdue Warning Banner (Non-blocking) */}
-        {showOverdueBanner && accessStatus.hasAccess && (
+        {showOverdueBanner && accessStatus.hasAccess && accessStatus.graceUntil && (
             <div className="p-4 mb-8 bg-amber-50 border border-amber-200 rounded-xl flex justify-between items-center">
                 <div className="flex items-center gap-3">
                     <AlertTriangle className="w-5 h-5 text-amber-600 flex-shrink-0" />

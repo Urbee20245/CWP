@@ -86,6 +86,7 @@ serve(async (req) => {
           billing_escalation_stage: 2,
           last_billing_notice_sent: now.toISOString(),
           billing_grace_until: graceDate,
+          access_status: 'grace', // Ensure status is grace
         };
         notificationStage = 2;
         actions.push({ client: client.id, action: 'Final_Notice', daysOverdue });
@@ -97,7 +98,7 @@ serve(async (req) => {
           billing_escalation_stage: 1,
           last_billing_notice_sent: now.toISOString(),
           billing_grace_until: graceDate,
-          access_status: 'active', // Ensure status is active during grace
+          access_status: 'grace', // Set status to grace
         };
         notificationStage = 1;
         actions.push({ client: client.id, action: 'First_Reminder', daysOverdue });

@@ -152,6 +152,25 @@ serve(async (req) => {
           .upsert(invoiceData, { onConflict: 'stripe_invoice_id' });
 
         if (upsertError) console.error('[stripe-webhook] Invoice upsert failed:', upsertError);
+        
+        // --- Access Restriction Logic on Failure ---
+        if (event.type === 'invoice.payment_failed' && invoice.status === 'open') {
+            const GRACE_PERIOD_DAYS = 7;
+            const dueDate = invoice.due_date ? new Date(invoice.due_date * 1000) : new Date();
+            const graceUntil = new Date(dueDate.getTime() + GRACE_PERIOD_DAYS * 24 * 60 * 60 * 1000).toISOString();
+            
+            await supabaseAdmin
+                .from('clients')
+                .update({
+                    access_status: 'grace',
+                    billing_escalation_stage: 1, // Start escalation
+                    billing_grace_until: graceUntil,
+                    last_billing_notice_sent: new Date().toISOString(),
+                })
+                .eq('id', client_id);
+            console.log(`[stripe-webhook] Client ${client_id} entered grace period due to payment failure.`);
+        }
+        
         break;
       }
 
@@ -176,16 +195,16 @@ serve(async (req) => {
 
         if (upsertError) console.error('[stripe-webhook] Subscription upsert failed:', upsertError);
         
-        // Also update client record with the latest active subscription ID
+        // Also update client record with the latest active subscription ID and access status
         if (subscription.status === 'active' || subscription.status === 'trialing') {
             await supabaseAdmin
                 .from('clients')
                 .update({ stripe_subscription_id: subscription.id, access_status: 'active' }) // Auto-restore access on active subscription
                 .eq('id', client_id);
-        } else if (event.type === 'customer.subscription.deleted') {
+        } else if (event.type === 'customer.subscription.deleted' || subscription.status === 'canceled') {
              await supabaseAdmin
                 .from('clients')
-                .update({ stripe_subscription_id: null })
+                .update({ stripe_subscription_id: null, access_status: 'restricted' }) // Restrict access on cancellation/deletion
                 .eq('id', client_id);
         }
         break;

@@ -31,12 +31,12 @@ serve(async (req) => {
       return errorResponse('Client not found.', 404);
     }
 
-    // 2. Check Admin Override
+    // 2. Check Admin Override (Rule 1)
     if (client.access_override) {
       return jsonResponse({ hasAccess: true, reason: 'override', graceUntil: client.billing_grace_until });
     }
 
-    // 3. Check for Active Subscriptions
+    // 3. Check for Active Subscriptions (Rule 2)
     const { count: activeSubsCount, error: subsError } = await supabaseAdmin
       .from('subscriptions')
       .select('*', { count: 'exact', head: true })
@@ -51,7 +51,7 @@ serve(async (req) => {
 
     const hasActiveSubscription = (activeSubsCount || 0) > 0;
 
-    // 4. Check for Overdue Invoices (past_due or open/unpaid beyond due date)
+    // 4. Check for Overdue Invoices (Rule 3 - used to trigger grace/restriction)
     const { data: overdueInvoices, error: invoiceError } = await supabaseAdmin
       .from('invoices')
       .select('id, status, due_date')
