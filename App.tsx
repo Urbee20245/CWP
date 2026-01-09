@@ -33,7 +33,9 @@ import ErrorBoundary from './src/components/ErrorBoundary';
 import GlobalLoading from './src/components/GlobalLoading';
 import { useAuth } from './src/hooks/useAuth';
 import LoginPage from './src/pages/Login';
-import ClientProfile from './src/pages/ClientProfile'; // New Import
+import ClientProfile from './src/pages/ClientProfile';
+import PrivacyPolicy from './src/pages/PrivacyPolicy';
+import TermsAndConditions from './src/pages/TermsAndConditions';
 
 // Component that uses useLocation to conditionally render global elements
 const AppContent: React.FC = () => {
@@ -64,6 +66,8 @@ const AppContent: React.FC = () => {
         <Route path="/jetsuite" element={<JetSuitePage />} />
         <Route path="/jetviz" element={<JetVizPage />} />
         <Route path="/jet-local-optimizer" element={<JetLocalOptimizerPage />} />
+        <Route path="/privacy-policy" element={<PrivacyPolicy />} />
+        <Route path="/terms-and-conditions" element={<TermsAndConditions />} />
         
         {/* Dedicated Login Page */}
         <Route path="/login" element={<LoginPage />} />
@@ -95,7 +99,7 @@ const AppContent: React.FC = () => {
           <Route path="dashboard" element={<ClientDashboard />} />
           <Route path="projects/:id" element={<ClientProjectDetail />} />
           <Route path="billing" element={<ClientBilling />} />
-          <Route path="profile" element={<ClientProfile />} /> {/* New Route */}
+          <Route path="profile" element={<ClientProfile />} />
         </Route>
         
         {/* Global 404 Fallback */}
