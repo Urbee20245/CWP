@@ -40,11 +40,11 @@ const VoiceAgent: React.FC = () => {
   // --- AUDIO UTILS ---
   const floatTo16BitPCM = (float32Array: Float32Array) => {
     const buffer = new ArrayBuffer(float32Array.length * 2);
-    const view = new DataView(buffer);
+    const dataView = new DataView(buffer);
     let offset = 0;
     for (let i = 0; i < float32Array.length; i++, offset += 2) {
       let s = Math.max(-1, Math.min(1, float32Array[i]));
-      view.setInt16(offset, s < 0 ? s * 0x8000 : s * 0x7FFF, true);
+      dataView.setInt16(offset, s < 0 ? s * 0x8000 : s * 0x7FFF, true);
     }
     return buffer;
   };
@@ -99,7 +99,6 @@ const VoiceAgent: React.FC = () => {
               
               YOUR ROLE:
               - Be helpful, concise, and professional.
-              - Answer questions about services.
               - Encourage users to book a consultation or use the free JetSuite tools.
               - Do not make up technical details.
               `
@@ -296,9 +295,8 @@ const VoiceAgent: React.FC = () => {
         className={`fixed bottom-8 right-8 z-40 group ${isOpen ? 'translate-y-24 opacity-0 pointer-events-none' : 'translate-y-0 opacity-100'} transition-all duration-500`}
       >
         <div className="absolute inset-0 bg-indigo-500 rounded-full blur opacity-40 group-hover:opacity-60 animate-pulse"></div>
-        <div className="relative bg-slate-900 text-white p-4 rounded-full shadow-2xl border border-slate-700 flex items-center gap-3 hover:scale-105 transition-transform">
+        <div className="relative bg-slate-900 text-white p-4 rounded-full shadow-2xl border border-slate-700 flex items-center justify-center hover:scale-105 transition-transform">
             <Bot className="w-5 h-5 text-indigo-400" />
-            <span className="font-semibold pr-2">Chat with Luna</span>
         </div>
       </button>
 
