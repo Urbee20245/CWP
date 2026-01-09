@@ -305,7 +305,7 @@ const ClientBilling: React.FC = () => {
                             Maintenance plans cover ongoing support, hosting, and updates. Billing status does not affect your access to this portal.
                         </p>
 
-                      {activeSubscription || stripeCustomerId ? (
+                      {activeSubscription ? (
   <button 
     onClick={handlePortalSession}
     disabled={isProcessing || !stripeCustomerId}
