@@ -65,8 +65,12 @@ export default function LoginPage() {
         if (actionType === 'login') {
             result = await AuthService.secureLogin(email, password, recaptchaToken);
             console.log("edge_invoke_result: login success", result);
-            // The useAuth hook will detect the session change and trigger the redirect,
-            // but we ensure the component unmounts cleanly by letting the top-level check handle it.
+            
+            // --- IMMEDIATE REDIRECT ---
+            console.log("redirecting_after_login");
+            navigate('/back-office', { replace: true });
+            // --------------------------
+            
         } else {
             result = await AuthService.secureSignup(email, password, recaptchaToken);
             console.log("edge_invoke_result: signup success", result);
@@ -76,7 +80,9 @@ export default function LoginPage() {
                 setEmail('');
                 setPassword('');
             } else {
-                // If session is returned (e.g., auto-login), let the top-level check handle redirect
+                // If session is returned (e.g., auto-login), redirect immediately
+                console.log("redirecting_after_signup_auto_login");
+                navigate('/back-office', { replace: true });
             }
         }
     } catch (e: any) {
