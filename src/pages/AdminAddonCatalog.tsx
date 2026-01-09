@@ -15,14 +15,27 @@ interface Addon {
     billing_type: 'one_time' | 'subscription';
     is_active: boolean;
     sort_order: number;
+    is_jet_suite_only: boolean;
 }
 
 const AdminAddonCatalog: React.FC = () => {
     const [addons, setAddons] = useState<Addon[]>([]);
     const [isLoading, setIsLoading] = useState(true);
     const [isSaving, setIsSaving] = useState(false);
+    const [isCreating, setIsCreating] = useState(false);
     const [editAddon, setEditAddon] = useState<Addon | null>(null);
     const [saveError, setSaveError] = useState<string | null>(null);
+    const [formError, setFormError] = useState<string | null>(null);
+    
+    const [newAddonData, setNewAddonData] = useState({
+        name: '',
+        key: '',
+        description: '',
+        price: 0, // USD
+        billingType: 'subscription' as 'one_time' | 'subscription',
+        sortOrder: 0,
+        isJetSuiteOnly: false,
+    });
 
     const fetchAddons = useCallback(async () => {
         setIsLoading(true);
@@ -46,6 +59,60 @@ const AdminAddonCatalog: React.FC = () => {
     const handleEditClick = (addon: Addon) => {
         setEditAddon(addon);
         setSaveError(null);
+    };
+    
+    const handleNewFormChange = (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement>) => {
+        const { name, value, type, checked } = e.target;
+        setNewAddonData(prev => ({
+            ...prev,
+            [name]: type === 'checkbox' ? checked : (name === 'price' || name === 'sortOrder' ? parseFloat(value) : value),
+        }));
+    };
+    
+    const handleNewAiContentGenerated = (content: string) => {
+        setNewAddonData(prev => ({ ...prev, description: content }));
+    };
+
+    const handleCreateAddon = async (e: React.FormEvent) => {
+        e.preventDefault();
+        setFormError(null);
+        setIsCreating(true);
+
+        const { name, key, description, price, billingType, sortOrder, isJetSuiteOnly } = newAddonData;
+        const priceCents = Math.round(price * 100);
+
+        if (!name || !key || priceCents <= 0) {
+            setFormError('Name, Key, and Price must be set.');
+            setIsCreating(false);
+            return;
+        }
+        
+        const payload = {
+            name,
+            key: key.toLowerCase().replace(/\s/g, '_'),
+            description,
+            price_cents: priceCents,
+            billing_type: billingType,
+            is_active: true,
+            sort_order: sortOrder,
+            is_jet_suite_only: isJetSuiteOnly,
+        };
+
+        try {
+            const { error } = await supabase
+                .from('addon_catalog')
+                .insert(payload);
+
+            if (error) throw error;
+
+            alert(`Add-on '${name}' created successfully!`);
+            setNewAddonData({ name: '', key: '', description: '', price: 0, billingType: 'subscription', sortOrder: 0, isJetSuiteOnly: false });
+            fetchAddons(); // Refresh list
+        } catch (e: any) {
+            setFormError(e.message || 'Failed to create add-on. Check if the Key is unique.');
+        } finally {
+            setIsCreating(false);
+        }
     };
 
     const handleSave = async (e: React.FormEvent) => {
@@ -78,7 +145,7 @@ const AdminAddonCatalog: React.FC = () => {
         }
     };
     
-    const handleAiContentGenerated = (content: string) => {
+    const handleEditAiContentGenerated = (content: string) => {
         if (editAddon) {
             setEditAddon(prev => prev ? { ...prev, description: content } : null);
         }
@@ -94,44 +161,173 @@ const AdminAddonCatalog: React.FC = () => {
                     <Zap className="w-7 h-7 text-indigo-600" /> AI Add-on Catalog Management
                 </h1>
 
-                <div className="bg-white rounded-xl shadow-lg border border-slate-100 p-6">
-                    <h2 className="text-xl font-bold text-slate-900 mb-6 border-b border-slate-100 pb-4">
-                        Available Add-ons ({addons.length})
-                    </h2>
+                <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
+                    
+                    {/* Left Column: Create New Add-on */}
+                    <div className="lg:col-span-1 bg-white p-6 rounded-xl shadow-lg border border-slate-100 h-fit">
+                        <h2 className="text-xl font-bold text-slate-900 mb-4 flex items-center gap-2 border-b border-slate-100 pb-4">
+                            <Plus className="w-5 h-5 text-indigo-600" /> Create New Add-on
+                        </h2>
+                        
+                        {formError && (
+                            <div className="p-3 mb-4 bg-red-100 border border-red-300 text-red-800 rounded-lg text-sm flex items-center gap-2">
+                                <AlertTriangle className="w-4 h-4" />
+                                {formError}
+                            </div>
+                        )}
 
-                    {isLoading ? (
-                        <div className="flex justify-center items-center h-32">
-                            <Loader2 className="w-6 h-6 animate-spin text-indigo-600" />
-                        </div>
-                    ) : (
-                        <div className="space-y-4">
-                            {addons.map(addon => (
-                                <div key={addon.id} className="p-4 bg-slate-50 rounded-lg border border-slate-100 flex justify-between items-center hover:bg-slate-100 transition-colors">
-                                    <div className="flex-1 min-w-0">
-                                        <div className="flex items-center gap-2 mb-1">
-                                            <span className="font-bold text-slate-900 truncate">{addon.name}</span>
-                                            <span className={`px-2 py-0.5 rounded-full text-xs font-semibold ${getStatusColor(addon.is_active)}`}>
-                                                {addon.is_active ? 'Active' : 'Inactive'}
-                                            </span>
-                                        </div>
-                                        <p className="text-xs text-slate-500 truncate">{addon.description}</p>
-                                    </div>
-                                    <div className="flex items-center gap-4 flex-shrink-0 ml-4">
-                                        <div className="text-right">
-                                            <p className="font-bold text-slate-900">{formatCurrency(addon.price_cents)}</p>
-                                            <p className="text-xs text-slate-500">{addon.billing_type === 'subscription' ? 'Monthly' : 'One-Time'}</p>
-                                        </div>
-                                        <button 
-                                            onClick={() => handleEditClick(addon)}
-                                            className="p-1 rounded-full text-indigo-600 hover:bg-indigo-100 transition-colors"
-                                        >
-                                            <Edit className="w-4 h-4" />
-                                        </button>
+                        <form onSubmit={handleCreateAddon} className="space-y-4">
+                            <div>
+                                <label className="block text-sm font-bold text-slate-700 mb-1">Name *</label>
+                                <input
+                                    type="text"
+                                    name="name"
+                                    value={newAddonData.name}
+                                    onChange={handleNewFormChange}
+                                    className="w-full p-2 border border-slate-300 rounded-lg text-sm"
+                                    required
+                                    disabled={isCreating}
+                                />
+                            </div>
+                            <div>
+                                <label className="block text-sm font-bold text-slate-700 mb-1">Key (Internal ID) *</label>
+                                <input
+                                    type="text"
+                                    name="key"
+                                    value={newAddonData.key}
+                                    onChange={handleNewFormChange}
+                                    placeholder="e.g., missed_call_automation"
+                                    className="w-full p-2 border border-slate-300 rounded-lg text-sm"
+                                    required
+                                    disabled={isCreating}
+                                />
+                                <p className="text-xs text-slate-500 mt-1">Must be unique, lowercase, and use underscores.</p>
+                            </div>
+                            <div>
+                                <div className="flex justify-between items-center">
+                                    <label className="block text-sm font-bold text-slate-700 mb-1">Description</label>
+                                    <AiContentGenerator
+                                        entityType="Add-on Service"
+                                        entityName={newAddonData.name || 'New Add-on'}
+                                        initialContent={newAddonData.description}
+                                        onGenerate={handleNewAiContentGenerated}
+                                        pricingType={newAddonData.billingType}
+                                        price={newAddonData.price}
+                                    />
+                                </div>
+                                <textarea
+                                    name="description"
+                                    value={newAddonData.description}
+                                    onChange={handleNewFormChange}
+                                    rows={2}
+                                    className="w-full p-2 border border-slate-300 rounded-lg text-sm resize-none"
+                                    disabled={isCreating}
+                                />
+                            </div>
+                            <div className="grid grid-cols-2 gap-4">
+                                <div>
+                                    <label className="block text-sm font-medium text-slate-700 mb-1">Price (USD) *</label>
+                                    <div className="relative">
+                                        <span className="absolute left-3 top-2.5 text-slate-500 text-sm">$</span>
+                                        <input
+                                            type="number"
+                                            name="price"
+                                            value={newAddonData.price || ''}
+                                            onChange={handleNewFormChange}
+                                            className="w-full pl-6 pr-2 py-2 border border-slate-300 rounded-lg text-sm"
+                                            required
+                                            min="0.01"
+                                            step="0.01"
+                                            disabled={isCreating}
+                                        />
                                     </div>
                                 </div>
-                            ))}
-                        </div>
-                    )}
+                                <div>
+                                    <label className="block text-sm font-medium text-slate-700 mb-1">Billing Type *</label>
+                                    <select
+                                        name="billingType"
+                                        value={newAddonData.billingType}
+                                        onChange={handleNewFormChange}
+                                        className="w-full p-2 border border-slate-300 rounded-lg text-sm"
+                                        required
+                                        disabled={isCreating}
+                                    >
+                                        <option value="subscription">Monthly Subscription</option>
+                                        <option value="one_time">One-Time Payment</option>
+                                    </select>
+                                </div>
+                            </div>
+                            
+                            <div className="flex items-center gap-4 pt-2">
+                                <label className="flex items-center text-sm font-medium text-slate-700">
+                                    <input
+                                        type="checkbox"
+                                        name="isJetSuiteOnly"
+                                        checked={newAddonData.isJetSuiteOnly}
+                                        onChange={handleNewFormChange}
+                                        className="w-4 h-4 text-indigo-600 border-slate-300 rounded focus:ring-indigo-500 mr-2"
+                                        disabled={isCreating}
+                                    />
+                                    Internal Only (JetSuite)
+                                </label>
+                            </div>
+                            
+                            <button
+                                type="submit"
+                                disabled={isCreating || !newAddonData.name || !newAddonData.key || newAddonData.price <= 0}
+                                className="w-full py-3 bg-indigo-600 text-white rounded-lg font-semibold hover:bg-indigo-700 transition-colors disabled:opacity-50 flex items-center justify-center gap-2"
+                            >
+                                {isCreating ? <Loader2 className="w-5 h-5 animate-spin" /> : <Plus className="w-5 h-5" />}
+                                {isCreating ? 'Creating...' : 'Create Add-on'}
+                            </button>
+                        </form>
+                    </div>
+
+                    {/* Right Column: Product List */}
+                    <div className="lg:col-span-2 bg-white p-6 rounded-xl shadow-lg border border-slate-100">
+                        <h2 className="text-xl font-bold text-slate-900 mb-6 border-b border-slate-100 pb-4">
+                            Available Add-ons ({addons.length})
+                        </h2>
+
+                        {isLoading ? (
+                            <div className="flex justify-center items-center h-32">
+                                <Loader2 className="w-6 h-6 animate-spin text-indigo-600" />
+                            </div>
+                        ) : (
+                            <div className="space-y-4">
+                                {addons.map(addon => (
+                                    <div key={addon.id} className="p-4 bg-slate-50 rounded-lg border border-slate-100 flex justify-between items-center hover:bg-slate-100 transition-colors">
+                                        <div className="flex-1 min-w-0">
+                                            <div className="flex items-center gap-2 mb-1">
+                                                <span className="font-bold text-slate-900 truncate">{addon.name}</span>
+                                                <span className={`px-2 py-0.5 rounded-full text-xs font-semibold ${getStatusColor(addon.is_active)}`}>
+                                                    {addon.is_active ? 'Active' : 'Inactive'}
+                                                </span>
+                                                {addon.is_jet_suite_only && (
+                                                    <span className="px-2 py-0.5 rounded-full text-xs font-semibold bg-purple-100 text-purple-800">
+                                                        Internal
+                                                    </span>
+                                                )}
+                                            </div>
+                                            <p className="text-xs text-slate-500 truncate">{addon.description}</p>
+                                        </div>
+                                        <div className="flex items-center gap-4 flex-shrink-0 ml-4">
+                                            <div className="text-right">
+                                                <p className="font-bold text-slate-900">{formatCurrency(addon.price_cents)}</p>
+                                                <p className="text-xs text-slate-500">{addon.billing_type === 'subscription' ? 'Monthly' : 'One-Time'}</p>
+                                            </div>
+                                            <button 
+                                                onClick={() => handleEditClick(addon)}
+                                                className="p-1 rounded-full text-indigo-600 hover:bg-indigo-100 transition-colors"
+                                            >
+                                                <Edit className="w-4 h-4" />
+                                            </button>
+                                        </div>
+                                    </div>
+                                ))}
+                            </div>
+                        )}
+                    </div>
                 </div>
             </div>
             
@@ -234,7 +430,7 @@ const AdminAddonCatalog: React.FC = () => {
                                         entityType="Add-on Service"
                                         entityName={editAddon.name}
                                         initialContent={editAddon.description}
-                                        onGenerate={handleAiContentGenerated}
+                                        onGenerate={handleEditAiContentGenerated}
                                         pricingType={editAddon.billing_type}
                                         price={editAddon.price_cents / 100}
                                     />
@@ -249,17 +445,28 @@ const AdminAddonCatalog: React.FC = () => {
                             </div>
                             
                             {/* Active Toggle */}
-                            <div className="flex items-center gap-2">
-                                <input
-                                    id="is_active"
-                                    type="checkbox"
-                                    checked={editAddon.is_active}
-                                    onChange={(e) => setEditAddon(prev => prev ? { ...prev, is_active: e.target.checked } : null)}
-                                    className="w-4 h-4 text-emerald-600 border-slate-300 rounded focus:ring-emerald-500"
-                                    disabled={isSaving}
-                                />
-                                <label htmlFor="is_active" className="text-sm font-medium text-slate-700">
-                                    Is Active (Visible to Clients)
+                            <div className="flex items-center gap-4 pt-2">
+                                <label className="flex items-center text-sm font-medium text-slate-700">
+                                    <input
+                                        id="is_active"
+                                        type="checkbox"
+                                        checked={editAddon.is_active}
+                                        onChange={(e) => setEditAddon(prev => prev ? { ...prev, is_active: e.target.checked } : null)}
+                                        className="w-4 h-4 text-emerald-600 border-slate-300 rounded focus:ring-emerald-500 mr-2"
+                                        disabled={isSaving}
+                                    />
+                                    Active (Visible to Clients)
+                                </label>
+                                <label className="flex items-center text-sm font-medium text-slate-700">
+                                    <input
+                                        id="is_jet_suite_only"
+                                        type="checkbox"
+                                        checked={editAddon.is_jet_suite_only}
+                                        onChange={(e) => setEditAddon(prev => prev ? { ...prev, is_jet_suite_only: e.target.checked } : null)}
+                                        className="w-4 h-4 text-purple-600 border-slate-300 rounded focus:ring-purple-500 mr-2"
+                                        disabled={isSaving}
+                                    />
+                                    Internal Only (JetSuite)
                                 </label>
                             </div>
 
