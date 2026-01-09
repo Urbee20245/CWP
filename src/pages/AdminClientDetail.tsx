@@ -136,45 +136,57 @@ const AdminClientDetail: React.FC = () => {
     if (!id) return;
     setFetchError(null);
 
-    const { data, error } = await supabase
+    // 1. Fetch Main Client Data (including profile)
+    const { data: clientData, error: clientError } = await supabase
       .from('clients')
       .select(`
           id, business_name, phone, address, status, notes, owner_profile_id, stripe_customer_id, billing_email, service_status, cancellation_reason, cancellation_effective_date,
-          profiles (id, full_name, email, role),
-          projects (id, title, status, progress_percent),
-          invoices (id, amount_due, status, hosted_invoice_url, pdf_url, created_at, last_reminder_sent_at, disable_reminders, stripe_invoice_id),
-          subscriptions (id, stripe_price_id, status, current_period_end, cancel_at_period_end),
-          deposits (id, amount_cents, status, stripe_invoice_id, applied_to_invoice_id, created_at),
-          service_pause_logs (id, action, internal_note, client_acknowledged, created_at),
-          client_addon_requests (id, addon_key, addon_name, status, notes, requested_at)
+          profiles (id, full_name, email, role)
       `)
       .eq('id', id)
-      .order('created_at', { foreignTable: 'projects', ascending: false })
-      .order('created_at', { foreignTable: 'invoices', ascending: false })
-      .order('created_at', { foreignTable: 'subscriptions', ascending: false })
-      .order('created_at', { foreignTable: 'deposits', ascending: false })
-      .order('created_at', { foreignTable: 'service_pause_logs', ascending: false })
-      .order('requested_at', { foreignTable: 'client_addon_requests', ascending: false })
       .single();
 
-    if (error) {
-      console.error('Error fetching client details:', error);
+    if (clientError) {
+      console.error('Error fetching client details:', clientError);
       setClient(null);
-      setFetchError(error.message || 'Failed to load client data.');
-    } else {
-      const clientData = data as unknown as Client;
-      
-      // Normalize nested arrays to prevent crashes
-      clientData.projects = ensureArray(clientData.projects);
-      clientData.invoices = ensureArray(clientData.invoices);
-      clientData.subscriptions = ensureArray(clientData.subscriptions);
-      clientData.deposits = ensureArray(clientData.deposits);
-      clientData.pause_logs = ensureArray(clientData.pause_logs);
-      clientData.addon_requests = ensureArray(clientData.client_addon_requests); // New
-      
-      setClient(clientData);
-      setAdminNotes(clientData.notes || '');
+      setFetchError(clientError.message || 'Failed to load client data.');
+      setIsLoading(false);
+      return;
     }
+    
+    const clientRecord = clientData as unknown as Client;
+
+    // 2. Fetch related data separately (Decoupled to prevent schema cache crash)
+    const [
+        { data: projectsData },
+        { data: invoicesData },
+        { data: subscriptionsData },
+        { data: depositsData },
+        { data: pauseLogsData },
+        { data: addonRequestsData },
+    ] = await Promise.all([
+        supabase.from('projects').select('id, title, status, progress_percent').eq('client_id', id).order('created_at', { ascending: false }),
+        supabase.from('invoices').select('id, amount_due, status, hosted_invoice_url, pdf_url, created_at, last_reminder_sent_at, disable_reminders, stripe_invoice_id').eq('client_id', id).order('created_at', { ascending: false }),
+        supabase.from('subscriptions').select('id, stripe_price_id, status, current_period_end, cancel_at_period_end').eq('client_id', id).order('created_at', { ascending: false }),
+        supabase.from('deposits').select('id, amount_cents, status, stripe_invoice_id, applied_to_invoice_id, created_at').eq('client_id', id).order('created_at', { ascending: false }),
+        supabase.from('service_pause_logs').select('id, action, internal_note, client_acknowledged, created_at').eq('client_id', id).order('created_at', { ascending: false }),
+        supabase.from('client_addon_requests').select('id, addon_key, addon_name, status, notes, requested_at').eq('client_id', id).order('requested_at', { ascending: false }),
+    ]);
+    
+    // 3. Merge and set state
+    const mergedClient: Client = {
+        ...clientRecord,
+        profiles: clientRecord.profiles as Profile,
+        projects: ensureArray(projectsData) as ProjectSummary[],
+        invoices: ensureArray(invoicesData) as InvoiceSummary[],
+        subscriptions: ensureArray(subscriptionsData) as SubscriptionSummary[],
+        deposits: ensureArray(depositsData) as DepositSummary[],
+        pause_logs: ensureArray(pauseLogsData) as PauseLog[],
+        addon_requests: ensureArray(addonRequestsData) as AddonRequest[],
+    };
+    
+    setClient(mergedClient);
+    setAdminNotes(mergedClient.notes || '');
     setIsLoading(false);
   }, [id]);
   
