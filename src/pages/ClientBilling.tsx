@@ -305,17 +305,24 @@ const ClientBilling: React.FC = () => {
                             Maintenance plans cover ongoing support, hosting, and updates. Billing status does not affect your access to this portal.
                         </p>
 
-                        <button 
-                            onClick={handlePortalSession}
-                            disabled={isProcessing || !stripeCustomerId}
-                            className="w-full py-3 bg-indigo-600 text-white rounded-lg font-semibold hover:bg-indigo-700 transition-colors disabled:opacity-50 flex items-center justify-center gap-2"
-                        >
-                            {isProcessing ? <Loader2 className="w-4 h-4 animate-spin" /> : <CreditCard className="w-4 h-4" />}
-                            Manage Billing & Plans
-                        </button>
-                        <p className="text-xs text-slate-500 mt-2 text-center">
-                            (Opens Stripe Customer Portal)
-                        </p>
+                      {activeSubscription || stripeCustomerId ? (
+  <button 
+    onClick={handlePortalSession}
+    disabled={isProcessing || !stripeCustomerId}
+    className="w-full py-3 bg-indigo-600 text-white rounded-lg font-semibold hover:bg-indigo-700 transition-colors disabled:opacity-50 flex items-center justify-center gap-2"
+  >
+    {isProcessing ? <Loader2 className="w-4 h-4 animate-spin" /> : <CreditCard className="w-4 h-4" />}
+    Manage Billing & Plans
+  </button>
+) : (
+  <div className="w-full py-3 bg-slate-100 text-slate-500 rounded-lg font-semibold text-center">
+    <p className="text-sm">No active plan</p>
+    <p className="text-xs mt-1">Billing portal available after first payment</p>
+  </div>
+)}
+<p className="text-xs text-slate-500 mt-2 text-center">
+  {(activeSubscription || stripeCustomerId) ? '(Opens Stripe Customer Portal)' : ''}
+</p>
                     </div>
                     
                     {/* Unapplied Credit */}
