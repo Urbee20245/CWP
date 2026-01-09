@@ -3,6 +3,7 @@ import { Mail, Phone, ArrowRight, Clock, Calendar, MapPin, CheckCircle2, AlertCi
 import { NavigationLink } from '../types';
 import { Link } from 'react-router-dom';
 import ReCAPTCHA from 'react-google-recaptcha';
+import { FormService } from '../src/services/formService'; // Import FormService
 
 // NOTE: This key must be set in .env.local or Vercel environment variables
 const RECAPTCHA_SITE_KEY = import.meta.env.VITE_RECAPTCHA_SITE_KEY;
@@ -30,12 +31,11 @@ const Contact: React.FC = () => {
                 throw new Error("reCAPTCHA verification failed. Please try again.");
             }
             
-            // --- SIMULATED BACKEND SUBMISSION ---
-            // In a real application, you would send formData and recaptchaToken to a secure Edge Function here.
-            console.log("Contact form submitted with reCAPTCHA token:", recaptchaToken);
-            
-            // Simulate API call delay and success
-            await new Promise(resolve => setTimeout(resolve, 1500));
+            // --- SECURE BACKEND SUBMISSION ---
+            await FormService.submitContactForm({
+                ...formData,
+                recaptchaToken,
+            });
             
             setFormStatus('success');
             setFormData({ name: '', email: '', phone: '', message: '' });

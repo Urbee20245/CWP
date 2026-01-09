@@ -14,6 +14,7 @@ import {
   Loader2
 } from 'lucide-react';
 import ReCAPTCHA from 'react-google-recaptcha';
+import { FormService } from '../src/services/formService'; // Import FormService
 
 // NOTE: This key must be set in .env.local or Vercel environment variables
 const RECAPTCHA_SITE_KEY = import.meta.env.VITE_RECAPTCHA_SITE_KEY;
@@ -209,11 +210,11 @@ const ContactPage: React.FC = () => {
             throw new Error("reCAPTCHA verification failed. Please try again.");
         }
         
-        // --- SIMULATED BACKEND SUBMISSION ---
-        console.log("Consultation form submitted with reCAPTCHA token:", recaptchaToken);
-        
-        // Simulate API call delay and success
-        await new Promise(resolve => setTimeout(resolve, 2000));
+        // --- SECURE BACKEND SUBMISSION ---
+        await FormService.submitConsultationForm({
+            ...formData,
+            recaptchaToken,
+        });
         
         setIsSubmitting(false);
         setIsSubmitted(true);
