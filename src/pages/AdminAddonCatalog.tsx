@@ -63,10 +63,21 @@ const AdminAddonCatalog: React.FC = () => {
     
     const handleNewFormChange = (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement>) => {
         const { name, value, type, checked } = e.target;
-        setNewAddonData(prev => ({
-            ...prev,
-            [name]: type === 'checkbox' ? checked : (name === 'price' || name === 'sortOrder' ? parseFloat(value) : value),
-        }));
+        
+        setNewAddonData(prev => {
+            let newState = {
+                ...prev,
+                [name]: type === 'checkbox' ? checked : (name === 'price' || name === 'sortOrder' ? parseFloat(value) : value),
+            };
+            
+            // Auto-generate key from name if the name field is being changed
+            if (name === 'name') {
+                const generatedKey = value.toLowerCase().replace(/\s+/g, '_').replace(/[^a-z0-9_]/g, '');
+                newState.key = generatedKey;
+            }
+            
+            return newState;
+        });
     };
     
     const handleNewAiContentGenerated = (content: string) => {
@@ -197,11 +208,12 @@ const AdminAddonCatalog: React.FC = () => {
                                     value={newAddonData.key}
                                     onChange={handleNewFormChange}
                                     placeholder="e.g., missed_call_automation"
-                                    className="w-full p-2 border border-slate-300 rounded-lg text-sm"
+                                    className="w-full p-2 border border-slate-300 rounded-lg text-sm bg-slate-100 text-slate-500"
                                     required
+                                    readOnly // Make it read-only since it's auto-generated
                                     disabled={isCreating}
                                 />
-                                <p className="text-xs text-slate-500 mt-1">Must be unique, lowercase, and use underscores.</p>
+                                <p className="text-xs text-slate-500 mt-1">Automatically generated from Name.</p>
                             </div>
                             <div>
                                 <div className="flex justify-between items-center">
