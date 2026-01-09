@@ -13,7 +13,7 @@ interface Addon {
     name: string;
     description: string;
     price_cents: number;
-    billing_type: 'one_time' | 'subscription';
+    billing_type: 'one_time' | 'subscription' | 'setup_plus_subscription';
     is_active: boolean;
 }
 
@@ -183,8 +183,8 @@ const ClientAddons: React.FC = () => {
                                 >
                                     <div className="flex justify-between items-start mb-4">
                                         <h3 className="text-xl font-bold text-slate-900">{addon.name}</h3>
-                                        <span className={`px-3 py-1 rounded-full text-xs font-semibold ${addon.billing_type === 'subscription' ? 'bg-purple-100 text-purple-800' : 'bg-blue-100 text-blue-800'}`}>
-                                            {addon.billing_type === 'subscription' ? 'Monthly' : 'One-Time'}
+                                        <span className={`px-3 py-1 rounded-full text-xs font-semibold ${addon.billing_type === 'subscription' ? 'bg-purple-100 text-purple-800' : addon.billing_type === 'one_time' ? 'bg-blue-100 text-blue-800' : 'bg-indigo-100 text-indigo-800'}`}>
+                                            {addon.billing_type === 'subscription' ? 'Monthly' : addon.billing_type === 'one_time' ? 'One-Time' : 'Setup + Monthly'}
                                         </span>
                                     </div>
                                     

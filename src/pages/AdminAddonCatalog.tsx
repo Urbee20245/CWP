@@ -12,7 +12,7 @@ interface Addon {
     name: string;
     description: string;
     price_cents: number;
-    billing_type: 'one_time' | 'subscription';
+    billing_type: 'one_time' | 'subscription' | 'setup_plus_subscription';
     is_active: boolean;
     sort_order: number;
     is_jet_suite_only: boolean;
@@ -32,7 +32,7 @@ const AdminAddonCatalog: React.FC = () => {
         key: '',
         description: '',
         price: 0, // USD
-        billingType: 'subscription' as 'one_time' | 'subscription',
+        billingType: 'subscription' as 'one_time' | 'subscription' | 'setup_plus_subscription',
         sortOrder: 0,
         isJetSuiteOnly: false,
     });
@@ -46,8 +46,11 @@ const AdminAddonCatalog: React.FC = () => {
 
         if (error) {
             console.error('Error fetching addons:', error);
+            // Display a user-friendly error if the table is inaccessible
+            setFormError("Failed to load catalog. Check database connection or RLS policies.");
         } else {
             setAddons(data as Addon[]);
+            setFormError(null); // Clear error on success
         }
         setIsLoading(false);
     }, []);
@@ -210,7 +213,7 @@ const AdminAddonCatalog: React.FC = () => {
                                     placeholder="e.g., missed_call_automation"
                                     className="w-full p-2 border border-slate-300 rounded-lg text-sm bg-slate-100 text-slate-500"
                                     required
-                                    readOnly // Make it read-only since it's auto-generated
+                                    readOnly
                                     disabled={isCreating}
                                 />
                                 <p className="text-xs text-slate-500 mt-1">Automatically generated from Name.</p>
@@ -266,6 +269,7 @@ const AdminAddonCatalog: React.FC = () => {
                                     >
                                         <option value="subscription">Monthly Subscription</option>
                                         <option value="one_time">One-Time Payment</option>
+                                        <option value="setup_plus_subscription">Setup Fee + Monthly</option>
                                     </select>
                                 </div>
                             </div>
@@ -326,7 +330,10 @@ const AdminAddonCatalog: React.FC = () => {
                                         <div className="flex items-center gap-4 flex-shrink-0 ml-4">
                                             <div className="text-right">
                                                 <p className="font-bold text-slate-900">{formatCurrency(addon.price_cents)}</p>
-                                                <p className="text-xs text-slate-500">{addon.billing_type === 'subscription' ? 'Monthly' : 'One-Time'}</p>
+                                                <p className="text-xs text-slate-500">
+                                                    {addon.billing_type === 'subscription' ? 'Monthly' : 
+                                                     addon.billing_type === 'one_time' ? 'One-Time' : 'Setup + Monthly'}
+                                                </p>
                                             </div>
                                             <button 
                                                 onClick={() => handleEditClick(addon)}
@@ -413,13 +420,14 @@ const AdminAddonCatalog: React.FC = () => {
                                     <label className="block text-sm font-bold text-slate-700 mb-1">Billing Type *</label>
                                     <select
                                         value={editAddon.billing_type}
-                                        onChange={(e) => setEditAddon(prev => prev ? { ...prev, billing_type: e.target.value as 'one_time' | 'subscription' } : null)}
+                                        onChange={(e) => setEditAddon(prev => prev ? { ...prev, billing_type: e.target.value as 'one_time' | 'subscription' | 'setup_plus_subscription' } : null)}
                                         className="w-full p-2 border border-slate-300 rounded-lg text-sm"
                                         required
                                         disabled={isSaving}
                                     >
                                         <option value="subscription">Monthly Subscription</option>
                                         <option value="one_time">One-Time Payment</option>
+                                        <option value="setup_plus_subscription">Setup Fee + Monthly</option>
                                     </select>
                                 </div>
                                 <div>
