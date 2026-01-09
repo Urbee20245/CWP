@@ -7,7 +7,8 @@ const invokeEdgeFunction = async (functionName: string, payload: any) => {
 
   if (error) {
     console.error(`Error invoking ${functionName}:`, error);
-    throw new Error(error.message || `Failed to call ${functionName}`);
+    // Ensure a proper Error object is thrown, providing a descriptive message for timeouts/network issues.
+    throw new Error(error.message || `Edge Function Timeout or Network Error: Failed to call ${functionName}`);
   }
   
   // Check for structured error response from the Edge Function body
