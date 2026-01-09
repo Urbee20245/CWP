@@ -6,6 +6,7 @@ import { useNavigate, Link } from 'react-router-dom';
 import { useAuth } from '../hooks/useAuth';
 import ReCAPTCHA from 'react-google-recaptcha';
 import { AuthService } from '../services/authService';
+import { supabase } from '../integrations/supabase/client'; // Import supabase client
 
 // NOTE: This key must be set in .env.local or Vercel environment variables
 const RECAPTCHA_SITE_KEY = import.meta.env.VITE_RECAPTCHA_SITE_KEY;
@@ -17,7 +18,7 @@ export default function LoginPage() {
   const [error, setError] = useState<string | null>(null);
   const [isSignupMode, setIsSignupMode] = useState(false);
   const [signupSuccess, setSignupSuccess] = useState(false);
-  const [isRedirecting, setIsRedirecting] = useState(false); // New state to handle immediate redirect loading
+  const [isRedirecting, setIsRedirecting] = useState(false); 
   
   // Ref for reCAPTCHA component to manually trigger token generation
   const recaptchaRef = useRef<ReCAPTCHA>(null);
@@ -56,45 +57,45 @@ export default function LoginPage() {
 
     if (!recaptchaToken) {
         setLoading(false);
-        return; // Error already set by executeRecaptcha if key is missing
+        return; 
     }
 
     try {
         console.log("edge_invoke_start");
-        let result;
+        const result = actionType === 'login' 
+            ? await AuthService.secureLogin(email, password, recaptchaToken)
+            : await AuthService.secureSignup(email, password, recaptchaToken);
+            
+        console.log(`edge_invoke_result: ${actionType} success`, result);
         
-        if (actionType === 'login') {
-            result = await AuthService.secureLogin(email, password, recaptchaToken);
-            console.log("edge_invoke_result: login success", result);
+        if (actionType === 'login' || (actionType === 'signup' && result.access_token)) {
             
-            // STEP 1 & 5: IMMEDIATE REDIRECT & LOG
-            console.log("redirecting_after_login");
-            setIsRedirecting(true); // Prevent form flicker
-            navigate('/back-office', { replace: true });
-            // --------------------------
-            
-        } else {
-            result = await AuthService.secureSignup(email, password, recaptchaToken);
-            console.log("edge_invoke_result: signup success", result);
-            
-            if (result.data.user && !result.data.session) {
-                setSignupSuccess(true);
-                setEmail('');
-                setPassword('');
-            } else {
-                // If session is returned (e.g., auto-login), redirect immediately
-                console.log("redirecting_after_signup_auto_login");
-                setIsRedirecting(true); // Prevent form flicker
-                navigate('/back-office', { replace: true });
+            // STEP 2: Set the session explicitly on the client
+            if (result.access_token && result.refresh_token) {
+                await supabase.auth.setSession({
+                    access_token: result.access_token,
+                    refresh_token: result.refresh_token,
+                });
+                console.log("session_set_success");
             }
+            
+            // STEP 3: Redirect immediately after session is set
+            console.log("redirecting_after_login");
+            setIsRedirecting(true); 
+            navigate('/back-office', { replace: true });
+            
+        } else if (actionType === 'signup' && result.user && !result.access_token) {
+            // Standard signup flow requiring email confirmation
+            setSignupSuccess(true);
+            setEmail('');
+            setPassword('');
         }
+        
     } catch (e: any) {
         console.error("Authentication failed:", e);
-        // Step 2: Surface the actual error message
         setError(e.message || `${actionType} failed. Check credentials or try again.`);
     } finally {
         setLoading(false);
-        // Reset reCAPTCHA token after use
         recaptchaRef.current?.reset();
     }
   }

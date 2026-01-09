@@ -92,7 +92,14 @@ serve(async (req) => {
     }
     
     console.log('[secure-auth] edge_invoke_result: success');
-    return jsonResponse({ success: true, data: authResult.data });
+    
+    // Return tokens and user data for client-side session setting
+    return jsonResponse({ 
+        success: true, 
+        user: authResult.data.user,
+        access_token: authResult.data.session?.access_token,
+        refresh_token: authResult.data.session?.refresh_token,
+    });
 
   } catch (error: any) {
     console.error('[secure-auth] Unhandled error:', error.message);
