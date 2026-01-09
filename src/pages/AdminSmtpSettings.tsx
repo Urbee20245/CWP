@@ -11,8 +11,8 @@ interface SmtpSettings {
     host: string;
     port: number;
     secure: boolean;
-    username: string;
     password_encrypted: string; // We only store the encrypted version
+    username: string;
     from_name: string;
     from_email: string;
     is_active: boolean;
@@ -85,6 +85,7 @@ const AdminSmtpSettings: React.FC = () => {
         }
         setIsTesting(true);
         setTestResult('idle');
+        setSaveError(null); // Clear previous error before testing
         
         try {
             await AdminService.sendEmail(
@@ -97,7 +98,7 @@ const AdminSmtpSettings: React.FC = () => {
             setTestResult('success');
         } catch (e: any) {
             setTestResult('failed');
-            setSaveError(`Test failed: ${e.message}`);
+            setSaveError(e.message || 'Test failed due to an unknown error.');
         } finally {
             setIsTesting(false);
         }
@@ -128,7 +129,14 @@ const AdminSmtpSettings: React.FC = () => {
                     {saveError && (
                         <div className="p-3 mb-4 bg-red-100 border border-red-300 text-red-800 rounded-lg text-sm flex items-center gap-2">
                             <AlertTriangle className="w-4 h-4" />
-                            {saveError}
+                            {saveError.includes('non-2xx') || saveError.includes('Failed to call') ? (
+                                <div>
+                                    <p className="font-bold">Test failed: Check Supabase Logs for detailed error.</p>
+                                    <p className="mt-1 text-xs">This usually means the SMTP server rejected the connection or the password decryption failed. Ensure the <code className="font-mono bg-red-200 px-1 rounded">SMTP_ENCRYPTION_KEY</code> secret is set correctly in Supabase.</p>
+                                </div>
+                            ) : (
+                                saveError
+                            )}
                         </div>
                     )}
 
