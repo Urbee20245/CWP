@@ -5,14 +5,19 @@ import { handleCors, jsonResponse, errorResponse } from '../_shared/utils.ts';
 const GEMINI_API_KEY = Deno.env.get('GEMINI_API_KEY');
 
 if (!GEMINI_API_KEY) {
-  throw new Error('GEMINI_API_KEY is not set.');
+  // Log error but do not throw, allowing the function to return a 500 error response
+  console.error('[generate-admin-content] GEMINI_API_KEY is not set.');
 }
 
-const ai = new GoogleGenAI({ apiKey: GEMINI_API_KEY });
+const ai = GEMINI_API_KEY ? new GoogleGenAI({ apiKey: GEMINI_API_KEY }) : null;
 
 serve(async (req) => {
   const corsResponse = handleCors(req);
   if (corsResponse) return corsResponse;
+
+  if (!ai) {
+    return errorResponse('AI service is unavailable. GEMINI_API_KEY is missing.', 500);
+  }
 
   try {
     const { entity_type, entity_name, entity_category, pricing_type, key_features, tone, additional_notes } = await req.json();
