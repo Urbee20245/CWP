@@ -161,57 +161,67 @@ const ClientAddons: React.FC = () => {
                     </div>
                 )}
 
-                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-                    {addons.map((addon) => {
-                        const status = getRequestStatus(addon.key);
-                        const isRequested = status === 'requested';
-                        const isApproved = status === 'approved';
-                        
-                        return (
-                            <div 
-                                key={addon.id} 
-                                className={`bg-white p-6 rounded-xl shadow-lg border ${isApproved ? 'border-emerald-300' : 'border-slate-100'} flex flex-col`}
-                            >
-                                <div className="flex justify-between items-start mb-4">
-                                    <h3 className="text-xl font-bold text-slate-900">{addon.name}</h3>
-                                    <span className={`px-3 py-1 rounded-full text-xs font-semibold ${addon.billing_type === 'subscription' ? 'bg-purple-100 text-purple-800' : 'bg-blue-100 text-blue-800'}`}>
-                                        {addon.billing_type === 'subscription' ? 'Monthly' : 'One-Time'}
-                                    </span>
+                {addons.length === 0 ? (
+                    <div className="p-12 bg-white rounded-xl shadow-lg border border-slate-200 text-center">
+                        <Zap className="w-10 h-10 text-slate-400 mx-auto mb-4" />
+                        <h2 className="text-xl font-bold text-slate-900 mb-2">No Add-ons Currently Available</h2>
+                        <p className="text-slate-600">
+                            No add-ons are currently available. Contact support for custom services.
+                        </p>
+                    </div>
+                ) : (
+                    <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+                        {addons.map((addon) => {
+                            const status = getRequestStatus(addon.key);
+                            const isRequested = status === 'requested';
+                            const isApproved = status === 'approved';
+                            
+                            return (
+                                <div 
+                                    key={addon.id} 
+                                    className={`bg-white p-6 rounded-xl shadow-lg border ${isApproved ? 'border-emerald-300' : 'border-slate-100'} flex flex-col`}
+                                >
+                                    <div className="flex justify-between items-start mb-4">
+                                        <h3 className="text-xl font-bold text-slate-900">{addon.name}</h3>
+                                        <span className={`px-3 py-1 rounded-full text-xs font-semibold ${addon.billing_type === 'subscription' ? 'bg-purple-100 text-purple-800' : 'bg-blue-100 text-blue-800'}`}>
+                                            {addon.billing_type === 'subscription' ? 'Monthly' : 'One-Time'}
+                                        </span>
+                                    </div>
+                                    
+                                    <p className="text-3xl font-bold text-slate-900 mb-4">
+                                        {formatCurrency(addon.price_cents)}
+                                        <span className="text-base font-medium text-slate-500">/mo</span>
+                                    </p>
+                                    
+                                    <p className="text-sm text-slate-600 mb-6 flex-grow">{addon.description}</p>
+                                    
+                                    {isApproved ? (
+                                        <button 
+                                            disabled
+                                            className="w-full py-3 bg-emerald-500 text-white rounded-lg font-semibold text-sm flex items-center justify-center gap-2"
+                                        >
+                                            <CheckCircle2 className="w-4 h-4" /> Service Approved
+                                        </button>
+                                    ) : isRequested ? (
+                                        <button 
+                                            disabled
+                                            className="w-full py-3 bg-amber-500 text-white rounded-lg font-semibold text-sm flex items-center justify-center gap-2"
+                                        >
+                                            <Clock className="w-4 h-4" /> Request Pending
+                                        </button>
+                                    ) : (
+                                        <button 
+                                            onClick={() => setSelectedAddonKey(addon.key)}
+                                            className="w-full py-3 bg-indigo-600 text-white rounded-lg font-semibold hover:bg-indigo-700 transition-colors text-sm flex items-center justify-center gap-2"
+                                        >
+                                            <Plus className="w-4 h-4" /> Request Add-on
+                                        </button>
+                                    )}
                                 </div>
-                                
-                                <p className="text-3xl font-bold text-slate-900 mb-4">
-                                    {formatCurrency(addon.price_cents)}
-                                    <span className="text-base font-medium text-slate-500">/mo</span>
-                                </p>
-                                
-                                <p className="text-sm text-slate-600 mb-6 flex-grow">{addon.description}</p>
-                                
-                                {isApproved ? (
-                                    <button 
-                                        disabled
-                                        className="w-full py-3 bg-emerald-500 text-white rounded-lg font-semibold text-sm flex items-center justify-center gap-2"
-                                    >
-                                        <CheckCircle2 className="w-4 h-4" /> Service Approved
-                                    </button>
-                                ) : isRequested ? (
-                                    <button 
-                                        disabled
-                                        className="w-full py-3 bg-amber-500 text-white rounded-lg font-semibold text-sm flex items-center justify-center gap-2"
-                                    >
-                                        <Clock className="w-4 h-4" /> Request Pending
-                                    </button>
-                                ) : (
-                                    <button 
-                                        onClick={() => setSelectedAddonKey(addon.key)}
-                                        className="w-full py-3 bg-indigo-600 text-white rounded-lg font-semibold hover:bg-indigo-700 transition-colors text-sm flex items-center justify-center gap-2"
-                                    >
-                                        <Plus className="w-4 h-4" /> Request Add-on
-                                    </button>
-                                )}
-                            </div>
-                        );
-                    })}
-                </div>
+                            );
+                        })}
+                    </div>
+                )}
                 
                 {/* Request Modal/Form */}
                 {selectedAddonKey && (
