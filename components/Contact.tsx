@@ -1,16 +1,52 @@
-import React, { useState } from 'react';
-import { Mail, Phone, ArrowRight, Clock, Calendar, MapPin, CheckCircle2 } from 'lucide-react';
+import React, { useState, useRef } from 'react';
+import { Mail, Phone, ArrowRight, Clock, Calendar, MapPin, CheckCircle2, AlertCircle, Loader2 } from 'lucide-react';
 import { NavigationLink } from '../types';
 import { Link } from 'react-router-dom';
+import ReCAPTCHA from 'react-google-recaptcha';
+
+// NOTE: This key must be set in .env.local or Vercel environment variables
+const RECAPTCHA_SITE_KEY = import.meta.env.VITE_RECAPTCHA_SITE_KEY;
 
 const Contact: React.FC = () => {
-    const [formStatus, setFormStatus] = useState<'idle' | 'sending' | 'success'>('idle');
+    const [formStatus, setFormStatus] = useState<'idle' | 'sending' | 'success' | 'error'>('idle');
     const [formData, setFormData] = useState({ name: '', email: '', phone: '', message: '' });
+    const [formError, setFormError] = useState<string | null>(null);
+    const recaptchaRef = useRef<ReCAPTCHA>(null);
 
-    const handleSubmit = (e: React.FormEvent) => {
+    const handleSubmit = async (e: React.FormEvent) => {
         e.preventDefault();
         setFormStatus('sending');
-        setTimeout(() => setFormStatus('success'), 1500);
+        setFormError(null);
+
+        if (!RECAPTCHA_SITE_KEY) {
+            setFormError("reCAPTCHA is not configured. Please set VITE_RECAPTCHA_SITE_KEY.");
+            setFormStatus('error');
+            return;
+        }
+
+        try {
+            const recaptchaToken = await recaptchaRef.current?.execute('contact_form');
+            if (!recaptchaToken) {
+                throw new Error("reCAPTCHA verification failed. Please try again.");
+            }
+            
+            // --- SIMULATED BACKEND SUBMISSION ---
+            // In a real application, you would send formData and recaptchaToken to a secure Edge Function here.
+            console.log("Contact form submitted with reCAPTCHA token:", recaptchaToken);
+            
+            // Simulate API call delay and success
+            await new Promise(resolve => setTimeout(resolve, 1500));
+            
+            setFormStatus('success');
+            setFormData({ name: '', email: '', phone: '', message: '' });
+
+        } catch (error: any) {
+            console.error("Form submission error:", error);
+            setFormError(error.message || "Submission failed due to a security check or network error.");
+            setFormStatus('error');
+        } finally {
+            recaptchaRef.current?.reset();
+        }
     };
 
     const handleChange = (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>) => {
@@ -46,6 +82,14 @@ const Contact: React.FC = () => {
                 ) : (
                     <div className="bg-white rounded-2xl shadow-lg border border-slate-200 p-8">
                         <form onSubmit={handleSubmit} className="space-y-6">
+                            
+                            {formError && (
+                                <div className="p-3 bg-red-100 border border-red-300 text-red-800 rounded-lg text-sm flex items-center gap-2">
+                                    <AlertCircle className="w-4 h-4" />
+                                    {formError}
+                                </div>
+                            )}
+
                             <div>
                                 <label className="block text-sm font-bold text-slate-700 mb-2">Full Name *</label>
                                 <input
@@ -56,6 +100,7 @@ const Contact: React.FC = () => {
                                     required
                                     placeholder="Your Full Name"
                                     className="w-full px-4 py-3 border border-slate-300 rounded-xl focus:border-indigo-500 focus:ring-2 focus:ring-indigo-200 outline-none transition-all"
+                                    disabled={formStatus === 'sending'}
                                 />
                             </div>
 
@@ -69,6 +114,7 @@ const Contact: React.FC = () => {
                                     required
                                     placeholder="your@email.com"
                                     className="w-full px-4 py-3 border border-slate-300 rounded-xl focus:border-indigo-500 focus:ring-2 focus:ring-indigo-200 outline-none transition-all"
+                                    disabled={formStatus === 'sending'}
                                 />
                             </div>
 
@@ -82,6 +128,7 @@ const Contact: React.FC = () => {
                                     required
                                     placeholder="(404) 555-1234"
                                     className="w-full px-4 py-3 border border-slate-300 rounded-xl focus:border-indigo-500 focus:ring-2 focus:ring-indigo-200 outline-none transition-all"
+                                    disabled={formStatus === 'sending'}
                                 />
                             </div>
 
@@ -95,15 +142,30 @@ const Contact: React.FC = () => {
                                     rows={3}
                                     placeholder="Tell us briefly what you need help with..."
                                     className="w-full px-4 py-3 border border-slate-300 rounded-xl focus:border-indigo-500 focus:ring-2 focus:ring-indigo-200 outline-none transition-all resize-none"
+                                    disabled={formStatus === 'sending'}
                                 />
                             </div>
+                            
+                            {/* Invisible ReCAPTCHA v3 Component */}
+                            {RECAPTCHA_SITE_KEY && (
+                                <ReCAPTCHA
+                                    ref={recaptchaRef}
+                                    sitekey={RECAPTCHA_SITE_KEY}
+                                    size="invisible"
+                                />
+                            )}
 
                             <button
                                 type="submit"
                                 disabled={formStatus === 'sending'}
                                 className="w-full py-4 bg-gradient-to-r from-indigo-600 to-purple-600 text-white rounded-xl font-bold text-lg hover:shadow-xl hover:shadow-indigo-200 transition-all disabled:opacity-50 flex items-center justify-center gap-2"
                             >
-                                {formStatus === 'sending' ? 'Sending...' : (
+                                {formStatus === 'sending' ? (
+                                    <>
+                                        <Loader2 className="w-5 h-5 animate-spin" />
+                                        Sending...
+                                    </>
+                                ) : (
                                     <>
                                         Send Message
                                         <ArrowRight className="w-5 h-5" />
