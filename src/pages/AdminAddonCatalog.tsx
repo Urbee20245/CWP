@@ -11,9 +11,9 @@ interface Addon {
     key: string;
     name: string;
     description: string;
-    price_cents: number | null; // Now nullable
-    setup_fee_cents: number | null; // New field
-    monthly_price_cents: number | null; // New field
+    price_cents: number | null;
+    setup_fee_cents: number | null;
+    monthly_price_cents: number | null;
     billing_type: 'one_time' | 'subscription' | 'setup_plus_subscription';
     is_active: boolean;
     sort_order: number;
@@ -33,9 +33,9 @@ const AdminAddonCatalog: React.FC = () => {
         name: '',
         key: '',
         description: '',
-        price: 0, // Used for one_time
-        setupFee: 0, // New field
-        monthlyPrice: 0, // New field
+        price: 0,
+        setupFee: 0,
+        monthlyPrice: 0,
         billingType: 'subscription' as 'one_time' | 'subscription' | 'setup_plus_subscription',
         sortOrder: 0,
         isJetSuiteOnly: false,
@@ -50,11 +50,10 @@ const AdminAddonCatalog: React.FC = () => {
 
         if (error) {
             console.error('Error fetching addons:', error);
-            // Display a user-friendly error if the table is inaccessible
             setFormError("Failed to load catalog. Check database connection or RLS policies.");
         } else {
             setAddons(data as Addon[]);
-            setFormError(null); // Clear error on success
+            setFormError(null);
         }
         setIsLoading(false);
     }, []);
@@ -68,16 +67,34 @@ const AdminAddonCatalog: React.FC = () => {
         setSaveError(null);
     };
     
+    const handleDeleteAddon = async (addon: Addon) => {
+        if (!confirm(`Are you sure you want to delete "${addon.name}"?`)) return;
+        
+        try {
+            const { error } = await supabase
+                .from('addon_catalog')
+                .delete()
+                .eq('id', addon.id);
+            
+            if (error) throw error;
+            
+            alert(`Add-on "${addon.name}" deleted successfully!`);
+            fetchAddons();
+        } catch (e: any) {
+            alert(`Failed to delete: ${e.message}`);
+        }
+    };
+    
     const handleNewFormChange = (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement>) => {
-        const { name, value, type, checked } = e.target;
+        const { name, value, type } = e.target;
+        const checked = (e.target as HTMLInputElement).checked;
         
         setNewAddonData(prev => {
             let newState = {
                 ...prev,
-                [name]: type === 'checkbox' ? checked : (name === 'price' || name === 'setupFee' || name === 'monthlyPrice' || name === 'sortOrder' ? parseFloat(value) : value),
+                [name]: type === 'checkbox' ? checked : (name === 'price' || name === 'setupFee' || name === 'monthlyPrice' || name === 'sortOrder' ? parseFloat(value || '0') : value),
             };
             
-            // Auto-generate key from name if the name field is being changed
             if (name === 'name') {
                 const generatedKey = value.toLowerCase().replace(/\s+/g, '_').replace(/[^a-z0-9_]/g, '');
                 newState.key = generatedKey;
@@ -154,7 +171,7 @@ const AdminAddonCatalog: React.FC = () => {
 
             alert(`Add-on '${name}' created successfully!`);
             setNewAddonData({ name: '', key: '', description: '', price: 0, setupFee: 0, monthlyPrice: 0, billingType: 'subscription', sortOrder: 0, isJetSuiteOnly: false });
-            fetchAddons(); // Refresh list
+            fetchAddons();
         } catch (e: any) {
             setFormError(e.message || 'Failed to create add-on. Check if the Key is unique.');
         } finally {
@@ -174,31 +191,37 @@ const AdminAddonCatalog: React.FC = () => {
         let monthlyPriceCents = null;
         
         if (editAddon.billing_type === 'one_time') {
-            priceCents = Math.round(editAddon.price_cents || 0);
+            priceCents = editAddon.price_cents || 0;
             if (priceCents <= 0) {
-                setSaveError('One-Time Price must be set.');
+                setSaveError('One-Time Price must be greater than 0.');
                 setIsSaving(false);
                 return;
             }
         } else if (editAddon.billing_type === 'subscription') {
-            monthlyPriceCents = Math.round(editAddon.monthly_price_cents || 0);
+            monthlyPriceCents = editAddon.monthly_price_cents || 0;
             if (monthlyPriceCents <= 0) {
-                setSaveError('Monthly Price must be set.');
+                setSaveError('Monthly Price must be greater than 0.');
                 setIsSaving(false);
                 return;
             }
         } else if (editAddon.billing_type === 'setup_plus_subscription') {
-            setupFeeCents = Math.round(editAddon.setup_fee_cents || 0);
-            monthlyPriceCents = Math.round(editAddon.monthly_price_cents || 0);
+            setupFeeCents = editAddon.setup_fee_cents || 0;
+            monthlyPriceCents = editAddon.monthly_price_cents || 0;
             if (setupFeeCents <= 0 || monthlyPriceCents <= 0) {
-                setSaveError('Setup Fee and Monthly Price must be set.');
+                setSaveError('Setup Fee and Monthly Price must be greater than 0.');
                 setIsSaving(false);
                 return;
             }
         }
 
         const payload = {
-            ...editAddon,
+            name: editAddon.name,
+            key: editAddon.key,
+            description: editAddon.description,
+            billing_type: editAddon.billing_type,
+            is_active: editAddon.is_active,
+            sort_order: editAddon.sort_order,
+            is_jet_suite_only: editAddon.is_jet_suite_only,
             price_cents: priceCents,
             setup_fee_cents: setupFeeCents,
             monthly_price_cents: monthlyPriceCents,
@@ -245,11 +268,10 @@ const AdminAddonCatalog: React.FC = () => {
     };
     
     const renderPriceInputs = (data: typeof newAddonData | Addon, isEdit: boolean = false) => {
-        const currentData = isEdit ? (data as Addon) : (data as typeof newAddonData);
-        const type = currentData.billingType;
+        const billingType = isEdit ? (data as Addon).billing_type : (data as typeof newAddonData).billingType;
         
-        if (type === 'one_time') {
-            const price = isEdit ? (currentData.price_cents || 0) / 100 : currentData.price;
+        if (billingType === 'one_time') {
+            const price = isEdit ? ((data as Addon).price_cents || 0) / 100 : (data as typeof newAddonData).price;
             return (
                 <div className="col-span-2">
                     <label className="block text-sm font-medium text-slate-700 mb-1">Price (USD) *</label>
@@ -259,7 +281,10 @@ const AdminAddonCatalog: React.FC = () => {
                             type="number"
                             name="price"
                             value={price || ''}
-                            onChange={isEdit ? (e) => setEditAddon(prev => prev ? { ...prev, price_cents: parseFloat(e.target.value) * 100, setup_fee_cents: null, monthly_price_cents: null } : null) : handleNewFormChange}
+                            onChange={isEdit ? (e) => {
+                                const value = parseFloat(e.target.value) || 0;
+                                setEditAddon(prev => prev ? { ...prev, price_cents: Math.round(value * 100), setup_fee_cents: null, monthly_price_cents: null } : null);
+                            } : handleNewFormChange}
                             className="w-full pl-6 pr-2 py-2 border border-slate-300 rounded-lg text-sm"
                             required
                             min="0.01"
@@ -271,8 +296,8 @@ const AdminAddonCatalog: React.FC = () => {
             );
         }
         
-        if (type === 'subscription') {
-            const monthlyPrice = isEdit ? (currentData.monthly_price_cents || 0) / 100 : currentData.monthlyPrice;
+        if (billingType === 'subscription') {
+            const monthlyPrice = isEdit ? ((data as Addon).monthly_price_cents || 0) / 100 : (data as typeof newAddonData).monthlyPrice;
             return (
                 <div className="col-span-2">
                     <label className="block text-sm font-medium text-slate-700 mb-1">Monthly Price (USD) *</label>
@@ -282,7 +307,10 @@ const AdminAddonCatalog: React.FC = () => {
                             type="number"
                             name="monthlyPrice"
                             value={monthlyPrice || ''}
-                            onChange={isEdit ? (e) => setEditAddon(prev => prev ? { ...prev, monthly_price_cents: parseFloat(e.target.value) * 100, price_cents: null, setup_fee_cents: null } : null) : handleNewFormChange}
+                            onChange={isEdit ? (e) => {
+                                const value = parseFloat(e.target.value) || 0;
+                                setEditAddon(prev => prev ? { ...prev, monthly_price_cents: Math.round(value * 100), price_cents: null, setup_fee_cents: null } : null);
+                            } : handleNewFormChange}
                             className="w-full pl-6 pr-2 py-2 border border-slate-300 rounded-lg text-sm"
                             required
                             min="0.01"
@@ -294,9 +322,9 @@ const AdminAddonCatalog: React.FC = () => {
             );
         }
         
-        if (type === 'setup_plus_subscription') {
-            const setupFee = isEdit ? (currentData.setup_fee_cents || 0) / 100 : currentData.setupFee;
-            const monthlyPrice = isEdit ? (currentData.monthly_price_cents || 0) / 100 : currentData.monthlyPrice;
+        if (billingType === 'setup_plus_subscription') {
+            const setupFee = isEdit ? ((data as Addon).setup_fee_cents || 0) / 100 : (data as typeof newAddonData).setupFee;
+            const monthlyPrice = isEdit ? ((data as Addon).monthly_price_cents || 0) / 100 : (data as typeof newAddonData).monthlyPrice;
             return (
                 <>
                     <div className="col-span-1">
@@ -307,7 +335,10 @@ const AdminAddonCatalog: React.FC = () => {
                                 type="number"
                                 name="setupFee"
                                 value={setupFee || ''}
-                                onChange={isEdit ? (e) => setEditAddon(prev => prev ? { ...prev, setup_fee_cents: parseFloat(e.target.value) * 100, price_cents: null } : null) : handleNewFormChange}
+                                onChange={isEdit ? (e) => {
+                                    const value = parseFloat(e.target.value) || 0;
+                                    setEditAddon(prev => prev ? { ...prev, setup_fee_cents: Math.round(value * 100), price_cents: null } : null);
+                                } : handleNewFormChange}
                                 className="w-full pl-6 pr-2 py-2 border border-slate-300 rounded-lg text-sm"
                                 required
                                 min="0.01"
@@ -324,7 +355,10 @@ const AdminAddonCatalog: React.FC = () => {
                                 type="number"
                                 name="monthlyPrice"
                                 value={monthlyPrice || ''}
-                                onChange={isEdit ? (e) => setEditAddon(prev => prev ? { ...prev, monthly_price_cents: parseFloat(e.target.value) * 100, price_cents: null } : null) : handleNewFormChange}
+                                onChange={isEdit ? (e) => {
+                                    const value = parseFloat(e.target.value) || 0;
+                                    setEditAddon(prev => prev ? { ...prev, monthly_price_cents: Math.round(value * 100) } : null);
+                                } : handleNewFormChange}
                                 className="w-full pl-6 pr-2 py-2 border border-slate-300 rounded-lg text-sm"
                                 required
                                 min="0.01"
@@ -348,7 +382,6 @@ const AdminAddonCatalog: React.FC = () => {
 
                 <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
                     
-                    {/* Left Column: Create New Add-on */}
                     <div className="lg:col-span-1 bg-white p-6 rounded-xl shadow-lg border border-slate-100 h-fit">
                         <h2 className="text-xl font-bold text-slate-900 mb-4 flex items-center gap-2 border-b border-slate-100 pb-4">
                             <Plus className="w-5 h-5 text-indigo-600" /> Create New Add-on
@@ -411,7 +444,6 @@ const AdminAddonCatalog: React.FC = () => {
                                 />
                             </div>
                             
-                            {/* Price & Billing Type */}
                             <div className="grid grid-cols-2 gap-4">
                                 <div className="col-span-2">
                                     <label className="block text-sm font-medium text-slate-700 mb-1">Billing Type *</label>
@@ -456,7 +488,6 @@ const AdminAddonCatalog: React.FC = () => {
                         </form>
                     </div>
 
-                    {/* Right Column: Product List */}
                     <div className="lg:col-span-2 bg-white p-6 rounded-xl shadow-lg border border-slate-100">
                         <h2 className="text-xl font-bold text-slate-900 mb-6 border-b border-slate-100 pb-4">
                             Available Add-ons ({addons.length})
@@ -498,6 +529,12 @@ const AdminAddonCatalog: React.FC = () => {
                                             >
                                                 <Edit className="w-4 h-4" />
                                             </button>
+                                            <button 
+                                                onClick={() => handleDeleteAddon(addon)}
+                                                className="p-1 rounded-full text-red-600 hover:bg-red-100 transition-colors"
+                                            >
+                                                <Trash2 className="w-4 h-4" />
+                                            </button>
                                         </div>
                                     </div>
                                 ))}
@@ -507,12 +544,10 @@ const AdminAddonCatalog: React.FC = () => {
                 </div>
             </div>
             
-            {/* Edit Addon Modal */}
             {editAddon && (
                 <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50 backdrop-blur-sm animate-fade-in">
                     <div className="bg-white rounded-2xl p-8 max-w-xl w-full shadow-2xl animate-scale-in">
                         
-                        {/* Header */}
                         <div className="flex justify-between items-center border-b border-slate-100 pb-4 mb-6">
                             <h3 className="text-2xl font-bold text-slate-900 flex items-center gap-3">
                                 <Edit className="w-6 h-6 text-indigo-600" /> Edit {editAddon.name}
@@ -531,7 +566,6 @@ const AdminAddonCatalog: React.FC = () => {
 
                         <form onSubmit={handleSave} className="space-y-4">
                             
-                            {/* Name & Key */}
                             <div className="grid grid-cols-2 gap-4">
                                 <div>
                                     <label className="block text-sm font-bold text-slate-700 mb-1">Name *</label>
@@ -555,13 +589,24 @@ const AdminAddonCatalog: React.FC = () => {
                                 </div>
                             </div>
                             
-                            {/* Price & Billing Type */}
                             <div className="grid grid-cols-3 gap-4">
                                 <div className="col-span-3">
                                     <label className="block text-sm font-bold text-slate-700 mb-1">Billing Type *</label>
                                     <select
                                         value={editAddon.billing_type}
-                                        onChange={(e) => setEditAddon(prev => prev ? { ...prev, billing_type: e.target.value as 'one_time' | 'subscription' | 'setup_plus_subscription' } : null)}
+                                        onChange={(e) => {
+                                            const newBillingType = e.target.value as 'one_time' | 'subscription' | 'setup_plus_subscription';
+                                            setEditAddon(prev => {
+                                                if (!prev) return null;
+                                                return {
+                                                    ...prev,
+                                                    billing_type: newBillingType,
+                                                    price_cents: newBillingType === 'one_time' ? (prev.price_cents || 0) : null,
+                                                    setup_fee_cents: newBillingType === 'setup_plus_subscription' ? (prev.setup_fee_cents || 0) : null,
+                                                    monthly_price_cents: (newBillingType === 'subscription' || newBillingType === 'setup_plus_subscription') ? (prev.monthly_price_cents || 0) : null,
+                                                };
+                                            });
+                                        }}
                                         className="w-full p-2 border border-slate-300 rounded-lg text-sm"
                                         required
                                         disabled={isSaving}
@@ -574,7 +619,6 @@ const AdminAddonCatalog: React.FC = () => {
                                 {renderPriceInputs(editAddon, true)}
                             </div>
                             
-                            {/* Description */}
                             <div>
                                 <div className="flex justify-between items-center">
                                     <label className="block text-sm font-bold text-slate-700 mb-1">Description</label>
@@ -596,7 +640,6 @@ const AdminAddonCatalog: React.FC = () => {
                                 />
                             </div>
                             
-                            {/* Active Toggle */}
                             <div className="flex items-center gap-4 pt-2">
                                 <label className="flex items-center text-sm font-medium text-slate-700">
                                     <input
