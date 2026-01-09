@@ -12,6 +12,7 @@ import AddProjectDialog from '../components/AddProjectDialog';
 import SendSmsDialog from '../components/SendSmsDialog'; // Import the new dialog
 import EditClientDialog from '../components/EditClientDialog'; // New Import
 import { format } from 'date-fns';
+import { ensureArray } from '../utils/dataNormalization'; // Import normalization utility
 
 interface ProjectSummary {
   id: string;
@@ -95,6 +96,7 @@ const AdminClientDetail: React.FC = () => {
   const [client, setClient] = useState<Client | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [activeTab, setActiveTab] = useState<'projects' | 'billing' | 'notes'>('billing');
+  const [fetchError, setFetchError] = useState<string | null>(null); // New state for fetch errors
   
   // Dialog State
   const [isProjectDialogOpen, setIsProjectDialogOpen] = useState(false);
@@ -121,6 +123,7 @@ const AdminClientDetail: React.FC = () => {
 
   const fetchClientData = useCallback(async () => {
     if (!id) return;
+    setFetchError(null);
 
     const { data, error } = await supabase
       .from('clients')
@@ -144,8 +147,17 @@ const AdminClientDetail: React.FC = () => {
     if (error) {
       console.error('Error fetching client details:', error);
       setClient(null);
+      setFetchError(error.message || 'Failed to load client data.');
     } else {
       const clientData = data as unknown as Client;
+      
+      // Normalize nested arrays to prevent crashes
+      clientData.projects = ensureArray(clientData.projects);
+      clientData.invoices = ensureArray(clientData.invoices);
+      clientData.subscriptions = ensureArray(clientData.subscriptions);
+      clientData.deposits = ensureArray(clientData.deposits);
+      clientData.pause_logs = ensureArray(clientData.pause_logs);
+      
       setClient(clientData);
       setAdminNotes(clientData.notes || '');
     }
@@ -493,12 +505,19 @@ const AdminClientDetail: React.FC = () => {
     );
   }
 
-  if (!client) {
+  if (fetchError || !client) {
     return (
       <AdminLayout>
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-12 text-center">
-          <h1 className="text-3xl font-bold text-red-500">Client Not Found</h1>
-          <p className="text-slate-500 mt-4">The client ID provided does not exist or the database query failed.</p>
+          <AlertCircle className="w-16 h-16 text-red-500 mx-auto mb-6" />
+          <h1 className="text-3xl font-bold text-red-500">Unable to load client details.</h1>
+          <p className="text-slate-500 mt-4">Error: {fetchError || 'Client not found or data is corrupted.'}</p>
+          <button 
+            onClick={() => fetchClientData()}
+            className="mt-6 px-6 py-3 bg-indigo-600 text-white rounded-lg font-semibold hover:bg-indigo-700 transition-colors flex items-center justify-center gap-2 mx-auto"
+          >
+            <Loader2 className="w-4 h-4" /> Try Again
+          </button>
         </div>
       </AdminLayout>
     );

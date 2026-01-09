@@ -11,6 +11,7 @@ import { format, differenceInDays, parseISO } from 'date-fns';
 import { AdminService } from '../services/adminService';
 import { useAuth } from '../hooks/useAuth';
 import { mapProjectDTO, ProjectDTO, MilestoneDTO, TaskDTO, FileItemDTO, ThreadDTO } from '../utils/projectMapper'; // Import DTO and Mapper
+import { ensureArray } from '../utils/dataNormalization';
 
 // Define types locally based on DTOs for clarity
 type Milestone = MilestoneDTO;
@@ -41,6 +42,7 @@ const AdminProjectDetail: React.FC = () => {
   const { user } = useAuth();
   const [project, setProject] = useState<ProjectDTO | null>(null); // Use ProjectDTO
   const [isLoading, setIsLoading] = useState(true);
+  const [fetchError, setFetchError] = useState<string | null>(null); // New state for fetch errors
   const [newProgress, setNewProgress] = useState(0);
   const [newMessage, setNewMessage] = useState('');
   const [isUpdating, setIsUpdating] = useState(false);
@@ -84,12 +86,13 @@ const AdminProjectDetail: React.FC = () => {
   const fetchProjectData = async () => {
     if (!id) return;
     setIsLoading(true);
+    setFetchError(null);
     
     const { data, error } = await supabase
       .from('projects')
       .select(`
         *,
-        clients (business_name),
+        clients (business_name, billing_email),
         tasks (id, title, status, due_date),
         files (id, file_name, file_type, file_size, storage_path, created_at, profiles (full_name)),
         milestones (id, name, amount_cents, status, order_index, stripe_invoice_id),
@@ -108,6 +111,7 @@ const AdminProjectDetail: React.FC = () => {
     if (error) {
       console.error('Error fetching project details:', error);
       setProject(null);
+      setFetchError(error.message || 'Failed to load project data.');
     } else {
       try {
         // Map raw data to safe DTO
@@ -155,7 +159,7 @@ const AdminProjectDetail: React.FC = () => {
         if (logsError) {
             console.error('Error fetching pause logs:', logsError);
         } else {
-            setPauseLogs(logsData as PauseLog[] ?? []);
+            setPauseLogs(ensureArray(logsData) as PauseLog[] ?? []);
         }
         
         // Fetch Deposits for this client
@@ -168,12 +172,13 @@ const AdminProjectDetail: React.FC = () => {
         if (depositsError) {
             console.error('Error fetching deposits:', depositsError);
         } else {
-            setDeposits(depositsData as DepositSummary[] ?? []);
+            setDeposits(ensureArray(depositsData) as DepositSummary[] ?? []);
         }
         
-      } catch (mapError) {
+      } catch (mapError: any) {
           console.error("Error mapping project DTO:", mapError);
           setProject(null);
+          setFetchError(mapError.message || 'Failed to process project data.');
       }
     }
     setIsLoading(false);
@@ -726,8 +731,8 @@ const AdminProjectDetail: React.FC = () => {
           if (error) throw error;
           
           // Try to switch to the next open thread or the first thread
-          const nextOpenThread = project.threads.find(t => t.id !== threadId && t.status === 'open');
-          setActiveThreadId(nextOpenThread?.id || project.threads.find(t => t.id !== threadId)?.id || null);
+          const nextOpenThread = project?.threads.find(t => t.id !== threadId && t.status === 'open');
+          setActiveThreadId(nextOpenThread?.id || project?.threads.find(t => t.id !== threadId)?.id || null);
           
           fetchProjectData();
       } catch (e: any) {
@@ -808,12 +813,19 @@ const AdminProjectDetail: React.FC = () => {
     );
   }
 
-  if (!project) {
+  if (fetchError || !project) {
     return (
       <AdminLayout>
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-12 text-center">
-          <h1 className="text-3xl font-bold text-red-500">Project Not Found</h1>
-          <p className="text-slate-500 mt-4">The project ID provided does not exist or the database query failed.</p>
+          <AlertTriangle className="w-16 h-16 text-red-500 mx-auto mb-6" />
+          <h1 className="text-3xl font-bold text-red-500">Unable to load project details.</h1>
+          <p className="text-slate-500 mt-4">Error: {fetchError || 'Project not found or data is corrupted.'}</p>
+          <button 
+            onClick={() => fetchProjectData()}
+            className="mt-6 px-6 py-3 bg-indigo-600 text-white rounded-lg font-semibold hover:bg-indigo-700 transition-colors flex items-center justify-center gap-2 mx-auto"
+          >
+            <Loader2 className="w-4 h-4" /> Try Again
+          </button>
         </div>
       </AdminLayout>
     );
@@ -1062,7 +1074,7 @@ const AdminProjectDetail: React.FC = () => {
                 <CheckCircle2 className="w-5 h-5 text-emerald-600" /> Tasks
               </h2>
               <div className="space-y-3 mb-4">
-                {project.tasks.length > 0 ? (
+                {project.tasks && project.tasks.length > 0 ? (
                   project.tasks.map(task => (
                     <div key={task.id} className="p-3 bg-slate-50 rounded-lg border border-slate-100 flex justify-between items-center">
                       <div>
@@ -1211,7 +1223,7 @@ const AdminProjectDetail: React.FC = () => {
 
                 {/* Milestones List */}
                 <div className="space-y-3 mb-6">
-                    {project.milestones.length > 0 ? (
+                    {project.milestones && project.milestones.length > 0 ? (
                         project.milestones.map(milestone => (
                             <div key={milestone.id} className="p-3 bg-slate-50 rounded-lg border border-slate-100 flex justify-between items-center">
                                 <div className="flex items-center gap-3">
@@ -1298,22 +1310,26 @@ const AdminProjectDetail: React.FC = () => {
               
               {/* Thread Selector */}
               <div className="flex gap-3 mb-4 overflow-x-auto pb-2 border-b border-slate-100">
-                  {project.threads.map(thread => (
-                      <button
-                          key={thread.id}
-                          onClick={() => setActiveThreadId(thread.id)}
-                          className={`flex-shrink-0 px-4 py-2 rounded-full text-sm font-semibold transition-all duration-200 ${
-                              activeThreadId === thread.id
-                                  ? 'bg-indigo-600 text-white shadow-md'
-                                  : thread.status === 'closed'
-                                      ? 'bg-slate-100 text-slate-500 hover:bg-slate-200'
-                                      : 'bg-slate-50 text-slate-700 hover:bg-slate-100'
-                          }`}
-                      >
-                          {thread.title} ({thread.messages.length})
-                          {thread.status === 'closed' && <X className="w-3 h-3 inline ml-1" />}
-                      </button>
-                  ))}
+                  {project.threads && project.threads.length > 0 ? (
+                      project.threads.map(thread => (
+                          <button
+                              key={thread.id}
+                              onClick={() => setActiveThreadId(thread.id)}
+                              className={`flex-shrink-0 px-4 py-2 rounded-full text-sm font-semibold transition-all duration-200 ${
+                                  activeThreadId === thread.id
+                                      ? 'bg-indigo-600 text-white shadow-md'
+                                      : thread.status === 'closed'
+                                          ? 'bg-slate-100 text-slate-500 hover:bg-slate-200'
+                                          : 'bg-slate-50 text-slate-700 hover:bg-slate-100'
+                              }`}
+                          >
+                              {thread.title} ({thread.messages?.length || 0})
+                              {thread.status === 'closed' && <X className="w-3 h-3 inline ml-1" />}
+                          </button>
+                      ))
+                  ) : (
+                      <p className="text-slate-500 text-sm">No threads found.</p>
+                  )}
               </div>
               
               {/* Active Thread Actions */}
@@ -1344,7 +1360,7 @@ const AdminProjectDetail: React.FC = () => {
               
               {/* Message List */}
               <div className="h-80 overflow-y-auto space-y-4 p-2 flex flex-col">
-                {activeThread?.messages.length ? (
+                {activeThread?.messages?.length ? (
                   activeThread.messages.map(message => (
                     <div key={message.id} className={`flex ${message.sender_profile_id === user?.id ? 'justify-end' : 'justify-start'}`}>
                         <div className={`max-w-[85%] p-3 rounded-xl text-sm relative ${message.sender_profile_id === user?.id ? 'bg-indigo-600 text-white rounded-br-none' : 'bg-slate-100 text-slate-800 rounded-tl-none'}`}>
@@ -1366,7 +1382,9 @@ const AdminProjectDetail: React.FC = () => {
                     </div>
                   ))
                 ) : (
-                  <div className="flex-1 flex items-center justify-center text-slate-500">Start the conversation!</div>
+                  <div className="flex-1 flex items-center justify-center text-slate-500">
+                      {activeThread ? 'No messages in this thread.' : 'Select a thread or create a new one.'}
+                  </div>
                 )}
                 <div ref={messagesEndRef} />
               </div>
@@ -1416,10 +1434,10 @@ const AdminProjectDetail: React.FC = () => {
             {/* Files Section */}
             <div className="bg-white p-6 rounded-xl shadow-lg border border-slate-100">
               <h2 className="text-xl font-bold mb-4 flex items-center gap-2 border-b border-slate-100 pb-4">
-                <FileText className="w-5 h-5 text-purple-600" /> Project Files ({project.files.length})
+                <FileText className="w-5 h-5 text-purple-600" /> Project Files ({project.files?.length || 0})
               </h2>
               <div className="space-y-3">
-                {project.files.length > 0 ? (
+                {project.files && project.files.length > 0 ? (
                   project.files.map(file => (
                     <div key={file.id} className="flex justify-between items-center p-3 bg-slate-50 rounded-lg border border-slate-100">
                       <div className="flex items-center gap-3">

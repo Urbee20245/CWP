@@ -7,6 +7,7 @@ export function ensureArray<T>(value: T | T[] | null | undefined): T[] {
     return [];
   }
   // Handle single object return from Supabase when expecting an array (e.g., count query)
+  // We check if it's a non-null object that isn't already an array.
   if (typeof value === 'object' && value !== null) {
     return [value] as T[];
   }
