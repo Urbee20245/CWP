@@ -17,6 +17,7 @@ export default function LoginPage() {
   const [error, setError] = useState<string | null>(null);
   const [isSignupMode, setIsSignupMode] = useState(false);
   const [signupSuccess, setSignupSuccess] = useState(false);
+  const [isRedirecting, setIsRedirecting] = useState(false); // New state to handle immediate redirect loading
   
   // Ref for reCAPTCHA component to manually trigger token generation
   const recaptchaRef = useRef<ReCAPTCHA>(null);
@@ -66,8 +67,9 @@ export default function LoginPage() {
             result = await AuthService.secureLogin(email, password, recaptchaToken);
             console.log("edge_invoke_result: login success", result);
             
-            // --- IMMEDIATE REDIRECT ---
+            // STEP 1 & 5: IMMEDIATE REDIRECT & LOG
             console.log("redirecting_after_login");
+            setIsRedirecting(true); // Prevent form flicker
             navigate('/back-office', { replace: true });
             // --------------------------
             
@@ -82,6 +84,7 @@ export default function LoginPage() {
             } else {
                 // If session is returned (e.g., auto-login), redirect immediately
                 console.log("redirecting_after_signup_auto_login");
+                setIsRedirecting(true); // Prevent form flicker
                 navigate('/back-office', { replace: true });
             }
         }
@@ -96,7 +99,8 @@ export default function LoginPage() {
     }
   }
 
-  if (isLoading) {
+  // STEP 4: Combine global loading and local redirect loading
+  if (isLoading || isRedirecting) {
     return (
         <div className="min-h-screen flex items-center justify-center pt-20">
             <Loader2 className="w-8 h-8 animate-spin text-indigo-600" />
