@@ -74,7 +74,7 @@ const PrivacyPolicy: React.FC = () => {
               <p>If you have questions or comments about this Privacy Policy, please contact us at:</p>
               <div className="mt-4 space-y-2">
                 <p className="flex items-center gap-2"><Mail className="w-4 h-4 text-indigo-600" /> Email: <a href="mailto:hello@customwebsitesplus.com" className="text-indigo-600 hover:underline">hello@customwebsitesplus.com</a></p>
-                <p className="flex items-center gap-2"><Phone className="w-4 h-4 text-indigo-600" /> Phone: (404) 532-9266</p>
+                <p className="flex items-center gap-2"><Phone className="w-4 h-4 text-indigo-600" /> Phone: (844) 213-0694</p>
               </div>
             </section>
             

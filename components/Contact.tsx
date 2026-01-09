@@ -192,12 +192,12 @@ const Contact: React.FC = () => {
             <div className="lg:col-span-2 space-y-6">
                 
                 {/* Call Card */}
-                <a href="tel:4045329266" className="group block p-6 rounded-2xl bg-slate-900 text-white shadow-xl hover:shadow-2xl hover:scale-[1.02] transition-all duration-300">
+                <a href="tel:8442130694" className="group block p-6 rounded-2xl bg-slate-900 text-white shadow-xl hover:shadow-2xl hover:scale-[1.02] transition-all duration-300">
                     <div className="flex items-center justify-between mb-3">
                         <div className="text-xs font-bold uppercase tracking-widest text-slate-400">Call Now</div>
                         <Phone className="w-5 h-5 text-indigo-400" />
                     </div>
-                    <h3 className="text-2xl font-bold mb-1">(404) 532-9266</h3>
+                    <h3 className="text-2xl font-bold mb-1">(844) 213-0694</h3>
                     <p className="text-slate-400 text-sm">Mon-Fri: 9am-6pm ET</p>
                 </a>
 

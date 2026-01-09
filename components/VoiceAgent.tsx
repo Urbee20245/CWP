@@ -92,7 +92,7 @@ const VoiceAgent: React.FC = () => {
               
               COMPANY INFO:
               - Name: Custom Websites Plus (CWP)
-              - Phone: (404) 532-9266
+              - Phone: (844) 213-0694
               - Service: Website Rebuilds, SEO, AI Agents
               - Pricing: $5k-$15k typically
               - Timeline: 4-6 weeks

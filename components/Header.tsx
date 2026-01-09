@@ -154,11 +154,11 @@ const Header: React.FC = () => {
         {/* Right Side Actions (Run Website Audit CTA) */}
         <div className="hidden md:flex items-center gap-4 pl-4 border-l border-slate-200 ml-2">
              <a 
-                href="tel:4045520926" 
+                href="tel:8442130694" 
                 className="text-sm font-bold text-slate-700 hover:text-indigo-600 transition-colors flex items-center gap-2"
              >
                 <Phone className="w-4 h-4" />
-                <span className="hidden lg:inline">(404) 552-0926</span>
+                <span className="hidden lg:inline">(844) 213-0694</span>
              </a>
              <Link
                 to="/jet-local-optimizer" 
