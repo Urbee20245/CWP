@@ -12,7 +12,9 @@ interface Addon {
     key: string;
     name: string;
     description: string;
-    price_cents: number;
+    price_cents: number | null;
+    setup_fee_cents: number | null;
+    monthly_price_cents: number | null;
     billing_type: 'one_time' | 'subscription' | 'setup_plus_subscription';
     is_active: boolean;
 }
@@ -125,7 +127,25 @@ const ClientAddons: React.FC = () => {
         return 'none';
     };
     
-    const formatCurrency = (cents: number) => `$${(cents / 100).toFixed(2)}`;
+    const formatCurrency = (cents: number | null) => cents !== null ? `$${(cents / 100).toFixed(2)}` : 'N/A';
+    
+    const renderPriceDisplay = (addon: Addon) => {
+        if (addon.billing_type === 'one_time' && addon.price_cents !== null) {
+            return <p className="text-3xl font-bold text-slate-900 mb-4">{formatCurrency(addon.price_cents)} <span className="text-base font-medium text-slate-500">One-Time</span></p>;
+        }
+        if (addon.billing_type === 'subscription' && addon.monthly_price_cents !== null) {
+            return <p className="text-3xl font-bold text-slate-900 mb-4">{formatCurrency(addon.monthly_price_cents)} <span className="text-base font-medium text-slate-500">/mo</span></p>;
+        }
+        if (addon.billing_type === 'setup_plus_subscription' && addon.setup_fee_cents !== null && addon.monthly_price_cents !== null) {
+            return (
+                <div className="mb-4">
+                    <p className="text-xl font-bold text-slate-900">Setup Fee: {formatCurrency(addon.setup_fee_cents)}</p>
+                    <p className="text-3xl font-bold text-slate-900 mt-1">Monthly: {formatCurrency(addon.monthly_price_cents)} <span className="text-base font-medium text-slate-500">/mo</span></p>
+                </div>
+            );
+        }
+        return <p className="text-3xl font-bold text-slate-900 mb-4">Price TBD</p>;
+    };
 
     if (isLoading) {
         return (
@@ -188,10 +208,7 @@ const ClientAddons: React.FC = () => {
                                         </span>
                                     </div>
                                     
-                                    <p className="text-3xl font-bold text-slate-900 mb-4">
-                                        {formatCurrency(addon.price_cents)}
-                                        <span className="text-base font-medium text-slate-500">/mo</span>
-                                    </p>
+                                    {renderPriceDisplay(addon)}
                                     
                                     <p className="text-sm text-slate-600 mb-6 flex-grow">{addon.description}</p>
                                     
