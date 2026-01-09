@@ -2,7 +2,7 @@
 
 import React, { useState, useEffect, useCallback } from 'react';
 import AdminLayout from '../components/AdminLayout';
-import { FileText, Bot, Loader2, AlertTriangle, Save, Send, Edit, Trash2, CheckCircle2, MessageSquare, Clock } from 'lucide-react';
+import { FileText, Bot, Loader2, AlertTriangle, Save, Send, Edit, Trash2, CheckCircle2, MessageSquare, Clock, Mail } from 'lucide-react';
 import { supabase } from '../integrations/supabase/client';
 import { AdminService } from '../services/adminService';
 import { useAuth } from '../hooks/useAuth';
@@ -287,7 +287,7 @@ const AdminEmailGenerator: React.FC = () => {
                                         ))}
                                     </select>
                                     {selectedClient && (
-                                        <p className="text-xs text-slate-500 mt-1">To: {selectedClient.billing_email || selectedClient.email}</p>
+                                        <p className="text-xs text-slate-500 mt-1">To: {selectedClient.billing_email}</p>
                                     )}
                                 </div>
                                 
