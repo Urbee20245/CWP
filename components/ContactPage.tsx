@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useRef } from 'react';
 import { Link } from 'react-router-dom';
 import { 
   CheckCircle2, 
@@ -10,8 +10,13 @@ import {
   Calendar,
   AlertCircle,
   Rocket,
-  Shield
+  Shield,
+  Loader2
 } from 'lucide-react';
+import ReCAPTCHA from 'react-google-recaptcha';
+
+// NOTE: This key must be set in .env.local or Vercel environment variables
+const RECAPTCHA_SITE_KEY = import.meta.env.VITE_RECAPTCHA_SITE_KEY;
 
 interface FormData {
   fullName: string;
@@ -60,6 +65,9 @@ const ContactPage: React.FC = () => {
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [isSubmitted, setIsSubmitted] = useState(false);
   const [showBudgetMessage, setShowBudgetMessage] = useState(false);
+  const [submissionError, setSubmissionError] = useState<string | null>(null);
+  
+  const recaptchaRef = useRef<ReCAPTCHA>(null);
 
   const industries = [
     'Restaurant',
@@ -177,6 +185,7 @@ const ContactPage: React.FC = () => {
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+    setSubmissionError(null);
     
     if (!validateForm()) {
       // Scroll to first error
@@ -188,12 +197,34 @@ const ContactPage: React.FC = () => {
 
     setIsSubmitting(true);
     
-    // Simulate form submission (replace with actual API call)
-    setTimeout(() => {
-      setIsSubmitting(false);
-      setIsSubmitted(true);
-      window.scrollTo({ top: 0, behavior: 'smooth' });
-    }, 2000);
+    if (!RECAPTCHA_SITE_KEY) {
+        setSubmissionError("reCAPTCHA is not configured. Please set VITE_RECAPTCHA_SITE_KEY.");
+        setIsSubmitting(false);
+        return;
+    }
+
+    try {
+        const recaptchaToken = await recaptchaRef.current?.execute('request_consultation');
+        if (!recaptchaToken) {
+            throw new Error("reCAPTCHA verification failed. Please try again.");
+        }
+        
+        // --- SIMULATED BACKEND SUBMISSION ---
+        console.log("Consultation form submitted with reCAPTCHA token:", recaptchaToken);
+        
+        // Simulate API call delay and success
+        await new Promise(resolve => setTimeout(resolve, 2000));
+        
+        setIsSubmitting(false);
+        setIsSubmitted(true);
+        window.scrollTo({ top: 0, behavior: 'smooth' });
+
+    } catch (error: any) {
+        console.error("Form submission error:", error);
+        setSubmissionError(error.message || "Submission failed due to a security check or network error.");
+        setIsSubmitting(false);
+        recaptchaRef.current?.reset();
+    }
   };
 
   if (isSubmitted) {
@@ -267,6 +298,12 @@ const ContactPage: React.FC = () => {
           <div className="lg:col-span-2">
             <form onSubmit={handleSubmit} className="bg-white rounded-2xl shadow-lg border border-slate-200 p-8">
               
+              {submissionError && (
+                <div className="p-3 mb-4 bg-red-100 border border-red-300 text-red-800 rounded-lg text-sm flex items-center gap-2">
+                  <AlertCircle className="w-4 h-4" /> {submissionError}
+                </div>
+              )}
+              
               {/* Basic Information */}
               <div className="mb-8">
                 <h3 className="text-xl font-bold text-slate-900 mb-6 pb-4 border-b border-slate-200">
@@ -285,6 +322,7 @@ const ContactPage: React.FC = () => {
                       onChange={handleInputChange}
                       placeholder="Your Full Name"
                       className={`w-full px-4 py-3 border ${errors.fullName ? 'border-red-500' : 'border-slate-300'} rounded-xl focus:border-indigo-500 focus:ring-2 focus:ring-indigo-200 outline-none transition-all`}
+                      disabled={isSubmitting}
                     />
                     {errors.fullName && (
                       <p className="mt-2 text-sm text-red-600 flex items-center gap-1">
@@ -304,6 +342,7 @@ const ContactPage: React.FC = () => {
                       onChange={handleInputChange}
                       placeholder="Your Business Name"
                       className={`w-full px-4 py-3 border ${errors.businessName ? 'border-red-500' : 'border-slate-300'} rounded-xl focus:border-indigo-500 focus:ring-2 focus:ring-indigo-200 outline-none transition-all`}
+                      disabled={isSubmitting}
                     />
                     {errors.businessName && (
                       <p className="mt-2 text-sm text-red-600 flex items-center gap-1">
@@ -323,6 +362,7 @@ const ContactPage: React.FC = () => {
                       onChange={handleInputChange}
                       placeholder="your@email.com"
                       className={`w-full px-4 py-3 border ${errors.email ? 'border-red-500' : 'border-slate-300'} rounded-xl focus:border-indigo-500 focus:ring-2 focus:ring-indigo-200 outline-none transition-all`}
+                      disabled={isSubmitting}
                     />
                     {errors.email && (
                       <p className="mt-2 text-sm text-red-600 flex items-center gap-1">
@@ -342,6 +382,7 @@ const ContactPage: React.FC = () => {
                       onChange={handleInputChange}
                       placeholder="(404) 555-1234"
                       className={`w-full px-4 py-3 border ${errors.phone ? 'border-red-500' : 'border-slate-300'} rounded-xl focus:border-indigo-500 focus:ring-2 focus:ring-indigo-200 outline-none transition-all`}
+                      disabled={isSubmitting}
                     />
                     {errors.phone && (
                       <p className="mt-2 text-sm text-red-600 flex items-center gap-1">
@@ -361,6 +402,7 @@ const ContactPage: React.FC = () => {
                       onChange={handleInputChange}
                       placeholder="https://yourbusiness.com"
                       className="w-full px-4 py-3 border border-slate-300 rounded-xl focus:border-indigo-500 focus:ring-2 focus:ring-indigo-200 outline-none transition-all"
+                      disabled={isSubmitting}
                     />
                     <p className="mt-2 text-xs text-slate-500">If you don't have a website yet, leave blank</p>
                   </div>
@@ -374,6 +416,7 @@ const ContactPage: React.FC = () => {
                       value={formData.industry}
                       onChange={handleInputChange}
                       className={`w-full px-4 py-3 border ${errors.industry ? 'border-red-500' : 'border-slate-300'} rounded-xl focus:border-indigo-500 focus:ring-2 focus:ring-indigo-200 outline-none transition-all`}
+                      disabled={isSubmitting}
                     >
                       <option value="">Select your industry...</option>
                       {industries.map(industry => (
@@ -408,6 +451,7 @@ const ContactPage: React.FC = () => {
                             checked={formData.services.includes(service)}
                             onChange={() => handleCheckboxChange(service)}
                             className="w-5 h-5 text-indigo-600 border-slate-300 rounded focus:ring-indigo-500"
+                            disabled={isSubmitting}
                           />
                           <span className="text-sm text-slate-700">{service}</span>
                         </label>
@@ -440,6 +484,7 @@ const ContactPage: React.FC = () => {
                             checked={formData.budget === option.value}
                             onChange={handleInputChange}
                             className="w-5 h-5 text-indigo-600 border-slate-300 focus:ring-indigo-500"
+                            disabled={isSubmitting}
                           />
                           <span className="text-sm font-medium text-slate-700">{option.label}</span>
                         </label>
@@ -478,6 +523,7 @@ const ContactPage: React.FC = () => {
                             checked={formData.timeline === option.value}
                             onChange={handleInputChange}
                             className="w-5 h-5 text-indigo-600 border-slate-300 focus:ring-indigo-500"
+                            disabled={isSubmitting}
                           />
                           <span className="text-sm font-medium text-slate-700">{option.label}</span>
                         </label>
@@ -501,6 +547,7 @@ const ContactPage: React.FC = () => {
                       placeholder="What are your main goals? What problems are you trying to solve?"
                       rows={5}
                       className={`w-full px-4 py-3 border ${errors.projectDescription ? 'border-red-500' : 'border-slate-300'} rounded-xl focus:border-indigo-500 focus:ring-2 focus:ring-indigo-200 outline-none transition-all resize-none`}
+                      disabled={isSubmitting}
                     />
                     <div className="mt-2 flex justify-between items-center">
                       <p className="text-xs text-slate-500">Minimum 50 characters required</p>
@@ -540,6 +587,7 @@ const ContactPage: React.FC = () => {
                       onChange={handleInputChange}
                       min={new Date().toISOString().split('T')[0]}
                       className={`w-full px-4 py-3 border ${errors.preferredDate ? 'border-red-500' : 'border-slate-300'} rounded-xl focus:border-indigo-500 focus:ring-2 focus:ring-indigo-200 outline-none transition-all`}
+                      disabled={isSubmitting}
                     />
                     {errors.preferredDate && (
                       <p className="mt-2 text-sm text-red-600 flex items-center gap-1">
@@ -557,6 +605,7 @@ const ContactPage: React.FC = () => {
                       value={formData.preferredTime}
                       onChange={handleInputChange}
                       className={`w-full px-4 py-3 border ${errors.preferredTime ? 'border-red-500' : 'border-slate-300'} rounded-xl focus:border-indigo-500 focus:ring-2 focus:ring-indigo-200 outline-none transition-all`}
+                      disabled={isSubmitting}
                     >
                       <option value="">Select time...</option>
                       <optgroup label="Weekday Hours (Mon-Fri)">
@@ -588,6 +637,7 @@ const ContactPage: React.FC = () => {
                       onChange={handleInputChange}
                       min={new Date().toISOString().split('T')[0]}
                       className="w-full px-4 py-3 border border-slate-300 rounded-xl focus:border-indigo-500 focus:ring-2 focus:ring-indigo-200 outline-none transition-all"
+                      disabled={isSubmitting}
                     />
                     <p className="mt-2 text-xs text-slate-500">Backup option if first choice unavailable</p>
                   </div>
@@ -601,6 +651,7 @@ const ContactPage: React.FC = () => {
                       value={formData.alternateTime}
                       onChange={handleInputChange}
                       className="w-full px-4 py-3 border border-slate-300 rounded-xl focus:border-indigo-500 focus:ring-2 focus:ring-indigo-200 outline-none transition-all"
+                      disabled={isSubmitting}
                     >
                       <option value="">Select time...</option>
                       <optgroup label="Weekday Hours (Mon-Fri)">
@@ -634,6 +685,7 @@ const ContactPage: React.FC = () => {
                       value={formData.referralSource}
                       onChange={handleInputChange}
                       className={`w-full px-4 py-3 border ${errors.referralSource ? 'border-red-500' : 'border-slate-300'} rounded-xl focus:border-indigo-500 focus:ring-2 focus:ring-indigo-200 outline-none transition-all`}
+                      disabled={isSubmitting}
                     >
                       <option value="">Select an option...</option>
                       {referralSources.map(source => (
@@ -665,6 +717,7 @@ const ContactPage: React.FC = () => {
                             checked={formData.decisionMaker === option.value}
                             onChange={handleInputChange}
                             className="w-5 h-5 text-indigo-600 border-slate-300 focus:ring-indigo-500"
+                            disabled={isSubmitting}
                           />
                           <span className="text-sm font-medium text-slate-700">{option.label}</span>
                         </label>
@@ -678,6 +731,15 @@ const ContactPage: React.FC = () => {
                   </div>
                 </div>
               </div>
+              
+              {/* Invisible ReCAPTCHA v3 Component */}
+              {RECAPTCHA_SITE_KEY && (
+                  <ReCAPTCHA
+                      ref={recaptchaRef}
+                      sitekey={RECAPTCHA_SITE_KEY}
+                      size="invisible"
+                  />
+              )}
 
               {/* Submit Button */}
               <button
@@ -691,7 +753,8 @@ const ContactPage: React.FC = () => {
               >
                 {isSubmitting ? (
                   <>
-                    <div className="w-5 h-5 border-2 border-white border-t-transparent rounded-full animate-spin"></div>
+                    <Loader2 className="w-5 h-5 border-2 border-white border-t-transparent rounded-full animate-spin">
+                    </Loader2>
                     Processing...
                   </>
                 ) : (
