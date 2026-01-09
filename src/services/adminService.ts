@@ -66,17 +66,8 @@ export const AdminService = {
   },
   
   saveSmtpSettings: async (settings: any) => {
-    // Use upsert to ensure only one record exists
-    const { data, error } = await supabase
-        .from('smtp_settings')
-        .upsert(settings, { onConflict: 'id' })
-        .select()
-        .single();
-        
-    if (error) throw error;
-    return data;
-  },
-  
+  return invokeEdgeFunction('save-smtp-settings', settings);
+},
   // --- Billing ---
   createStripeCustomer: async (clientId: string) => {
     return invokeEdgeFunction('stripe-api/create-customer', { client_id: clientId });
