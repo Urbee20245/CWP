@@ -22,12 +22,12 @@ const VoiceAgent: React.FC = () => {
   const [isSpeaking, setIsSpeaking] = useState(false);
   const [volumeLevel, setVolumeLevel] = useState(0);
   
-  // Refs for Audio
+  // Refs for Audio & Chat
   const audioContextRef = useRef<AudioContext | null>(null);
   const mediaStreamRef = useRef<MediaStream | null>(null);
   const processorRef = useRef<ScriptProcessorNode | null>(null);
-  const clientRef = useRef<any>(null);
-  const chatSessionRef = useRef<any>(null);
+  const liveSessionRef = useRef<any>(null); // For live voice session
+  const chatSessionRef = useRef<any>(null); // For text chat session
   
   const scrollToBottom = () => {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
@@ -108,11 +108,10 @@ const VoiceAgent: React.FC = () => {
         },
       });
 
-      clientRef.current = session;
+      liveSessionRef.current = session;
       setIsConnected(true);
 
       // 4. Handle Incoming Audio (Stream)
-      // Using a simple loop to process the incoming stream
       (async () => {
         try {
           for await (const chunk of session.receive()) {
@@ -154,16 +153,10 @@ const VoiceAgent: React.FC = () => {
         }
         setVolumeLevel(Math.min(100, Math.round(sum * 500)));
 
-        // Convert to PCM 16kHz
-        // Note: Assuming input is close to 16k or we just send it. 
-        // For best results, we should downsample if context is 44.1k/48k.
-        // Simple 1-to-1 skip for downsampling if needed:
-        // (Omitted strict resampling for brevity, usually context handles pull or we rely on robust backend)
-        
         const pcm16 = floatTo16BitPCM(inputData);
         const b64 = arrayBufferToBase64(pcm16);
 
-        clientRef.current.send({
+        liveSessionRef.current.send({
           realtimeInput: {
             mediaChunks: [{
               mimeType: "audio/pcm",
@@ -196,7 +189,7 @@ const VoiceAgent: React.FC = () => {
       audioContextRef.current.close();
       audioContextRef.current = null;
     }
-    clientRef.current = null; // Session cleanup
+    liveSessionRef.current = null; // Session cleanup
     setIsConnected(false);
     setIsSpeaking(false);
     setVolumeLevel(0);
@@ -236,30 +229,42 @@ const VoiceAgent: React.FC = () => {
 
   // --- CHAT MODE LOGIC ---
   const initChat = async () => {
-    // ... (Keep existing Chat Logic for text mode fallback)
-    // Re-implementing briefly for completeness
     try {
         const apiKey = (import.meta as any).env.VITE_GEMINI_API_KEY;
-        if (!apiKey) return;
+        if (!apiKey) {
+            setConfigError("API Key not found for chat.");
+            return;
+        }
+        
+        // Correct initialization for @google/genai SDK
         const client = new GoogleGenAI({ apiKey });
-        const model = client.getGenerativeModel({ model: 'gemini-2.0-flash-exp' });
-        chatSessionRef.current = model.startChat({ 
+        
+        // Use client.chats.create for a new chat session
+        const chatSession = client.chats.create({ 
+            model: 'gemini-2.0-flash-exp',
             history: [],
-            systemInstruction: `You are Luna, AI assistant for Custom Websites Plus.`
+            config: {
+                systemInstruction: `You are Luna, AI assistant for Custom Websites Plus.`,
+            }
         });
-    } catch (e) {
+        chatSessionRef.current = chatSession;
+        setConfigError(null);
+    } catch (e: any) {
         console.error("Chat init error", e);
+        setConfigError(e.message || "Failed to initialize AI chat.");
     }
   };
 
   useEffect(() => {
-    if (isOpen && mode === 'chat') initChat();
+    if (isOpen && mode === 'chat' && !chatSessionRef.current) {
+        initChat();
+    }
     return () => disconnectVoiceSession();
   }, [isOpen, mode]);
 
   const handleTextSend = async (e?: React.FormEvent) => {
     e?.preventDefault();
-    if (!inputValue.trim()) return;
+    if (!inputValue.trim() || configError) return;
     
     const text = inputValue;
     setInputValue('');
@@ -267,11 +272,17 @@ const VoiceAgent: React.FC = () => {
     setIsTyping(true);
 
     try {
-        if (!chatSessionRef.current) await initChat();
-        const result = await chatSessionRef.current.sendMessage(text);
-        setMessages(p => [...p, { id: Date.now().toString(), role: 'assistant', text: result.response.text() }]);
+        if (!chatSessionRef.current) {
+            await initChat();
+            if (!chatSessionRef.current) throw new Error("Chat session failed to initialize.");
+        }
+        
+        // Use the correct method to send message
+        const result = await chatSessionRef.current.sendMessage({ message: text });
+        
+        setMessages(p => [...p, { id: Date.now().toString(), role: 'assistant', text: result.text }]);
     } catch (e) {
-        setMessages(p => [...p, { id: Date.now().toString(), role: 'assistant', text: "Error connecting." }]);
+        setMessages(p => [...p, { id: Date.now().toString(), role: 'assistant', text: "Error connecting to AI. Please check console." }]);
     } finally {
         setIsTyping(false);
     }
@@ -396,15 +407,22 @@ const VoiceAgent: React.FC = () => {
                         <div ref={messagesEndRef} />
                     </div>
                     <div className="p-4 bg-slate-900/95 border-t border-white/5">
-                        <form onSubmit={handleTextSend} className="flex gap-2">
-                            <input 
-                                value={inputValue} 
-                                onChange={e => setInputValue(e.target.value)}
-                                placeholder="Type a message..."
-                                className="flex-1 bg-slate-800 border border-slate-700 text-white rounded-xl px-4 py-3 focus:border-indigo-500 outline-none"
-                            />
-                            <button type="submit" className="bg-indigo-600 text-white p-3 rounded-xl hover:bg-indigo-500"><Send className="w-5 h-5" /></button>
-                        </form>
+                        {configError ? (
+                            <div className="p-3 bg-red-900/20 text-red-400 rounded-lg text-sm flex items-center gap-2">
+                                <AlertTriangle className="w-4 h-4" />
+                                {configError}
+                            </div>
+                        ) : (
+                            <form onSubmit={handleTextSend} className="flex gap-2">
+                                <input 
+                                    value={inputValue} 
+                                    onChange={e => setInputValue(e.target.value)}
+                                    placeholder="Type a message..."
+                                    className="flex-1 bg-slate-800 border border-slate-700 text-white rounded-xl px-4 py-3 focus:border-indigo-500 outline-none"
+                                />
+                                <button type="submit" className="bg-indigo-600 text-white p-3 rounded-xl hover:bg-indigo-500"><Send className="w-5 h-5" /></button>
+                            </form>
+                        )}
                     </div>
                 </>
             )}
