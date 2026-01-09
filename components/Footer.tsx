@@ -4,6 +4,7 @@ import { NavigationLink } from '../types';
 import { Link } from 'react-router-dom';
 
 const Footer: React.FC = () => {
+  const currentYear = new Date().getFullYear();
   
   return (
     <footer className="bg-slate-900 text-slate-300 pt-20 pb-10 border-t border-slate-800">
@@ -67,7 +68,7 @@ const Footer: React.FC = () => {
                     <li>
                         <div className="mt-4 p-4 bg-slate-800 rounded-xl border border-slate-700">
                             <span className="block text-xs font-bold text-emerald-400 mb-1 uppercase">Now Accepting</span>
-                            <span className="text-xs text-slate-300">New clients for Q3 2025 Rebuilds</span>
+                            <span className="text-xs text-slate-300">New clients for Q3 {currentYear} Rebuilds</span>
                         </div>
                     </li>
                 </ul>
@@ -75,7 +76,7 @@ const Footer: React.FC = () => {
         </div>
         
         <div className="border-t border-slate-800 pt-8 flex flex-col md:flex-row justify-between items-center gap-4 text-xs text-slate-500">
-            <p>© 2025 Custom Websites Plus. Built by <a href="https://jetautomations.ai" target="_blank" rel="noopener noreferrer" className="text-indigo-400 hover:text-indigo-300 transition-colors">Jetautomations.AI</a></p>
+            <p>© {currentYear} Custom Websites Plus. Built by <a href="https://jetautomations.ai" target="_blank" rel="noopener noreferrer" className="text-indigo-400 hover:text-indigo-300 transition-colors">Jetautomations.AI</a></p>
             <div className="flex gap-6 items-center">
                 <Link to="/login" className="flex items-center gap-1 text-indigo-400 hover:text-white transition-colors font-bold">
                     <LogIn className="w-3 h-3" />
