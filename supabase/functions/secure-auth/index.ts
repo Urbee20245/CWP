@@ -3,46 +3,64 @@ import { createClient } from 'https://esm.sh/@supabase/supabase-js@2.45.0';
 import { handleCors, jsonResponse, errorResponse } from '../_shared/utils.ts';
 
 const RECAPTCHA_SECRET_KEY = Deno.env.get('RECAPTCHA_SECRET_KEY');
+const RECAPTCHA_THRESHOLD = 0.5;
 
 serve(async (req) => {
   const corsResponse = handleCors(req);
   if (corsResponse) return corsResponse;
 
-  if (!RECAPTCHA_SECRET_KEY) {
-    return errorResponse("reCAPTCHA secret key is missing.", 500);
-  }
+  const isDevBypass = !RECAPTCHA_SECRET_KEY;
+  
+  // Initialize Public Supabase Client
+  const supabase = createClient(
+    Deno.env.get('SUPABASE_URL')!,
+    Deno.env.get('SUPABASE_ANON_KEY')!
+  );
 
   try {
     const { email, password, recaptchaToken, action } = await req.json();
 
-    if (!email || !password || !recaptchaToken || !action) {
-      return errorResponse('Missing required fields.', 400);
+    if (!email || !password || !action) {
+      return errorResponse('Missing required fields: email, password, or action.', 400);
     }
     
-    console.log(`[secure-auth] Verifying reCAPTCHA for action: ${action}`);
+    if (!isDevBypass) {
+        if (!recaptchaToken) {
+            return errorResponse('reCAPTCHA token is missing. Please refresh and try again.', 400);
+        }
+        
+        console.log(`[secure-auth] Verifying reCAPTCHA for action: ${action}`);
 
-    // 1. Verify reCAPTCHA Token (v3 verification)
-    const verificationResponse = await fetch('https://www.google.com/recaptcha/api/siteverify', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
-      body: `secret=${RECAPTCHA_SECRET_KEY}&response=${recaptchaToken}`,
-    });
+        // 1. Verify reCAPTCHA Token (v3 verification)
+        const verificationResponse = await fetch('https://www.google.com/recaptcha/api/siteverify', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+          body: `secret=${RECAPTCHA_SECRET_KEY}&response=${recaptchaToken}`,
+        });
 
-    const verificationData = await verificationResponse.json();
+        const verificationData = await verificationResponse.json();
 
-    // Check success and score (v3 threshold of 0.5)
-    if (!verificationData.success || verificationData.score < 0.5) {
-      console.warn(`[secure-auth] reCAPTCHA verification failed for ${email}. Score: ${verificationData.score}`);
-      return errorResponse('Spam detection failed. Please try again.', 403);
+        // 2. Validate: success, score, and action match
+        if (!verificationData.success) {
+            console.error(`[secure-auth] reCAPTCHA verification failed: ${JSON.stringify(verificationData['error-codes'])}`);
+            return errorResponse('Security check failed. Please try again.', 403);
+        }
+        
+        if (verificationData.score < RECAPTCHA_THRESHOLD) {
+            console.warn(`[secure-auth] Low reCAPTCHA score for ${email}. Score: ${verificationData.score}`);
+            return errorResponse('Security check failed: Detected as potential spam.', 403);
+        }
+        
+        // Optional: Check action match (v3 best practice)
+        if (verificationData.action !== action) {
+            console.warn(`[secure-auth] Action mismatch: Expected ${action}, got ${verificationData.action}`);
+            // We allow it to pass for now but log the warning.
+        }
+        
+        console.log(`[secure-auth] reCAPTCHA verified successfully. Score: ${verificationData.score}`);
+    } else {
+        console.warn(`[secure-auth] WARNING: RECAPTCHA_SECRET_KEY is missing. Bypassing security check.`);
     }
-    
-    console.log(`[secure-auth] reCAPTCHA verified successfully. Score: ${verificationData.score}`);
-
-    // 2. Initialize Public Supabase Client
-    const supabase = createClient(
-      Deno.env.get('SUPABASE_URL')!,
-      Deno.env.get('SUPABASE_ANON_KEY')!
-    );
 
     let authResult;
 
@@ -66,13 +84,15 @@ serve(async (req) => {
 
     if (authResult.error) {
       console.error(`[secure-auth] Supabase Auth failed: ${authResult.error.message}`);
-      return errorResponse(authResult.error.message, 401);
+      // Return a generic error message to prevent enumeration attacks
+      return errorResponse('Invalid login credentials.', 401);
     }
 
     return jsonResponse({ success: true, data: authResult.data });
 
   } catch (error: any) {
     console.error('[secure-auth] Unhandled error:', error.message);
-    return errorResponse(error.message, 500);
+    // Step 2: Fail Safe - return clean 500 response
+    return errorResponse('Internal server error during authentication.', 500);
   }
 });

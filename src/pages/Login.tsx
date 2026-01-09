@@ -73,6 +73,7 @@ export default function LoginPage() {
             }
         }
     } catch (e: any) {
+        // Step 5: Handle non-2xx responses gracefully and display user-friendly error
         setError(e.message || `${actionType} failed. Check credentials or try again.`);
     } finally {
         setLoading(false);
