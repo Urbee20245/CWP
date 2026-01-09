@@ -21,7 +21,7 @@ serve(async (req) => {
     
     console.log(`[secure-auth] Verifying reCAPTCHA for action: ${action}`);
 
-    // 1. Verify reCAPTCHA Token
+    // 1. Verify reCAPTCHA Token (v3 verification)
     const verificationResponse = await fetch('https://www.google.com/recaptcha/api/siteverify', {
       method: 'POST',
       headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
@@ -30,7 +30,7 @@ serve(async (req) => {
 
     const verificationData = await verificationResponse.json();
 
-    // Check success and score (using v3 threshold of 0.5, though v2 is usually used for checkboxes)
+    // Check success and score (v3 threshold of 0.5)
     if (!verificationData.success || verificationData.score < 0.5) {
       console.warn(`[secure-auth] reCAPTCHA verification failed for ${email}. Score: ${verificationData.score}`);
       return errorResponse('Spam detection failed. Please try again.', 403);

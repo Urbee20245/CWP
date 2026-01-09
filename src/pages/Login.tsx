@@ -1,7 +1,6 @@
 "use client";
 
-import React, { useState } from 'react';
-import { supabase } from '../integrations/supabase/client';
+import React, { useState, useRef } from 'react';
 import { Bot, Loader2, LogIn, UserPlus, ArrowLeft, AlertTriangle } from 'lucide-react';
 import { useNavigate, Link } from 'react-router-dom';
 import { useAuth } from '../hooks/useAuth';
@@ -18,7 +17,9 @@ export default function LoginPage() {
   const [error, setError] = useState<string | null>(null);
   const [isSignupMode, setIsSignupMode] = useState(false);
   const [signupSuccess, setSignupSuccess] = useState(false);
-  const [recaptchaToken, setRecaptchaToken] = useState<string | null>(null);
+  
+  // Ref for reCAPTCHA component to manually trigger token generation
+  const recaptchaRef = useRef<ReCAPTCHA>(null);
   
   const navigate = useNavigate();
   const { user, isLoading } = useAuth(); 
@@ -29,63 +30,54 @@ export default function LoginPage() {
     return null; 
   }
   
-  const handleRecaptchaChange = (token: string | null) => {
-    setRecaptchaToken(token);
-    if (error) setError(null); // Clear error when user interacts with reCAPTCHA
+  const executeRecaptcha = async (action: 'login' | 'signup') => {
+    if (!recaptchaRef.current) {
+        setError("reCAPTCHA is not initialized. Please ensure VITE_RECAPTCHA_SITE_KEY is set.");
+        return null;
+    }
+    
+    // Manually execute reCAPTCHA v3 to get a token
+    const token = await recaptchaRef.current.execute(action);
+    return token;
   };
 
-  async function handleLogin(e: React.FormEvent) {
-    e.preventDefault();
-    setLoading(true);
-    setError(null);
-
-    if (!recaptchaToken) {
-        setError("Please complete the security check.");
-        setLoading(false);
-        return;
-    }
-
-    try {
-        // Use secure Edge Function for reCAPTCHA verification + login
-        await AuthService.secureLogin(email, password, recaptchaToken);
-        
-        // Successful login. SessionProvider handles the final redirect.
-        navigate('/back-office', { replace: true });
-    } catch (e: any) {
-        setError(e.message || "Login failed. Check credentials or try again.");
-        setLoading(false);
-    }
-  }
-
-  async function handleSignup(e: React.FormEvent) {
+  async function handleAuth(e: React.FormEvent) {
     e.preventDefault();
     setLoading(true);
     setError(null);
     setSignupSuccess(false);
     
+    const actionType = isSignupMode ? 'signup' : 'login';
+    const recaptchaToken = await executeRecaptcha(actionType);
+
     if (!recaptchaToken) {
-        setError("Please complete the security check.");
         setLoading(false);
-        return;
+        return; // Error already set by executeRecaptcha if key is missing
     }
 
     try {
-        // Use secure Edge Function for reCAPTCHA verification + signup
-        const result = await AuthService.secureSignup(email, password, recaptchaToken);
-        
-        if (result.data.user && !result.data.session) {
-            // Successful signup, but email confirmation required
-            setSignupSuccess(true);
-            setEmail('');
-            setPassword('');
-        } else {
-            // Should not happen if email confirmation is enabled, but handle direct sign-in if it occurs
+        if (actionType === 'login') {
+            // Use secure Edge Function for reCAPTCHA verification + login
+            await AuthService.secureLogin(email, password, recaptchaToken);
             navigate('/back-office', { replace: true });
+        } else {
+            // Use secure Edge Function for reCAPTCHA verification + signup
+            const result = await AuthService.secureSignup(email, password, recaptchaToken);
+            
+            if (result.data.user && !result.data.session) {
+                setSignupSuccess(true);
+                setEmail('');
+                setPassword('');
+            } else {
+                navigate('/back-office', { replace: true });
+            }
         }
     } catch (e: any) {
-        setError(e.message || "Signup failed. Please try again.");
+        setError(e.message || `${actionType} failed. Check credentials or try again.`);
     } finally {
         setLoading(false);
+        // Reset reCAPTCHA token after use
+        recaptchaRef.current?.reset();
     }
   }
 
@@ -121,7 +113,7 @@ export default function LoginPage() {
                     </button>
                 </div>
             ) : (
-                <form onSubmit={isSignupMode ? handleSignup : handleLogin} className="space-y-6">
+                <form onSubmit={handleAuth} className="space-y-6">
                     {error && (
                         <div className="p-3 bg-red-100 border border-red-300 text-red-800 rounded-lg text-sm flex items-center gap-2">
                             <AlertTriangle className="w-4 h-4" />
@@ -155,14 +147,13 @@ export default function LoginPage() {
                         />
                     </div>
                     
-                    {/* ReCAPTCHA Component */}
+                    {/* Invisible ReCAPTCHA v3 Component */}
                     <div className="flex justify-center">
                         {RECAPTCHA_SITE_KEY ? (
                             <ReCAPTCHA
+                                ref={recaptchaRef}
                                 sitekey={RECAPTCHA_SITE_KEY}
-                                onChange={handleRecaptchaChange}
-                                onExpired={() => setRecaptchaToken(null)}
-                                theme="light"
+                                size="invisible" // Use invisible size for v3
                             />
                         ) : (
                             <div className="p-3 bg-amber-50 border border-amber-200 rounded-lg text-sm text-amber-800">
@@ -173,7 +164,7 @@ export default function LoginPage() {
 
                     <button
                         type="submit"
-                        disabled={loading || !recaptchaToken}
+                        disabled={loading}
                         className="w-full py-4 bg-gradient-to-r from-indigo-600 to-purple-600 text-white rounded-xl font-bold text-lg hover:shadow-xl hover:shadow-indigo-200 transition-all disabled:opacity-50 flex items-center justify-center gap-2"
                     >
                         {loading ? (
