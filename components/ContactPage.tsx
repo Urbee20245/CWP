@@ -733,7 +733,7 @@ const ContactPage: React.FC = () => {
               </div>
               
               {/* Invisible ReCAPTCHA v3 Component */}
-              {RECAPTCHA_SITE_KEY && (
+              {RECAPTCHA_SITE_KEY && !isSubmitted && (
                   <ReCAPTCHA
                       ref={recaptchaRef}
                       sitekey={RECAPTCHA_SITE_KEY}

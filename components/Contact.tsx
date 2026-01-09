@@ -147,7 +147,7 @@ const Contact: React.FC = () => {
                             </div>
                             
                             {/* Invisible ReCAPTCHA v3 Component */}
-                            {RECAPTCHA_SITE_KEY && (
+                            {RECAPTCHA_SITE_KEY && formStatus !== 'success' && (
                                 <ReCAPTCHA
                                     ref={recaptchaRef}
                                     sitekey={RECAPTCHA_SITE_KEY}
