@@ -13,7 +13,7 @@ import SendSmsDialog from '../components/SendSmsDialog'; // Import the new dialo
 import EditClientDialog from '../components/EditClientDialog'; // New Import
 import { format } from 'date-fns';
 import { ensureArray } from '../utils/dataNormalization'; // Import normalization utility
-
+import { useAuth } from '../hooks/useAuth';
 interface ProjectSummary {
   id: string;
   title: string;
