@@ -39,4 +39,16 @@ export const ClientBillingService = {
         cancel_url: cancelUrl,
     });
   },
+  
+  requestAddon: async (clientId: string, addonKey: string, addonName: string, notes: string) => {
+    const { error } = await supabase.rpc('request_addon', {
+        p_client_id: clientId,
+        p_addon_key: addonKey,
+        p_addon_name: addonName,
+        p_notes: notes,
+    });
+    
+    if (error) throw error;
+    return { success: true };
+  }
 };

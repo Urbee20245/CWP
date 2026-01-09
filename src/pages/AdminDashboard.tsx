@@ -3,11 +3,11 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import { Link } from 'react-router-dom';
 import { supabase } from '../integrations/supabase/client';
-import { Users, Briefcase, DollarSign, Loader2, ArrowRight, BarChart3, Zap, MessageSquare } from 'lucide-react';
+import { Users, Briefcase, DollarSign, Loader2, ArrowRight, BarChart3, Zap, MessageSquare, Bell } from 'lucide-react';
 import AdminLayout from '../components/AdminLayout';
 
 const AdminDashboard: React.FC = () => {
-  const [stats, setStats] = useState({ totalClients: 0, activeProjects: 0, totalRevenue: 0, newMessages: 0 });
+  const [stats, setStats] = useState({ totalClients: 0, activeProjects: 0, totalRevenue: 0, newMessages: 0, pendingAddonRequests: 0 });
   const [isLoading, setIsLoading] = useState(true);
 
   const fetchData = useCallback(async () => {
@@ -34,6 +34,12 @@ const AdminDashboard: React.FC = () => {
       .from('messages')
       .select('*', { count: 'exact', head: true })
       .gte('created_at', twentyFourHoursAgo);
+      
+    // Fetch Pending Add-on Requests Count
+    const { count: pendingAddonRequestsCount } = await supabase
+        .from('client_addon_requests')
+        .select('*', { count: 'exact', head: true })
+        .eq('status', 'requested');
 
     let totalRevenue = 0;
     if (revenueData) {
@@ -45,6 +51,7 @@ const AdminDashboard: React.FC = () => {
         activeProjects: activeProjectsCount || 0,
         totalRevenue: totalRevenue,
         newMessages: newMessagesCount || 0,
+        pendingAddonRequests: pendingAddonRequestsCount || 0,
     });
     setIsLoading(false);
   }, []);
@@ -59,6 +66,15 @@ const AdminDashboard: React.FC = () => {
     { title: 'Total Revenue', value: `$${stats.totalRevenue.toLocaleString(undefined, { minimumFractionDigits: 0, maximumFractionDigits: 0 })}`, icon: DollarSign, color: 'text-purple-600', bg: 'bg-purple-50', link: '/admin/billing/revenue' },
     { title: 'New Messages (24h)', value: stats.newMessages, icon: MessageSquare, color: 'text-red-600', bg: 'bg-red-50', link: '/admin/projects' },
   ];
+  
+  const notificationCard = {
+      title: 'Pending Add-on Requests',
+      value: stats.pendingAddonRequests,
+      icon: Bell,
+      color: stats.pendingAddonRequests > 0 ? 'text-amber-600' : 'text-slate-600',
+      bg: stats.pendingAddonRequests > 0 ? 'bg-amber-50' : 'bg-slate-50',
+      link: '/admin/clients', // Link to client list where requests can be reviewed
+  };
 
   return (
     <AdminLayout>
@@ -91,6 +107,22 @@ const AdminDashboard: React.FC = () => {
               ))}
             </div>
             
+            {/* Notification Card */}
+            <div className="grid grid-cols-1 md:grid-cols-4 gap-6 mb-12">
+                <Link to={notificationCard.link} className="bg-white p-6 rounded-xl shadow-lg border border-slate-100 hover:shadow-xl hover:border-amber-200 transition-all block">
+                  <div className="flex items-center justify-between">
+                    <p className="text-sm font-medium text-slate-500">{notificationCard.title}</p>
+                    <div className={`w-8 h-8 rounded-full ${notificationCard.bg} flex items-center justify-center ${notificationCard.color}`}>
+                      <notificationCard.icon className="w-4 h-4" />
+                    </div>
+                  </div>
+                  <p className="mt-1 text-3xl font-bold text-slate-900">{notificationCard.value}</p>
+                  <div className="mt-3 text-sm font-medium text-indigo-600 flex items-center gap-1">
+                    Review Requests <ArrowRight className="w-3 h-3" />
+                  </div>
+                </Link>
+            </div>
+
             {/* Quick Links */}
             <div className="bg-white rounded-xl shadow-lg border border-slate-100 p-6">
                 <h2 className="text-xl font-bold text-slate-900 mb-4 border-b border-slate-100 pb-4">

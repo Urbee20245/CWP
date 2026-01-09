@@ -36,6 +36,8 @@ import LoginPage from './src/pages/Login';
 import ClientProfile from './src/pages/ClientProfile';
 import PrivacyPolicy from './src/pages/PrivacyPolicy';
 import TermsAndConditions from './src/pages/TermsAndConditions';
+import ClientAddons from './src/pages/ClientAddons';
+import AdminAddonCatalog from './src/pages/AdminAddonCatalog'; // New Import
 
 // Component that uses useLocation to conditionally render global elements
 const AppContent: React.FC = () => {
@@ -92,6 +94,7 @@ const AppContent: React.FC = () => {
           <Route path="settings/twilio" element={<AdminTwilioSettings />} />
           <Route path="ai-docs" element={<AdminDocumentGenerator />} />
           <Route path="ai-email" element={<AdminEmailGenerator />} />
+          <Route path="addons/catalog" element={<AdminAddonCatalog />} /> {/* New Route */}
         </Route>
 
         {/* Client Routes */}
@@ -100,6 +103,7 @@ const AppContent: React.FC = () => {
           <Route path="projects/:id" element={<ClientProjectDetail />} />
           <Route path="billing" element={<ClientBilling />} />
           <Route path="profile" element={<ClientProfile />} />
+          <Route path="addons" element={<ClientAddons />} />
         </Route>
         
         {/* Global 404 Fallback */}

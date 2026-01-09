@@ -3,7 +3,7 @@
 import React from 'react';
 import { useAuth } from '../hooks/useAuth';
 import { Link } from 'react-router-dom';
-import { Briefcase, DollarSign, LogOut, User } from 'lucide-react';
+import { Briefcase, DollarSign, LogOut, User, Zap } from 'lucide-react';
 
 interface ClientLayoutProps {
   children: React.ReactNode;
@@ -15,7 +15,8 @@ const ClientLayout: React.FC<ClientLayoutProps> = ({ children }) => {
   const navItems = [
     { name: 'Dashboard', href: '/client/dashboard', icon: Briefcase },
     { name: 'Billing', href: '/client/billing', icon: DollarSign },
-    { name: 'My Profile', href: '/client/profile', icon: User }, // Added Profile Link
+    { name: 'Add-ons', href: '/client/addons', icon: Zap }, // New Add-ons Link
+    { name: 'My Profile', href: '/client/profile', icon: User }, 
   ];
 
   return (

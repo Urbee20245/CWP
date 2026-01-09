@@ -2,7 +2,7 @@
 
 import React from 'react';
 import AdminLayout from '../components/AdminLayout';
-import { Settings, MessageSquare, Shield, ExternalLink, CheckCircle2, AlertTriangle, Mail, DollarSign } from 'lucide-react';
+import { Settings, MessageSquare, Shield, ExternalLink, CheckCircle2, AlertTriangle, Mail, DollarSign, Zap } from 'lucide-react';
 import { Link } from 'react-router-dom';
 
 const AdminSettingsPage: React.FC = () => {
@@ -15,6 +15,23 @@ const AdminSettingsPage: React.FC = () => {
         </h1>
 
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
+          
+          {/* Catalog Management Card */}
+          <div className="lg:col-span-1 bg-white p-6 rounded-xl shadow-lg border border-slate-100">
+            <h2 className="text-xl font-bold text-slate-900 mb-4 flex items-center gap-2 border-b border-slate-100 pb-4">
+              <Zap className="w-5 h-5 text-indigo-600" /> Add-on Catalog
+            </h2>
+            <p className="text-slate-600 mb-4 text-sm">
+              Manage the list, pricing, and descriptions of all available AI and Customer Engagement add-ons.
+            </p>
+            <Link 
+              to="/admin/addons/catalog" 
+              className="inline-flex items-center gap-2 px-4 py-2 bg-indigo-600 text-white rounded-lg text-sm font-semibold hover:bg-indigo-700 transition-colors"
+            >
+              Manage Catalog
+              <ExternalLink className="w-4 h-4" />
+            </Link>
+          </div>
           
           {/* Integration Card: SMTP Email */}
           <div className="lg:col-span-2 bg-white p-6 rounded-xl shadow-lg border border-slate-100">
