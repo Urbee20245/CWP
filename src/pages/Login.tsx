@@ -38,6 +38,7 @@ export default function LoginPage() {
     
     // Manually execute reCAPTCHA v3 to get a token
     const token = await recaptchaRef.current.execute(action);
+    console.log("recaptcha_token_acquired");
     return token;
   };
 
@@ -46,6 +47,8 @@ export default function LoginPage() {
     setLoading(true);
     setError(null);
     setSignupSuccess(false);
+    
+    console.log("login_start");
     
     const actionType = isSignupMode ? 'signup' : 'login';
     const recaptchaToken = await executeRecaptcha(actionType);
@@ -56,13 +59,16 @@ export default function LoginPage() {
     }
 
     try {
+        console.log("edge_invoke_start");
+        let result;
+        
         if (actionType === 'login') {
-            // Use secure Edge Function for reCAPTCHA verification + login
-            await AuthService.secureLogin(email, password, recaptchaToken);
+            result = await AuthService.secureLogin(email, password, recaptchaToken);
+            console.log("edge_invoke_result: login success", result);
             navigate('/back-office', { replace: true });
         } else {
-            // Use secure Edge Function for reCAPTCHA verification + signup
-            const result = await AuthService.secureSignup(email, password, recaptchaToken);
+            result = await AuthService.secureSignup(email, password, recaptchaToken);
+            console.log("edge_invoke_result: signup success", result);
             
             if (result.data.user && !result.data.session) {
                 setSignupSuccess(true);
@@ -73,7 +79,8 @@ export default function LoginPage() {
             }
         }
     } catch (e: any) {
-        // Step 5: Handle non-2xx responses gracefully and display user-friendly error
+        console.error("Authentication failed:", e);
+        // Step 2: Surface the actual error message
         setError(e.message || `${actionType} failed. Check credentials or try again.`);
     } finally {
         setLoading(false);
@@ -171,7 +178,7 @@ export default function LoginPage() {
                         {loading ? (
                             <>
                                 <Loader2 className="w-5 h-5 animate-spin" />
-                                {isSignupMode ? 'Signing Up...' : 'Logging In...'}
+                                {isSignupMode ? 'Signing Up...' : 'Signing In...'}
                             </>
                         ) : (
                             <>

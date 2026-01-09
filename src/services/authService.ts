@@ -10,9 +10,16 @@ const invokeEdgeFunction = async (functionName: string, payload: any) => {
     throw new Error(error.message || `Failed to call ${functionName}`);
   }
   
+  // Check for structured error response from the Edge Function body
   if (data.error) {
     console.error(`Edge function ${functionName} returned error:`, data.error);
     throw new Error(data.error);
+  }
+  
+  // Check for non-structured error response (e.g., if the function returned a 4xx/5xx status with a message)
+  if (data.message && data.status && data.status >= 400) {
+      console.error(`Edge function ${functionName} returned status ${data.status}:`, data.message);
+      throw new Error(data.message);
   }
 
   return data;

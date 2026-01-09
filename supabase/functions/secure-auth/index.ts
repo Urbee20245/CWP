@@ -21,11 +21,15 @@ serve(async (req) => {
     const { email, password, recaptchaToken, action } = await req.json();
 
     if (!email || !password || !action) {
+      console.error('[secure-auth] Missing required fields in request body.');
       return errorResponse('Missing required fields: email, password, or action.', 400);
     }
     
+    console.log(`[secure-auth] login_start for: ${email}`);
+
     if (!isDevBypass) {
         if (!recaptchaToken) {
+            console.error('[secure-auth] Missing reCAPTCHA token.');
             return errorResponse('reCAPTCHA token is missing. Please refresh and try again.', 400);
         }
         
@@ -54,7 +58,6 @@ serve(async (req) => {
         // Optional: Check action match (v3 best practice)
         if (verificationData.action !== action) {
             console.warn(`[secure-auth] Action mismatch: Expected ${action}, got ${verificationData.action}`);
-            // We allow it to pass for now but log the warning.
         }
         
         console.log(`[secure-auth] reCAPTCHA verified successfully. Score: ${verificationData.score}`);
@@ -63,12 +66,12 @@ serve(async (req) => {
     }
 
     let authResult;
+    console.log('[secure-auth] edge_invoke_start');
 
     // 3. Perform Auth Action
     if (action === 'login') {
       authResult = await supabase.auth.signInWithPassword({ email, password });
     } else if (action === 'signup') {
-      // Note: We pass user_metadata for the profile trigger to work correctly
       authResult = await supabase.auth.signUp({ 
         email, 
         password,
@@ -87,7 +90,8 @@ serve(async (req) => {
       // Return a generic error message to prevent enumeration attacks
       return errorResponse('Invalid login credentials.', 401);
     }
-
+    
+    console.log('[secure-auth] edge_invoke_result: success');
     return jsonResponse({ success: true, data: authResult.data });
 
   } catch (error: any) {
