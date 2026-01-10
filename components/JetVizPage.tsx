@@ -13,7 +13,8 @@ import {
   Sparkles,
   Phone,
   Star,
-  AlertCircle
+  AlertCircle,
+  Bot
 } from 'lucide-react';
 import { Link, useSearchParams } from 'react-router-dom';
 import { AnalyzerService } from '../src/tools/jet-local-optimizer/services/analyzer';
@@ -539,6 +540,14 @@ const JetVizPage: React.FC = () => {
                                     Check Another Site
                                 </button>
                             </div>
+                        </div>
+                        
+                        {/* Added value proposition for JetSuite */}
+                        <div className="mt-8 p-4 bg-indigo-700 rounded-xl flex items-center gap-4">
+                            <Bot className="w-6 h-6 text-emerald-400 flex-shrink-0" />
+                            <p className="text-sm font-semibold text-white">
+                                **Let AI do it for you.** JetSuite is the complete platform that automates your marketing, content, and customer engagement.
+                            </p>
                         </div>
                     </div>
                 </div>
