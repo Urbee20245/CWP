@@ -1,7 +1,7 @@
 "use client";
 
 import React, { useState, useEffect, useCallback } from 'react';
-import { useParams, useNavigate, useSearchParams } from 'react-router-dom';
+import { useParams, useNavigate, useSearchParams, Link } from 'react-router-dom'; // Added Link import
 import AdminLayout from '../components/AdminLayout';
 import { Bot, Loader2, AlertTriangle, Save, Send, Edit, Mail, ArrowLeft, CheckCircle2, Sparkles } from 'lucide-react';
 import { supabase } from '../integrations/supabase/client';
