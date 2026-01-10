@@ -15,6 +15,7 @@ import {
 } from 'lucide-react';
 import ReCAPTCHA from 'react-google-recaptcha';
 import { FormService } from '../src/services/formService'; // Import FormService
+import SuccessDialog from '../src/components/SuccessDialog'; // Import SuccessDialog
 
 // NOTE: This key must be set in .env.local or Vercel environment variables
 const RECAPTCHA_SITE_KEY = import.meta.env.VITE_RECAPTCHA_SITE_KEY;
@@ -64,7 +65,7 @@ const ContactPage: React.FC = () => {
 
   const [errors, setErrors] = useState<FormErrors>({});
   const [isSubmitting, setIsSubmitting] = useState(false);
-  const [isSubmitted, setIsSubmitted] = useState(false);
+  const [isSubmitted, setIsSubmitted] = useState(false); // Use this to trigger the dialog
   const [showBudgetMessage, setShowBudgetMessage] = useState(false);
   const [submissionError, setSubmissionError] = useState<string | null>(null);
   
@@ -217,7 +218,7 @@ const ContactPage: React.FC = () => {
         });
         
         setIsSubmitting(false);
-        setIsSubmitted(true);
+        setIsSubmitted(true); // Trigger dialog
         window.scrollTo({ top: 0, behavior: 'smooth' });
 
     } catch (error: any) {
@@ -228,52 +229,7 @@ const ContactPage: React.FC = () => {
     }
   };
 
-  if (isSubmitted) {
-    return (
-      <div className="min-h-screen bg-gradient-to-br from-emerald-50 to-teal-50 pt-32 pb-20">
-        <div className="max-w-3xl mx-auto px-6 text-center">
-          <div className="bg-white rounded-2xl shadow-xl p-12 border border-emerald-200">
-            <div className="w-20 h-20 bg-emerald-500 rounded-full flex items-center justify-center mx-auto mb-6">
-              <CheckCircle2 className="w-10 h-10 text-white" />
-            </div>
-            <h1 className="text-4xl font-bold text-slate-900 mb-4">
-              Consultation Request Received!
-            </h1>
-            <p className="text-xl text-slate-600 mb-8">
-              Thank you for your interest. We'll contact you within 24 hours to confirm your consultation time.
-            </p>
-            <div className="bg-emerald-50 border border-emerald-200 rounded-xl p-6 mb-8 text-left">
-              <h3 className="font-bold text-slate-900 mb-4">What Happens Next:</h3>
-              <ul className="space-y-3">
-                <li className="flex items-start gap-3">
-                  <CheckCircle2 className="w-5 h-5 text-emerald-600 flex-shrink-0 mt-0.5" />
-                  <span className="text-slate-700">We'll review your project details and confirm your consultation time</span>
-                </li>
-                <li className="flex items-start gap-3">
-                  <CheckCircle2 className="w-5 h-5 text-emerald-600 flex-shrink-0 mt-0.5" />
-                  <span className="text-slate-700">You'll receive a calendar invite with meeting details</span>
-                </li>
-                <li className="flex items-start gap-3">
-                  <CheckCircle2 className="w-5 h-5 text-emerald-600 flex-shrink-0 mt-0.5" />
-                  <span className="text-slate-700">We'll prepare a preliminary analysis of your current website</span>
-                </li>
-                <li className="flex items-start gap-3">
-                  <CheckCircle2 className="w-5 h-5 text-emerald-600 flex-shrink-0 mt-0.5" />
-                  <span className="text-slate-700">After the call, you'll receive a detailed proposal within 48 hours</span>
-                </li>
-              </ul>
-            </div>
-            <Link
-              to="/"
-              className="inline-flex items-center gap-2 px-8 py-4 bg-slate-900 text-white rounded-xl font-bold hover:bg-slate-800 transition-all"
-            >
-              Return to Homepage
-            </Link>
-          </div>
-        </div>
-      </div>
-    );
-  }
+  // Removed the old inline success page rendering logic
 
   return (
     <div className="min-h-screen bg-slate-50 pt-32 pb-20">
@@ -734,7 +690,7 @@ const ContactPage: React.FC = () => {
               </div>
               
               {/* Invisible ReCAPTCHA v3 Component */}
-              {RECAPTCHA_SITE_KEY && !isSubmitted && (
+              {RECAPTCHA_SITE_KEY && (
                   <ReCAPTCHA
                       ref={recaptchaRef}
                       sitekey={RECAPTCHA_SITE_KEY}
@@ -813,7 +769,7 @@ const ContactPage: React.FC = () => {
               {/* Contact Information */}
               <div className="bg-slate-900 text-white rounded-2xl shadow-lg p-6">
                 <h3 className="text-xl font-bold mb-6">Contact Information</h3>
-                <ul className="space-y-4">
+                <ul className="space-y-4 text-sm">
                   <li>
                     <a href="tel:8442130694" className="flex items-center gap-3 hover:text-indigo-400 transition-colors">
                       <Phone className="w-5 h-5" />
@@ -857,6 +813,16 @@ const ContactPage: React.FC = () => {
           </div>
         </div>
       </div>
+      
+      {/* Success Dialog */}
+      <SuccessDialog
+        isOpen={isSubmitted}
+        onClose={() => setIsSubmitted(false)}
+        title="Consultation Request Received!"
+        message="Thank you for your interest. We'll contact you within 24 hours to confirm your consultation time."
+        ctaText="Return to Homepage"
+        ctaLink="/"
+      />
     </div>
   );
 };
