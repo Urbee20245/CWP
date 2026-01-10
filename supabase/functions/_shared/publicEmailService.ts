@@ -6,6 +6,7 @@ const SMTP_PORT = Deno.env.get('SMTP_PORT');
 const SMTP_USER = Deno.env.get('SMTP_USER');
 const SMTP_PASS = Deno.env.get('SMTP_PASS');
 const SMTP_FROM_NAME = Deno.env.get('SMTP_FROM_NAME') || 'Custom Websites Plus';
+const SMTP_FROM_EMAIL = Deno.env.get('SMTP_FROM_EMAIL') || SMTP_USER; // Use dedicated FROM email if set, otherwise use SMTP_USER
 
 export async function sendPublicFormEmail(
     toEmail: string,
@@ -18,13 +19,19 @@ export async function sendPublicFormEmail(
         throw new Error("Email service not configured (Missing SMTP secrets).");
     }
 
-    console.log(`[publicEmailService] Attempting to send email via ${SMTP_HOST}:${SMTP_PORT}`);
+    const port = parseInt(SMTP_PORT);
+    const isSecurePort = port === 465;
 
-    // Port 465 typically requires secure: true (implicit SSL)
+    console.log(`[publicEmailService] Attempting to send email via ${SMTP_HOST}:${port}. Secure: ${isSecurePort}`);
+
     const transporter = nodemailer.createTransport({
         host: SMTP_HOST,
-        port: parseInt(SMTP_PORT),
-        secure: parseInt(SMTP_PORT) === 465, // Use implicit SSL for port 465
+        port: port,
+        secure: isSecurePort, // Use implicit SSL for port 465
+        // Adding ignoreTLS as a diagnostic step for socket close errors
+        // If this works, the server might be misconfigured or Deno's TLS stack is having issues.
+        // We will remove this if it doesn't help.
+        ignoreTLS: isSecurePort, 
         auth: {
             user: SMTP_USER,
             pass: SMTP_PASS,
@@ -32,7 +39,7 @@ export async function sendPublicFormEmail(
     });
 
     const mailOptions = {
-        from: `"${SMTP_FROM_NAME}" <${SMTP_USER}>`,
+        from: `"${SMTP_FROM_NAME}" <${SMTP_FROM_EMAIL}>`, // Use SMTP_FROM_EMAIL for sender
         to: toEmail,
         replyTo: replyToEmail,
         subject: subject,
