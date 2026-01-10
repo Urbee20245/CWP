@@ -3,15 +3,14 @@ import { decrypt } from './encryption.ts';
 
 // --- Environment Variables ---
 const RESEND_API_KEY = Deno.env.get('RESEND_API_KEY');
-const RESEND_FROM_EMAIL = "Custom Websites Plus <onboarding@resend.dev>"; // Hardcoded as requested
-
-// SMTP Fallback Config
+// Use the verified domain email for Resend sending
 const SMTP_HOST = Deno.env.get('SMTP_HOST');
 const SMTP_PORT = Deno.env.get('SMTP_PORT');
 const SMTP_USER = Deno.env.get('SMTP_USER');
 const SMTP_PASS_RAW = Deno.env.get('SMTP_PASS');
 const SMTP_FROM_NAME = Deno.env.get('SMTP_FROM_NAME') || 'Custom Websites Plus';
 const SMTP_FROM_EMAIL_FALLBACK = Deno.env.get('SMTP_FROM_EMAIL') || SMTP_USER;
+const RESEND_FROM_EMAIL = `${SMTP_FROM_NAME} <${SMTP_FROM_EMAIL_FALLBACK}>`; // Use verified domain email
 
 // Decrypt the password once for the SMTP fallback path
 let SMTP_PASS = SMTP_PASS_RAW || '';
