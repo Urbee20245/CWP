@@ -10,7 +10,7 @@ const RECAPTCHA_SITE_KEY = import.meta.env.VITE_RECAPTCHA_SITE_KEY;
 
 const Contact: React.FC = () => {
     const [formStatus, setFormStatus] = useState<'idle' | 'sending' | 'success' | 'error'>('idle');
-    const [formData, setFormData] = useState({ name: '', email: '', phone: '', message: '' });
+    const [formData, setFormData] = useState({ fullName: '', email: '', phone: '', message: '' });
     const [formError, setFormError] = useState<string | null>(null);
     const recaptchaRef = useRef<ReCAPTCHA>(null);
 
@@ -39,7 +39,7 @@ const Contact: React.FC = () => {
             });
             
             setFormStatus('success');
-            setFormData({ name: '', email: '', phone: '', message: '' });
+            setFormData({ fullName: '', email: '', phone: '', message: '' });
 
         } catch (error: any) {
             console.error("Form submission error:", error);
@@ -95,8 +95,8 @@ const Contact: React.FC = () => {
                                 <label className="block text-sm font-bold text-slate-700 mb-2">Full Name *</label>
                                 <input
                                     type="text"
-                                    name="name"
-                                    value={formData.name}
+                                    name="fullName"
+                                    value={formData.fullName}
                                     onChange={handleChange}
                                     required
                                     placeholder="Your Full Name"
