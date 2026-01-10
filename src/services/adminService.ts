@@ -1,4 +1,5 @@
 import { supabase } from '../integrations/supabase/client';
+import { marked } from 'marked';
 
 const invokeEdgeFunction = async (functionName: string, payload: any) => {
   const { data, error } = await supabase.functions.invoke(functionName, {
@@ -49,7 +50,10 @@ export const AdminService = {
   },
   
   // --- Email Sending ---
-  sendEmail: async (to_email: string, subject: string, html_body: string, client_id: string | null, sent_by: string) => {
+  sendEmail: async (to_email: string, subject: string, markdown_body: string, client_id: string | null, sent_by: string) => {
+    // Convert Markdown to HTML before sending to the Edge Function
+    const html_body = marked.parse(markdown_body);
+    
     return invokeEdgeFunction('send-email', { to_email, subject, html_body, client_id, sent_by });
   },
   
@@ -112,16 +116,21 @@ export const AdminService = {
   // --- Manual Invoice Actions ---
   resendInvoiceEmail: async (invoiceId: string, clientEmail: string, clientName: string, hostedUrl: string, amount: number, sentBy: string) => {
       const subject = `Invoice Reminder: ${clientName} - $${amount.toFixed(2)} Due`;
-      const html_body = `
-          <p>Dear ${clientName},</p>
-          <p>This is a reminder for your invoice of <strong>$${amount.toFixed(2)}</strong>.</p>
-          <p>Please click the link below to view and pay the invoice:</p>
-          <p><a href="${hostedUrl}" style="background-color: #4F46E5; color: white; padding: 10px 20px; text-decoration: none; border-radius: 8px; display: inline-block;">View & Pay Invoice</a></p>
-          <p>Thank you,<br>The Custom Websites Plus Team</p>
-      `;
+      const markdown_body = `
+Dear ${clientName},
+
+This is a reminder for your invoice of **$${amount.toFixed(2)}**.
+
+Please click the button below to view and pay the invoice:
+
+[View & Pay Invoice](${hostedUrl})
+
+Thank you,
+The Custom Websites Plus Team
+`;
       
-      // Use the existing sendEmail function which calls the Resend Edge Function
-      return AdminService.sendEmail(clientEmail, subject, html_body, null, sentBy);
+      // Use the existing sendEmail function which converts markdown to HTML
+      return AdminService.sendEmail(clientEmail, subject, markdown_body, null, sentBy);
   },
   
   markInvoiceResolved: async (invoiceId: string) => {

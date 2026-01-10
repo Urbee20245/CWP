@@ -2,11 +2,12 @@
 
 import React, { useState, useEffect, useCallback } from 'react';
 import AdminLayout from '../components/AdminLayout';
-import { FileText, Bot, Loader2, AlertTriangle, Save, Send, Edit, Trash2, CheckCircle2, MessageSquare, Clock, Mail } from 'lucide-react';
+import { FileText, Bot, Loader2, AlertTriangle, Save, Send, Edit, Trash2, CheckCircle2, MessageSquare, Clock, Mail, Sparkles } from 'lucide-react';
 import { supabase } from '../integrations/supabase/client';
 import { AdminService } from '../services/adminService';
 import { useAuth } from '../hooks/useAuth';
 import { format } from 'date-fns';
+import EmailEditor from '../components/EmailEditor'; // Import the new editor
 
 interface Client {
     id: string;
@@ -194,11 +195,11 @@ const AdminEmailGenerator: React.FC = () => {
         setGenerationError(null);
         
         try {
-            // 1. Send email via secure Edge Function
+            // 1. Send email via secure Edge Function (AdminService handles Markdown to HTML conversion)
             await AdminService.sendEmail(
                 selectedClient.billing_email,
                 currentSubject,
-                currentBody, // Sending HTML body (markdown is fine for simple text)
+                currentBody, // Sending Markdown body
                 selectedClient.id,
                 user.id
             );
@@ -420,24 +421,13 @@ const AdminEmailGenerator: React.FC = () => {
                                         <p className="font-bold">Review Required: AI-generated content must be checked before sending.</p>
                                     </div>
                                     
-                                    <div className="mb-4">
-                                        <label className="block text-sm font-bold text-slate-700 mb-1">Subject</label>
-                                        <input
-                                            type="text"
-                                            value={currentSubject}
-                                            onChange={(e) => setCurrentSubject(e.target.value)}
-                                            className="w-full p-2 border border-slate-300 rounded-lg text-sm font-semibold focus:border-indigo-500 outline-none"
-                                            disabled={!isEditing}
-                                        />
-                                    </div>
-                                    
-                                    <label className="block text-sm font-bold text-slate-700 mb-1">Body (Markdown/HTML)</label>
-                                    <textarea
-                                        value={currentBody}
-                                        onChange={(e) => setCurrentBody(e.target.value)}
-                                        rows={10}
-                                        className="w-full p-3 border border-slate-300 rounded-lg text-sm font-mono resize-none focus:border-indigo-500 outline-none"
-                                        disabled={!isEditing}
+                                    <EmailEditor
+                                        subject={currentSubject}
+                                        body={currentBody}
+                                        isEditing={isEditing}
+                                        onSubjectChange={setCurrentSubject}
+                                        onBodyChange={setCurrentBody}
+                                        disabled={isSending}
                                     />
                                     
                                     {sendResult === 'success' && (
