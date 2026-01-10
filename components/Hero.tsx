@@ -7,7 +7,7 @@ const Hero: React.FC = () => {
   // Client avatar paths from your public folder
   const CLIENT_AVATARS = [
     '/CWPC1.png',
-    '/CWPC12.png',
+    '/CWPC2.png',
     '/CWPC3.png',
     '/CWPC4.png'
   ];
