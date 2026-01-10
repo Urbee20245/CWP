@@ -1,12 +1,14 @@
 "use client";
 
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, useRef } from 'react';
 import AdminLayout from '../components/AdminLayout';
 import { FileText, Bot, Loader2, AlertTriangle, Save, Share2, Edit, Trash2, Download, ChevronDown, ChevronUp } from 'lucide-react';
 import { supabase } from '../integrations/supabase/client';
 import { AdminService } from '../services/adminService';
 import { useAuth } from '../hooks/useAuth';
 import { format } from 'date-fns';
+import { marked } from 'marked'; // Import marked for preview
+import MarkdownToolbar from '../components/MarkdownToolbar'; // Import toolbar
 
 interface Client {
     id: string;
@@ -76,6 +78,8 @@ const AdminDocumentGenerator: React.FC = () => {
     const [isEditing, setIsEditing] = useState(false);
     const [isSaving, setIsSaving] = useState(false);
     const [expandedDocId, setExpandedDocId] = useState<string | null>(null);
+    
+    const textareaRef = useRef<HTMLTextAreaElement>(null); // Ref for toolbar
 
     const fetchClientsAndDocuments = useCallback(async () => {
         setIsLoading(true);
@@ -91,7 +95,7 @@ const AdminDocumentGenerator: React.FC = () => {
             setIsLoading(false);
             return;
         }
-        setClients(clientsData as Client[]);
+        setClients(clientsData as Client[] || []);
         
         // Fetch Documents
         const { data: docsData, error: docsError } = await supabase
@@ -102,7 +106,7 @@ const AdminDocumentGenerator: React.FC = () => {
         if (docsError) {
             console.error('Error fetching documents:', docsError);
         } else {
-            setDocuments(docsData as Document[]);
+            setDocuments(docsData as Document[] || []);
         }
 
         setIsLoading(false);
@@ -257,10 +261,11 @@ const AdminDocumentGenerator: React.FC = () => {
     const renderDocumentContent = (content: string) => {
         // Simple markdown to HTML conversion for display
         let html = content;
-        html = html.replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>'); // Bold
-        html = html.replace(/## (.*)/g, '<h2>$1</h2>'); // H2
-        html = html.replace(/### (.*)/g, '<h3>$1</h3>'); // H3
-        html = html.replace(/\n/g, '<br/>'); // Newlines
+        try {
+            html = marked.parse(content);
+        } catch (e) {
+            html = `<p style='color: red;'>Error rendering markdown: ${e}</p>`;
+        }
         return <div dangerouslySetInnerHTML={{ __html: html }} className="prose max-w-none text-sm text-slate-700" />;
     };
 
@@ -410,22 +415,57 @@ const AdminDocumentGenerator: React.FC = () => {
                                         <p className="font-bold">LEGAL DISCLAIMER: This is an AI-generated draft. It MUST be reviewed by a licensed attorney before use.</p>
                                     </div>
                                     
-                                    <textarea
-                                        value={currentDocumentContent}
-                                        onChange={(e) => setCurrentDocumentContent(e.target.value)}
-                                        rows={20}
-                                        className="w-full p-3 border border-slate-300 rounded-lg text-sm font-mono resize-none focus:border-indigo-500 outline-none"
-                                        disabled={!isEditing}
-                                    />
+                                    <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+                                        {/* Markdown Input */}
+                                        <div>
+                                            <div className="flex items-center gap-2 text-sm font-bold text-slate-700 mb-1">
+                                                <Edit className="w-4 h-4" /> Markdown Editor
+                                                {!isEditing && <span className="text-xs text-red-500">(Locked)</span>}
+                                            </div>
+                                            
+                                            <MarkdownToolbar 
+                                                textareaRef={textareaRef} 
+                                                disabled={isSaving || !isEditing} 
+                                            />
+                                            
+                                            <textarea
+                                                ref={textareaRef}
+                                                value={currentDocumentContent}
+                                                onChange={(e) => setCurrentDocumentContent(e.target.value)}
+                                                rows={15}
+                                                className="w-full p-3 border border-slate-300 rounded-lg text-sm font-mono resize-none focus:border-indigo-500 outline-none bg-white"
+                                                disabled={isSaving || !isEditing}
+                                            />
+                                        </div>
+                                        
+                                        {/* HTML Preview */}
+                                        <div>
+                                            <div className="flex items-center gap-2 text-sm font-bold text-slate-700 mb-1">
+                                                <FileText className="w-4 h-4" /> Document Preview
+                                            </div>
+                                            <div className="w-full h-[300px] overflow-y-auto p-3 border border-slate-300 rounded-lg bg-slate-50 text-sm">
+                                                {renderDocumentContent(currentDocumentContent)}
+                                            </div>
+                                        </div>
+                                    </div>
                                     
-                                    <div className="mt-4 flex justify-between items-center">
-                                        <button
-                                            onClick={handleSaveDocument}
-                                            disabled={isSaving || !selectedClient}
-                                            className="px-4 py-2 bg-emerald-600 text-white rounded-lg text-sm font-semibold hover:bg-emerald-700 transition-colors disabled:opacity-50 flex items-center gap-2"
-                                        >
-                                            <Save className="w-4 h-4" /> {currentDocumentId ? 'Save New Version' : 'Save Draft'}
-                                        </button>
+                                    <div className="mt-4 flex justify-between items-center pt-4 border-t border-slate-100">
+                                        <div className="flex gap-3">
+                                            <button
+                                                onClick={handleSaveDocument}
+                                                disabled={isSaving || !selectedClient}
+                                                className="px-4 py-2 bg-emerald-600 text-white rounded-lg text-sm font-semibold hover:bg-emerald-700 transition-colors disabled:opacity-50 flex items-center gap-2"
+                                            >
+                                                <Save className="w-4 h-4" /> {currentDocumentId ? 'Save New Version' : 'Save Draft'}
+                                            </button>
+                                            <button
+                                                onClick={() => setIsEditing(p => !p)}
+                                                disabled={isSaving}
+                                                className="px-4 py-2 bg-slate-100 text-slate-700 rounded-lg text-sm font-semibold hover:bg-slate-200 transition-colors disabled:opacity-50 flex items-center gap-2"
+                                            >
+                                                <Edit className="w-4 h-4" /> {isEditing ? 'Lock Editing' : 'Edit Content'}
+                                            </button>
+                                        </div>
                                         
                                         <div className="flex gap-2">
                                             <button onClick={() => handleExport(currentDocumentContent, 'text')} className="px-3 py-2 bg-slate-100 text-slate-700 rounded-lg text-sm hover:bg-slate-200 flex items-center gap-2">

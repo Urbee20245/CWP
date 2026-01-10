@@ -1,8 +1,9 @@
 "use client";
 
-import React, { useState, useMemo } from 'react';
+import React, { useState, useMemo, useRef } from 'react';
 import { marked } from 'marked';
 import { Edit, Eye, AlertTriangle } from 'lucide-react';
+import MarkdownToolbar from './MarkdownToolbar'; // Import the new toolbar
 
 interface EmailEditorProps {
   subject: string;
@@ -22,6 +23,8 @@ const EmailEditor: React.FC<EmailEditorProps> = ({
   disabled,
 }) => {
   
+  const textareaRef = useRef<HTMLTextAreaElement>(null);
+
   const htmlPreview = useMemo(() => {
     try {
       // Convert Markdown body to HTML
@@ -56,7 +59,14 @@ const EmailEditor: React.FC<EmailEditorProps> = ({
             <Edit className="w-4 h-4" /> Markdown Editor
             {!isEditing && <span className="text-xs text-red-500">(Locked)</span>}
           </div>
+          
+          <MarkdownToolbar 
+            textareaRef={textareaRef} 
+            disabled={disabled || !isEditing} 
+          />
+          
           <textarea
+            ref={textareaRef}
             value={body}
             onChange={(e) => onBodyChange(e.target.value)}
             rows={15}
