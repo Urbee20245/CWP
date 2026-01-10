@@ -1,5 +1,4 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts"
-import { SMTPClient } from "https://deno.land/x/denomailer@1.6.0/mod.ts"
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
@@ -7,61 +6,80 @@ const corsHeaders = {
 }
 
 serve(async (req) => {
-  console.log('=== CONTACT FORM FUNCTION START ===')
-  
   if (req.method === 'OPTIONS') {
     return new Response('ok', { headers: corsHeaders })
   }
 
-  try {
-    const body = await req.json()
-    console.log('Received data:', {
-      hasFullName: !!body.fullName,
-      hasEmail: !!body.email,
-      hasMessage: !!body.message,
-      formType: body.formType
-    })
+  console.log('🔷 Step 1: Function called')
 
+  try {
+    console.log('🔷 Step 2: Parsing request body')
+    const body = await req.json()
+    
+    console.log('🔷 Step 3: Body parsed:', JSON.stringify(body))
+    
     const { fullName, email, phone, message, formType = 'Contact Form' } = body
 
-    // Validate required fields
+    console.log('🔷 Step 4: Extracted fields:', { 
+      fullName, 
+      email, 
+      phone: phone || 'none',
+      messageLength: message?.length || 0,
+      formType 
+    })
+
     if (!fullName || !email || !message) {
-      console.error('VALIDATION ERROR: Missing required fields')
+      console.log('❌ Missing fields:', { 
+        noFullName: !fullName, 
+        noEmail: !email, 
+        noMessage: !message 
+      })
       return new Response(
         JSON.stringify({ success: false, error: 'Missing required fields' }),
         { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
       )
     }
 
-    // Get SMTP configuration from environment
+    console.log('🔷 Step 5: Getting SMTP credentials from environment')
     const smtpHost = Deno.env.get('SMTP_HOST')
     const smtpPort = Deno.env.get('SMTP_PORT')
     const smtpUser = Deno.env.get('SMTP_USER')
     const smtpPass = Deno.env.get('SMTP_PASS')
-    
-    console.log('SMTP Configuration:', {
-      host: smtpHost,
-      port: smtpPort,
-      user: smtpUser,
-      hasPassword: !!smtpPass
+
+    console.log('🔷 Step 6: SMTP credentials check:', {
+      hasHost: !!smtpHost,
+      host: smtpHost || 'MISSING',
+      hasPort: !!smtpPort,
+      port: smtpPort || 'MISSING',
+      hasUser: !!smtpUser,
+      user: smtpUser || 'MISSING',
+      hasPass: !!smtpPass,
+      passLength: smtpPass?.length || 0
     })
-    
+
     if (!smtpHost || !smtpUser || !smtpPass) {
-      console.error('SMTP CREDENTIALS MISSING!')
+      console.log('❌ SMTP credentials incomplete')
       return new Response(
         JSON.stringify({ success: false, error: 'Email service not configured' }),
         { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
       )
     }
 
-    console.log('Creating SMTP client for port 465 (SSL)...')
+    console.log('🔷 Step 7: Importing SMTPClient')
+    const { SMTPClient } = await import("https://deno.land/x/denomailer@1.6.0/mod.ts")
     
-    // Port 465 requires different TLS configuration
+    console.log('🔷 Step 8: Creating SMTP client with config:', {
+      hostname: smtpHost,
+      port: parseInt(smtpPort || '465'),
+      tls: true,
+      username: smtpUser
+    })
+
     const client = new SMTPClient({
       connection: {
         hostname: smtpHost,
         port: parseInt(smtpPort || '465'),
-        tls: true,  // SSL/TLS enabled for port 465
+        tls: true,
         auth: {
           username: smtpUser,
           password: smtpPass,
@@ -69,55 +87,59 @@ serve(async (req) => {
       },
     })
 
-    console.log('Sending email...')
-    
-    await client.send({
-      from: `Custom Websites Plus <${smtpUser}>`,  // Use your actual email as sender
-      to: smtpUser,  // Send to yourself
-      replyTo: email,  // So you can reply to the customer
+    console.log('🔷 Step 9: Preparing email data')
+    const emailContent = {
+      from: `Custom Websites Plus <${smtpUser}>`,
+      to: smtpUser,
+      replyTo: email,
       subject: `New ${formType}: ${fullName}`,
       content: `
-        <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
-          <h2 style="color: #0EA5E9;">New ${formType} Submission</h2>
-          <div style="background: #f9fafb; padding: 20px; border-radius: 8px; margin: 20px 0;">
-            <p><strong style="color: #374151;">Name:</strong> ${fullName}</p>
-            <p><strong style="color: #374151;">Email:</strong> <a href="mailto:${email}" style="color: #0EA5E9;">${email}</a></p>
-            <p><strong style="color: #374151;">Phone:</strong> ${phone || 'Not provided'}</p>
-          </div>
-          <div style="background: white; padding: 20px; border-left: 4px solid #0EA5E9; margin: 20px 0;">
-            <p><strong style="color: #374151;">Message:</strong></p>
-            <p style="white-space: pre-wrap;">${message}</p>
-          </div>
-          <hr style="border: none; border-top: 1px solid #e5e7eb; margin: 30px 0;">
-          <p style="color: #6b7280; font-size: 14px;">
-            This message was sent via the contact form on customwebsitesplus.com<br>
-            Reply directly to this email to respond to ${fullName}
-          </p>
-        </div>
+        <h2>New ${formType}</h2>
+        <p><strong>Name:</strong> ${fullName}</p>
+        <p><strong>Email:</strong> ${email}</p>
+        <p><strong>Phone:</strong> ${phone || 'Not provided'}</p>
+        <p><strong>Message:</strong></p>
+        <p>${message}</p>
       `,
       html: true,
-    })
+    }
 
-    console.log('Closing SMTP connection...')
+    console.log('🔷 Step 10: Sending email...')
+    await client.send(emailContent)
+    
+    console.log('🔷 Step 11: Closing connection...')
     await client.close()
     
-    console.log('✅ EMAIL SENT SUCCESSFULLY!')
+    console.log('✅ SUCCESS: Email sent!')
 
     return new Response(
       JSON.stringify({ success: true, message: 'Email sent successfully' }),
       { status: 200, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
     )
 
-  } catch (error) {
-    console.error('❌ ERROR IN CONTACT FORM FUNCTION:')
-    console.error('Error name:', error.name)
-    console.error('Error message:', error.message)
-    console.error('Error stack:', error.stack)
+  } catch (err) {
+    console.log('❌❌❌ CAUGHT ERROR ❌❌❌')
+    console.log('Error object:', err)
+    console.log('Error type:', typeof err)
+    console.log('Error constructor:', err?.constructor?.name)
+    console.log('Error message:', err?.message)
+    console.log('Error toString:', String(err))
+    
+    if (err && typeof err === 'object') {
+      console.log('Error keys:', Object.keys(err))
+      for (const key of Object.keys(err)) {
+        console.log(`  ${key}:`, err[key])
+      }
+    }
+    
+    if (err?.stack) {
+      console.log('Error stack:', err.stack)
+    }
     
     return new Response(
       JSON.stringify({ 
         success: false, 
-        error: 'Failed to send email: ' + error.message 
+        error: String(err?.message || err || 'Unknown error')
       }),
       { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
     )
