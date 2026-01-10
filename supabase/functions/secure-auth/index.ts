@@ -27,6 +27,7 @@ serve(async (req) => {
     
     console.log(`[secure-auth] login_start for: ${email}`);
 
+    // --- RECAPTCHA CHECK ---
     if (!isDevBypass) {
         if (!recaptchaToken) {
             console.error('[secure-auth] Missing reCAPTCHA token.');
@@ -64,6 +65,7 @@ serve(async (req) => {
     } else {
         console.warn(`[secure-auth] WARNING: RECAPTCHA_SECRET_KEY is missing. Bypassing security check.`);
     }
+    // --- END RECAPTCHA CHECK ---
 
     let authResult;
     console.log('[secure-auth] edge_invoke_start');
