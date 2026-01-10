@@ -66,8 +66,25 @@ export const AdminService = {
   },
   
   saveSmtpSettings: async (settings: any) => {
-  return invokeEdgeFunction('save-smtp-settings', settings);
-},
+    return invokeEdgeFunction('save-smtp-settings', settings);
+  },
+  
+  // --- Resend Configuration (New) ---
+  getResendSettings: async () => {
+    const { data, error } = await supabase
+        .from('resend_settings')
+        .select('*')
+        .limit(1)
+        .single();
+    
+    if (error && error.code !== 'PGRST116') throw error; // Ignore 'No rows found'
+    return data;
+  },
+  
+  saveResendSettings: async (settings: any) => {
+    return invokeEdgeFunction('save-resend-settings', settings);
+  },
+  
   // --- Billing ---
   createStripeCustomer: async (clientId: string) => {
     return invokeEdgeFunction('stripe-api/create-customer', { client_id: clientId });
