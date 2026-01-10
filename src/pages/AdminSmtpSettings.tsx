@@ -98,10 +98,48 @@ const AdminSmtpSettings: React.FC = () => {
             setTestResult('success');
         } catch (e: any) {
             setTestResult('failed');
+            // The Edge Function now returns the specific error message
             setSaveError(e.message || 'Test failed due to an unknown error.');
         } finally {
             setIsTesting(false);
         }
+    };
+    
+    const renderDetailedError = (errorMessage: string) => {
+        // Check for common Nodemailer/SMTP errors
+        if (errorMessage.includes('Invalid login') || errorMessage.includes('authentication failed')) {
+            return (
+                <div>
+                    <p className="font-bold">Authentication Failed:</p>
+                    <p className="mt-1 text-xs">The SMTP server rejected your username or password. Please verify your credentials and ensure the password is correct (re-enter and save).</p>
+                </div>
+            );
+        }
+        if (errorMessage.includes('Unexpected socket close') || errorMessage.includes('ECONNREFUSED')) {
+            return (
+                <div>
+                    <p className="font-bold">Connection Error:</p>
+                    <p className="mt-1 text-xs">The server rejected the connection immediately. Check the Host, Port, and Secure (SSL/TLS) setting. If using port 587, ensure 'Use SSL/TLS' is unchecked.</p>
+                </div>
+            );
+        }
+        if (errorMessage.includes('Failed to decrypt SMTP password')) {
+            return (
+                <div>
+                    <p className="font-bold">Decryption Error:</p>
+                    <p className="mt-1 text-xs">The <code className="font-mono bg-red-200 px-1 rounded">SMTP_ENCRYPTION_KEY</code> secret in Supabase is likely missing or incorrect. Please verify the key and re-enter/save the password.</p>
+                </div>
+            );
+        }
+        
+        // Default detailed error
+        return (
+            <div>
+                <p className="font-bold">Detailed Error:</p>
+                <p className="mt-1 text-xs font-mono break-all">{errorMessage}</p>
+                <p className="mt-2 text-xs">Check Supabase Edge Function logs for more details.</p>
+            </div>
+        );
     };
 
     if (isLoading) {
@@ -128,15 +166,8 @@ const AdminSmtpSettings: React.FC = () => {
                     
                     {saveError && (
                         <div className="p-3 mb-4 bg-red-100 border border-red-300 text-red-800 rounded-lg text-sm flex items-center gap-2">
-                            <AlertTriangle className="w-4 h-4" />
-                            {saveError.includes('non-2xx') || saveError.includes('Failed to call') ? (
-                                <div>
-                                    <p className="font-bold">Test failed: Check Supabase Logs for detailed error.</p>
-                                    <p className="mt-1 text-xs">This usually means the SMTP server rejected the connection or the password decryption failed. Ensure the <code className="font-mono bg-red-200 px-1 rounded">SMTP_ENCRYPTION_KEY</code> secret is set correctly in Supabase.</p>
-                                </div>
-                            ) : (
-                                saveError
-                            )}
+                            <AlertTriangle className="w-4 h-4 flex-shrink-0" />
+                            {renderDetailedError(saveError)}
                         </div>
                     )}
 
@@ -288,7 +319,7 @@ const AdminSmtpSettings: React.FC = () => {
                         {testResult === 'failed' && (
                             <div className="p-3 bg-red-100 border border-red-300 text-red-800 rounded-lg text-sm flex items-center gap-2">
                                 <AlertTriangle className="w-4 h-4" />
-                                Test email failed. Check logs and credentials.
+                                Test email failed. See error details above.
                             </div>
                         )}
                     </form>

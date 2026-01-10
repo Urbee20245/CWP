@@ -54,9 +54,9 @@ serve(async (req) => {
     // 2. Decrypt password
     const decryptedPassword = decrypt(smtpSettings.password_encrypted);
     if (!decryptedPassword) {
-        logEntry.error_message = 'Failed to decrypt SMTP password.';
+        logEntry.error_message = 'Failed to decrypt SMTP password. Check SMTP_ENCRYPTION_KEY.';
         await supabaseAdmin.from('email_logs').insert(logEntry);
-        return errorResponse('Failed to decrypt SMTP password.', 500);
+        return errorResponse('Failed to decrypt SMTP password. Check SMTP_ENCRYPTION_KEY.', 500);
     }
 
     // 3. Configure Nodemailer Transporter
@@ -93,9 +93,12 @@ serve(async (req) => {
     console.error('[send-email] Unhandled error:', error.message);
     
     // 5. Log Failure
-    logEntry.error_message = error.message;
+    // Capture the specific error message from Nodemailer/transport
+    const errorMessage = error.response || error.message || 'Unknown SMTP error.';
+    logEntry.error_message = errorMessage;
     await supabaseAdmin.from('email_logs').insert(logEntry);
     
-    return errorResponse(`Email sending failed: ${error.message}`, 500);
+    // Return the specific error message
+    return errorResponse(`Email sending failed: ${errorMessage}`, 500);
   }
 });
