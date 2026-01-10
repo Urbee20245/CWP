@@ -1,12 +1,29 @@
 import nodemailer from 'https://esm.sh/nodemailer@6.9.14?target=deno';
+import { decrypt } from './encryption.ts';
 
 // Environment variables are read directly by Deno runtime
 const SMTP_HOST = Deno.env.get('SMTP_HOST');
 const SMTP_PORT = Deno.env.get('SMTP_PORT');
 const SMTP_USER = Deno.env.get('SMTP_USER');
-const SMTP_PASS = Deno.env.get('SMTP_PASS');
+const SMTP_PASS_RAW = Deno.env.get('SMTP_PASS');
 const SMTP_FROM_NAME = Deno.env.get('SMTP_FROM_NAME') || 'Custom Websites Plus';
-const SMTP_FROM_EMAIL = Deno.env.get('SMTP_FROM_EMAIL') || SMTP_USER; // Use dedicated FROM email if set, otherwise use SMTP_USER
+const SMTP_FROM_EMAIL = Deno.env.get('SMTP_FROM_EMAIL') || SMTP_USER;
+
+// Decrypt the password if it's encrypted
+let SMTP_PASS = SMTP_PASS_RAW || '';
+if (SMTP_PASS_RAW) {
+  try {
+    const decrypted = decrypt(SMTP_PASS_RAW);
+    if (decrypted && decrypted.length > 0) {
+      SMTP_PASS = decrypted;
+      console.log('[publicEmailService] Using decrypted password');
+    } else {
+      console.log('[publicEmailService] Decryption returned empty, using raw password');
+    }
+  } catch (e) {
+    console.log('[publicEmailService] Decryption failed, using raw password:', e);
+  }
+}
 
 export async function sendPublicFormEmail(
     toEmail: string,
@@ -23,14 +40,12 @@ export async function sendPublicFormEmail(
     const isSecurePort = port === 465;
 
     console.log(`[publicEmailService] Attempting to send email via ${SMTP_HOST}:${port}. Secure: ${isSecurePort}`);
+    console.log(`[publicEmailService] Password length: ${SMTP_PASS.length}`);
 
     const transporter = nodemailer.createTransport({
         host: SMTP_HOST,
         port: port,
-        secure: isSecurePort, // Use implicit SSL for port 465
-        // Adding ignoreTLS as a diagnostic step for socket close errors
-        // If this works, the server might be misconfigured or Deno's TLS stack is having issues.
-        // We will remove this if it doesn't help.
+        secure: isSecurePort,
         ignoreTLS: isSecurePort, 
         auth: {
             user: SMTP_USER,
@@ -39,7 +54,7 @@ export async function sendPublicFormEmail(
     });
 
     const mailOptions = {
-        from: `"${SMTP_FROM_NAME}" <${SMTP_FROM_EMAIL}>`, // Use SMTP_FROM_EMAIL for sender
+        from: `"${SMTP_FROM_NAME}" <${SMTP_FROM_EMAIL}>`,
         to: toEmail,
         replyTo: replyToEmail,
         subject: subject,
