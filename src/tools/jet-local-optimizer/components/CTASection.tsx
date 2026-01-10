@@ -1,5 +1,7 @@
 import type { BrandConfig } from '../config/brands';
 import type { AnalysisResult } from '../types';
+import { Link } from 'react-router-dom';
+import { Sparkles, Bot } from 'lucide-react';
 
 interface CTASectionProps {
   brandConfig: BrandConfig;
@@ -46,13 +48,33 @@ export function CTASection({ brandConfig, result }: CTASectionProps) {
             </ul>
           </div>
         )}
+        
+        {/* AI Value Proposition */}
+        <div className="mt-8 p-4 bg-blue-700 rounded-xl flex items-center gap-4 text-left">
+            <Bot className="w-6 h-6 text-emerald-400 flex-shrink-0" />
+            <p className="text-sm font-semibold text-white">
+                **Let AI do it for you.** JetSuite is the complete platform that automates your marketing, content, and customer engagement.
+            </p>
+        </div>
 
-        <button 
-          className="bg-white text-blue-600 px-8 py-4 rounded-lg font-bold text-lg hover:bg-gray-100 transition shadow-lg"
-          onClick={() => window.location.href = '/contact'}
-        >
-          {brandConfig.ctaButton}
-        </button>
+        <div className="flex flex-col sm:flex-row justify-center gap-4 mt-6">
+            <button 
+              className="bg-white text-blue-600 px-8 py-4 rounded-lg font-bold text-lg hover:bg-gray-100 transition shadow-lg"
+              onClick={() => window.location.href = '/contact'}
+            >
+              {brandConfig.ctaButton}
+            </button>
+            
+            <a 
+                href="https://getjetsuite.com"
+                target="_blank"
+                rel="noopener noreferrer"
+                className="bg-emerald-500 text-white px-8 py-4 rounded-lg font-bold text-lg hover:bg-emerald-600 transition shadow-lg flex items-center justify-center gap-2"
+            >
+                <Sparkles className="w-5 h-5" />
+                Visit JetSuite
+            </a>
+        </div>
 
         <p className="text-sm mt-4 opacity-75">
           Free consultation • No obligation • {brandConfig.name}
