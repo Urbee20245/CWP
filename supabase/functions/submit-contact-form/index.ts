@@ -1,76 +1,102 @@
-import { serve } from "https://deno.land/std@0.190.0/http/server.ts";
-import { createClient } from 'https://esm.sh/@supabase/supabase-js@2.45.0';
-import { handleCors, jsonResponse, errorResponse } from '../_shared/utils.ts';
+// supabase/functions/submit-contact-form/index.ts
+import { serve } from "https://deno.land/std@0.168.0/http/server.ts"
+import { SMTPClient } from "https://deno.land/x/denomailer@1.6.0/mod.ts"
 
-// The target email address for all form submissions
-const ADMIN_EMAIL = "info@customwebsitesplus.com";
+const corsHeaders = {
+  'Access-Control-Allow-Origin': '*',
+  'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
+}
 
 serve(async (req) => {
-  const corsResponse = handleCors(req);
-  if (corsResponse) return corsResponse;
-
-  // Initialize Supabase client with service role key to invoke other functions
-  const supabaseAdmin = createClient(
-    Deno.env.get('SUPABASE_URL')!,
-    Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!
-  );
+  // Handle CORS preflight requests
+  if (req.method === 'OPTIONS') {
+    return new Response('ok', { headers: corsHeaders })
+  }
 
   try {
-    const formData = await req.json();
-    const { name, email, phone, message, recaptchaToken, formType, ...additionalFields } = formData;
+    const { fullName, email, phone, message } = await req.json()
 
-    if (!email || !name || !formType) {
-      return errorResponse('Missing required fields: name, email, or formType.', 400);
-    }
-    
-    console.log(`[submit-contact-form] Received submission for ${formType} from ${email}`);
-
-    // --- Construct Email Body ---
-    let htmlBody = `
-      <h2>New Form Submission: ${formType}</h2>
-      <p><strong>From:</strong> ${name}</p>
-      <p><strong>Email:</strong> ${email}</p>
-      ${phone ? `<p><strong>Phone:</strong> ${phone}</p>` : ''}
-      ${message ? `<p><strong>Message:</strong> ${message}</p>` : ''}
-      <hr>
-      <h3>Additional Details:</h3>
-    `;
-    
-    // Add any extra fields from the form (e.g., budget, timeline)
-    for (const [key, value] of Object.entries(additionalFields)) {
-        if (value) {
-            htmlBody += `<p><strong>${key.replace(/([A-Z])/g, ' $1').replace(/^./, str => str.toUpperCase())}:</strong> ${Array.isArray(value) ? value.join(', ') : value}</p>`;
+    // Validate input
+    if (!fullName || !email || !message) {
+      return new Response(
+        JSON.stringify({ error: 'Missing required fields' }),
+        { 
+          status: 400,
+          headers: { ...corsHeaders, 'Content-Type': 'application/json' }
         }
-    }
-    
-    // --- Invoke send-email Edge Function ---
-    const sendEmailPayload = {
-        to_email: ADMIN_EMAIL,
-        subject: `NEW LEAD: ${formType} from ${name}`,
-        html_body: htmlBody,
-        client_id: null, // Not associated with an existing client yet
-        sent_by: 'system_form_submission',
-    };
-
-    const { data: emailResult, error: emailError } = await supabaseAdmin.functions.invoke('send-email', {
-        body: JSON.stringify(sendEmailPayload),
-    });
-
-    if (emailError) {
-        console.error('[submit-contact-form] Failed to invoke send-email:', emailError);
-        throw new Error(emailError.message);
-    }
-    
-    if (emailResult.error) {
-        console.error('[submit-contact-form] send-email returned error:', emailResult.error);
-        throw new Error(emailResult.error);
+      )
     }
 
-    console.log(`[submit-contact-form] Email successfully dispatched to ${ADMIN_EMAIL}`);
-    return jsonResponse({ success: true, message: 'Form submitted and email sent.' });
+    // Get environment variables
+    const smtpHost = Deno.env.get('SMTP_HOST')
+    const smtpPort = parseInt(Deno.env.get('SMTP_PORT') || '587')
+    const smtpUser = Deno.env.get('SMTP_USER')
+    const smtpPass = Deno.env.get('SMTP_PASS')
+    const fromEmail = Deno.env.get('SMTP_FROM_EMAIL') || 'hello@customwebsitesplus.com'
+    const fromName = Deno.env.get('SMTP_FROM_NAME') || 'Custom Websites Plus'
 
-  } catch (error: any) {
-    console.error('[submit-contact-form] Unhandled error:', error.message);
-    return errorResponse(error.message, 500);
+    // Check if SMTP is configured
+    if (!smtpHost || !smtpUser || !smtpPass) {
+      console.error('SMTP not configured. Missing environment variables.')
+      return new Response(
+        JSON.stringify({ error: 'Email service not configured' }),
+        { 
+          status: 500,
+          headers: { ...corsHeaders, 'Content-Type': 'application/json' }
+        }
+      )
+    }
+
+    // Create SMTP client
+    const client = new SMTPClient({
+      connection: {
+        hostname: smtpHost,
+        port: smtpPort,
+        tls: true,
+        auth: {
+          username: smtpUser,
+          password: smtpPass,
+        },
+      },
+    })
+
+    // Send email
+    await client.send({
+      from: `${fromName} <${fromEmail}>`,
+      to: fromEmail, // Send to your own email
+      subject: `New Contact Form Submission from ${fullName}`,
+      content: `
+        <h2>New Contact Form Submission</h2>
+        <p><strong>Name:</strong> ${fullName}</p>
+        <p><strong>Email:</strong> ${email}</p>
+        <p><strong>Phone:</strong> ${phone || 'Not provided'}</p>
+        <p><strong>Message:</strong></p>
+        <p>${message}</p>
+      `,
+      html: true,
+    })
+
+    await client.close()
+
+    return new Response(
+      JSON.stringify({ success: true, message: 'Email sent successfully' }),
+      { 
+        status: 200,
+        headers: { ...corsHeaders, 'Content-Type': 'application/json' }
+      }
+    )
+
+  } catch (error) {
+    console.error('Error in submit-contact-form:', error)
+    return new Response(
+      JSON.stringify({ 
+        error: 'Failed to send email',
+        details: error.message 
+      }),
+      { 
+        status: 500,
+        headers: { ...corsHeaders, 'Content-Type': 'application/json' }
+      }
+    )
   }
-});
+})
