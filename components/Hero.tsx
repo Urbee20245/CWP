@@ -7,7 +7,7 @@ const Hero: React.FC = () => {
   // Client avatar paths from your public folder
   const CLIENT_AVATARS = [
     '/CWPC1.png',
-    '/CWPC2.png',
+    '/CWPC12.png',
     '/CWPC3.png',
     '/CWPC4.png'
   ];
@@ -52,8 +52,11 @@ const Hero: React.FC = () => {
                 </p>
 
                 <div className="flex flex-col sm:flex-row items-center gap-4 w-full mb-12">
-                  <Link 
-                    to="/strategy-call"
+                  {/* UPDATED: Link to external contact page */}
+                  <a 
+                    href="https://www.customwebsitesplus.com/contact"
+                    target="_blank"
+                    rel="noopener noreferrer"
                     className="w-full sm:w-auto px-10 py-5 bg-gradient-to-r from-blue-600 to-indigo-600 text-white rounded-xl font-bold transition-all hover:from-blue-700 hover:to-indigo-700 hover:shadow-2xl hover:shadow-blue-500/20 active:scale-95 hover:scale-[1.02] duration-300 group"
                   >
                     <span className="flex items-center justify-center gap-3">
@@ -63,7 +66,7 @@ const Hero: React.FC = () => {
                     <span className="block text-sm font-normal opacity-90 mt-2 text-blue-100 text-center">
                       Get a custom roadmap for your digital growth
                     </span>
-                  </Link>
+                  </a>
                   
                   <a 
                     href={`#${NavigationLink.Services}`}
