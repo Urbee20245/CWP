@@ -53,10 +53,10 @@ serve(async (req) => {
 
     // 2. Decrypt password
     const decryptedPassword = decrypt(smtpSettings.password_encrypted);
-    if (!decryptedPassword) {
-        logEntry.error_message = 'Failed to decrypt SMTP password. Check SMTP_ENCRYPTION_KEY.';
+    if (!decryptedPassword || decryptedPassword.length === 0) {
+        logEntry.error_message = 'Failed to decrypt SMTP password. Check SMTP_ENCRYPTION_KEY secret.';
         await supabaseAdmin.from('email_logs').insert(logEntry);
-        return errorResponse('Failed to decrypt SMTP password. Check SMTP_ENCRYPTION_KEY.', 500);
+        return errorResponse('Email sending failed: Failed to decrypt SMTP password. Check SMTP_ENCRYPTION_KEY secret.', 500);
     }
 
     // 3. Configure Nodemailer Transporter

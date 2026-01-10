@@ -7,23 +7,10 @@ const RESEND_API_KEY = Deno.env.get('RESEND_API_KEY');
 const SMTP_HOST = Deno.env.get('SMTP_HOST');
 const SMTP_PORT = Deno.env.get('SMTP_PORT');
 const SMTP_USER = Deno.env.get('SMTP_USER');
-const SMTP_PASS_RAW = Deno.env.get('SMTP_PASS');
+const SMTP_PASS_ENCRYPTED = Deno.env.get('SMTP_PASS'); // Renamed for clarity
 const SMTP_FROM_NAME = Deno.env.get('SMTP_FROM_NAME') || 'Custom Websites Plus';
 const SMTP_FROM_EMAIL_FALLBACK = Deno.env.get('SMTP_FROM_EMAIL') || SMTP_USER;
 const RESEND_FROM_EMAIL = `${SMTP_FROM_NAME} <${SMTP_FROM_EMAIL_FALLBACK}>`; // Use verified domain email
-
-// Decrypt the password once for the SMTP fallback path
-let SMTP_PASS = SMTP_PASS_RAW || '';
-if (SMTP_PASS_RAW) {
-  try {
-    const decrypted = decrypt(SMTP_PASS_RAW);
-    if (decrypted && decrypted.length > 0) {
-      SMTP_PASS = decrypted;
-    }
-  } catch (e) {
-    console.log('[publicEmailService] Decryption failed for SMTP password.');
-  }
-}
 
 export async function sendPublicFormEmail(
     toEmail: string,
@@ -69,13 +56,26 @@ export async function sendPublicFormEmail(
     }
 
     // 2. --- SMTP FALLBACK METHOD ---
-    if (!SMTP_HOST || !SMTP_PORT || !SMTP_USER || !SMTP_PASS) {
+    if (!SMTP_HOST || !SMTP_PORT || !SMTP_USER || !SMTP_PASS_ENCRYPTED) {
         console.error("[publicEmailService] SMTP credentials incomplete. Cannot fallback.");
         throw new Error("Email service failed: Both Resend and SMTP configurations are incomplete or failed.");
     }
+    
+    // Decrypt the password for SMTP
+    let SMTP_PASS = '';
+    try {
+        const decrypted = decrypt(SMTP_PASS_ENCRYPTED);
+        if (decrypted && decrypted.length > 0) {
+            SMTP_PASS = decrypted;
+        } else {
+            throw new Error("Decryption failed or resulted in empty password.");
+        }
+    } catch (e) {
+        console.error("[publicEmailService] Decryption failed for SMTP password:", e);
+        throw new Error("SMTP configuration error: Failed to decrypt password. Check SMTP_ENCRYPTION_KEY secret.");
+    }
 
     const port = parseInt(SMTP_PORT);
-    // Use secure: true only if port is 465 (standard SSL/TLS)
     const isSecureConnection = port === 465; 
 
     console.log(`[publicEmailService] Attempting SMTP fallback via ${SMTP_HOST}:${port}. Secure: ${isSecureConnection}`);
@@ -88,7 +88,6 @@ export async function sendPublicFormEmail(
             user: SMTP_USER,
             pass: SMTP_PASS,
         },
-        // Explicitly require TLS for port 587 connections (secure: false)
         requireTLS: port === 587 ? true : false,
     });
 
