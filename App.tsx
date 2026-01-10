@@ -26,7 +26,6 @@ import AdminRevenueDashboard from './src/pages/AdminRevenueDashboard';
 import AdminSettingsPage from './src/pages/AdminSettingsPage';
 import AdminDocumentGenerator from './src/pages/AdminDocumentGenerator';
 import AdminEmailGenerator from './src/pages/AdminEmailGenerator';
-import AdminSmtpSettings from './src/pages/AdminSmtpSettings';
 import AdminTwilioSettings from './src/pages/AdminTwilioSettings';
 import NotFoundPage from './src/pages/NotFoundPage';
 import ErrorBoundary from './src/components/ErrorBoundary';
@@ -37,7 +36,7 @@ import ClientProfile from './src/pages/ClientProfile';
 import PrivacyPolicy from './src/pages/PrivacyPolicy';
 import TermsAndConditions from './src/pages/TermsAndConditions';
 import ClientAddons from './src/pages/ClientAddons';
-import AdminAddonCatalog from './src/pages/AdminAddonCatalog'; // New Import
+import AdminAddonCatalog from './src/pages/AdminAddonCatalog';
 
 // Component that uses useLocation to conditionally render global elements
 const AppContent: React.FC = () => {
@@ -90,11 +89,11 @@ const AppContent: React.FC = () => {
           <Route path="billing/products" element={<AdminBillingProducts />} />
           <Route path="billing/revenue" element={<AdminRevenueDashboard />} />
           <Route path="settings" element={<AdminSettingsPage />} />
-          <Route path="settings/smtp" element={<AdminSmtpSettings />} />
+          {/* Removed SMTP route: <Route path="settings/smtp" element={<AdminSmtpSettings />} /> */}
           <Route path="settings/twilio" element={<AdminTwilioSettings />} />
           <Route path="ai-docs" element={<AdminDocumentGenerator />} />
           <Route path="ai-email" element={<AdminEmailGenerator />} />
-          <Route path="addons/catalog" element={<AdminAddonCatalog />} /> {/* New Route */}
+          <Route path="addons/catalog" element={<AdminAddonCatalog />} />
         </Route>
 
         {/* Client Routes */}

@@ -1,16 +1,9 @@
-import nodemailer from 'https://esm.sh/nodemailer@6.9.14?target=deno';
-import { decrypt } from './encryption.ts';
+import { decrypt } from './encryption.ts'; // Keep import for now, though not used here
 
 // --- Environment Variables ---
 const RESEND_API_KEY = Deno.env.get('RESEND_API_KEY');
-// Use the verified domain email for Resend sending
-const SMTP_HOST = Deno.env.get('SMTP_HOST');
-const SMTP_PORT = Deno.env.get('SMTP_PORT');
-const SMTP_USER = Deno.env.get('SMTP_USER');
-const SMTP_PASS_ENCRYPTED = Deno.env.get('SMTP_PASS'); // Renamed for clarity
-const SMTP_FROM_NAME = Deno.env.get('SMTP_FROM_NAME') || 'Custom Websites Plus';
-const SMTP_FROM_EMAIL_FALLBACK = Deno.env.get('SMTP_FROM_EMAIL') || SMTP_USER;
-const RESEND_FROM_EMAIL = `${SMTP_FROM_NAME} <${SMTP_FROM_EMAIL_FALLBACK}>`; // Use verified domain email
+const RESEND_FROM_EMAIL = Deno.env.get('SMTP_FROM_EMAIL') || 'noreply@customwebsitesplus.com';
+const RESEND_FROM_NAME = Deno.env.get('SMTP_FROM_NAME') || 'Custom Websites Plus';
 
 export async function sendPublicFormEmail(
     toEmail: string,
@@ -18,93 +11,41 @@ export async function sendPublicFormEmail(
     htmlContent: string,
     replyToEmail: string
 ) {
-    // 1. --- RESEND PRIMARY METHOD ---
-    if (RESEND_API_KEY) {
-        try {
-            console.log('[publicEmailService] Attempting to send email via Resend API.');
-            
-            const resendResponse = await fetch('https://api.resend.com/emails', {
-                method: 'POST',
-                headers: {
-                    'Authorization': `Bearer ${RESEND_API_KEY}`,
-                    'Content-Type': 'application/json',
-                },
-                body: JSON.stringify({
-                    from: RESEND_FROM_EMAIL,
-                    to: toEmail,
-                    reply_to: replyToEmail,
-                    subject: subject,
-                    html: htmlContent,
-                }),
-            });
-
-            const resendData = await resendResponse.json();
-
-            if (resendResponse.ok) {
-                console.log(`[publicEmailService] Resend success. ID: ${resendData.id}`);
-                return { success: true, messageId: resendData.id };
-            } else {
-                console.error(`[publicEmailService] Resend API failed (${resendResponse.status}):`, resendData);
-                // Fall through to SMTP fallback
-            }
-        } catch (error) {
-            console.error('[publicEmailService] Resend network error, falling back to SMTP:', error);
-            // Fall through to SMTP fallback
-        }
-    } else {
-        console.warn('[publicEmailService] RESEND_API_KEY missing. Falling back to SMTP.');
-    }
-
-    // 2. --- SMTP FALLBACK METHOD ---
-    if (!SMTP_HOST || !SMTP_PORT || !SMTP_USER || !SMTP_PASS_ENCRYPTED) {
-        console.error("[publicEmailService] SMTP credentials incomplete. Cannot fallback.");
-        throw new Error("Email service failed: Both Resend and SMTP configurations are incomplete or failed.");
+    if (!RESEND_API_KEY) {
+        console.error('[publicEmailService] CRITICAL: RESEND_API_KEY missing. Cannot send email.');
+        throw new Error("Email service failed: RESEND_API_KEY is not configured.");
     }
     
-    // Decrypt the password for SMTP
-    let SMTP_PASS = '';
     try {
-        const decrypted = decrypt(SMTP_PASS_ENCRYPTED);
-        if (decrypted && decrypted.length > 0) {
-            SMTP_PASS = decrypted;
+        console.log('[publicEmailService] Attempting to send email via Resend API.');
+        
+        const resendResponse = await fetch('https://api.resend.com/emails', {
+            method: 'POST',
+            headers: {
+                'Authorization': `Bearer ${RESEND_API_KEY}`,
+                'Content-Type': 'application/json',
+            },
+            body: JSON.stringify({
+                from: `"${RESEND_FROM_NAME}" <${RESEND_FROM_EMAIL}>`,
+                to: toEmail,
+                reply_to: replyToEmail,
+                subject: subject,
+                html: htmlContent,
+            }),
+        });
+
+        const resendData = await resendResponse.json();
+
+        if (resendResponse.ok) {
+            console.log(`[publicEmailService] Resend success. ID: ${resendData.id}`);
+            return { success: true, messageId: resendData.id };
         } else {
-            throw new Error("Decryption failed or resulted in empty password.");
+            const errorMsg = resendData.message || `Resend API failed with status ${resendResponse.status}`;
+            console.error(`[publicEmailService] Resend API failed:`, errorMsg);
+            throw new Error(`Resend API failed: ${errorMsg}`);
         }
-    } catch (e) {
-        console.error("[publicEmailService] Decryption failed for SMTP password:", e);
-        throw new Error("SMTP configuration error: Failed to decrypt password. Check SMTP_ENCRYPTION_KEY secret.");
-    }
-
-    const port = parseInt(SMTP_PORT);
-    const isSecureConnection = port === 465; 
-
-    console.log(`[publicEmailService] Attempting SMTP fallback via ${SMTP_HOST}:${port}. Secure: ${isSecureConnection}`);
-    
-    const transporter = nodemailer.createTransport({
-        host: SMTP_HOST,
-        port: port,
-        secure: isSecureConnection, 
-        auth: {
-            user: SMTP_USER,
-            pass: SMTP_PASS,
-        },
-        requireTLS: port === 587 ? true : false,
-    });
-
-    const mailOptions = {
-        from: `"${SMTP_FROM_NAME}" <${SMTP_FROM_EMAIL_FALLBACK}>`,
-        to: toEmail,
-        replyTo: replyToEmail,
-        subject: subject,
-        html: htmlContent,
-    };
-
-    try {
-        const info = await transporter.sendMail(mailOptions);
-        console.log(`[publicEmailService] SMTP fallback success. Message ID: ${info.messageId}`);
-        return { success: true, messageId: info.messageId };
     } catch (error: any) {
-        console.error("[publicEmailService] SMTP fallback error:", error.message);
-        throw new Error(`SMTP connection failed: ${error.message}`);
+        console.error('[publicEmailService] Resend network error:', error.message);
+        throw new Error(`Email service failed: ${error.message}`);
     }
 }

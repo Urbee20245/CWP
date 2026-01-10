@@ -33,32 +33,36 @@ const AdminSettingsPage: React.FC = () => {
             </Link>
           </div>
           
-          {/* Integration Card: SMTP Email */}
+          {/* Integration Card: Resend Email */}
           <div className="lg:col-span-2 bg-white p-6 rounded-xl shadow-lg border border-slate-100">
             <h2 className="text-xl font-bold text-slate-900 mb-4 flex items-center gap-2 border-b border-slate-100 pb-4">
-              <Mail className="w-5 h-5 text-indigo-600" /> Email (SMTP) Configuration
+              <Mail className="w-5 h-5 text-emerald-600" /> Email (Resend) Configuration
             </h2>
             
             <p className="text-slate-600 mb-6">
-              Configure your external SMTP provider (e.g., SendGrid, Postmark, Gmail) to enable direct email sending from the system.
+              The system now uses the Resend API for all email sending (public forms and admin notifications).
             </p>
             
-            <div className="p-4 bg-red-50 border border-red-200 rounded-xl mb-6">
-                <h3 className="font-bold text-red-800 mb-2 flex items-center gap-2">
-                    <AlertTriangle className="w-5 h-5" /> Encryption Key Required
+            <div className="p-4 bg-emerald-50 border border-emerald-200 rounded-xl mb-6">
+                <h3 className="font-bold text-emerald-800 mb-2 flex items-center gap-2">
+                    <CheckCircle2 className="w-5 h-5" /> Configuration Required
                 </h3>
-                <p className="text-sm text-red-700">
-                    For security, you must set the secret <code className="font-mono text-xs bg-red-200 px-1 rounded">SMTP_ENCRYPTION_KEY</code> in Supabase Secrets to encrypt SMTP passwords.
+                <p className="text-sm text-emerald-700">
+                    You must set the secret <code className="font-mono text-xs bg-emerald-200 px-1 rounded">RESEND_API_KEY</code> in Supabase Secrets.
+                    <br/>
+                    Also set <code className="font-mono text-xs bg-emerald-200 px-1 rounded">SMTP_FROM_EMAIL</code> and <code className="font-mono text-xs bg-emerald-200 px-1 rounded">SMTP_FROM_NAME</code> for the sender identity.
                 </p>
             </div>
 
-            <Link 
-              to="/admin/settings/smtp" 
-              className="inline-flex items-center gap-2 px-4 py-2 bg-indigo-600 text-white rounded-lg text-sm font-semibold hover:bg-indigo-700 transition-colors"
+            <a 
+              href={`https://supabase.com/dashboard/project/nvgumhlewbqynrhlkqhx/functions/secrets`}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="inline-flex items-center gap-2 px-4 py-2 bg-emerald-600 text-white rounded-lg text-sm font-semibold hover:bg-emerald-700 transition-colors"
             >
-              Configure SMTP Settings
+              Go to Supabase Secrets
               <ExternalLink className="w-4 h-4" />
-            </Link>
+            </a>
           </div>
           
           {/* Integration Card: Twilio SMS */}

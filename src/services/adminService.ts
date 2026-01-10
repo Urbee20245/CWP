@@ -53,21 +53,6 @@ export const AdminService = {
     return invokeEdgeFunction('send-email', { to_email, subject, html_body, client_id, sent_by });
   },
   
-  // --- SMTP Configuration ---
-  getSmtpSettings: async () => {
-    const { data, error } = await supabase
-        .from('smtp_settings')
-        .select('*')
-        .limit(1)
-        .single();
-    
-    if (error && error.code !== 'PGRST116') throw error; // Ignore 'No rows found'
-    return data;
-  },
-  
-  saveSmtpSettings: async (settings: any) => {
-  return invokeEdgeFunction('save-smtp-settings', settings);
-},
   // --- Billing ---
   createStripeCustomer: async (clientId: string) => {
     return invokeEdgeFunction('stripe-api/create-customer', { client_id: clientId });
@@ -135,7 +120,7 @@ export const AdminService = {
           <p>Thank you,<br>The Custom Websites Plus Team</p>
       `;
       
-      // Use the existing sendEmail function which calls the Edge Function
+      // Use the existing sendEmail function which calls the Resend Edge Function
       return AdminService.sendEmail(clientEmail, subject, html_body, null, sentBy);
   },
   

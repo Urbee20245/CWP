@@ -1,8 +1,10 @@
 import { serve } from "https://deno.land/std@0.190.0/http/server.ts";
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2.45.0';
-import nodemailer from 'https://esm.sh/nodemailer@6.9.14?target=deno';
 import { handleCors, jsonResponse, errorResponse } from '../_shared/utils.ts';
-import { decrypt } from '../_shared/encryption.ts';
+
+const RESEND_API_KEY = Deno.env.get('RESEND_API_KEY');
+const RESEND_FROM_EMAIL = Deno.env.get('SMTP_FROM_EMAIL') || 'noreply@customwebsitesplus.com';
+const RESEND_FROM_NAME = Deno.env.get('SMTP_FROM_NAME') || 'Custom Websites Plus';
 
 serve(async (req) => {
   const corsResponse = handleCors(req);
@@ -23,8 +25,12 @@ serve(async (req) => {
     sent_by: null as string | null,
   };
 
+  if (!RESEND_API_KEY) {
+    return errorResponse('Email service failed: RESEND_API_KEY is not set in Supabase Secrets.', 500);
+  }
+
   try {
-    const { to_email, subject, html_body, text_body, client_id, sent_by } = await req.json();
+    const { to_email, subject, html_body, client_id, sent_by } = await req.json();
 
     if (!to_email || !subject || !html_body) {
       return errorResponse('Missing required email fields.', 400);
@@ -36,69 +42,43 @@ serve(async (req) => {
     logEntry.body = html_body;
     logEntry.sent_by = sent_by;
 
-    // 1. Fetch active SMTP settings
-    const { data: smtpSettings, error: settingsError } = await supabaseAdmin
-      .from('smtp_settings')
-      .select('*')
-      .eq('is_active', true)
-      .limit(1)
-      .single();
-
-    if (settingsError || !smtpSettings) {
-      const msg = settingsError ? settingsError.message : 'No active SMTP configuration found.';
-      logEntry.error_message = msg;
-      await supabaseAdmin.from('email_logs').insert(logEntry);
-      return errorResponse(msg, 500);
-    }
-
-    // 2. Decrypt password
-    const decryptedPassword = decrypt(smtpSettings.password_encrypted);
-    if (!decryptedPassword || decryptedPassword.length === 0) {
-        logEntry.error_message = 'Failed to decrypt SMTP password. Check SMTP_ENCRYPTION_KEY secret.';
-        await supabaseAdmin.from('email_logs').insert(logEntry);
-        return errorResponse('Email sending failed: Failed to decrypt SMTP password. Check SMTP_ENCRYPTION_KEY secret.', 500);
-    }
-
-    // 3. Configure Nodemailer Transporter
-    const transporter = nodemailer.createTransport({
-      host: smtpSettings.host,
-      port: smtpSettings.port,
-      secure: smtpSettings.secure,
-      auth: {
-        user: smtpSettings.username,
-        pass: decryptedPassword,
-      },
+    // 1. Send Email via Resend
+    const resendResponse = await fetch('https://api.resend.com/emails', {
+        method: 'POST',
+        headers: {
+            'Authorization': `Bearer ${RESEND_API_KEY}`,
+            'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+            from: `"${RESEND_FROM_NAME}" <${RESEND_FROM_EMAIL}>`,
+            to: to_email,
+            subject: subject,
+            html: html_body,
+        }),
     });
 
-    // 4. Send Email
-    const mailOptions = {
-      from: `"${smtpSettings.from_name}" <${smtpSettings.from_email}>`,
-      to: to_email,
-      subject: subject,
-      html: html_body,
-      text: text_body || html_body.replace(/<[^>]*>?/gm, ''), // Basic HTML to text conversion
-    };
+    const resendData = await resendResponse.json();
 
-    const info = await transporter.sendMail(mailOptions);
+    if (!resendResponse.ok) {
+        const errorMsg = resendData.message || `Resend API failed with status ${resendResponse.status}`;
+        throw new Error(errorMsg);
+    }
     
-    console.log(`[send-email] Message sent: ${info.messageId}`);
+    console.log(`[send-email] Message sent via Resend: ${resendData.id}`);
     
-    // 5. Log Success
+    // 2. Log Success
     logEntry.status = 'sent';
     await supabaseAdmin.from('email_logs').insert(logEntry);
 
-    return jsonResponse({ success: true, messageId: info.messageId });
+    return jsonResponse({ success: true, messageId: resendData.id });
 
   } catch (error: any) {
     console.error('[send-email] Unhandled error:', error.message);
     
-    // 5. Log Failure
-    // Capture the specific error message from Nodemailer/transport
-    const errorMessage = error.response || error.message || 'Unknown SMTP error.';
-    logEntry.error_message = errorMessage;
+    // 3. Log Failure
+    logEntry.error_message = error.message;
     await supabaseAdmin.from('email_logs').insert(logEntry);
     
-    // Return the specific error message
-    return errorResponse(`Email sending failed: ${errorMessage}`, 500);
+    return errorResponse(`Email sending failed: ${error.message}`, 500);
   }
 });
