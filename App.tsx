@@ -18,6 +18,7 @@ import AdminProjectList from './src/pages/AdminProjectList';
 import ClientDashboard from './src/pages/ClientDashboard';
 import AdminClientDetail from './src/pages/AdminClientDetail';
 import AdminProjectDetail from './src/pages/AdminProjectDetail';
+import ClientProjectDetail from './src/pages/ClientProjectDetail';
 import ClientBilling from './src/pages/ClientBilling';
 import BackOfficeRedirect from './src/pages/BackOfficeRedirect';
 import AdminBillingProducts from './src/pages/AdminBillingProducts';
@@ -27,7 +28,6 @@ import AdminDocumentGenerator from './src/pages/AdminDocumentGenerator';
 import AdminEmailGenerator from './src/pages/AdminEmailGenerator';
 import AdminSmtpSettings from './src/pages/AdminSmtpSettings';
 import AdminTwilioSettings from './src/pages/AdminTwilioSettings';
-import AdminResendSettings from './src/pages/AdminResendSettings'; // New Import
 import NotFoundPage from './src/pages/NotFoundPage';
 import ErrorBoundary from './src/components/ErrorBoundary';
 import GlobalLoading from './src/components/GlobalLoading';
@@ -37,7 +37,7 @@ import ClientProfile from './src/pages/ClientProfile';
 import PrivacyPolicy from './src/pages/PrivacyPolicy';
 import TermsAndConditions from './src/pages/TermsAndConditions';
 import ClientAddons from './src/pages/ClientAddons';
-import AdminAddonCatalog from './src/pages/AdminAddonCatalog';
+import AdminAddonCatalog from './src/pages/AdminAddonCatalog'; // New Import
 
 // Component that uses useLocation to conditionally render global elements
 const AppContent: React.FC = () => {
@@ -92,10 +92,9 @@ const AppContent: React.FC = () => {
           <Route path="settings" element={<AdminSettingsPage />} />
           <Route path="settings/smtp" element={<AdminSmtpSettings />} />
           <Route path="settings/twilio" element={<AdminTwilioSettings />} />
-          <Route path="settings/resend" element={<AdminResendSettings />} /> {/* New Route */}
           <Route path="ai-docs" element={<AdminDocumentGenerator />} />
           <Route path="ai-email" element={<AdminEmailGenerator />} />
-          <Route path="addons/catalog" element={<AdminAddonCatalog />} />
+          <Route path="addons/catalog" element={<AdminAddonCatalog />} /> {/* New Route */}
         </Route>
 
         {/* Client Routes */}
