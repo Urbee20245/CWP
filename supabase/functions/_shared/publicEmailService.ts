@@ -76,19 +76,21 @@ export async function sendPublicFormEmail(
     }
 
     const port = parseInt(SMTP_PORT);
-    const isSecurePort = port === 465;
+    // Use secure: true only if port is 465 (standard SSL/TLS)
+    const isSecureConnection = port === 465; 
 
-    console.log(`[publicEmailService] Attempting SMTP fallback via ${SMTP_HOST}:${port}. Secure: ${isSecurePort}`);
+    console.log(`[publicEmailService] Attempting SMTP fallback via ${SMTP_HOST}:${port}. Secure: ${isSecureConnection}`);
     
     const transporter = nodemailer.createTransport({
         host: SMTP_HOST,
         port: port,
-        secure: isSecurePort,
-        ignoreTLS: isSecurePort, 
+        secure: isSecureConnection, 
         auth: {
             user: SMTP_USER,
             pass: SMTP_PASS,
         },
+        // Explicitly require TLS for port 587 connections (secure: false)
+        requireTLS: port === 587 ? true : false,
     });
 
     const mailOptions = {
