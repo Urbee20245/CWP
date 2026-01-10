@@ -4,6 +4,14 @@ import { NavigationLink } from '../types';
 import { Link } from 'react-router-dom';
 
 const Hero: React.FC = () => {
+  // Client avatar paths from your public folder
+  const CLIENT_AVATARS = [
+    '/CWPC1.png',
+    '/CWPC12.png',
+    '/CWPC3.png',
+    '/CWPC4.png'
+  ];
+
   return (
     <section className="relative min-h-[90vh] flex items-center justify-center pt-24 pb-20 overflow-hidden bg-gradient-to-br from-slate-50 via-white to-blue-50/30 lg:pt-32">
       {/* Modern Background Pattern */}
@@ -58,11 +66,11 @@ const Hero: React.FC = () => {
                   </Link>
                   
                   <a 
-                    href={`#${NavigationLink.Portfolio}`}
+                    href={`#${NavigationLink.Services}`}
                     className="w-full sm:w-auto px-10 py-5 bg-white text-slate-700 border border-slate-200 rounded-xl font-semibold hover:border-blue-200 hover:text-blue-600 transition-all shadow-sm hover:shadow-lg hover:scale-[1.02] duration-300 flex items-center justify-center gap-3"
                   >
                     <Play className="w-5 h-5 fill-current" />
-                    See Our Work
+                    See How It Works
                   </a>
                 </div>
 
@@ -91,13 +99,19 @@ const Hero: React.FC = () => {
                   </div>
                 </div>
 
-                {/* Social Proof */}
+                {/* Social Proof with YOUR images */}
                 <div className="mt-12 pt-8 border-t border-slate-200/50 w-full">
                   <div className="flex flex-col sm:flex-row items-start sm:items-center gap-6">
                     <div className="flex items-center gap-4">
                       <div className="flex -space-x-3 flex-shrink-0">
-                        {[1, 2, 3, 4].map((i) => (
-                          <div key={i} className="w-12 h-12 rounded-full bg-gradient-to-br from-blue-200 to-indigo-200 border-3 border-white shadow"></div>
+                        {CLIENT_AVATARS.map((avatar, index) => (
+                          <img 
+                            key={index}
+                            src={avatar}
+                            alt={`Client ${index + 1}`}
+                            className="w-12 h-12 rounded-full border-3 border-white shadow object-cover"
+                            loading="lazy"
+                          />
                         ))}
                       </div>
                       <div>
