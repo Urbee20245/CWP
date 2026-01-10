@@ -1,50 +1,31 @@
-// supabase/functions/submit-contact-form/index.ts
-import { serve } from "https://deno.land/std@0.168.0/http/server.ts"
+import { serve } from "https://deno.land/std@0.190.0/http/server.ts"
 import { SMTPClient } from "https://deno.land/x/denomailer@1.6.0/mod.ts"
-
-const corsHeaders = {
-  'Access-Control-Allow-Origin': '*',
-  'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
-}
+import { handleCors, jsonResponse, errorResponse } from '../_shared/utils.ts';
 
 serve(async (req) => {
-  // Handle CORS preflight requests
-  if (req.method === 'OPTIONS') {
-    return new Response('ok', { headers: corsHeaders })
-  }
+  const corsResponse = handleCors(req);
+  if (corsResponse) return corsResponse;
 
   try {
-    const { fullName, email, phone, message } = await req.json()
+    const { fullName, email, phone, message, recaptchaToken, formType } = await req.json();
 
     // Validate input
-    if (!fullName || !email || !message) {
-      return new Response(
-        JSON.stringify({ error: 'Missing required fields' }),
-        { 
-          status: 400,
-          headers: { ...corsHeaders, 'Content-Type': 'application/json' }
-        }
-      )
+    if (!fullName || !email || !message || !recaptchaToken) {
+      return errorResponse('Missing required fields (name, email, message, or security token).', 400);
     }
 
     // Get environment variables
-    const smtpHost = Deno.env.get('SMTP_HOST')
-    const smtpPort = parseInt(Deno.env.get('SMTP_PORT') || '587')
-    const smtpUser = Deno.env.get('SMTP_USER')
-    const smtpPass = Deno.env.get('SMTP_PASS')
-    const fromEmail = Deno.env.get('SMTP_FROM_EMAIL') || 'hello@customwebsitesplus.com'
-    const fromName = Deno.env.get('SMTP_FROM_NAME') || 'Custom Websites Plus'
+    const smtpHost = Deno.env.get('SMTP_HOST');
+    const smtpPort = parseInt(Deno.env.get('SMTP_PORT') || '587');
+    const smtpUser = Deno.env.get('SMTP_USER');
+    const smtpPass = Deno.env.get('SMTP_PASS');
+    const toEmail = Deno.env.get('SMTP_FROM_EMAIL') || 'hello@customwebsitesplus.com';
+    const fromName = Deno.env.get('SMTP_FROM_NAME') || 'Custom Websites Plus';
 
     // Check if SMTP is configured
     if (!smtpHost || !smtpUser || !smtpPass) {
-      console.error('SMTP not configured. Missing environment variables.')
-      return new Response(
-        JSON.stringify({ error: 'Email service not configured' }),
-        { 
-          status: 500,
-          headers: { ...corsHeaders, 'Content-Type': 'application/json' }
-        }
-      )
+      console.error('[submit-contact-form] SMTP not configured. Missing environment variables.');
+      return errorResponse('Email service not configured. Contact administrator.', 500);
     }
 
     // Create SMTP client
@@ -58,45 +39,37 @@ serve(async (req) => {
           password: smtpPass,
         },
       },
-    })
+    });
+
+    // Construct email content
+    const subject = `New ${formType || 'Contact'} Request: ${fullName} (${email})`;
+    const htmlContent = `
+      <h2>New ${formType || 'Contact'} Submission</h2>
+      <p><strong>Form Type:</strong> ${formType || 'Quick Inquiry'}</p>
+      <p><strong>Name:</strong> ${fullName}</p>
+      <p><strong>Email:</strong> ${email}</p>
+      <p><strong>Phone:</strong> ${phone || 'Not provided'}</p>
+      <p><strong>Message:</strong></p>
+      <p style="white-space: pre-wrap; border: 1px solid #eee; padding: 10px; background-color: #f9f9f9;">${message}</p>
+      <hr>
+      <p style="font-size: 10px; color: #999;">Recaptcha Token: ${recaptchaToken}</p>
+    `;
 
     // Send email
     await client.send({
-      from: `${fromName} <${fromEmail}>`,
-      to: fromEmail, // Send to your own email
-      subject: `New Contact Form Submission from ${fullName}`,
-      content: `
-        <h2>New Contact Form Submission</h2>
-        <p><strong>Name:</strong> ${fullName}</p>
-        <p><strong>Email:</strong> ${email}</p>
-        <p><strong>Phone:</strong> ${phone || 'Not provided'}</p>
-        <p><strong>Message:</strong></p>
-        <p>${message}</p>
-      `,
+      from: `${fromName} <${toEmail}>`,
+      to: 'hello@customwebsitesplus.com', // Send to hardcoded recipient
+      subject: subject,
+      content: htmlContent,
       html: true,
-    })
+    });
 
-    await client.close()
+    await client.close();
 
-    return new Response(
-      JSON.stringify({ success: true, message: 'Email sent successfully' }),
-      { 
-        status: 200,
-        headers: { ...corsHeaders, 'Content-Type': 'application/json' }
-      }
-    )
+    return jsonResponse({ success: true, message: 'Email sent successfully' });
 
-  } catch (error) {
-    console.error('Error in submit-contact-form:', error)
-    return new Response(
-      JSON.stringify({ 
-        error: 'Failed to send email',
-        details: error.message 
-      }),
-      { 
-        status: 500,
-        headers: { ...corsHeaders, 'Content-Type': 'application/json' }
-      }
-    )
+  } catch (error: any) {
+    console.error('[submit-contact-form] Error:', error.message);
+    return errorResponse(`Failed to send email: ${error.message}`, 500);
   }
-})
+});

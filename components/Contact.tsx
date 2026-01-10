@@ -35,6 +35,7 @@ const Contact: React.FC = () => {
             await FormService.submitContactForm({
                 ...formData,
                 recaptchaToken,
+                formType: 'Quick Inquiry', // Explicitly setting form type for Edge Function
             });
             
             setFormStatus('success');
