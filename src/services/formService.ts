@@ -20,6 +20,7 @@ const invokeEdgeFunction = async (functionName: string, payload: any) => {
 
 export const FormService = {
     submitContactForm: async (formData: any) => {
+        console.log('🚀 Calling submit-contact-form function with:', formData);
         return invokeEdgeFunction('submit-contact-form', {
             ...formData,
             formType: 'Quick Inquiry',
@@ -27,6 +28,7 @@ export const FormService = {
     },
     
     submitConsultationForm: async (formData: any) => {
+        console.log('🚀 Calling submit-contact-form function with:', formData);
         return invokeEdgeFunction('submit-contact-form', {
             ...formData,
             formType: 'Consultation Request',
