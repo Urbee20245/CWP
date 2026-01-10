@@ -37,7 +37,9 @@ import PrivacyPolicy from './src/pages/PrivacyPolicy';
 import TermsAndConditions from './src/pages/TermsAndConditions';
 import ClientAddons from './src/pages/ClientAddons';
 import AdminAddonCatalog from './src/pages/AdminAddonCatalog';
-import AdminEmailDraft from './src/pages/AdminEmailDraft'; // New Import
+import AdminEmailDraft from './src/pages/AdminEmailDraft';
+import AdminAppointmentManagement from './src/pages/AdminAppointmentManagement'; // NEW IMPORT
+import ClientAppointmentBooking from './src/pages/ClientAppointmentBooking'; // NEW IMPORT
 
 // Component that uses useLocation to conditionally render global elements
 const AppContent: React.FC = () => {
@@ -87,6 +89,7 @@ const AppContent: React.FC = () => {
           <Route path="clients/:id" element={<AdminClientDetail />} />
           <Route path="projects" element={<AdminProjectList />} />
           <Route path="projects/:id" element={<AdminProjectDetail />} />
+          <Route path="appointments" element={<AdminAppointmentManagement />} /> {/* NEW ROUTE */}
           <Route path="billing/products" element={<AdminBillingProducts />} />
           <Route path="billing/revenue" element={<AdminRevenueDashboard />} />
           <Route path="settings" element={<AdminSettingsPage />} />
@@ -94,7 +97,7 @@ const AppContent: React.FC = () => {
           <Route path="settings/twilio" element={<AdminTwilioSettings />} />
           <Route path="ai-docs" element={<AdminDocumentGenerator />} />
           <Route path="ai-email" element={<AdminEmailGenerator />} />
-          <Route path="email-draft" element={<AdminEmailDraft />} /> {/* NEW DRAFT ROUTE */}
+          <Route path="email-draft" element={<AdminEmailDraft />} />
           <Route path="addons/catalog" element={<AdminAddonCatalog />} />
         </Route>
 
@@ -102,6 +105,7 @@ const AppContent: React.FC = () => {
         <Route path="/client/*" element={<ProtectedRoute allowedRoles={['client']} />}>
           <Route path="dashboard" element={<ClientDashboard />} />
           <Route path="projects/:id" element={<ClientProjectDetail />} />
+          <Route path="appointments" element={<ClientAppointmentBooking />} /> {/* NEW ROUTE */}
           <Route path="billing" element={<ClientBilling />} />
           <Route path="profile" element={<ClientProfile />} />
           <Route path="addons" element={<ClientAddons />} />
