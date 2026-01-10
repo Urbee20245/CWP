@@ -522,6 +522,16 @@ const JetVizPage: React.FC = () => {
                                 >
                                     Book Free Strategy Call
                                 </Link>
+                                {/* NEW BUTTON ADDED HERE */}
+                                <a 
+                                    href="https://getjetsuite.com"
+                                    target="_blank"
+                                    rel="noopener noreferrer"
+                                    className="bg-emerald-500 text-white px-8 py-4 rounded-xl font-bold text-center hover:bg-emerald-600 transition-colors shadow-lg flex items-center justify-center gap-2"
+                                >
+                                    <Sparkles className="w-5 h-5" />
+                                    Visit JetSuite
+                                </a>
                                 <button 
                                     onClick={() => setHasAnalyzed(false)}
                                     className="bg-indigo-700 text-white px-8 py-4 rounded-xl font-bold text-center hover:bg-indigo-800 transition-colors border border-indigo-500"
