@@ -68,7 +68,7 @@ interface AddonRequest {
     requested_at: string;
 }
 
-type ClientServiceStatus = 'active' | 'paused' | 'onboarding' | 'completed';
+type ClientServiceStatus = 'active' | 'paused' | 'onboarding' | 'completed' | 'awaiting_payment';
 
 interface Client {
   id: string;
@@ -381,7 +381,7 @@ const AdminClientDetail: React.FC = () => {
           setIsProcessing(false);
       }
   };
-
+  
   // --- Billing Handlers (omitted for brevity, kept in original file) ---
   const handleCreateCustomer = async () => { /* ... */ };
   const handleStartSubscription = async () => { /* ... */ };
@@ -391,6 +391,20 @@ const AdminClientDetail: React.FC = () => {
   const handleAddInvoiceItem = () => { /* ... */ };
   const handleRemoveInvoiceItem = (index: number) => { /* ... */ };
   const handleInvoiceItemChange = (index: number, field: 'description' | 'amount', value: string | number) => { /* ... */ };
+  
+  const handleSendEmailClick = () => {
+      if (!client) return;
+      const recipientEmail = client.billing_email || client.profiles?.email;
+      const recipientName = client.profiles?.full_name || client.business_name;
+      
+      if (!recipientEmail) {
+          alert("Cannot send email: Client email address is missing.");
+          return;
+      }
+      
+      // Navigate to the new dedicated drafting page
+      navigate(`/admin/email-draft?clientId=${client.id}&clientEmail=${recipientEmail}&clientName=${client.business_name}&clientFullName=${client.profiles?.full_name}`);
+  };
   
   const getStatusColor = (status: string) => {
     switch (status) {
@@ -496,12 +510,12 @@ const AdminClientDetail: React.FC = () => {
             >
                 <Phone className="w-4 h-4" /> Send SMS
             </button>
-            <a 
-                href={`mailto:${client.profiles?.email}`}
+            <button 
+                onClick={handleSendEmailClick}
                 className="flex items-center gap-2 px-4 py-2 bg-slate-100 text-slate-700 rounded-lg text-sm font-semibold hover:bg-slate-200 transition-colors"
             >
                 <MessageSquare className="w-4 h-4" /> Send Email
-            </a>
+            </button>
         </div>
 
 
@@ -667,7 +681,7 @@ const AdminClientDetail: React.FC = () => {
             {activeTab === 'addons' && (
                 <div className="bg-white p-6 rounded-xl shadow-lg border border-slate-100">
                     <h2 className="text-xl font-bold mb-4 flex items-center gap-2 text-slate-900 border-b border-slate-100 pb-4">
-                        <Zap className="w-5 h-5 text-indigo-600" /> Add-on Requests ({client.addon_requests?.length || 0})
+                        <Zap className="w-5 h-5 text-indigo-600" /> Add-on Requests ({client.addon_requests?.filter(r => r.status === 'requested').length || 0})
                     </h2>
                     <div className="space-y-4">
                         {client.addon_requests && client.addon_requests.length > 0 ? (

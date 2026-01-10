@@ -37,6 +37,7 @@ import PrivacyPolicy from './src/pages/PrivacyPolicy';
 import TermsAndConditions from './src/pages/TermsAndConditions';
 import ClientAddons from './src/pages/ClientAddons';
 import AdminAddonCatalog from './src/pages/AdminAddonCatalog';
+import AdminEmailDraft from './src/pages/AdminEmailDraft'; // New Import
 
 // Component that uses useLocation to conditionally render global elements
 const AppContent: React.FC = () => {
@@ -93,6 +94,7 @@ const AppContent: React.FC = () => {
           <Route path="settings/twilio" element={<AdminTwilioSettings />} />
           <Route path="ai-docs" element={<AdminDocumentGenerator />} />
           <Route path="ai-email" element={<AdminEmailGenerator />} />
+          <Route path="email-draft" element={<AdminEmailDraft />} /> {/* NEW DRAFT ROUTE */}
           <Route path="addons/catalog" element={<AdminAddonCatalog />} />
         </Route>
 
