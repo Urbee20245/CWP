@@ -1,5 +1,3 @@
-import { decrypt } from './encryption.ts'; // Keep import for now, though not used here
-
 // --- Environment Variables ---
 const RESEND_API_KEY = Deno.env.get('RESEND_API_KEY');
 const RESEND_FROM_EMAIL = Deno.env.get('SMTP_FROM_EMAIL') || 'noreply@customwebsitesplus.com';
