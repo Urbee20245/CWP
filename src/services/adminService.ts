@@ -97,7 +97,14 @@ export const AdminService = {
     return invokeEdgeFunction('stripe-api/create-portal-session', { client_id: clientId });
   },
   
-  createBillingProduct: async (productData: { name: string, description: string, amount_cents: number, billing_type: 'one_time' | 'subscription' }) => {
+  createBillingProduct: async (productData: { 
+      name: string, 
+      description: string, 
+      amount_cents: number, 
+      billing_type: 'one_time' | 'subscription' | 'setup_plus_subscription',
+      setup_fee_cents?: number | null, // New field
+      monthly_price_cents?: number | null // New field
+  }) => {
     return invokeEdgeFunction('create-billing-product', productData);
   },
   

@@ -25,10 +25,21 @@ serve(async (req) => {
   );
 
   try {
-    const { name, description, amount_cents, billing_type, currency = 'usd' } = await req.json();
+    const { name, description, amount_cents, billing_type, setup_fee_cents, monthly_price_cents, currency = 'usd' } = await req.json();
 
-    if (!name || !amount_cents || !billing_type) {
-      return errorResponse('Missing required fields: name, amount_cents, or billing_type.', 400);
+    if (!name || !billing_type) {
+      return errorResponse('Missing required fields: name or billing_type.', 400);
+    }
+    
+    // Determine the primary amount for Stripe's default price creation.
+    // Stripe requires a default price, so we use the monthly price if available, otherwise the one-time amount.
+    const stripeUnitAmount = monthly_price_cents || amount_cents || 0;
+    
+    if (stripeUnitAmount <= 0 && billing_type !== 'setup_plus_subscription') {
+        // Only enforce amount_cents if it's a simple one-time or subscription product
+        if (billing_type === 'one_time' || billing_type === 'subscription') {
+            return errorResponse('Amount must be greater than zero for this billing type.', 400);
+        }
     }
     
     console.log(`[create-billing-product] Creating product: ${name} (${billing_type})`);
@@ -39,8 +50,8 @@ serve(async (req) => {
       description: description,
       default_price_data: {
         currency: currency,
-        unit_amount: amount_cents,
-        recurring: billing_type === 'subscription' ? { interval: 'month' } : undefined,
+        unit_amount: stripeUnitAmount,
+        recurring: (billing_type === 'subscription' || billing_type === 'setup_plus_subscription') ? { interval: 'month' } : undefined,
       },
       expand: ['default_price'],
     });
@@ -55,7 +66,9 @@ serve(async (req) => {
         name,
         description,
         billing_type,
-        amount_cents,
+        amount_cents: amount_cents, // One-time price
+        setup_fee_cents: setup_fee_cents, // New setup fee
+        monthly_price_cents: monthly_price_cents, // New monthly price
         currency,
         stripe_product_id: stripeProductId,
         stripe_price_id: stripePriceId,
@@ -65,7 +78,6 @@ serve(async (req) => {
 
     if (dbError) {
       console.error('[create-billing-product] Failed to insert into DB:', dbError);
-      // Note: In a production system, we would also delete the Stripe product if DB insert fails.
       return errorResponse('Failed to save product to database.', 500);
     }
 

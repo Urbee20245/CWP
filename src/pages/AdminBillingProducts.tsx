@@ -12,8 +12,10 @@ interface BillingProduct {
   id: string;
   name: string;
   description: string;
-  billing_type: 'one_time' | 'subscription';
-  amount_cents: number;
+  billing_type: 'one_time' | 'subscription' | 'setup_plus_subscription'; // Updated type
+  amount_cents: number | null; // Can be null if setup+subscription
+  setup_fee_cents: number | null; // New field
+  monthly_price_cents: number | null; // New field for subscription part
   currency: string;
   stripe_product_id: string;
   stripe_price_id: string;
@@ -48,9 +50,11 @@ const AdminBillingProducts: React.FC = () => {
   const [formData, setFormData] = useState({
     name: '',
     description: '',
-    amount: 0, // USD
-    billingType: 'subscription' as 'one_time' | 'subscription',
-    features: [] as string[], // New state for features
+    oneTimeAmount: 0, // USD for one_time
+    setupFee: 0, // USD for setup_plus_subscription
+    monthlyPrice: 0, // USD for subscription/setup_plus_subscription
+    billingType: 'subscription' as 'one_time' | 'subscription' | 'setup_plus_subscription',
+    features: [] as string[],
   });
 
   const fetchProducts = useCallback(async () => {
@@ -93,8 +97,6 @@ const AdminBillingProducts: React.FC = () => {
         ? `Key Features: ${formData.features.join(', ')}. ` 
         : '';
     
-    // Only update the description if it currently starts with the feature list, 
-    // or if the feature list is empty. This prevents overwriting manual edits.
     if (formData.description.startsWith('Key Features:') || formData.description === '' || featureList === '') {
         setFormData(prev => ({
             ...prev,
@@ -122,7 +124,6 @@ const AdminBillingProducts: React.FC = () => {
   };
   
   const handleAiContentGenerated = (content: string) => {
-    // When AI generates content, we replace the entire description, including the feature list prefix
     setFormData(prev => ({ ...prev, description: content }));
   };
 
@@ -131,31 +132,63 @@ const AdminBillingProducts: React.FC = () => {
     setFormError(null);
     setIsCreating(true);
 
-    const { name, description, amount, billingType } = formData;
-    const amountCents = Math.round(amount * 100);
+    const { name, description, oneTimeAmount, setupFee, monthlyPrice, billingType } = formData;
+    
+    let amountCents = null;
+    let setupFeeCents = null;
+    let monthlyPriceCents = null;
 
-    if (!name || amountCents <= 0) {
-      setFormError('Name and price must be set.');
-      setIsCreating(false);
-      return;
+    if (billingType === 'one_time') {
+        amountCents = Math.round(oneTimeAmount * 100);
+        if (amountCents <= 0) {
+            setFormError('One-Time Price must be set.');
+            setIsCreating(false);
+            return;
+        }
+    } else if (billingType === 'subscription') {
+        monthlyPriceCents = Math.round(monthlyPrice * 100);
+        if (monthlyPriceCents <= 0) {
+            setFormError('Monthly Price must be set.');
+            setIsCreating(false);
+            return;
+        }
+    } else if (billingType === 'setup_plus_subscription') {
+        setupFeeCents = Math.round(setupFee * 100);
+        monthlyPriceCents = Math.round(monthlyPrice * 100);
+        if (setupFeeCents <= 0 || monthlyPriceCents <= 0) {
+            setFormError('Setup Fee and Monthly Price must be set.');
+            setIsCreating(false);
+            return;
+        }
+    }
+
+    if (!name) {
+        setFormError('Product Name must be set.');
+        setIsCreating(false);
+        return;
     }
     
-    // The description field already contains the feature list due to the useEffect hook
     const finalDescription = description;
 
     try {
+      // NOTE: Stripe API call needs to be updated to handle setup_fee_cents and monthly_price_cents
+      // For now, we pass the primary amount (monthly price) to Stripe's default price field, 
+      // and rely on the DB to store the full structure.
+      const stripeAmountCents = monthlyPriceCents || amountCents || 0;
+      
       await AdminService.createBillingProduct({
         name,
         description: finalDescription,
-        amount_cents: amountCents,
+        amount_cents: stripeAmountCents, // Primary price for Stripe's default price
         billing_type: billingType,
+        setup_fee_cents: setupFeeCents,
+        monthly_price_cents: monthlyPriceCents,
       });
 
       alert(`Product '${name}' created successfully in Stripe and Supabase!`);
-      setFormData({ name: '', description: '', amount: 0, billingType: 'subscription', features: [] });
+      setFormData({ name: '', description: '', oneTimeAmount: 0, setupFee: 0, monthlyPrice: 0, billingType: 'subscription', features: [] });
       fetchProducts(); // Refresh list
       
-      // NEW: Handle navigation/action if a client was selected
       if (selectedClient) {
           const clientName = clients.find(c => c.id === selectedClient)?.business_name;
           alert(`Product created. Redirecting to ${clientName}'s billing page to use the new product.`);
@@ -177,8 +210,6 @@ const AdminBillingProducts: React.FC = () => {
         
     if (!window.confirm(confirmMessage)) return;
     
-    // Note: We only update the Supabase record. Stripe product status is managed separately 
-    // but for CWP's internal use, the Supabase 'active' flag controls visibility in the UI.
     const { error } = await supabase
         .from('billing_products')
         .update({ active: newActiveStatus })
@@ -193,7 +224,27 @@ const AdminBillingProducts: React.FC = () => {
   };
 
   const getStatusColor = (active: boolean) => active ? 'bg-emerald-100 text-emerald-800' : 'bg-red-100 text-red-800';
-  const getTypeIcon = (type: 'one_time' | 'subscription') => type === 'subscription' ? <Zap className="w-4 h-4" /> : <Clock className="w-4 h-4" />;
+  const getTypeIcon = (type: BillingProduct['billing_type']) => {
+      switch (type) {
+          case 'subscription': return <Zap className="w-4 h-4" />;
+          case 'one_time': return <Clock className="w-4 h-4" />;
+          case 'setup_plus_subscription': return <DollarSign className="w-4 h-4" />;
+          default: return <FileText className="w-4 h-4" />;
+      }
+  };
+  
+  const renderPriceDisplay = (product: BillingProduct) => {
+      if (product.billing_type === 'one_time' && product.amount_cents !== null) {
+          return `$${(product.amount_cents / 100).toFixed(2)}`;
+      }
+      if (product.billing_type === 'subscription' && product.monthly_price_cents !== null) {
+          return `$${(product.monthly_price_cents / 100).toFixed(2)}/mo`;
+      }
+      if (product.billing_type === 'setup_plus_subscription' && product.setup_fee_cents !== null && product.monthly_price_cents !== null) {
+          return `Setup: $${(product.setup_fee_cents / 100).toFixed(2)} + $${(product.monthly_price_cents / 100).toFixed(2)}/mo`;
+      }
+      return 'N/A';
+  };
 
   return (
     <AdminLayout>
@@ -259,8 +310,8 @@ const AdminBillingProducts: React.FC = () => {
                         initialContent={formData.description}
                         onGenerate={handleAiContentGenerated}
                         pricingType={formData.billingType}
-                        price={formData.amount}
-                        keyFeatures={formData.features.join(', ')} // Pass selected features
+                        price={formData.oneTimeAmount || formData.monthlyPrice}
+                        keyFeatures={formData.features.join(', ')}
                     />
                 </div>
                 <textarea
@@ -272,41 +323,107 @@ const AdminBillingProducts: React.FC = () => {
                   disabled={isCreating}
                 />
               </div>
-              <div className="grid grid-cols-2 gap-4">
-                <div>
-                  <label className="block text-sm font-medium text-slate-700 mb-1">Price (USD) *</label>
-                  <div className="relative">
-                    <span className="absolute left-3 top-2.5 text-slate-500 text-sm">$</span>
-                    <input
-                      type="number"
-                      name="amount"
-                      value={formData.amount || ''}
-                      onChange={handleFormChange}
-                      className="w-full pl-6 pr-2 py-2 border border-slate-300 rounded-lg text-sm"
-                      required
-                      min="0.01"
-                      step="0.01"
-                      disabled={isCreating}
-                    />
-                  </div>
-                </div>
-                <div>
-                  <label className="block text-sm font-medium text-slate-700 mb-1">Billing Type *</label>
-                  <select
-                    name="billingType"
-                    value={formData.billingType}
-                    onChange={handleFormChange}
-                    className="w-full p-2 border border-slate-300 rounded-lg text-sm"
-                    required
-                    disabled={isCreating}
-                  >
-                    <option value="subscription">Monthly Subscription</option>
-                    <option value="one_time">One-Time Payment</option>
-                  </select>
-                </div>
+              
+              {/* Billing Type Selector */}
+              <div>
+                <label className="block text-sm font-medium text-slate-700 mb-1">Billing Type *</label>
+                <select
+                  name="billingType"
+                  value={formData.billingType}
+                  onChange={handleFormChange}
+                  className="w-full p-2 border border-slate-300 rounded-lg text-sm"
+                  required
+                  disabled={isCreating}
+                >
+                  <option value="subscription">Monthly Subscription</option>
+                  <option value="one_time">One-Time Payment</option>
+                  <option value="setup_plus_subscription">Setup Fee + Monthly Subscription</option>
+                </select>
               </div>
               
-              {/* NEW CLIENT SELECTOR */}
+              {/* Conditional Price Inputs */}
+              <div className="grid grid-cols-2 gap-4">
+                {formData.billingType === 'one_time' && (
+                    <div className="col-span-2">
+                        <label className="block text-sm font-medium text-slate-700 mb-1">Price (USD) *</label>
+                        <div className="relative">
+                            <span className="absolute left-3 top-2.5 text-slate-500 text-sm">$</span>
+                            <input
+                                type="number"
+                                name="oneTimeAmount"
+                                value={formData.oneTimeAmount || ''}
+                                onChange={handleFormChange}
+                                className="w-full pl-6 pr-2 py-2 border border-slate-300 rounded-lg text-sm"
+                                required
+                                min="0.01"
+                                step="0.01"
+                                disabled={isCreating}
+                            />
+                        </div>
+                    </div>
+                )}
+                
+                {formData.billingType === 'subscription' && (
+                    <div className="col-span-2">
+                        <label className="block text-sm font-medium text-slate-700 mb-1">Monthly Price (USD) *</label>
+                        <div className="relative">
+                            <span className="absolute left-3 top-2.5 text-slate-500 text-sm">$</span>
+                            <input
+                                type="number"
+                                name="monthlyPrice"
+                                value={formData.monthlyPrice || ''}
+                                onChange={handleFormChange}
+                                className="w-full pl-6 pr-2 py-2 border border-slate-300 rounded-lg text-sm"
+                                required
+                                min="0.01"
+                                step="0.01"
+                                disabled={isCreating}
+                            />
+                        </div>
+                    </div>
+                )}
+                
+                {formData.billingType === 'setup_plus_subscription' && (
+                    <>
+                        <div>
+                            <label className="block text-sm font-medium text-slate-700 mb-1">Setup Fee (USD) *</label>
+                            <div className="relative">
+                                <span className="absolute left-3 top-2.5 text-slate-500 text-sm">$</span>
+                                <input
+                                    type="number"
+                                    name="setupFee"
+                                    value={formData.setupFee || ''}
+                                    onChange={handleFormChange}
+                                    className="w-full pl-6 pr-2 py-2 border border-slate-300 rounded-lg text-sm"
+                                    required
+                                    min="0.01"
+                                    step="0.01"
+                                    disabled={isCreating}
+                                />
+                            </div>
+                        </div>
+                        <div>
+                            <label className="block text-sm font-medium text-slate-700 mb-1">Monthly Price (USD) *</label>
+                            <div className="relative">
+                                <span className="absolute left-3 top-2.5 text-slate-500 text-sm">$</span>
+                                <input
+                                    type="number"
+                                    name="monthlyPrice"
+                                    value={formData.monthlyPrice || ''}
+                                    onChange={handleFormChange}
+                                    className="w-full pl-6 pr-2 py-2 border border-slate-300 rounded-lg text-sm"
+                                    required
+                                    min="0.01"
+                                    step="0.01"
+                                    disabled={isCreating}
+                                />
+                            </div>
+                        </div>
+                    </>
+                )}
+              </div>
+              
+              {/* Client Selector */}
               <div>
                 <label className="block text-sm font-bold text-slate-700 mb-1">Action Client (Optional)</label>
                 <select
@@ -359,10 +476,10 @@ const AdminBillingProducts: React.FC = () => {
                             </div>
                             <div className="flex items-center gap-4 flex-shrink-0 ml-4">
                                 <div className="text-right">
-                                    <p className="font-bold text-slate-900">${(product.amount_cents / 100).toFixed(2)}</p>
+                                    <p className="font-bold text-slate-900">{renderPriceDisplay(product)}</p>
                                     <div className="flex items-center gap-1 text-xs text-slate-500">
                                         {getTypeIcon(product.billing_type)}
-                                        <span>{product.billing_type === 'subscription' ? 'Monthly' : 'One-Time'}</span>
+                                        <span>{product.billing_type.replace('_', ' ')}</span>
                                     </div>
                                 </div>
                                 <button 
