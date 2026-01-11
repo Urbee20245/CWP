@@ -13,7 +13,7 @@ interface AiContentGeneratorProps {
   entityCategory?: string;
   pricingType?: string;
   price?: number;
-  keyFeatures?: string; // NEW: Features selected outside the modal
+  keyFeatures?: string; // Features selected outside the modal
 }
 
 const TONES = ['Professional', 'Concise', 'Marketing-Friendly', 'Informational'];

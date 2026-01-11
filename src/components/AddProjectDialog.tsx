@@ -1,8 +1,9 @@
 "use client";
 
 import React, { useState } from 'react';
-import { X, Loader2, Briefcase, Plus, AlertCircle, Users } from 'lucide-react';
+import { X, Loader2, Briefcase, Plus, AlertCircle, Users, Sparkles } from 'lucide-react';
 import { supabase } from '../integrations/supabase/client';
+import AiContentGenerator from './AiContentGenerator'; // Import AiContentGenerator
 
 interface AddProjectDialogProps {
   isOpen: boolean;
@@ -12,12 +13,24 @@ interface AddProjectDialogProps {
   clientName: string;
 }
 
+const PROJECT_FEATURES = [
+    'Complete Website Rebuild',
+    'Website Application',
+    'Custom CRM Build',
+    'SEO Optimization',
+    'AI Chatbot Integration',
+    'Mobile Optimization',
+    'E-commerce Setup',
+    'Ongoing Maintenance'
+];
+
 const AddProjectDialog: React.FC<AddProjectDialogProps> = ({ isOpen, onClose, onProjectAdded, clientId, clientName }) => {
   const [formData, setFormData] = useState({
     title: '',
     description: '',
     status: 'active',
     progress_percent: 0,
+    features: [] as string[], // New state for selected features
   });
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -27,6 +40,19 @@ const AddProjectDialog: React.FC<AddProjectDialogProps> = ({ isOpen, onClose, on
   const handleChange = (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement>) => {
     const { name, value } = e.target;
     setFormData({ ...formData, [name]: name === 'progress_percent' ? parseInt(value) : value });
+  };
+  
+  const handleFeatureChange = (feature: string, isChecked: boolean) => {
+    setFormData(prev => {
+        const newFeatures = isChecked
+            ? [...prev.features, feature]
+            : prev.features.filter(f => f !== feature);
+        return { ...prev, features: newFeatures };
+    });
+  };
+  
+  const handleAiContentGenerated = (content: string) => {
+    setFormData(prev => ({ ...prev, description: content }));
   };
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -58,7 +84,7 @@ const AddProjectDialog: React.FC<AddProjectDialogProps> = ({ isOpen, onClose, on
       alert(`Project '${title}' created successfully for ${clientName}!`);
       onProjectAdded();
       onClose();
-      setFormData({ title: '', description: '', status: 'active', progress_percent: 0 });
+      setFormData({ title: '', description: '', status: 'active', progress_percent: 0, features: [] });
 
     } catch (e: any) {
       console.error('Project creation error:', e);
@@ -112,8 +138,38 @@ const AddProjectDialog: React.FC<AddProjectDialogProps> = ({ isOpen, onClose, on
                 disabled={isLoading}
               />
             </div>
+            
+            {/* Feature Selection */}
             <div>
-              <label className="block text-sm font-bold text-slate-700 mb-2">Description</label>
+                <label className="block text-sm font-bold text-slate-700 mb-2">Key Features</label>
+                <div className="grid grid-cols-2 gap-2">
+                    {PROJECT_FEATURES.map(feature => (
+                        <label key={feature} className="flex items-center text-sm text-slate-600">
+                            <input
+                                type="checkbox"
+                                checked={formData.features.includes(feature)}
+                                onChange={(e) => handleFeatureChange(feature, e.target.checked)}
+                                className="w-4 h-4 text-indigo-600 border-slate-300 rounded focus:ring-indigo-500 mr-2"
+                                disabled={isLoading}
+                            />
+                            {feature}
+                        </label>
+                    ))}
+                </div>
+            </div>
+            
+            {/* Description with AI Generator */}
+            <div>
+              <div className="flex justify-between items-center">
+                <label className="block text-sm font-bold text-slate-700 mb-2">Description</label>
+                <AiContentGenerator
+                    entityType="Project"
+                    entityName={formData.title || clientName}
+                    initialContent={formData.description}
+                    onGenerate={handleAiContentGenerated}
+                    keyFeatures={formData.features.join(', ')}
+                />
+              </div>
               <textarea
                 name="description"
                 value={formData.description}
@@ -123,6 +179,7 @@ const AddProjectDialog: React.FC<AddProjectDialogProps> = ({ isOpen, onClose, on
                 disabled={isLoading}
               />
             </div>
+            
             <div className="grid grid-cols-2 gap-4">
               <div>
                 <label className="block text-sm font-bold text-slate-700 mb-2">Status</label>
