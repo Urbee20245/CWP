@@ -118,20 +118,23 @@ const ClientJetSuitePage: React.FC = () => {
                     <div className="absolute top-0 left-1/4 w-96 h-96 bg-indigo-500/10 rounded-full blur-3xl animate-pulse"></div>
                     
                     <div className="relative max-w-7xl mx-auto px-6 text-center z-10">
+                        {/* Badge */}
                         <div className="inline-flex items-center gap-2 px-4 py-2 rounded-full bg-white/10 border border-white/20 text-white text-xs font-bold uppercase tracking-widest mb-8">
-                            <Sparkles className="w-4 h-4 text-yellow-400" />
-                            Client DIY Tools
+                            <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse"></span>
+                            <span>20 Powerful tools, One Growth platform</span>
                         </div>
 
+                        {/* Main Heading */}
                         <h1 className="text-5xl md:text-7xl font-bold text-white mb-6 leading-tight tracking-tight">
-                            20 Powerful Tools.
+                            Get found First On Google.
                             <span className="block text-transparent bg-clip-text bg-gradient-to-r from-blue-400 via-purple-400 to-pink-400 mt-2">
-                                One Growth Platform.
+                                Get More Customers.
                             </span>
                         </h1>
 
+                        {/* Subtitle */}
                         <p className="text-xl md:text-2xl text-slate-300 mb-12 max-w-3xl mx-auto leading-relaxed">
-                            The complete toolkit to analyze, create, engage, and track your local business growth.
+                            JetSuite is the AI platform that helps you improve google rankings manage reputation and power on brand Content and Advertising- so customers find you and choose you first.
                         </p>
 
                         <a
@@ -258,7 +261,7 @@ const ClientJetSuitePage: React.FC = () => {
                                 className="inline-flex items-center gap-2 px-8 py-4 rounded-xl font-bold text-lg transition-all duration-300 hover:scale-105 bg-white text-indigo-600 hover:bg-indigo-50 shadow-xl"
                             >
                                 <MessageSquare className="w-5 h-5" />
-                                Contact Us for 20% Off
+                                Request My Discount Code
                             </button>
                         )}
                         
