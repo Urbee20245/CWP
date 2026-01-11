@@ -2,7 +2,7 @@
 
 import React, { useState, useEffect, useCallback } from 'react';
 import { supabase } from '../integrations/supabase/client';
-import { Loader2, DollarSign, Plus, Zap, Clock, FileText, Trash2, Edit, AlertCircle } from 'lucide-react';
+import { Loader2, DollarSign, Plus, Zap, Clock, FileText, Trash2, Edit, AlertCircle, X } from 'lucide-react';
 import AdminLayout from '../components/AdminLayout';
 import { AdminService } from '../services/adminService';
 import AiContentGenerator from '../components/AiContentGenerator'; // New Import
