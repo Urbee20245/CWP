@@ -62,31 +62,37 @@ serve(async (req) => {
       if (stripeCustomerId) return stripeCustomerId;
 
       if (!clientEmail) {
-        return errorResponse('Client email is required to create Stripe customer.', 400);
+        // FIX: Throw error instead of returning Response object
+        throw new Error('Client email is required to create Stripe customer.');
       }
 
-      const customer = await stripe.customers.create({
-        email: clientEmail,
-        name: client.business_name,
-        metadata: {
-          supabase_client_id: client.id,
-          supabase_profile_id: client.owner_profile_id,
-        },
-      });
+      try {
+        const customer = await stripe.customers.create({
+          email: clientEmail,
+          name: client.business_name,
+          metadata: {
+            supabase_client_id: client.id,
+            supabase_profile_id: client.owner_profile_id,
+          },
+        });
 
-      // Update Supabase with new Stripe Customer ID
-      const { error: updateError } = await supabaseAdmin
-        .from('clients')
-        .update({ stripe_customer_id: customer.id })
-        .eq('id', client.id);
+        // Update Supabase with new Stripe Customer ID
+        const { error: updateError } = await supabaseAdmin
+          .from('clients')
+          .update({ stripe_customer_id: customer.id })
+          .eq('id', client.id);
 
-      if (updateError) {
-        console.error('[stripe-api] Failed to update client with Stripe ID:', updateError);
-        // Proceed anyway, but log the error
+        if (updateError) {
+          console.error('[stripe-api] Failed to update client with Stripe ID:', updateError);
+          // Proceed anyway, but log the error
+        }
+
+        stripeCustomerId = customer.id;
+        return stripeCustomerId;
+      } catch (e: any) {
+          console.error('[stripe-api] Stripe customer creation failed:', e.message);
+          throw new Error(`Stripe customer creation failed: ${e.message}`);
       }
-
-      stripeCustomerId = customer.id;
-      return stripeCustomerId;
     };
     
     // --- Helper to apply unapplied deposits as credit ---
@@ -234,6 +240,7 @@ serve(async (req) => {
             return errorResponse('Deposit amount and description are required.', 400);
         }
         const customerId = await ensureStripeCustomer();
+        
         const { amount, description, project_id } = deposit_details;
         const amountCents = Math.round(amount * 100);
         
@@ -407,6 +414,7 @@ serve(async (req) => {
     }
   } catch (error: any) {
     console.error('[stripe-api] Unhandled error:', error.message);
+    // Ensure we return a proper error response if an exception is caught
     return errorResponse(error.message, 500);
   }
 });
