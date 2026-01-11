@@ -20,6 +20,17 @@ interface BillingProduct {
   created_at: string;
 }
 
+const PRODUCT_FEATURES = [
+    'Complete Website Rebuild',
+    'Website Application',
+    'Custom CRM Build',
+    'SEO Optimization',
+    'AI Chatbot Integration',
+    'Mobile Optimization',
+    'E-commerce Setup',
+    'Ongoing Maintenance'
+];
+
 const AdminBillingProducts: React.FC = () => {
   const [products, setProducts] = useState<BillingProduct[]>([]);
   const [isLoading, setIsLoading] = useState(true);
@@ -30,6 +41,7 @@ const AdminBillingProducts: React.FC = () => {
     description: '',
     amount: 0, // USD
     billingType: 'subscription' as 'one_time' | 'subscription',
+    features: [] as string[], // New state for features
   });
 
   const fetchProducts = useCallback(async () => {
@@ -60,6 +72,15 @@ const AdminBillingProducts: React.FC = () => {
     }));
   };
   
+  const handleFeatureChange = (feature: string, isChecked: boolean) => {
+    setFormData(prev => {
+        const newFeatures = isChecked
+            ? [...prev.features, feature]
+            : prev.features.filter(f => f !== feature);
+        return { ...prev, features: newFeatures };
+    });
+  };
+  
   const handleAiContentGenerated = (content: string) => {
     setFormData(prev => ({ ...prev, description: content }));
   };
@@ -69,7 +90,7 @@ const AdminBillingProducts: React.FC = () => {
     setFormError(null);
     setIsCreating(true);
 
-    const { name, description, amount, billingType } = formData;
+    const { name, description, amount, billingType, features } = formData;
     const amountCents = Math.round(amount * 100);
 
     if (!name || amountCents <= 0) {
@@ -77,17 +98,23 @@ const AdminBillingProducts: React.FC = () => {
       setIsCreating(false);
       return;
     }
+    
+    // Combine features and description for the final product description
+    const featureList = features.length > 0 
+        ? `Key Features: ${features.join(', ')}. ` 
+        : '';
+    const finalDescription = featureList + description;
 
     try {
       await AdminService.createBillingProduct({
         name,
-        description,
+        description: finalDescription,
         amount_cents: amountCents,
         billing_type: billingType,
       });
 
       alert(`Product '${name}' created successfully in Stripe and Supabase!`);
-      setFormData({ name: '', description: '', amount: 0, billingType: 'subscription' });
+      setFormData({ name: '', description: '', amount: 0, billingType: 'subscription', features: [] });
       fetchProducts(); // Refresh list
     } catch (e: any) {
       setFormError(e.message || 'Failed to create product.');
@@ -157,6 +184,26 @@ const AdminBillingProducts: React.FC = () => {
                   disabled={isCreating}
                 />
               </div>
+              
+              {/* Product Features Checkboxes */}
+              <div>
+                <label className="block text-sm font-bold text-slate-700 mb-2">Product Features (Optional)</label>
+                <div className="grid grid-cols-2 gap-2">
+                    {PRODUCT_FEATURES.map(feature => (
+                        <label key={feature} className="flex items-center text-sm text-slate-600">
+                            <input
+                                type="checkbox"
+                                checked={formData.features.includes(feature)}
+                                onChange={(e) => handleFeatureChange(feature, e.target.checked)}
+                                className="w-4 h-4 text-indigo-600 border-slate-300 rounded focus:ring-indigo-500 mr-2"
+                                disabled={isCreating}
+                            />
+                            {feature}
+                        </label>
+                    ))}
+                </div>
+              </div>
+              
               <div>
                 <div className="flex justify-between items-center">
                     <label className="block text-sm font-bold text-slate-700 mb-1">Description</label>
@@ -167,6 +214,7 @@ const AdminBillingProducts: React.FC = () => {
                         onGenerate={handleAiContentGenerated}
                         pricingType={formData.billingType}
                         price={formData.amount}
+                        keyFeatures={formData.features.join(', ')} // Pass selected features
                     />
                 </div>
                 <textarea

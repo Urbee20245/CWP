@@ -13,6 +13,7 @@ interface AiContentGeneratorProps {
   entityCategory?: string;
   pricingType?: string;
   price?: number;
+  keyFeatures?: string; // NEW: Features selected outside the modal
 }
 
 const TONES = ['Professional', 'Concise', 'Marketing-Friendly', 'Informational'];
@@ -25,6 +26,7 @@ const AiContentGenerator: React.FC<AiContentGeneratorProps> = ({
   entityCategory,
   pricingType,
   price,
+  keyFeatures,
 }) => {
   const [isOpen, setIsOpen] = useState(false);
   const [isGenerating, setIsGenerating] = useState(false);
@@ -32,20 +34,23 @@ const AiContentGenerator: React.FC<AiContentGeneratorProps> = ({
   
   // Generator Form State
   const [tone, setTone] = useState(TONES[0]);
-  const [keyFeatures, setKeyFeatures] = useState('');
+  const [keyFeaturesInput, setKeyFeaturesInput] = useState(''); // Internal state for additional features
   const [additionalNotes, setAdditionalNotes] = useState('');
 
   const handleGenerate = async (e: React.FormEvent) => {
     e.preventDefault();
     setIsGenerating(true);
     setError(null);
+    
+    // Combine features passed via prop (from main form) and features typed in the modal
+    const combinedFeatures = [keyFeatures, keyFeaturesInput].filter(Boolean).join(', ');
 
     const context = {
       entity_type: entityType,
       entity_name: entityName,
       entity_category: entityCategory,
       pricing_type: pricingType,
-      key_features: keyFeatures,
+      key_features: combinedFeatures,
       tone: tone,
       additional_notes: additionalNotes,
       price: price,
@@ -67,7 +72,6 @@ const AiContentGenerator: React.FC<AiContentGeneratorProps> = ({
       <button
         type="button"
         onClick={() => {
-            console.log("[AiContentGenerator] Button clicked. Opening modal.");
             setIsOpen(true);
         }}
         className="flex items-center gap-1 text-xs font-semibold text-indigo-600 hover:text-indigo-800 transition-colors"
@@ -93,6 +97,9 @@ const AiContentGenerator: React.FC<AiContentGeneratorProps> = ({
             <div className="p-3 mb-4 bg-slate-50 border border-slate-200 rounded-lg text-xs">
                 <p className="font-bold text-slate-700 mb-1">Target: {entityType} - {entityName}</p>
                 <p className="text-slate-500">Current Content: {initialContent.substring(0, 50)}...</p>
+                {keyFeatures && (
+                    <p className="text-slate-500 mt-1">Pre-selected Features: <span className="font-semibold text-indigo-600">{keyFeatures}</span></p>
+                )}
             </div>
 
             {error && (
@@ -118,16 +125,15 @@ const AiContentGenerator: React.FC<AiContentGeneratorProps> = ({
                 </select>
               </div>
               
-              {/* Key Features */}
+              {/* Key Features (Internal Input) */}
               <div>
-                <label className="block text-sm font-bold text-slate-700 mb-1">Key Features / Selling Points (Required)</label>
+                <label className="block text-sm font-bold text-slate-700 mb-1">Additional Key Features / Selling Points (Optional)</label>
                 <textarea 
-                  value={keyFeatures} 
-                  onChange={(e) => setKeyFeatures(e.target.value)} 
+                  value={keyFeaturesInput} 
+                  onChange={(e) => setKeyFeaturesInput(e.target.value)} 
                   placeholder="e.g., 24/7 monitoring, weekly backups, priority support." 
                   rows={3} 
                   className="w-full p-2 border border-slate-300 rounded-lg text-sm resize-none" 
-                  required
                   disabled={isGenerating} 
                 />
               </div>
@@ -147,7 +153,7 @@ const AiContentGenerator: React.FC<AiContentGeneratorProps> = ({
 
               <button
                 type="submit"
-                disabled={isGenerating || !keyFeatures}
+                disabled={isGenerating}
                 className="w-full py-3 bg-indigo-600 text-white rounded-lg font-semibold hover:bg-indigo-700 transition-colors disabled:opacity-50 flex items-center justify-center gap-2"
               >
                 {isGenerating ? (
