@@ -522,12 +522,23 @@ const AdminProjectDetail: React.FC = () => {
     const depositCents = requiredDeposit ? Math.round(requiredDeposit as number * 100) : null;
     
     let newStatus = project.status;
+    
+    // If deposit is required and not paid, set to awaiting_deposit
     if (depositCents && depositCents > 0 && !project.deposit_paid) {
         newStatus = 'awaiting_deposit';
-    } else if (project.deposit_paid && project.status === 'awaiting_deposit') {
+    } 
+    // If deposit is paid and status was awaiting_deposit, set to active
+    else if (project.deposit_paid && project.status === 'awaiting_deposit') {
         newStatus = 'active';
-    } else if (!depositCents && project.status === 'awaiting_deposit') {
-        newStatus = 'draft'; // If deposit requirement is removed
+    } 
+    // If deposit requirement is removed (set to 0 or null) AND status was awaiting_deposit, revert to draft
+    else if ((!depositCents || depositCents === 0) && project.status === 'awaiting_deposit') {
+        newStatus = 'draft'; 
+    }
+    // If deposit requirement is removed and status was active/completed/paused, keep status
+    else if (!depositCents || depositCents === 0) {
+        // Keep current status (active, completed, paused, draft)
+        newStatus = project.status === 'awaiting_deposit' ? 'draft' : project.status;
     }
     
     const { error } = await supabase
@@ -674,7 +685,7 @@ const AdminProjectDetail: React.FC = () => {
         if (logError) console.error('Error logging service action:', logError);
         
         // 3. Send notification (Mocked server-side call)
-        // NOTE: In a real app, this would be an Edge Function call to send the email securely.
+        // NOTE: In a real app, trigger an email/slack notification to the admin team here.
         // const clientEmail = (project.clients as any).billing_email || (project.clients as any).profiles.email;
         // await AdminService.sendServiceStatusNotification(clientEmail, project.clients.business_name, logAction, project.title);
 
@@ -1164,7 +1175,7 @@ const AdminProjectDetail: React.FC = () => {
                         </button>
                     </div>
                     <p className="text-xs text-slate-500 mt-2">
-                        Current Status: {project.deposit_paid ? 'Paid' : 'Unpaid'}
+                        Current Status: {project.deposit_paid ? 'Paid' : 'Unpaid'}. Set amount to 0 to remove requirement and revert status from 'Awaiting Deposit'.
                     </p>
                 </div>
                 
