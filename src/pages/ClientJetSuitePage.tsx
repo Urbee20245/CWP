@@ -3,7 +3,7 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import ClientLayout from '../components/ClientLayout';
 import { Link } from 'react-router-dom';
-import { Zap, Eye, MapPin, Sparkles, ArrowRight, Bell, CheckCircle2, ExternalLink, MessageSquare, DollarSign, Home, Search, List, Image, Star, TrendingUp, Clock, User } from 'lucide-react';
+import { Zap, Eye, MapPin, Sparkles, ArrowRight, Bell, CheckCircle2, ExternalLink, MessageSquare, DollarSign, Home, Search, List, Image, Star, TrendingUp, Clock, User, FileText, Gauge } from 'lucide-react';
 import { useAuth } from '../hooks/useAuth';
 import { supabase } from '../integrations/supabase/client';
 import { Loader2 } from 'lucide-react';
@@ -27,6 +27,27 @@ const ToolCard: React.FC<any> = ({ icon: Icon, title, subtitle, description, rep
         </div>
     </div>
 );
+
+const FAQItem: React.FC<{ question: string; answer: string; index: number }> = ({ question, answer }) => {
+    const [isOpen, setIsOpen] = useState(false);
+
+    return (
+        <div className="border border-slate-700 rounded-lg overflow-hidden bg-slate-800/30">
+            <button
+                onClick={() => setIsOpen(!isOpen)}
+                className="w-full px-6 py-4 text-left flex items-center justify-between hover:bg-slate-800/50 transition-colors"
+            >
+                <span className="font-semibold text-white">{question}</span>
+                <ArrowRight className={`w-5 h-5 text-indigo-400 transition-transform ${isOpen ? 'rotate-90' : ''}`} />
+            </button>
+            {isOpen && (
+                <div className="px-6 py-4 text-slate-300 border-t border-slate-700 bg-slate-800/20">
+                    {answer}
+                </div>
+            )}
+        </div>
+    );
+};
 
 const ClientJetSuitePage: React.FC = () => {
     const { profile } = useAuth();
@@ -237,7 +258,7 @@ const ClientJetSuitePage: React.FC = () => {
                                 className="inline-flex items-center gap-2 px-8 py-4 rounded-xl font-bold text-lg transition-all duration-300 hover:scale-105 bg-white text-indigo-600 hover:bg-indigo-50 shadow-xl"
                             >
                                 <MessageSquare className="w-5 h-5" />
-                                Request My Discount Code
+                                Contact Us for 20% Off
                             </button>
                         )}
                         
