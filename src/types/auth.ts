@@ -5,6 +5,7 @@ export type Profile = {
   email: string;
   full_name: string;
   role: 'admin' | 'client';
+  admin_role: 'super_admin' | 'project_manager' | 'billing_manager' | 'support_agent' | string; // Added admin_role
   created_at: string;
 };
 

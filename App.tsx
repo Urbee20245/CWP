@@ -41,7 +41,8 @@ import AdminEmailDraft from './src/pages/AdminEmailDraft';
 import AdminAppointmentManagement from './src/pages/AdminAppointmentManagement';
 import ClientAppointmentBooking from './src/pages/ClientAppointmentBooking';
 import ClientJetSuitePage from './src/pages/ClientJetSuitePage';
-import AdminProfile from './src/pages/AdminProfile'; // NEW IMPORT
+import AdminProfile from './src/pages/AdminProfile';
+import AdminUserManagement from './src/pages/AdminUserManagement'; // NEW IMPORT
 
 // Component that uses useLocation to conditionally render global elements
 const AppContent: React.FC = () => {
@@ -87,7 +88,8 @@ const AppContent: React.FC = () => {
         <Route path="/admin/*" element={<ProtectedRoute allowedRoles={['admin']} />}>
           <Route index element={<Navigate to="dashboard" replace />} />
           <Route path="dashboard" element={<AdminDashboard />} />
-          <Route path="profile" element={<AdminProfile />} /> {/* NEW ROUTE */}
+          <Route path="profile" element={<AdminProfile />} />
+          <Route path="users" element={<AdminUserManagement />} /> {/* NEW ROUTE */}
           <Route path="clients" element={<AdminClientList />} />
           <Route path="clients/:id" element={<AdminClientDetail />} />
           <Route path="projects" element={<AdminProjectList />} />

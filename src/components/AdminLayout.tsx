@@ -3,7 +3,7 @@
 import React, { useState } from 'react';
 import { useAuth } from '../hooks/useAuth';
 import { Link } from 'react-router-dom';
-import { Users, Briefcase, DollarSign, LogOut, Bot, BarChart3, Settings, FileText, Mail, Zap, CalendarCheck, Menu, X, User } from 'lucide-react';
+import { Users, Briefcase, DollarSign, LogOut, Bot, BarChart3, Settings, FileText, Mail, Zap, CalendarCheck, Menu, X, User, UserPlus } from 'lucide-react';
 
 interface AdminLayoutProps {
   children: React.ReactNode;
@@ -12,19 +12,25 @@ interface AdminLayoutProps {
 const AdminLayout: React.FC<AdminLayoutProps> = ({ children }) => {
   const { profile, signOut } = useAuth();
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
+  
+  const adminRole = profile?.admin_role || 'project_manager'; // Default to least privileged if missing
 
+  // Define navigation items and the required admin_role to see them
   const navItems = [
-    { name: 'Dashboard', href: '/admin/dashboard', icon: Bot },
-    { name: 'Clients', href: '/admin/clients', icon: Users },
-    { name: 'Projects', href: '/admin/projects', icon: Briefcase },
-    { name: 'Appointments', href: '/admin/appointments', icon: CalendarCheck },
-    { name: 'Revenue', href: '/admin/billing/revenue', icon: BarChart3 },
-    { name: 'Billing Products', href: '/admin/billing/products', icon: DollarSign }, 
-    { name: 'Add-ons Catalog', href: '/admin/addons/catalog', icon: Zap },
-    { name: 'AI Docs', href: '/admin/ai-docs', icon: FileText },
-    { name: 'AI Email', href: '/admin/ai-email', icon: Mail },
-    { name: 'Settings', href: '/admin/settings', icon: Settings },
+    { name: 'Dashboard', href: '/admin/dashboard', icon: Bot, roles: ['super_admin', 'project_manager', 'billing_manager', 'support_agent'] },
+    { name: 'Clients', href: '/admin/clients', icon: Users, roles: ['super_admin', 'project_manager', 'billing_manager', 'support_agent'] },
+    { name: 'Projects', href: '/admin/projects', icon: Briefcase, roles: ['super_admin', 'project_manager', 'support_agent'] },
+    { name: 'Appointments', href: '/admin/appointments', icon: CalendarCheck, roles: ['super_admin', 'support_agent'] },
+    { name: 'Revenue', href: '/admin/billing/revenue', icon: BarChart3, roles: ['super_admin', 'billing_manager'] },
+    { name: 'Billing Products', href: '/admin/billing/products', icon: DollarSign, roles: ['super_admin', 'billing_manager'] }, 
+    { name: 'Add-ons Catalog', href: '/admin/addons/catalog', icon: Zap, roles: ['super_admin', 'project_manager'] },
+    { name: 'AI Docs', href: '/admin/ai-docs', icon: FileText, roles: ['super_admin', 'project_manager'] },
+    { name: 'AI Email', href: '/admin/ai-email', icon: Mail, roles: ['super_admin', 'project_manager', 'support_agent'] },
+    { name: 'User Management', href: '/admin/users', icon: UserPlus, roles: ['super_admin'] }, // New User Management Link
+    { name: 'Settings', href: '/admin/settings', icon: Settings, roles: ['super_admin'] },
   ];
+  
+  const filteredNavItems = navItems.filter(item => item.roles.includes(adminRole));
   
   const handleSignOut = () => {
       setIsMobileMenuOpen(false);
@@ -63,10 +69,10 @@ const AdminLayout: React.FC<AdminLayoutProps> = ({ children }) => {
           
           <div className="mb-8 pt-4 border-t border-slate-100">
             <h3 className="text-lg font-bold text-slate-900">Admin Panel</h3>
-            <p className="text-xs text-slate-500">Welcome, {profile?.full_name || 'Admin'}</p>
+            <p className="text-xs text-slate-500">Role: {adminRole.replace('_', ' ')}</p>
           </div>
           <nav className="space-y-2 flex-1">
-            {navItems.map((item) => (
+            {filteredNavItems.map((item) => (
               <Link
                 key={item.name}
                 to={item.href}
@@ -109,7 +115,7 @@ const AdminLayout: React.FC<AdminLayoutProps> = ({ children }) => {
                         <p className="text-xs text-slate-500">Welcome, {profile?.full_name || 'Admin'}</p>
                     </div>
                     <nav className="space-y-2">
-                        {navItems.map((item) => (
+                        {filteredNavItems.map((item) => (
                             <Link
                                 key={item.name}
                                 to={item.href}
