@@ -131,20 +131,36 @@ const ClientAddons: React.FC = () => {
     
     const renderPriceDisplay = (addon: Addon) => {
         if (addon.billing_type === 'one_time' && addon.price_cents !== null) {
-            return <p className="text-3xl font-bold text-slate-900 mb-4">{formatCurrency(addon.price_cents)} <span className="text-base font-medium text-slate-500">One-Time</span></p>;
-        }
-        if (addon.billing_type === 'subscription' && addon.monthly_price_cents !== null) {
-            return <p className="text-3xl font-bold text-slate-900 mb-4">{formatCurrency(addon.monthly_price_cents)} <span className="text-base font-medium text-slate-500">/mo</span></p>;
-        }
-        if (addon.billing_type === 'setup_plus_subscription' && addon.setup_fee_cents !== null && addon.monthly_price_cents !== null) {
             return (
                 <div className="mb-4">
-                    <p className="text-xl font-bold text-slate-900">Setup Fee: {formatCurrency(addon.setup_fee_cents)}</p>
-                    <p className="text-3xl font-bold text-slate-900 mt-1">Monthly: {formatCurrency(addon.monthly_price_cents)} <span className="text-base font-medium text-slate-500">/mo</span></p>
+                    <p className="text-xl font-bold text-slate-900">{formatCurrency(addon.price_cents)}</p>
+                    <p className="text-sm font-medium text-slate-500">One-Time Fee</p>
                 </div>
             );
         }
-        return <p className="text-3xl font-bold text-slate-900 mb-4">Price TBD</p>;
+        if (addon.billing_type === 'subscription' && addon.monthly_price_cents !== null) {
+            return (
+                <div className="mb-4">
+                    <p className="text-xl font-bold text-slate-900">{formatCurrency(addon.monthly_price_cents)} /mo</p>
+                    <p className="text-sm font-medium text-slate-500">Monthly Subscription</p>
+                </div>
+            );
+        }
+        if (addon.billing_type === 'setup_plus_subscription' && addon.setup_fee_cents !== null && addon.monthly_price_cents !== null) {
+            return (
+                <div className="mb-4 space-y-1">
+                    <div className="flex justify-between items-center">
+                        <p className="text-sm font-medium text-slate-700">Setup Fee:</p>
+                        <p className="text-lg font-bold text-slate-900">{formatCurrency(addon.setup_fee_cents)}</p>
+                    </div>
+                    <div className="flex justify-between items-center">
+                        <p className="text-sm font-medium text-slate-700">Monthly:</p>
+                        <p className="text-xl font-bold text-slate-900">{formatCurrency(addon.monthly_price_cents)} /mo</p>
+                    </div>
+                </div>
+            );
+        }
+        return <p className="text-xl font-bold text-slate-900 mb-4">Price TBD</p>;
     };
 
     if (isLoading) {
@@ -202,7 +218,7 @@ const ClientAddons: React.FC = () => {
                                     className={`bg-white p-6 rounded-xl shadow-lg border ${isApproved ? 'border-emerald-300' : 'border-slate-100'} flex flex-col`}
                                 >
                                     <div className="flex justify-between items-start mb-4">
-                                        <h3 className="text-xl font-bold text-slate-900">{addon.name}</h3>
+                                        <h3 className="text-lg font-bold text-slate-900">{addon.name}</h3>
                                         <span className={`px-3 py-1 rounded-full text-xs font-semibold ${addon.billing_type === 'subscription' ? 'bg-purple-100 text-purple-800' : addon.billing_type === 'one_time' ? 'bg-blue-100 text-blue-800' : 'bg-indigo-100 text-indigo-800'}`}>
                                             {addon.billing_type === 'subscription' ? 'Monthly' : addon.billing_type === 'one_time' ? 'One-Time' : 'Setup + Monthly'}
                                         </span>
@@ -215,14 +231,14 @@ const ClientAddons: React.FC = () => {
                                     {isApproved ? (
                                         <button 
                                             disabled
-                                            className="w-full py-3 bg-emerald-500 text-white rounded-lg font-semibold text-sm flex items-center justify-center gap-2"
+                                            className="w-full py-3 bg-emerald-600 text-white rounded-lg font-semibold text-sm flex items-center justify-center gap-2"
                                         >
                                             <CheckCircle2 className="w-4 h-4" /> Service Approved
                                         </button>
                                     ) : isRequested ? (
                                         <button 
                                             disabled
-                                            className="w-full py-3 bg-amber-500 text-white rounded-lg font-semibold text-sm flex items-center justify-center gap-2"
+                                            className="w-full py-3 bg-amber-600 text-white rounded-lg font-semibold text-sm flex items-center justify-center gap-2"
                                         >
                                             <Clock className="w-4 h-4" /> Request Pending
                                         </button>
