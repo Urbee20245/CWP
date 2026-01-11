@@ -93,7 +93,15 @@ export default function LoginPage() {
         
     } catch (e: any) {
         console.error("Authentication failed:", e);
-        setError(e.message || `${actionType} failed. Check credentials or try again.`);
+        
+        let userFriendlyError = e.message || `${actionType} failed. Check credentials or try again.`;
+        
+        // Check for the generic security error message from the Edge Function
+        if (userFriendlyError.includes('Invalid login credentials')) {
+            userFriendlyError = "The email or password you entered is incorrect. Please double-check your credentials.";
+        }
+        
+        setError(userFriendlyError);
     } finally {
         setLoading(false);
         recaptchaRef.current?.reset();
