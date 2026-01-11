@@ -3,7 +3,7 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import { useParams, Link, useNavigate } from 'react-router-dom';
 import { supabase } from '../integrations/supabase/client';
-import { Loader2, Briefcase, FileText, DollarSign, Plus, CreditCard, Zap, ExternalLink, ShieldCheck, Lock, Trash2, Send, AlertCircle, MessageSquare, Phone, CheckCircle2, Pause, Play, Clock, Download, Edit, Bell, BellOff, Users } from 'lucide-react';
+import { Loader2, Briefcase, FileText, DollarSign, Plus, CreditCard, Zap, ExternalLink, ShieldCheck, Lock, Trash2, Send, AlertCircle, MessageSquare, Phone, CheckCircle2, Pause, Play, Clock, Download, Edit, Bell, BellOff, Users, Percent } from 'lucide-react';
 import AdminLayout from '../components/AdminLayout';
 import { Profile } from '../types/auth';
 import { AdminService } from '../services/adminService'; // Use AdminService for admin functions
@@ -23,6 +23,15 @@ interface ProjectSummary {
   progress_percent: number;
 }
 
+interface InvoiceDiscount {
+    id: string;
+    invoice_id: string;
+    discount_type: 'percentage' | 'fixed';
+    discount_value: number; // Percentage (0-100) or fixed amount in cents
+    applied_by: string;
+    created_at: string;
+}
+
 interface InvoiceSummary {
   id: string;
   amount_due: number;
@@ -33,6 +42,7 @@ interface InvoiceSummary {
   last_reminder_sent_at: string | null; // New field
   disable_reminders: boolean; // New field
   stripe_invoice_id: string; // ADDED for audit/resend verification
+  discounts: InvoiceDiscount[]; // NEW FIELD
 }
 
 interface SubscriptionSummary {
@@ -109,7 +119,7 @@ const AdminClientDetail: React.FC = () => {
   const { user } = useAuth();
   const [client, setClient] = useState<Client | null>(null);
   const [isLoading, setIsLoading] = useState(true);
-  const [activeTab, setActiveTab] = useState<'projects' | 'billing' | 'notes' | 'addons'>('addons'); // Default to addons
+  const [activeTab, setActiveTab] = useState<'projects' | 'billing' | 'notes' | 'addons'>('billing'); // Default to billing
   const [fetchError, setFetchError] = useState<string | null>(null); // New state for fetch errors
   
   // Dialog State
@@ -131,6 +141,14 @@ const AdminClientDetail: React.FC = () => {
   const [isServiceUpdating, setIsServiceUpdating] = useState(false);
   const [adminNotes, setAdminNotes] = useState('');
   const [serviceActionNote, setServiceActionNote] = useState(''); // Note for pause/resume action
+  
+  // Discount State
+  const [discountForm, setDiscountForm] = useState({
+      invoiceId: '',
+      discountType: 'percentage' as 'percentage' | 'fixed',
+      discountValue: 0,
+  });
+  const [discountError, setDiscountError] = useState<string | null>(null);
 
   const fetchClientData = useCallback(async () => {
     if (!id) return;
@@ -164,6 +182,7 @@ const AdminClientDetail: React.FC = () => {
         { data: depositsData },
         { data: pauseLogsData },
         { data: addonRequestsData },
+        { data: discountsData }, // Fetch Discounts
     ] = await Promise.all([
         supabase.from('projects').select('id, title, status, progress_percent').eq('client_id', id).order('created_at', { ascending: false }),
         supabase.from('invoices').select('id, amount_due, status, hosted_invoice_url, pdf_url, created_at, last_reminder_sent_at, disable_reminders, stripe_invoice_id').eq('client_id', id).order('created_at', { ascending: false }),
@@ -171,14 +190,20 @@ const AdminClientDetail: React.FC = () => {
         supabase.from('deposits').select('id, amount_cents, status, stripe_invoice_id, applied_to_invoice_id, created_at').eq('client_id', id).order('created_at', { ascending: false }),
         supabase.from('service_pause_logs').select('id, action, internal_note, client_acknowledged, created_at').eq('client_id', id).order('created_at', { ascending: false }),
         supabase.from('client_addon_requests').select('id, addon_key, addon_name, status, notes, requested_at').eq('client_id', id).order('requested_at', { ascending: false }),
+        supabase.from('invoice_discounts').select('*'), // Fetch all discounts
     ]);
     
+    const allDiscounts = ensureArray(discountsData) as InvoiceDiscount[];
+
     // 3. Merge and set state
     const mergedClient: Client = {
         ...clientRecord,
         profiles: clientRecord.profiles as Profile,
         projects: ensureArray(projectsData) as ProjectSummary[],
-        invoices: ensureArray(invoicesData) as InvoiceSummary[],
+        invoices: ensureArray(invoicesData).map(inv => ({
+            ...inv,
+            discounts: allDiscounts.filter(d => d.invoice_id === inv.id)
+        })) as InvoiceSummary[],
         subscriptions: ensureArray(subscriptionsData) as SubscriptionSummary[],
         deposits: ensureArray(depositsData) as DepositSummary[],
         pause_logs: ensureArray(pauseLogsData) as PauseLog[],
@@ -519,6 +544,37 @@ const AdminClientDetail: React.FC = () => {
       navigate(`/admin/email-draft?clientId=${client.id}&clientEmail=${recipientEmail}&clientName=${client.business_name}&clientFullName=${client.profiles?.full_name}`);
   };
   
+  const handleApplyDiscount = async (e: React.FormEvent) => {
+      e.preventDefault();
+      setDiscountError(null);
+      setIsProcessing(true);
+      
+      const { invoiceId, discountType, discountValue } = discountForm;
+      
+      if (!invoiceId || discountValue <= 0 || (discountType === 'percentage' && discountValue > 100)) {
+          setDiscountError('Invalid discount value or invoice selected.');
+          setIsProcessing(false);
+          return;
+      }
+      
+      try {
+          await AdminService.applyInvoiceDiscount(
+              invoiceId,
+              discountType,
+              discountType === 'percentage' ? discountValue : Math.round(discountValue * 100), // Convert fixed amount to cents
+              user!.id // Applied by current admin user
+          );
+          
+          alert(`Discount applied successfully! The invoice will be updated on the next sync or manual action.`);
+          setDiscountForm({ invoiceId: '', discountType: 'percentage', discountValue: 0 });
+          fetchClientData();
+      } catch (e: any) {
+          setDiscountError(e.message || 'Failed to apply discount.');
+      } finally {
+          setIsProcessing(false);
+      }
+  };
+  
   const getStatusColor = (status: string) => {
     switch (status) {
       case 'active': return 'bg-emerald-100 text-emerald-800';
@@ -564,6 +620,8 @@ const AdminClientDetail: React.FC = () => {
   
   const unappliedDeposits = client?.deposits?.filter(d => d.status === 'paid' || d.status === 'applied') || [];
   const totalUnappliedCredit = unappliedDeposits.reduce((sum, d) => sum + d.amount_cents, 0) / 100;
+  
+  const openInvoices = client.invoices?.filter(inv => inv.status === 'open' || inv.status === 'past_due') || [];
 
   if (isLoading) {
     return (
@@ -1064,6 +1122,82 @@ const AdminClientDetail: React.FC = () => {
                         />
                     )}
                     
+                    {/* Apply Discount Form */}
+                    <div className="bg-white p-6 rounded-xl shadow-lg border border-slate-100">
+                        <h2 className="text-xl font-bold mb-4 flex items-center gap-2 text-slate-900 border-b border-slate-100 pb-4">
+                            <Percent className="w-5 h-5 text-purple-600" /> Apply Discount to Invoice
+                        </h2>
+                        <form onSubmit={handleApplyDiscount} className="space-y-4">
+                            
+                            {discountError && (
+                                <div className="p-3 bg-red-100 border border-red-300 text-red-800 rounded-lg text-sm flex items-center gap-2">
+                                    <AlertCircle className="w-4 h-4" />
+                                    {discountError}
+                                </div>
+                            )}
+                            
+                            <div>
+                                <label className="block text-sm font-medium text-slate-700 mb-1">Select Open Invoice *</label>
+                                <select
+                                    value={discountForm.invoiceId}
+                                    onChange={(e) => setDiscountForm(prev => ({ ...prev, invoiceId: e.target.value }))}
+                                    className="w-full p-2 border border-slate-300 rounded-lg text-sm"
+                                    required
+                                    disabled={isProcessing || openInvoices.length === 0}
+                                >
+                                    <option value="">-- Select Invoice --</option>
+                                    {openInvoices.map(invoice => (
+                                        <option key={invoice.id} value={invoice.id}>
+                                            {invoice.status.toUpperCase()} - ${((invoice.amount_due || 0) / 100).toFixed(2)} (ID: {invoice.id.substring(0, 8)})
+                                        </option>
+                                    ))}
+                                </select>
+                                {openInvoices.length === 0 && <p className="text-xs text-red-500 mt-1">No open invoices available for discount.</p>}
+                            </div>
+                            
+                            <div className="grid grid-cols-3 gap-4">
+                                <div className="col-span-1">
+                                    <label className="block text-sm font-medium text-slate-700 mb-1">Discount Type *</label>
+                                    <select
+                                        value={discountForm.discountType}
+                                        onChange={(e) => setDiscountForm(prev => ({ ...prev, discountType: e.target.value as 'percentage' | 'fixed', discountValue: 0 }))}
+                                        className="w-full p-2 border border-slate-300 rounded-lg text-sm"
+                                        disabled={isProcessing}
+                                    >
+                                        <option value="percentage">Percentage (%)</option>
+                                        <option value="fixed">Fixed Amount ($)</option>
+                                    </select>
+                                </div>
+                                <div className="col-span-2">
+                                    <label className="block text-sm font-medium text-slate-700 mb-1">Discount Value *</label>
+                                    <div className="relative">
+                                        <span className="absolute left-3 top-2.5 text-slate-500 text-sm">{discountForm.discountType === 'fixed' ? '$' : '%'}</span>
+                                        <input
+                                            type="number"
+                                            value={discountForm.discountValue || ''}
+                                            onChange={(e) => setDiscountForm(prev => ({ ...prev, discountValue: parseFloat(e.target.value) || 0 }))}
+                                            className={`w-full ${discountForm.discountType === 'fixed' ? 'pl-6' : 'pl-6'} pr-2 py-2 border border-slate-300 rounded-lg text-sm`}
+                                            required
+                                            min="0.01"
+                                            step="0.01"
+                                            max={discountForm.discountType === 'percentage' ? 100 : undefined}
+                                            disabled={isProcessing}
+                                        />
+                                    </div>
+                                </div>
+                            </div>
+                            
+                            <button 
+                                type="submit"
+                                disabled={isProcessing || !discountForm.invoiceId || discountForm.discountValue <= 0}
+                                className="w-full py-2 bg-purple-600 text-white rounded-lg text-sm font-semibold hover:bg-purple-700 transition-colors disabled:opacity-50 flex items-center justify-center gap-2"
+                            >
+                                {isProcessing ? <Loader2 className="w-4 h-4 animate-spin" /> : <DollarSign className="w-4 h-4" />}
+                                Apply Discount & Update Invoice
+                            </button>
+                        </form>
+                    </div>
+                    
                     {/* Deposit History */}
                     <div className="bg-white p-6 rounded-xl shadow-lg border border-slate-100">
                       <h2 className="text-xl font-bold mb-4 flex items-center gap-2 text-slate-900 border-b border-slate-100 pb-4">
@@ -1132,6 +1266,11 @@ const AdminClientDetail: React.FC = () => {
                                       {isDepositInvoice(invoice.stripe_invoice_id) && (
                                           <span className="px-2 py-0.5 rounded-full text-xs font-semibold bg-blue-100 text-blue-800">
                                               Deposit
+                                          </span>
+                                      )}
+                                      {invoice.discounts && invoice.discounts.length > 0 && (
+                                          <span className="px-2 py-0.5 rounded-full text-xs font-semibold bg-purple-100 text-purple-800 flex items-center gap-1">
+                                              <Percent className="w-3 h-3" /> Discount Applied
                                           </span>
                                       )}
                                   </div>

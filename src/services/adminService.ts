@@ -130,6 +130,15 @@ export const AdminService = {
       return data;
   },
   
+  applyInvoiceDiscount: async (invoiceId: string, discountType: 'percentage' | 'fixed', discountValue: number, appliedBy: string) => {
+      return invokeEdgeFunction('apply-invoice-discount', { 
+          invoice_id: invoiceId, 
+          discount_type: discountType, 
+          discount_value: discountValue, 
+          applied_by: appliedBy 
+      });
+  },
+  
   // --- Manual Invoice Actions ---
   resendInvoiceEmail: async (invoiceId: string, clientEmail: string, clientName: string, hostedUrl: string, amount: number, sentBy: string) => {
       const subject = `Invoice Reminder: ${clientName} - $${amount.toFixed(2)} Due`;
