@@ -11,6 +11,7 @@ import { ClientBillingService } from '../services/clientBillingService'; // Use 
 import AddProjectDialog from '../components/AddProjectDialog';
 import SendSmsDialog from '../components/SendSmsDialog'; // Import the new dialog
 import EditClientDialog from '../components/EditClientDialog'; // New Import
+import CreateInvoiceForm from '../components/CreateInvoiceForm'; // NEW IMPORT
 import { format } from 'date-fns';
 import { ensureArray } from '../utils/dataNormalization'; // Import normalization utility
 import { useAuth } from '../hooks/useAuth';
@@ -118,9 +119,6 @@ const AdminClientDetail: React.FC = () => {
   const [isProcessing, setIsProcessing] = useState(false);
   const [products, setProducts] = useState<BillingProduct[]>([]);
   const [selectedSubscriptionPriceId, setSelectedSubscriptionPriceId] = useState('');
-  const [selectedOneTimePriceId, setSelectedOneTimePriceId] = useState('');
-  const [invoiceItems, setInvoiceItems] = useState([{ description: '', amount: 0 }]);
-  const [invoiceDueDate, setInvoiceDueDate] = useState('');
   
   // Deposit State
   const [depositAmount, setDepositAmount] = useState<number | ''>('');
@@ -382,15 +380,87 @@ const AdminClientDetail: React.FC = () => {
       }
   };
   
-  // --- Billing Handlers (omitted for brevity, kept in original file) ---
-  const handleCreateCustomer = async () => { /* ... */ };
-  const handleStartSubscription = async () => { /* ... */ };
-  const handleCreateInvoice = async (e: React.FormEvent) => { /* ... */ };
-  const handleCollectDeposit = async (e: React.FormEvent) => { /* ... */ };
-  const handlePortalSession = async () => { /* ... */ };
-  const handleAddInvoiceItem = () => { /* ... */ };
-  const handleRemoveInvoiceItem = (index: number) => { /* ... */ };
-  const handleInvoiceItemChange = (index: number, field: 'description' | 'amount', value: string | number) => { /* ... */ };
+  // --- Billing Handlers ---
+  const handleCreateCustomer = async () => {
+    if (!client) return;
+    setIsProcessing(true);
+    try {
+        const result = await AdminService.createStripeCustomer(client.id);
+        alert(`Stripe Customer created: ${result.stripe_customer_id}`);
+        fetchClientData();
+    } catch (e: any) {
+        alert(`Failed to create Stripe Customer: ${e.message}`);
+    } finally {
+        setIsProcessing(false);
+    }
+  };
+  
+  const handleStartSubscription = async () => {
+    if (!client || !selectedSubscriptionPriceId) return;
+    setIsProcessing(true);
+    try {
+        const result = await AdminService.createSubscription(client.id, selectedSubscriptionPriceId);
+        
+        if (result.requires_action && result.hosted_invoice_url) {
+            alert("Subscription created but requires payment action. Redirecting to invoice.");
+            window.open(result.hosted_invoice_url, '_blank');
+        } else {
+            alert(`Subscription started successfully! Status: ${result.status}`);
+        }
+        
+        setSelectedSubscriptionPriceId('');
+        fetchClientData();
+    } catch (e: any) {
+        alert(`Failed to start subscription: ${e.message}`);
+    } finally {
+        setIsProcessing(false);
+    }
+  };
+  
+  const handlePortalSession = async () => {
+    if (!client || !client.stripe_customer_id) {
+        alert("Stripe customer record not found. Please create one first.");
+        return;
+    }
+    setIsProcessing(true);
+    try {
+      const result = await AdminService.createPortalSession(client.id);
+      window.open(result.portal_url, '_blank');
+    } catch (e: any) {
+      alert(`Failed to open portal: ${e.message}`);
+    } finally {
+      setIsProcessing(false);
+    }
+  };
+  
+  const handleCollectDeposit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!client || !depositAmount) return;
+    setIsProcessing(true);
+    
+    try {
+        // Determine if we should link the deposit to a project (for auto-application later)
+        const projectId = applyDepositToFuture && client.projects.length > 0 
+            ? client.projects[0].id // Use the first project ID as a default link
+            : undefined;
+            
+        const result = await AdminService.createDepositInvoice(
+            client.id,
+            depositAmount as number,
+            depositDescription || 'Client Deposit',
+            projectId
+        );
+        
+        alert(`Deposit invoice sent! Client must pay via hosted URL: ${result.hosted_url}`);
+        setDepositAmount('');
+        setDepositDescription('');
+        fetchClientData();
+    } catch (e: any) {
+        alert(`Failed to send deposit invoice: ${e.message}`);
+    } finally {
+        setIsProcessing(false);
+    }
+  };
   
   const handleSendEmailClick = () => {
       if (!client) return;
@@ -745,7 +815,7 @@ const AdminClientDetail: React.FC = () => {
                           <div className="flex justify-between items-center mb-2">
                             <h3 className="font-bold text-slate-900">{project.title}</h3>
                             <span className={`px-2 py-0.5 rounded-full text-xs font-semibold ${getStatusColor(project.status)}`}>
-                              {project.status}
+                              {project.status.replace('_', ' ')}
                             </span>
                           </div>
                           <div className="flex items-center gap-3">
@@ -929,91 +999,16 @@ const AdminClientDetail: React.FC = () => {
                         </div>
                     )}
                     
-                    {/* Create Invoice Form */}
-                    <div className="bg-white p-6 rounded-xl shadow-lg border border-slate-100">
-                      <h2 className="text-xl font-bold mb-4 flex items-center gap-2 text-slate-900 border-b border-slate-100 pb-4">
-                        <DollarSign className="w-5 h-5 text-red-600" /> Create One-Time Invoice
-                      </h2>
-                      <form onSubmit={handleCreateInvoice} className="space-y-4">
-                        
-                        {/* Product Selector for quick add */}
-                        <div className="flex gap-3 items-center">
-                            <select
-                                value={selectedOneTimePriceId}
-                                onChange={(e) => setSelectedOneTimePriceId(e.target.value)}
-                                className="flex-1 p-2 border border-slate-300 rounded-lg text-sm"
-                                disabled={isProcessing}
-                            >
-                                <option value="">Select a one-time product to add...</option>
-                                {oneTimeProducts.map(product => (
-                                    <option key={product.stripe_price_id} value={product.stripe_price_id}>
-                                        {product.name} (${(product.amount_cents / 100).toFixed(2)}/mo)
-                                    </option>
-                                ))}
-                            </select>
-                            <button type="button" onClick={handleAddInvoiceItem} className="px-4 py-2 bg-indigo-600 text-white rounded-lg text-sm font-semibold hover:bg-indigo-700 transition-colors disabled:opacity-50">
-                                Add
-                            </button>
-                        </div>
-                        
-                        {/* Manual Line Items */}
-                        {invoiceItems.map((item, index) => (
-                          <div key={index} className="flex gap-3 items-center">
-                            <input
-                              type="text"
-                              placeholder="Item Description"
-                              value={item.description}
-                              onChange={(e) => handleInvoiceItemChange(index, 'description', e.target.value)}
-                              className="flex-1 p-2 border border-slate-300 rounded-lg text-sm"
-                              required
-                              disabled={isProcessing}
-                            />
-                            <div className="relative w-24">
-                              <span className="absolute left-3 top-2.5 text-slate-500 text-sm">$</span>
-                              <input
-                                type="number"
-                                placeholder="Amount"
-                                value={item.amount || ''}
-                                onChange={(e) => handleInvoiceItemChange(index, 'amount', e.target.value)}
-                                className="w-full pl-6 pr-2 py-2 border border-slate-300 rounded-lg text-sm"
-                                required
-                                min="0.01"
-                                step="0.01"
-                                disabled={isProcessing}
-                              />
-                            </div>
-                            {invoiceItems.length > 0 && (
-                              <button type="button" onClick={() => handleRemoveInvoiceItem(index)} className="text-red-500 hover:text-red-700">
-                                <Trash2 className="w-4 h-4" />
-                              </button>
-                            )}
-                          </div>
-                        ))}
-                        <div className="flex justify-between">
-                            <button type="button" onClick={() => handleAddInvoiceItem()} className="text-indigo-600 hover:text-indigo-800 text-sm font-medium flex items-center gap-1">
-                                <Plus className="w-4 h-4" /> Add Custom Line Item
-                            </button>
-                            <div className="flex items-center gap-2">
-                                <label className="text-sm text-slate-600">Due Date:</label>
-                                <input
-                                    type="date"
-                                    value={invoiceDueDate}
-                                    onChange={(e) => setInvoiceDueDate(e.target.value)}
-                                    className="p-2 border border-slate-300 rounded-lg text-sm"
-                                    disabled={isProcessing}
-                                />
-                            </div>
-                        </div>
-                        <button 
-                          type="submit"
-                          disabled={isProcessing}
-                          className="w-full py-3 bg-red-600 text-white rounded-lg font-semibold hover:bg-red-700 transition-colors disabled:opacity-50 flex items-center justify-center gap-2"
-                        >
-                          {isProcessing ? <Loader2 className="w-5 h-5 animate-spin" /> : <DollarSign className="w-5 h-5" />}
-                          Create & Send Invoice
-                        </button>
-                      </form>
-                    </div>
+                    {/* Create Invoice Form (Using new component) */}
+                    {client && (
+                        <CreateInvoiceForm
+                            clientId={client.id}
+                            oneTimeProducts={oneTimeProducts}
+                            onInvoiceCreated={fetchClientData}
+                            isProcessing={isProcessing}
+                            setIsProcessing={setIsProcessing}
+                        />
+                    )}
                     
                     {/* Deposit History */}
                     <div className="bg-white p-6 rounded-xl shadow-lg border border-slate-100">
@@ -1155,7 +1150,7 @@ const AdminClientDetail: React.FC = () => {
         <AddProjectDialog
           isOpen={isProjectDialogOpen}
           onClose={() => setIsProjectDialogOpen(false)}
-          onProjectAdded={fetchClientData}
+          onClientAdded={fetchClientData}
           clientId={client.id}
           clientName={client.business_name}
         />
