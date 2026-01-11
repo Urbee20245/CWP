@@ -1,5 +1,7 @@
+"use client";
+
 import React, { useState, useRef, useEffect, useCallback } from 'react';
-import { X, MessageSquare, Bot, Send, Sparkles, Mic, MicOff, Volume2, VolumeX, Phone } from 'lucide-react';
+import { X, MessageSquare, Bot, Send, Sparkles, Mic, MicOff, Volume2, VolumeX, Phone, ArrowLeftRight, Gauge, Eye } from 'lucide-react';
 import { GoogleGenAI } from '@google/genai';
 
 interface ChatMessage {
@@ -93,9 +95,15 @@ const VoiceAgent: React.FC = () => {
               COMPANY INFO:
               - Name: Custom Websites Plus (CWP)
               - Phone: (844) 213-0694
-              - Service: Website Rebuilds, SEO, AI Agents
-              - Pricing: $5k-$15k typically
-              - Timeline: 4-6 weeks
+              - Email: hello@customwebsitesplus.com
+              - Service Area: Walton County, Gwinnett County, and Metro Atlanta area.
+              - Core Services: Custom Website Rebuilds, Local SEO Foundation, Performance Optimization, AI Voice Agents (Add-on).
+              - Pricing: Website rebuilds typically range from $5,000 to $15,000.
+              - Timeline: Projects are completed in a proven 4-6 week process.
+              - Tools: We offer free DIY tools:
+                  - JetSuite: Complete AI toolkit for local business growth.
+                  - Jet Local Optimizer: Free technical website audit (speed, SEO, mobile).
+                  - JetViz: Free visual design assessment (checks for outdated design).
               
               YOUR ROLE:
               - Be helpful, concise, and professional.
@@ -166,8 +174,8 @@ const VoiceAgent: React.FC = () => {
       };
 
       source.connect(processor);
-      processor.connect(audioContextRef.current.destination);
-
+      processor.connect(processorRef.current.context.destination); // Connect to destination
+      
     } catch (err: any) {
       console.error("Voice Connection Failed:", err);
       setConfigError(err.message || "Connection failed");
@@ -240,10 +248,29 @@ const VoiceAgent: React.FC = () => {
         
         // Use client.chats.create for a new chat session
         const chatSession = client.chats.create({ 
-            model: 'gemini-2.0-flash-exp',
+            model: 'gemini-2.5-flash', // Using 2.5-flash for chat
             history: [],
             config: {
-                systemInstruction: `You are Luna, AI assistant for Custom Websites Plus.`,
+                systemInstruction: `You are Luna, a professional AI receptionist for Custom Websites Plus.
+              
+                COMPANY INFO:
+                - Name: Custom Websites Plus (CWP)
+                - Phone: (844) 213-0694
+                - Email: hello@customwebsitesplus.com
+                - Service Area: Walton County, Gwinnett County, and Metro Atlanta area.
+                - Core Services: Custom Website Rebuilds, Local SEO Foundation, Performance Optimization, AI Voice Agents (Add-on).
+                - Pricing: Website rebuilds typically range from $5,000 to $15,000.
+                - Timeline: Projects are completed in a proven 4-6 week process.
+                - Tools: We offer free DIY tools:
+                    - JetSuite: Complete AI toolkit for local business growth.
+                    - Jet Local Optimizer: Free technical website audit (speed, SEO, mobile).
+                    - JetViz: Free visual design assessment (checks for outdated design).
+                
+                YOUR ROLE:
+                - Be helpful, concise, and professional.
+                - Encourage users to book a consultation or use the free JetSuite tools.
+                - Do not make up technical details.
+                `,
             }
         });
         chatSessionRef.current = chatSession;
