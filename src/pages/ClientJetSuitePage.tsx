@@ -3,7 +3,7 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import ClientLayout from '../components/ClientLayout';
 import { Link } from 'react-router-dom';
-import { Zap, Eye, MapPin, Sparkles, ArrowRight, Bell, CheckCircle2, ExternalLink, MessageSquare, DollarSign } from 'lucide-react';
+import { Zap, Eye, MapPin, Sparkles, ArrowRight, Bell, CheckCircle2, ExternalLink, MessageSquare, DollarSign, Home, Search, List, Image, Star, TrendingUp, Clock, User } from 'lucide-react';
 import { useAuth } from '../hooks/useAuth';
 import { supabase } from '../integrations/supabase/client';
 import { Loader2 } from 'lucide-react';
@@ -30,39 +30,15 @@ const ToolCard: React.FC<any> = ({ icon: Icon, title, subtitle, description, rep
 
 const ClientJetSuitePage: React.FC = () => {
     const { profile } = useAuth();
-    const [latestProjectId, setLatestProjectId] = useState<string | null>(null);
-    const [isDataLoading, setIsDataLoading] = useState(true);
+    // Removed latestProjectId state and related fetching logic
+    const [isDataLoading, setIsDataLoading] = useState(false); // Set to false immediately
 
+    // Simplified data fetching to just set loading state (keeping structure for future expansion)
     const fetchProjectData = useCallback(async () => {
-        if (!profile) return;
-
-        // 1. Get Client ID
-        const { data: clientData, error: clientError } = await supabase
-            .from('clients')
-            .select('id')
-            .eq('owner_profile_id', profile.id)
-            .single();
-
-        if (clientError || !clientData) {
-            setIsDataLoading(false);
-            return;
-        }
-        
-        // 2. Get Latest Project ID
-        const { data: projectData } = await supabase
-            .from('projects')
-            .select('id')
-            .eq('client_id', clientData.id)
-            .order('created_at', { ascending: false })
-            .limit(1)
-            .single();
-
-        if (projectData) {
-            setLatestProjectId(projectData.id);
-        }
-        
-        setIsDataLoading(false);
-    }, [profile]);
+        setIsDataLoading(true);
+        // Simulate data fetch time if needed, but for now, just set to false
+        setTimeout(() => setIsDataLoading(false), 100);
+    }, []);
 
     useEffect(() => {
         fetchProjectData();
@@ -109,9 +85,7 @@ const ClientJetSuitePage: React.FC = () => {
         { icon: User, title: 'Business Details', subtitle: 'Central Business Profile', description: 'Store and update business info once that powers all tools automatically.', replaces: 'Brand Guidelines Doc' },
     ];
     
-    const deepLink = latestProjectId 
-        ? `/client/projects/${latestProjectId}?tab=messages&message=${encodeURIComponent("I'm interested in the JetSuite Deal. Please send me the lifetime 20% off code!")}`
-        : '/client/dashboard'; // Fallback if no project exists
+    // Removed deepLink logic
 
     return (
         <ClientLayout>
@@ -244,7 +218,7 @@ const ClientJetSuitePage: React.FC = () => {
                     </div>
                 </section>
                 
-                {/* EXCLUSIVE DISCOUNT BANNER (NEW) */}
+                {/* EXCLUSIVE DISCOUNT BANNER (MODIFIED) */}
                 <section className="py-16 bg-indigo-600 text-white">
                     <div className="max-w-4xl mx-auto px-6 text-center">
                         <h2 className="text-3xl md:text-4xl font-bold mb-4 flex items-center justify-center gap-3">
@@ -258,30 +232,18 @@ const ClientJetSuitePage: React.FC = () => {
                         {isDataLoading ? (
                             <Loader2 className="w-6 h-6 animate-spin text-white mx-auto" />
                         ) : (
-                            <Link
-                                to={deepLink}
-                                className={`inline-flex items-center gap-2 px-8 py-4 rounded-xl font-bold text-lg transition-all duration-300 hover:scale-105 ${
-                                    latestProjectId 
-                                        ? 'bg-white text-indigo-600 hover:bg-indigo-50 shadow-xl'
-                                        : 'bg-slate-400 text-slate-800 cursor-not-allowed'
-                                }`}
-                                onClick={(e) => {
-                                    if (!latestProjectId) {
-                                        e.preventDefault();
-                                        alert("Please ensure you have at least one active project to request the code.");
-                                    }
-                                }}
+                            <button
+                                onClick={() => alert("Please contact your project manager directly for the exclusive discount code.")}
+                                className="inline-flex items-center gap-2 px-8 py-4 rounded-xl font-bold text-lg transition-all duration-300 hover:scale-105 bg-white text-indigo-600 hover:bg-indigo-50 shadow-xl"
                             >
                                 <MessageSquare className="w-5 h-5" />
                                 Request My Discount Code
-                            </Link>
+                            </button>
                         )}
                         
-                        {!latestProjectId && !isDataLoading && (
-                            <p className="text-xs text-red-200 mt-3">
-                                Note: You must have an active project to use the automated request link.
-                            </p>
-                        )}
+                        <p className="text-xs text-red-200 mt-3">
+                            Note: Contact your project manager directly for the code.
+                        </p>
                     </div>
                 </section>
                 
