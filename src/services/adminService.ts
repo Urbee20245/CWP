@@ -62,8 +62,8 @@ export const AdminService = {
     return invokeEdgeFunction('stripe-api/create-customer', { client_id: clientId });
   },
 
-  createSubscription: async (clientId: string, priceId: string) => {
-    return invokeEdgeFunction('stripe-api/create-subscription', { client_id: clientId, price_id: priceId });
+  createSubscription: async (clientId: string, priceId: string, setupFeePriceId?: string) => {
+    return invokeEdgeFunction('stripe-api/create-subscription', { client_id: clientId, price_id: priceId, setup_fee_price_id: setupFeePriceId });
   },
 
   createInvoice: async (clientId: string, lineItems: Array<{ description: string, amount: number }>, dueDate?: string) => {
@@ -101,9 +101,9 @@ export const AdminService = {
       name: string, 
       description: string, 
       amount_cents: number | null, 
-      billing_type: 'one_time' | 'subscription' | 'setup_plus_subscription',
-      setup_fee_cents?: number | null, // New field
-      monthly_price_cents?: number | null // New field
+      billing_type: 'one_time' | 'subscription',
+      monthly_price_cents?: number | null,
+      bundled_with_product_id?: string | null,
   }) => {
     return invokeEdgeFunction('create-billing-product', productData);
   },

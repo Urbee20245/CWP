@@ -96,9 +96,11 @@ interface Client {
 interface BillingProduct {
   id: string;
   name: string;
-  billing_type: 'one_time' | 'subscription';
-  amount_cents: number;
+  billing_type: 'one_time' | 'subscription'; // Updated type
+  amount_cents: number | null;
+  monthly_price_cents: number | null;
   stripe_price_id: string;
+  bundled_with_product_id: string | null; // New field
 }
 
 const AdminClientDetail: React.FC = () => {
@@ -191,7 +193,7 @@ const AdminClientDetail: React.FC = () => {
   const fetchProducts = async () => {
     const { data, error } = await supabase
       .from('billing_products')
-      .select('id, name, billing_type, amount_cents, stripe_price_id')
+      .select('id, name, billing_type, amount_cents, monthly_price_cents, stripe_price_id, bundled_with_product_id')
       .eq('active', true);
       
     if (error) {
@@ -398,8 +400,34 @@ const AdminClientDetail: React.FC = () => {
   const handleStartSubscription = async () => {
     if (!client || !selectedSubscriptionPriceId) return;
     setIsProcessing(true);
+    
+    const selectedProduct = products.find(p => p.stripe_price_id === selectedSubscriptionPriceId);
+    if (!selectedProduct) {
+        alert("Selected product not found.");
+        setIsProcessing(false);
+        return;
+    }
+    
+    let setupFeePriceId: string | undefined = undefined;
+    
+    // Check if this subscription is bundled with a setup fee product
+    if (selectedProduct.bundled_with_product_id) {
+        const setupProduct = products.find(p => p.id === selectedProduct.bundled_with_product_id);
+        if (setupProduct && setupProduct.billing_type === 'one_time') {
+            setupFeePriceId = setupProduct.stripe_price_id;
+        } else {
+            alert("Bundled setup fee product is invalid or not found.");
+            setIsProcessing(false);
+            return;
+        }
+    }
+    
     try {
-        const result = await AdminService.createSubscription(client.id, selectedSubscriptionPriceId);
+        const result = await AdminService.createSubscription(
+            client.id, 
+            selectedSubscriptionPriceId, 
+            setupFeePriceId // Pass the setup fee price ID
+        );
         
         if (result.requires_action && result.hosted_invoice_url) {
             alert("Subscription created but requires payment action. Redirecting to invoice.");
@@ -515,7 +543,16 @@ const AdminClientDetail: React.FC = () => {
   };
   
   const getPlanName = (priceId: string) => {
-      return products.find(p => p.stripe_price_id === priceId)?.name || 'Unknown Plan';
+      const product = products.find(p => p.stripe_price_id === priceId);
+      let name = product?.name || 'Unknown Plan';
+      
+      if (product?.bundled_with_product_id) {
+          const setupProduct = products.find(p => p.id === product.bundled_with_product_id);
+          if (setupProduct) {
+              name += ` (+ ${setupProduct.name})`;
+          }
+      }
+      return name;
   };
 
   const isDepositInvoice = (stripeInvoiceId: string) => {
@@ -924,8 +961,10 @@ const AdminClientDetail: React.FC = () => {
                         disabled={isProcessing || !client.stripe_customer_id}
                       >
                         <option value="">Select a plan...</option>
-                        {subscriptionProducts.map(plan => (
-                          <option key={plan.stripe_price_id} value={plan.stripe_price_id}>{plan.name} (${(plan.amount_cents / 100).toFixed(2)}/mo)</option>
+                        {subscriptionProducts.map(product => (
+                          <option key={product.stripe_price_id} value={product.stripe_price_id}>
+                            {getPlanName(product.stripe_price_id)} (${(product.monthly_price_cents! / 100).toFixed(2)}/mo)
+                          </option>
                         ))}
                       </select>
                       <button 

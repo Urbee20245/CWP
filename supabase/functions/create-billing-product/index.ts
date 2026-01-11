@@ -34,7 +34,7 @@ serve(async (req) => {
       Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!
     );
 
-    const { name, description, amount_cents, billing_type, setup_fee_cents, monthly_price_cents, currency = 'usd' } = await req.json();
+    const { name, description, amount_cents, billing_type, monthly_price_cents, bundled_with_product_id, currency = 'usd' } = await req.json();
 
     if (!name || !billing_type) {
       return new Response(
@@ -46,8 +46,8 @@ serve(async (req) => {
     // --- Determine amounts for Stripe and DB ---
     let stripeUnitAmount = 0;
     let dbAmountCents = null;
-    let dbSetupFeeCents = null;
     let dbMonthlyPriceCents = null;
+    let isRecurring = false;
 
     if (billing_type === 'one_time') {
         stripeUnitAmount = amount_cents || 0;
@@ -55,17 +55,13 @@ serve(async (req) => {
     } else if (billing_type === 'subscription') {
         stripeUnitAmount = monthly_price_cents || 0;
         dbMonthlyPriceCents = monthly_price_cents;
-    } else if (billing_type === 'setup_plus_subscription') {
-        // Stripe requires a default price, use the monthly price for the subscription object
-        stripeUnitAmount = monthly_price_cents || 0;
-        dbSetupFeeCents = setup_fee_cents;
-        dbMonthlyPriceCents = monthly_price_cents;
+        isRecurring = true;
     }
     
-    if (stripeUnitAmount <= 0 && billing_type !== 'setup_plus_subscription') {
-      if (billing_type === 'one_time' || billing_type === 'subscription') {
+    if (stripeUnitAmount <= 0 && billing_type !== 'one_time') {
+      if (billing_type === 'subscription') {
         return new Response(
-          JSON.stringify({ error: 'Price must be greater than zero for this billing type' }),
+          JSON.stringify({ error: 'Monthly Price must be greater than zero for subscription type' }),
           { status: 400, headers: corsHeaders }
         );
       }
@@ -73,13 +69,14 @@ serve(async (req) => {
     
     console.log(`[create-billing-product] Creating product: ${name} (${billing_type})`);
 
+    // 1. Create Stripe Product and Price
     const product = await stripe.products.create({
       name: name,
       description: description,
       default_price_data: {
         currency: currency,
         unit_amount: stripeUnitAmount,
-        recurring: (billing_type === 'subscription' || billing_type === 'setup_plus_subscription') ? { interval: 'month' } : undefined,
+        recurring: isRecurring ? { interval: 'month' } : undefined,
       },
       expand: ['default_price'],
     });
@@ -87,18 +84,19 @@ serve(async (req) => {
     const stripeProductId = product.id;
     const stripePriceId = (product.default_price as Stripe.Price).id;
 
+    // 2. Insert into Supabase
     const { data: dbProduct, error: dbError } = await supabaseAdmin
       .from('billing_products')
       .insert({
         name,
         description,
         billing_type,
-        amount_cents: dbAmountCents, // Corrected: NULL for subscription types
-        setup_fee_cents: dbSetupFeeCents,
-        monthly_price_cents: dbMonthlyPriceCents,
+        amount_cents: dbAmountCents, // Only set for one_time
+        monthly_price_cents: dbMonthlyPriceCents, // Only set for subscription
         currency,
         stripe_product_id: stripeProductId,
         stripe_price_id: stripePriceId,
+        bundled_with_product_id: bundled_with_product_id || null, // Persist bundle link
       })
       .select()
       .single();

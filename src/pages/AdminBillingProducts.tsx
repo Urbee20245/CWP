@@ -12,15 +12,16 @@ interface BillingProduct {
   id: string;
   name: string;
   description: string;
-  billing_type: 'one_time' | 'subscription' | 'setup_plus_subscription'; // Updated type
-  amount_cents: number | null; // Can be null if setup+subscription
-  setup_fee_cents: number | null; // New field
-  monthly_price_cents: number | null; // New field for subscription part
+  billing_type: 'one_time' | 'subscription'; // Simplified type
+  amount_cents: number | null; 
+  setup_fee_cents: number | null; 
+  monthly_price_cents: number | null; 
   currency: string;
   stripe_product_id: string;
   stripe_price_id: string;
   active: boolean;
   created_at: string;
+  bundled_with_product_id: string | null; // New field for bundling
 }
 
 interface Client {
@@ -52,10 +53,10 @@ const AdminBillingProducts: React.FC = () => {
     name: '',
     description: '',
     oneTimeAmount: 0, // USD for one_time
-    setupFee: 0, // USD for setup_plus_subscription
-    monthlyPrice: 0, // USD for subscription/setup_plus_subscription
-    billingType: 'one_time' as 'one_time' | 'subscription' | 'setup_plus_subscription',
+    monthlyPrice: 0, // USD for subscription
+    billingType: 'one_time' as 'one_time' | 'subscription', // Removed setup_plus_subscription
     features: [] as string[],
+    bundledWithProductId: '' as string, // New state for bundling
   });
 
   const fetchProducts = useCallback(async () => {
@@ -133,10 +134,9 @@ const AdminBillingProducts: React.FC = () => {
     setFormError(null);
     setIsCreating(true);
 
-    const { name, description, oneTimeAmount, setupFee, monthlyPrice, billingType } = formData;
+    const { name, description, oneTimeAmount, monthlyPrice, billingType, bundledWithProductId } = formData;
     
     let amountCents = null;
-    let setupFeeCents = null;
     let monthlyPriceCents = null;
 
     if (billingType === 'one_time') {
@@ -150,14 +150,6 @@ const AdminBillingProducts: React.FC = () => {
         monthlyPriceCents = Math.round(monthlyPrice * 100);
         if (monthlyPriceCents <= 0) {
             setFormError('Monthly Price must be set.');
-            setIsCreating(false);
-            return;
-        }
-    } else if (billingType === 'setup_plus_subscription') {
-        setupFeeCents = Math.round(setupFee * 100);
-        monthlyPriceCents = Math.round(monthlyPrice * 100);
-        if (setupFeeCents <= 0 || monthlyPriceCents <= 0) {
-            setFormError('Setup Fee and Monthly Price must be set.');
             setIsCreating(false);
             return;
         }
@@ -178,14 +170,15 @@ const AdminBillingProducts: React.FC = () => {
       await AdminService.createBillingProduct({
         name,
         description: finalDescription,
-        amount_cents: finalAmountCents, // Corrected: null for subscription types
+        amount_cents: finalAmountCents,
         billing_type: billingType,
-        setup_fee_cents: setupFeeCents,
         monthly_price_cents: monthlyPriceCents,
+        // Pass the bundled product ID if it's a subscription and selected
+        bundled_with_product_id: billingType === 'subscription' && bundledWithProductId ? bundledWithProductId : null,
       });
 
       alert(`Product '${name}' created successfully in Stripe and Supabase!`);
-      setFormData({ name: '', description: '', oneTimeAmount: 0, setupFee: 0, monthlyPrice: 0, billingType: 'subscription', features: [] });
+      setFormData({ name: '', description: '', oneTimeAmount: 0, monthlyPrice: 0, billingType: 'subscription', features: [], bundledWithProductId: '' });
       fetchProducts(); // Refresh list
       
       if (selectedClient) {
@@ -251,23 +244,32 @@ const AdminBillingProducts: React.FC = () => {
       switch (type) {
           case 'subscription': return <Zap className="w-4 h-4" />;
           case 'one_time': return <Clock className="w-4 h-4" />;
-          case 'setup_plus_subscription': return <DollarSign className="w-4 h-4" />;
           default: return <FileText className="w-4 h-4" />;
       }
   };
   
   const renderPriceDisplay = (product: BillingProduct) => {
-      if (product.billing_type === 'one_time' && product.amount_cents !== null) {
-          return `$${(product.amount_cents / 100).toFixed(2)}`;
+      const monthlyPrice = product.monthly_price_cents;
+      const oneTimePrice = product.amount_cents;
+      
+      if (product.billing_type === 'one_time' && oneTimePrice !== null) {
+          return `$${(oneTimePrice / 100).toFixed(2)}`;
       }
-      if (product.billing_type === 'subscription' && product.monthly_price_cents !== null) {
-          return `$${(product.monthly_price_cents / 100).toFixed(2)}/mo`;
-      }
-      if (product.billing_type === 'setup_plus_subscription' && product.setup_fee_cents !== null && product.monthly_price_cents !== null) {
-          return `Setup: $${(product.setup_fee_cents / 100).toFixed(2)} + $${(product.monthly_price_cents / 100).toFixed(2)}/mo`;
+      if (product.billing_type === 'subscription' && monthlyPrice !== null) {
+          let display = `$${(monthlyPrice / 100).toFixed(2)}/mo`;
+          
+          if (product.bundled_with_product_id) {
+              const setupFeeProduct = products.find(p => p.id === product.bundled_with_product_id);
+              if (setupFeeProduct && setupFeeProduct.amount_cents) {
+                  display = `Setup: $${(setupFeeProduct.amount_cents / 100).toFixed(2)} + ${display}`;
+              }
+          }
+          return display;
       }
       return 'N/A';
   };
+  
+  const oneTimeProducts = products.filter(p => p.billing_type === 'one_time' && p.active);
 
   return (
     <AdminLayout>
@@ -360,7 +362,7 @@ const AdminBillingProducts: React.FC = () => {
                 >
                   <option value="subscription">Monthly Subscription</option>
                   <option value="one_time">One-Time Payment</option>
-                  <option value="setup_plus_subscription">Setup Fee + Monthly Subscription</option>
+                  {/* Removed setup_plus_subscription */}
                 </select>
               </div>
               
@@ -387,45 +389,8 @@ const AdminBillingProducts: React.FC = () => {
                 )}
                 
                 {formData.billingType === 'subscription' && (
-                    <div className="col-span-2">
-                        <label className="block text-sm font-medium text-slate-700 mb-1">Monthly Price (USD) *</label>
-                        <div className="relative">
-                            <span className="absolute left-3 top-2.5 text-slate-500 text-sm">$</span>
-                            <input
-                                type="number"
-                                name="monthlyPrice"
-                                value={formData.monthlyPrice || ''}
-                                onChange={handleFormChange}
-                                className="w-full pl-6 pr-2 py-2 border border-slate-300 rounded-lg text-sm"
-                                required
-                                min="0.01"
-                                step="0.01"
-                                disabled={isCreating}
-                            />
-                        </div>
-                    </div>
-                )}
-                
-                {formData.billingType === 'setup_plus_subscription' && (
                     <>
-                        <div>
-                            <label className="block text-sm font-medium text-slate-700 mb-1">Setup Fee (USD) *</label>
-                            <div className="relative">
-                                <span className="absolute left-3 top-2.5 text-slate-500 text-sm">$</span>
-                                <input
-                                    type="number"
-                                    name="setupFee"
-                                    value={formData.setupFee || ''}
-                                    onChange={handleFormChange}
-                                    className="w-full pl-6 pr-2 py-2 border border-slate-300 rounded-lg text-sm"
-                                    required
-                                    min="0.01"
-                                    step="0.01"
-                                    disabled={isCreating}
-                                />
-                            </div>
-                        </div>
-                        <div>
+                        <div className="col-span-2">
                             <label className="block text-sm font-medium text-slate-700 mb-1">Monthly Price (USD) *</label>
                             <div className="relative">
                                 <span className="absolute left-3 top-2.5 text-slate-500 text-sm">$</span>
@@ -441,6 +406,26 @@ const AdminBillingProducts: React.FC = () => {
                                     disabled={isCreating}
                                 />
                             </div>
+                        </div>
+                        
+                        {/* NEW: Bundle With Selector */}
+                        <div className="col-span-2">
+                            <label className="block text-sm font-medium text-slate-700 mb-1">Bundle With Setup Fee (Optional)</label>
+                            <select
+                                name="bundledWithProductId"
+                                value={formData.bundledWithProductId}
+                                onChange={handleFormChange}
+                                className="w-full p-2 border border-slate-300 rounded-lg text-sm"
+                                disabled={isCreating}
+                            >
+                                <option value="">-- Select One-Time Setup Fee --</option>
+                                {oneTimeProducts.map(product => (
+                                    <option key={product.id} value={product.id}>
+                                        {product.name} (${(product.amount_cents! / 100).toFixed(2)})
+                                    </option>
+                                ))}
+                            </select>
+                            <p className="text-xs text-slate-500 mt-1">The setup fee will be charged immediately with the first month's subscription.</p>
                         </div>
                     </>
                 )}

@@ -31,7 +31,7 @@ serve(async (req) => {
   );
 
   try {
-    const { client_id, price_id, line_items, due_date, deposit_details, milestone_details, project_id, amount_cents, description, success_url, cancel_url } = await req.json();
+    const { client_id, price_id, line_items, due_date, deposit_details, milestone_details, project_id, amount_cents, description, success_url, cancel_url, setup_fee_price_id } = await req.json();
 
     if (path !== '/create-portal-session' && !client_id) {
       return errorResponse('Client ID is required.', 400);
@@ -146,10 +146,19 @@ serve(async (req) => {
       case '/create-subscription': {
         if (!price_id) return errorResponse('Price ID is required.', 400);
         const customerId = await ensureStripeCustomer();
+        
+        // Build the items array: always include the recurring price
+        const items = [{ price: price_id }];
+        
+        // If a setup fee is bundled, add it as a one-time item
+        if (setup_fee_price_id) {
+            items.push({ price: setup_fee_price_id, quantity: 1 });
+            console.log(`[stripe-api] Bundling setup fee price ID: ${setup_fee_price_id}`);
+        }
 
         const subscription = await stripe.subscriptions.create({
           customer: customerId,
-          items: [{ price: price_id }],
+          items: items, // Use the combined items array
           payment_behavior: 'default_incomplete',
           expand: ['latest_invoice.payment_intent'],
         });
