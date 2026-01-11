@@ -24,7 +24,8 @@ import {
     User, 
     DollarSign, 
     Clock,
-    Lock
+    Lock,
+    ExternalLink // ADDED: Missing import
 } from 'lucide-react';
 
 interface ToolCardProps {
