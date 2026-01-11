@@ -72,7 +72,7 @@ serve(async (req) => {
         console.warn('[create-client-user] Failed to update profile role/name:', profileUpdateError);
     }
     
-    // 4. Send Welcome Email
+    // 4. Send Welcome Email (Wrapped in try/catch to ensure function returns 200 if email fails)
     const subject = `Welcome to the ${businessName} Client Portal!`;
     const portalUrl = Deno.env.get('PUBLIC_BASE_URL') || 'https://customwebsitesplus.com/login'; // Assuming a base URL env var or hardcoded fallback
     
