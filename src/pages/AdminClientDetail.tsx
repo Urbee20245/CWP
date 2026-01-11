@@ -462,6 +462,21 @@ const AdminClientDetail: React.FC = () => {
     }
   };
   
+  const handleDeleteDeposit = async (depositId: string) => {
+      if (!window.confirm("Are you sure you want to delete this pending deposit?")) return;
+      
+      setIsProcessing(true);
+      try {
+          await AdminService.deletePendingDeposit(depositId);
+          alert('Pending deposit deleted successfully.');
+          fetchClientData();
+      } catch (e: any) {
+          alert(`Failed to delete deposit: ${e.message}`);
+      } finally {
+          setIsProcessing(false);
+      }
+  };
+  
   const handleSendEmailClick = () => {
       if (!client) return;
       const recipientEmail = client.billing_email || client.profiles?.email;
@@ -1018,26 +1033,40 @@ const AdminClientDetail: React.FC = () => {
                       <div className="space-y-3">
                         {client.deposits && client.deposits.length > 0 ? (
                           client.deposits.sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime()).map(deposit => (
-                            <div key={deposit.id} className="flex justify-between items-center text-sm p-3 bg-slate-50 rounded-lg border border-slate-100">
-                              <span className="font-medium text-slate-900">${(deposit.amount_cents / 100).toFixed(2)} USD</span>
-                              <span className={`px-2 py-0.5 rounded-full text-xs font-semibold ${getStatusColor(deposit.status)}`}>
-                                {deposit.status}
-                              </span>
-                              {deposit.applied_to_invoice_id && (
-                                  <span className={`px-2 py-0.5 rounded-full text-xs font-semibold ${getStatusColor('applied')}`}>
-                                    Applied
+                            <div key={deposit.id} className="flex flex-col md:flex-row justify-between items-start md:items-center text-sm p-3 bg-slate-50 rounded-lg border border-slate-100">
+                              <div className="flex-1 min-w-0 flex items-center gap-3">
+                                  <span className="font-medium text-slate-900">${(deposit.amount_cents / 100).toFixed(2)} USD</span>
+                                  <span className={`px-2 py-0.5 rounded-full text-xs font-semibold ${getStatusColor(deposit.status)}`}>
+                                    {deposit.status}
                                   </span>
-                              )}
-                              {deposit.stripe_invoice_id && (
-                                  <a 
-                                    href={`https://dashboard.stripe.com/invoices/${deposit.stripe_invoice_id}`} 
-                                    target="_blank" 
-                                    rel="noopener noreferrer" 
-                                    className="text-indigo-600 hover:underline flex items-center gap-1"
-                                  >
-                                    View Invoice <ExternalLink className="w-3 h-3" />
-                                  </a>
-                              )}
+                                  {deposit.applied_to_invoice_id && (
+                                      <span className={`px-2 py-0.5 rounded-full text-xs font-semibold ${getStatusColor('applied')}`}>
+                                        Applied
+                                      </span>
+                                  )}
+                              </div>
+                              <div className="flex items-center gap-2 mt-2 md:mt-0 flex-shrink-0">
+                                  {deposit.status === 'pending' && (
+                                      <button 
+                                          onClick={() => handleDeleteDeposit(deposit.id)}
+                                          disabled={isProcessing}
+                                          className="text-red-500 hover:text-red-700 text-sm flex items-center gap-1"
+                                          title="Delete Pending Deposit"
+                                      >
+                                          <Trash2 className="w-4 h-4" />
+                                      </button>
+                                  )}
+                                  {deposit.stripe_invoice_id && (
+                                      <a 
+                                        href={`https://dashboard.stripe.com/invoices/${deposit.stripe_invoice_id}`} 
+                                        target="_blank" 
+                                        rel="noopener noreferrer" 
+                                        className="text-indigo-600 hover:underline flex items-center gap-1"
+                                      >
+                                        View Invoice <ExternalLink className="w-3 h-3" />
+                                      </a>
+                                  )}
+                              </div>
                             </div>
                           ))
                         ) : (
@@ -1150,7 +1179,7 @@ const AdminClientDetail: React.FC = () => {
         <AddProjectDialog
           isOpen={isProjectDialogOpen}
           onClose={() => setIsProjectDialogOpen(false)}
-          onClientAdded={fetchClientData}
+          onProjectAdded={fetchClientData}
           clientId={client.id}
           clientName={client.business_name}
         />

@@ -100,7 +100,7 @@ export const AdminService = {
   createBillingProduct: async (productData: { 
       name: string, 
       description: string, 
-      amount_cents: number, 
+      amount_cents: number | null, 
       billing_type: 'one_time' | 'subscription' | 'setup_plus_subscription',
       setup_fee_cents?: number | null, // New field
       monthly_price_cents?: number | null // New field
@@ -114,6 +114,16 @@ export const AdminService = {
               p_deposit_id: depositId,
               p_milestone_id: milestoneId,
               p_project_id: projectId,
+          });
+          
+      if (error) throw error;
+      return data;
+  },
+  
+  deletePendingDeposit: async (depositId: string) => {
+      const { data, error } = await supabase
+          .rpc('delete_pending_deposit', {
+              p_deposit_id: depositId,
           });
           
       if (error) throw error;
