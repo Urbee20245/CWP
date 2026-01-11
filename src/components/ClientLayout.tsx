@@ -3,7 +3,7 @@
 import React, { useState } from 'react';
 import { useAuth } from '../hooks/useAuth';
 import { Link } from 'react-router-dom';
-import { Briefcase, DollarSign, LogOut, User, Zap, CalendarCheck, Sparkles, Menu, X } from 'lucide-react';
+import { Briefcase, DollarSign, LogOut, User, Zap, CalendarCheck, Sparkles, Menu, X, ArrowRight } from 'lucide-react';
 
 interface ClientLayoutProps {
   children: React.ReactNode;
@@ -15,12 +15,13 @@ const ClientLayout: React.FC<ClientLayoutProps> = ({ children }) => {
 
   const navItems = [
     { name: 'Dashboard', href: '/client/dashboard', icon: Briefcase },
-    { name: 'JetSuite DIY', href: '/client/jetsuite', icon: Sparkles },
     { name: 'Appointments', href: '/client/appointments', icon: CalendarCheck },
     { name: 'Billing', href: '/client/billing', icon: DollarSign },
     { name: 'Add-ons', href: '/client/addons', icon: Zap },
     { name: 'My Profile', href: '/client/profile', icon: User }, 
   ];
+  
+  const jetSuiteItem = { name: 'JetSuite DIY', href: '/client/jetsuite', icon: Sparkles };
   
   const handleSignOut = () => {
       setIsMobileMenuOpen(false);
@@ -46,7 +47,7 @@ const ClientLayout: React.FC<ClientLayoutProps> = ({ children }) => {
 
       <div className="flex">
         {/* Sidebar (Desktop) */}
-        <div className="hidden md:block w-64 bg-white border-r border-slate-200 sticky top-20 h-[calc(100vh-80px)] p-6 flex-shrink-0">
+        <div className="hidden md:block w-64 bg-white border-r border-slate-200 sticky top-20 h-[calc(100vh-80px)] p-6 flex-shrink-0 flex flex-col">
           
           {/* Logo */}
           <Link to="/client/dashboard" className="mb-6 block">
@@ -61,7 +62,9 @@ const ClientLayout: React.FC<ClientLayoutProps> = ({ children }) => {
             <h3 className="text-lg font-bold text-slate-900">Client Portal</h3>
             <p className="text-xs text-slate-500">Welcome, {profile?.full_name || 'Client'}</p>
           </div>
-          <nav className="space-y-2">
+          
+          {/* Main Navigation Links */}
+          <nav className="space-y-2 flex-1">
             {navItems.map((item) => (
               <Link
                 key={item.name}
@@ -73,10 +76,23 @@ const ClientLayout: React.FC<ClientLayoutProps> = ({ children }) => {
               </Link>
             ))}
           </nav>
-          <div className="mt-8 pt-4 border-t border-slate-100">
+          
+          {/* JetSuite DIY Button */}
+          <div className="mt-4 pt-4 border-t border-slate-100">
+            <Link
+                to={jetSuiteItem.href}
+                className="w-full flex items-center justify-center gap-2 px-3 py-3 bg-indigo-600 text-white rounded-lg text-sm font-bold hover:bg-indigo-700 transition-colors shadow-md hover:shadow-lg"
+            >
+                <jetSuiteItem.icon className="w-5 h-5" />
+                {jetSuiteItem.name}
+            </Link>
+          </div>
+          
+          {/* Sign Out Button */}
+          <div className="mt-4 pt-4 border-t border-slate-100">
             <button 
               onClick={handleSignOut} 
-              className="flex items-center gap-3 px-3 py-2 rounded-lg text-sm font-medium text-red-500 hover:bg-red-50 hover:text-red-700 transition-colors w-full text-left"
+              className="flex items-center gap-3 px-3 py-2 rounded-lg text-sm font-medium text-red-600 hover:bg-red-50 hover:text-red-700 transition-colors w-full text-left border border-red-100 hover:border-red-200"
             >
               <LogOut className="w-5 h-5" />
               Sign Out
@@ -105,10 +121,24 @@ const ClientLayout: React.FC<ClientLayoutProps> = ({ children }) => {
                             </Link>
                         ))}
                     </nav>
-                    <div className="mt-8 pt-4 border-t border-slate-100">
+                    
+                    {/* Mobile JetSuite Button */}
+                    <div className="mt-6 pt-4 border-t border-slate-100">
+                        <Link
+                            to={jetSuiteItem.href}
+                            onClick={() => setIsMobileMenuOpen(false)}
+                            className="w-full flex items-center justify-center gap-2 px-3 py-3 bg-indigo-600 text-white rounded-lg text-sm font-bold hover:bg-indigo-700 transition-colors shadow-md"
+                        >
+                            <jetSuiteItem.icon className="w-5 h-5" />
+                            {jetSuiteItem.name}
+                        </Link>
+                    </div>
+                    
+                    {/* Mobile Sign Out Button */}
+                    <div className="mt-4 pt-4 border-t border-slate-100">
                         <button 
                             onClick={handleSignOut} 
-                            className="flex items-center gap-3 px-3 py-2 rounded-lg text-sm font-medium text-red-500 hover:bg-red-50 hover:text-red-700 transition-colors w-full text-left"
+                            className="flex items-center gap-3 px-3 py-2 rounded-lg text-sm font-medium text-red-600 hover:bg-red-50 hover:text-red-700 transition-colors w-full text-left border border-red-100 hover:border-red-200"
                         >
                             <LogOut className="w-5 h-5" />
                             Sign Out
