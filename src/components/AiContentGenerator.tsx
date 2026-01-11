@@ -66,7 +66,10 @@ const AiContentGenerator: React.FC<AiContentGeneratorProps> = ({
     <>
       <button
         type="button"
-        onClick={() => setIsOpen(true)}
+        onClick={() => {
+            console.log("[AiContentGenerator] Button clicked. Opening modal.");
+            setIsOpen(true);
+        }}
         className="flex items-center gap-1 text-xs font-semibold text-indigo-600 hover:text-indigo-800 transition-colors"
       >
         <Sparkles className="w-3 h-3" /> Generate with AI
