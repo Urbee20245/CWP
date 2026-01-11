@@ -31,7 +31,6 @@ const checkDevAdminBypass = (user: User | null, fetchedProfile: Profile | null):
                 email: user.email,
                 full_name: 'Dev Admin (Forced)',
                 role: DEV_FORCE_ROLE,
-                admin_role: 'super_admin', // Defaulting to super_admin for dev bypass
                 created_at: new Date().toISOString(),
             } as Profile;
         }
@@ -49,7 +48,7 @@ const SessionProvider: React.FC<SessionProviderProps> = ({ children }) => {
     // Use maybeSingle() to handle cases where a user exists but no profile record has been created yet.
     const { data, error } = await supabase
       .from('profiles')
-      .select('id, email, full_name, role, admin_role, created_at') // Select new admin_role field
+      .select('*')
       .eq('id', userId)
       .maybeSingle();
 
