@@ -25,7 +25,17 @@ const ClientLayout: React.FC<ClientLayoutProps> = ({ children }) => {
       <div className="flex">
         {/* Sidebar */}
         <div className="hidden md:block w-64 bg-white border-r border-slate-200 sticky top-20 h-[calc(100vh-80px)] p-6 flex-shrink-0">
-          <div className="mb-8">
+          
+          {/* Logo */}
+          <Link to="/client/dashboard" className="mb-6 block">
+            <img 
+              src="/CWPlogolight.png" 
+              alt="Custom Websites Plus" 
+              className="h-10 w-auto object-contain"
+            />
+          </Link>
+          
+          <div className="mb-8 pt-4 border-t border-slate-100">
             <h3 className="text-lg font-bold text-slate-900">Client Portal</h3>
             <p className="text-xs text-slate-500">Welcome, {profile?.full_name || 'Client'}</p>
           </div>
