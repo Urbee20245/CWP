@@ -1,44 +1,14 @@
 "use client";
 
-import React, { useState } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import ClientLayout from '../components/ClientLayout';
 import { Link } from 'react-router-dom';
-import { 
-    Sparkles, 
-    CheckCircle2, 
-    ArrowRight, 
-    ChevronDown, 
-    ChevronUp, 
-    Zap, 
-    Eye, 
-    Search, 
-    MapPin, 
-    FileText, 
-    Image, 
-    MessageSquare, 
-    Star, 
-    TrendingUp, 
-    List, 
-    Gauge, 
-    Home, 
-    User, 
-    DollarSign, 
-    Clock,
-    Lock,
-    ExternalLink // ADDED: Missing import
-} from 'lucide-react';
+import { Zap, Eye, MapPin, Sparkles, ArrowRight, Bell, CheckCircle2, ExternalLink, MessageSquare, DollarSign } from 'lucide-react';
+import { useAuth } from '../hooks/useAuth';
+import { supabase } from '../integrations/supabase/client';
+import { Loader2 } from 'lucide-react';
 
-interface ToolCardProps {
-    icon: React.FC<any>;
-    title: string;
-    subtitle: string;
-    description: string;
-    replaces: string;
-    isFeatured?: boolean;
-    iconColor: string;
-}
-
-const ToolCard: React.FC<ToolCardProps> = ({ icon: Icon, title, subtitle, description, replaces, isFeatured, iconColor }) => (
+const ToolCard: React.FC<any> = ({ icon: Icon, title, subtitle, description, replaces, isFeatured, iconColor }) => (
     <div className="relative p-6 bg-slate-800/50 border border-slate-700 rounded-xl shadow-lg hover:border-indigo-500/50 transition-all duration-300">
         {isFeatured && (
             <span className="absolute top-0 right-0 -mt-3 -mr-3 px-3 py-1 bg-pink-600 text-white text-xs font-bold rounded-full shadow-md">
@@ -58,28 +28,45 @@ const ToolCard: React.FC<ToolCardProps> = ({ icon: Icon, title, subtitle, descri
     </div>
 );
 
-const FAQItem: React.FC<{ question: string, answer: string, index: number }> = ({ question, answer, index }) => {
-    const [isOpen, setIsOpen] = useState(false);
-    return (
-        <div className="border-b border-slate-700">
-            <button
-                className="w-full flex justify-between items-center py-4 text-left text-white hover:text-indigo-400 transition-colors"
-                onClick={() => setIsOpen(!isOpen)}
-            >
-                <span className="font-semibold text-lg">{question}</span>
-                {isOpen ? <ChevronUp className="w-5 h-5" /> : <ChevronDown className="w-5 h-5" />}
-            </button>
-            {isOpen && (
-                <div className="pb-4 text-slate-400 text-sm leading-relaxed">
-                    {answer}
-                </div>
-            )}
-        </div>
-    );
-};
-
 const ClientJetSuitePage: React.FC = () => {
-    const [openFaq, setOpenFaq] = useState<number | null>(null);
+    const { profile } = useAuth();
+    const [latestProjectId, setLatestProjectId] = useState<string | null>(null);
+    const [isDataLoading, setIsDataLoading] = useState(true);
+
+    const fetchProjectData = useCallback(async () => {
+        if (!profile) return;
+
+        // 1. Get Client ID
+        const { data: clientData, error: clientError } = await supabase
+            .from('clients')
+            .select('id')
+            .eq('owner_profile_id', profile.id)
+            .single();
+
+        if (clientError || !clientData) {
+            setIsDataLoading(false);
+            return;
+        }
+        
+        // 2. Get Latest Project ID
+        const { data: projectData } = await supabase
+            .from('projects')
+            .select('id')
+            .eq('client_id', clientData.id)
+            .order('created_at', { ascending: false })
+            .limit(1)
+            .single();
+
+        if (projectData) {
+            setLatestProjectId(projectData.id);
+        }
+        
+        setIsDataLoading(false);
+    }, [profile]);
+
+    useEffect(() => {
+        fetchProjectData();
+    }, [fetchProjectData]);
 
     const tools = [
         // FOUNDATION
@@ -121,6 +108,10 @@ const ClientJetSuitePage: React.FC = () => {
         { icon: Home, title: 'Home Dashboard', subtitle: 'Weekly Growth Command Center', description: 'Shows current week\'s tasks, progress, and priority actions at a glance.', replaces: 'Spreadsheets' },
         { icon: User, title: 'Business Details', subtitle: 'Central Business Profile', description: 'Store and update business info once that powers all tools automatically.', replaces: 'Brand Guidelines Doc' },
     ];
+    
+    const deepLink = latestProjectId 
+        ? `/client/projects/${latestProjectId}?tab=messages&message=${encodeURIComponent("I'm interested in the JetSuite Deal. Please send me the lifetime 20% off code!")}`
+        : '/client/dashboard'; // Fallback if no project exists
 
     return (
         <ClientLayout>
@@ -250,6 +241,47 @@ const ClientJetSuitePage: React.FC = () => {
                                 </div>
                             </div>
                         </div>
+                    </div>
+                </section>
+                
+                {/* EXCLUSIVE DISCOUNT BANNER (NEW) */}
+                <section className="py-16 bg-indigo-600 text-white">
+                    <div className="max-w-4xl mx-auto px-6 text-center">
+                        <h2 className="text-3xl md:text-4xl font-bold mb-4 flex items-center justify-center gap-3">
+                            <DollarSign className="w-8 h-8 text-emerald-400" />
+                            Lifetime 20% Off for Custom Websites Plus Customers
+                        </h2>
+                        <p className="text-xl text-indigo-100 mb-8">
+                            As a valued client, you qualify for an exclusive, lifetime discount on the JetSuite platform.
+                        </p>
+                        
+                        {isDataLoading ? (
+                            <Loader2 className="w-6 h-6 animate-spin text-white mx-auto" />
+                        ) : (
+                            <Link
+                                to={deepLink}
+                                className={`inline-flex items-center gap-2 px-8 py-4 rounded-xl font-bold text-lg transition-all duration-300 hover:scale-105 ${
+                                    latestProjectId 
+                                        ? 'bg-white text-indigo-600 hover:bg-indigo-50 shadow-xl'
+                                        : 'bg-slate-400 text-slate-800 cursor-not-allowed'
+                                }`}
+                                onClick={(e) => {
+                                    if (!latestProjectId) {
+                                        e.preventDefault();
+                                        alert("Please ensure you have at least one active project to request the code.");
+                                    }
+                                }}
+                            >
+                                <MessageSquare className="w-5 h-5" />
+                                Request My Discount Code
+                            </Link>
+                        )}
+                        
+                        {!latestProjectId && !isDataLoading && (
+                            <p className="text-xs text-red-200 mt-3">
+                                Note: You must have an active project to use the automated request link.
+                            </p>
+                        )}
                     </div>
                 </section>
                 
