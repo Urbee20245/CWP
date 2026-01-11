@@ -53,7 +53,7 @@ const AdminBillingProducts: React.FC = () => {
     oneTimeAmount: 0, // USD for one_time
     setupFee: 0, // USD for setup_plus_subscription
     monthlyPrice: 0, // USD for subscription/setup_plus_subscription
-    billingType: 'subscription' as 'one_time' | 'subscription' | 'setup_plus_subscription',
+    billingType: 'one_time' as 'one_time' | 'subscription' | 'setup_plus_subscription',
     features: [] as string[],
   });
 
@@ -171,15 +171,17 @@ const AdminBillingProducts: React.FC = () => {
     const finalDescription = description;
 
     try {
-      // NOTE: Stripe API call needs to be updated to handle setup_fee_cents and monthly_price_cents
-      // For now, we pass the primary amount (monthly price) to Stripe's default price field, 
-      // and rely on the DB to store the full structure.
-      const stripeAmountCents = monthlyPriceCents || amountCents || 0;
+      // Determine the amount to send to Stripe for the default price (used for Stripe's price object)
+      // This is the monthly price for subscriptions, or the one-time price for one_time.
+      const stripeUnitAmount = monthlyPriceCents || amountCents || 0;
+      
+      // CRITICAL FIX: Only send amount_cents if billing_type is 'one_time'
+      const finalAmountCents = billingType === 'one_time' ? amountCents : null;
       
       await AdminService.createBillingProduct({
         name,
         description: finalDescription,
-        amount_cents: stripeAmountCents, // Primary price for Stripe's default price
+        amount_cents: finalAmountCents, // Corrected: null for subscription types
         billing_type: billingType,
         setup_fee_cents: setupFeeCents,
         monthly_price_cents: monthlyPriceCents,
