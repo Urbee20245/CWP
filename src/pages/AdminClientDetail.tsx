@@ -618,10 +618,13 @@ const AdminClientDetail: React.FC = () => {
   const subscriptionProducts = products.filter(p => p.billing_type === 'subscription');
   const oneTimeProducts = products.filter(p => p.billing_type === 'one_time');
   
+  // Safely calculate derived state
   const unappliedDeposits = client?.deposits?.filter(d => d.status === 'paid' || d.status === 'applied') || [];
   const totalUnappliedCredit = unappliedDeposits.reduce((sum, d) => sum + d.amount_cents, 0) / 100;
   
-  const openInvoices = client.invoices?.filter(inv => inv.status === 'open' || inv.status === 'past_due') || [];
+  const openInvoices = client?.invoices?.filter(inv => inv.status === 'open' || inv.status === 'past_due') || [];
+  const currentSubscription = client?.subscriptions?.find(sub => sub.status === 'active' || sub.status === 'trialing');
+
 
   if (isLoading) {
     return (
@@ -650,8 +653,6 @@ const AdminClientDetail: React.FC = () => {
       </AdminLayout>
     );
   }
-
-  const currentSubscription = client.subscriptions?.find(sub => sub.status === 'active' || sub.status === 'trialing');
 
   return (
     <AdminLayout>
