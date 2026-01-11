@@ -43,6 +43,7 @@ serve(async (req) => {
       );
     }
     
+    // Determine the amount to send to Stripe for the default price
     const stripeUnitAmount = monthly_price_cents || amount_cents || 0;
     
     if (stripeUnitAmount <= 0 && billing_type !== 'setup_plus_subscription') {
@@ -53,6 +54,9 @@ serve(async (req) => {
         );
       }
     }
+    
+    // --- FIX: Ensure amount_cents is null for subscription types ---
+    const finalAmountCents = billing_type === 'one_time' ? amount_cents : null;
     
     console.log(`[create-billing-product] Creating product: ${name} (${billing_type})`);
 
@@ -76,7 +80,7 @@ serve(async (req) => {
         name,
         description,
         billing_type,
-        amount_cents: amount_cents,
+        amount_cents: finalAmountCents, // Use the corrected value
         setup_fee_cents: setup_fee_cents,
         monthly_price_cents: monthly_price_cents,
         currency,
