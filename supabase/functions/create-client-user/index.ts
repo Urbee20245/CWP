@@ -1,6 +1,30 @@
 import { serve } from "https://deno.land/std@0.190.0/http/server.ts";
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2.45.0';
-import { handleCors, jsonResponse, errorResponse } from '../_shared/utils.ts';
+
+// Embedded utility functions (since _shared folder isn't accessible in Dashboard deployment)
+const corsHeaders = {
+  'Access-Control-Allow-Origin': '*',
+  'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
+  'Content-Type': 'application/json',
+};
+
+function handleCors(req: Request) {
+  if (req.method === 'OPTIONS') {
+    return new Response(null, { headers: corsHeaders });
+  }
+}
+
+function jsonResponse(body: any, status: number = 200) {
+  return new Response(JSON.stringify(body), {
+    status,
+    headers: corsHeaders,
+  });
+}
+
+function errorResponse(message: string, status: number = 500) {
+  console.error(`[create-client-user] Error: ${message}`);
+  return jsonResponse({ error: message }, status);
+}
 
 serve(async (req) => {
   const corsResponse = handleCors(req);
@@ -74,7 +98,7 @@ serve(async (req) => {
     
     // 4. Send Welcome Email (Wrapped in try/catch to ensure function returns 200 if email fails)
     const subject = `Welcome to the ${businessName} Client Portal!`;
-    const portalUrl = Deno.env.get('PUBLIC_BASE_URL') || 'https://customwebsitesplus.com/login'; // Assuming a base URL env var or hardcoded fallback
+    const portalUrl = Deno.env.get('PUBLIC_BASE_URL') || 'https://customwebsitesplus.com/login';
     
     const markdownBody = `
 Hello **${fullName}**,
@@ -114,12 +138,12 @@ The Custom Websites Plus Team
                 subject: subject,
                 markdown_body: markdownBody,
                 client_id: clientData.id,
-                sent_by: newUserId, // Sent by the admin who created the user (or system user)
+                sent_by: newUserId,
             }),
         });
         
-        if (emailError || emailData.error) {
-            console.error('[create-client-user] Failed to send welcome email:', emailError || emailData.error);
+        if (emailError || emailData?.error) {
+            console.error('[create-client-user] Failed to send welcome email:', emailError || emailData?.error);
             // Log the error but DO NOT throw, allowing the client creation to succeed.
         } else {
             console.log('[create-client-user] Welcome email sent successfully.');
@@ -128,7 +152,6 @@ The Custom Websites Plus Team
         console.error('[create-client-user] Error invoking send-email:', e);
         // Log the error but DO NOT throw.
     }
-
 
     return jsonResponse({ success: true, userId: newUserId });
 
