@@ -77,13 +77,13 @@ serve(async (req) => {
     const portalUrl = Deno.env.get('PUBLIC_BASE_URL') || 'https://customwebsitesplus.com/login'; // Assuming a base URL env var or hardcoded fallback
     
     const markdownBody = `
-Hello ${fullName},
+Hello **${fullName}**,
 
 Welcome aboard! Your client portal is now active. You can log in immediately using the temporary credentials below.
 
-**Portal URL:** [Client Portal Login](${portalUrl})
+### Portal Access Details
 
-**Your Temporary Credentials:**
+*   **Portal URL:** [Client Portal Login](${portalUrl})
 *   **Email:** \`${email}\`
 *   **Temporary Password:** \`${password}\`
 
@@ -120,11 +120,13 @@ The Custom Websites Plus Team
         
         if (emailError || emailData.error) {
             console.error('[create-client-user] Failed to send welcome email:', emailError || emailData.error);
+            // Log the error but DO NOT throw, allowing the client creation to succeed.
         } else {
             console.log('[create-client-user] Welcome email sent successfully.');
         }
     } catch (e) {
         console.error('[create-client-user] Error invoking send-email:', e);
+        // Log the error but DO NOT throw.
     }
 
 

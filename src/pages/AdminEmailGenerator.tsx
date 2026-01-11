@@ -2,7 +2,7 @@
 
 import React, { useState, useEffect, useCallback } from 'react';
 import AdminLayout from '../components/AdminLayout';
-import { FileText, Bot, Loader2, AlertTriangle, Save, Send, Edit, Trash2, CheckCircle2, MessageSquare, Clock, Mail, Sparkles } from 'lucide-react';
+import { FileText, Bot, Loader2, AlertTriangle, Save, Send, Edit, Trash2, CheckCircle2, MessageSquare, Clock, Mail, Sparkles, User } from 'lucide-react';
 import { supabase } from '../integrations/supabase/client';
 import { AdminService } from '../services/adminService';
 import { useAuth } from '../hooks/useAuth';
@@ -51,8 +51,45 @@ const TONES = [
     'Informational',
 ];
 
+// --- Template Generator Function (Client-side approximation of Edge Function logic) ---
+const generateWelcomeEmailTemplate = (clientName: string, clientEmail: string, tempPassword: string, portalUrl: string) => {
+    const subject = `Welcome to the ${clientName} Client Portal!`;
+    const markdownBody = `
+Hello **[Client Full Name]**,
+
+Welcome aboard! Your client portal is now active. You can log in immediately using the temporary credentials below.
+
+### Portal Access Details
+
+*   **Portal URL:** [Client Portal Login](${portalUrl})
+*   **Email:** \`${clientEmail}\`
+*   **Temporary Password:** \`${tempPassword}\`
+
+We strongly recommend you change your password immediately after your first login for security.
+
+---
+
+### What you can do in the Client Portal:
+
+*   **Project Dashboard:** Track the progress of your website rebuild or service project in real-time.
+*   **Milestones & Billing:** View all invoices, payment history, and manage your maintenance subscriptions.
+*   **Messaging:** Communicate directly with our team via project-specific threads.
+*   **Files & Documents:** Upload necessary assets and access shared documents (like legal drafts or strategy plans).
+*   **Appointments:** Easily book and manage consultation calls with our team.
+
+We are excited to start working with you! If you have any questions, please reply to this email.
+
+Best regards,
+
+The Custom Websites Plus Team
+`;
+    return { subject, body: markdownBody };
+};
+// -----------------------------------------------------------------------------------
+
+
 const AdminEmailGenerator: React.FC = () => {
-    const { user } = useAuth();
+    const { user, profile } = useAuth();
     const [clients, setClients] = useState<Client[]>([]);
     const [projects, setProjects] = useState<Project[]>([]);
     const [emails, setEmails] = useState<AdminEmail[]>([]);
@@ -111,6 +148,29 @@ const AdminEmailGenerator: React.FC = () => {
     
     const selectedClient = clients.find(c => c.id === selectedClientId);
     const selectedProject = projects.find(p => p.id === selectedProjectId);
+
+    const handleLoadTemplate = (type: string) => {
+        if (type === 'Onboarding / Welcome Email') {
+            const template = generateWelcomeEmailTemplate(
+                selectedClient?.business_name || '[Client Business Name]',
+                selectedClient?.billing_email || '[client@email.com]',
+                'TEMPORARY_PASSWORD',
+                window.location.origin + '/login'
+            );
+            setCurrentSubject(template.subject);
+            setCurrentBody(template.body);
+            setCurrentEmailId(null);
+            setIsEditing(true);
+            setGenerationError(null);
+            setSendResult('idle');
+        } else {
+            // Clear fields if switching away from template
+            setCurrentSubject('');
+            setCurrentBody('');
+            setCurrentEmailId(null);
+            setIsEditing(false);
+        }
+    };
 
     const handleGenerate = async (e: React.FormEvent) => {
         e.preventDefault();
@@ -185,10 +245,10 @@ const AdminEmailGenerator: React.FC = () => {
         }
     };
     
-    const handleSendEmail = async () => {
-        if (!selectedClient || !currentBody || !currentSubject || !user) return;
+    const handleSendEmail = async (toEmail: string, isTest: boolean = false) => {
+        if (!currentBody || !currentSubject || !user) return;
         
-        if (!window.confirm(`Are you sure you want to send this email to ${selectedClient.billing_email}?`)) return;
+        if (!isTest && !window.confirm(`Are you sure you want to send this email to ${toEmail}?`)) return;
         
         setIsSending(true);
         setSendResult('idle');
@@ -197,37 +257,39 @@ const AdminEmailGenerator: React.FC = () => {
         try {
             // 1. Send email via secure Edge Function (AdminService handles Markdown to HTML conversion)
             await AdminService.sendEmail(
-                selectedClient.billing_email,
+                toEmail,
                 currentSubject,
                 currentBody, // Sending Markdown body
-                selectedClient.id,
+                isTest ? null : selectedClient?.id || null,
                 user.id
             );
             
-            // 2. Update/Log the email status in admin_emails table
-            const logData = {
-                client_id: selectedClient.id,
-                to_email: selectedClient.billing_email,
-                subject: currentSubject,
-                body: currentBody,
-                status: 'sent',
-                sent_by: user.id,
-            };
-            
-            await supabase.from('email_logs').insert(logData);
-            
-            // 3. Update draft status if it was a draft
-            if (currentEmailId) {
-                await supabase.from('admin_emails').update({ status: 'sent', sent_at: new Date().toISOString() }).eq('id', currentEmailId);
+            // 2. Log the email status in admin_emails table (only for non-test sends)
+            if (!isTest) {
+                const logData = {
+                    client_id: selectedClient?.id || null,
+                    to_email: toEmail,
+                    subject: currentSubject,
+                    body: currentBody,
+                    status: 'sent',
+                    sent_by: user.id,
+                };
+                
+                await supabase.from('email_logs').insert(logData);
+                
+                // 3. Update draft status if it was a draft
+                if (currentEmailId) {
+                    await supabase.from('admin_emails').update({ status: 'sent', sent_at: new Date().toISOString() }).eq('id', currentEmailId);
+                }
             }
             
             setSendResult('success');
-            alert('Email sent successfully!');
+            alert(`Email sent successfully to ${toEmail}!`);
             fetchClientsProjectsAndEmails();
             
         } catch (e: any) {
             setSendResult('failed');
-            setGenerationError(e.message || 'Failed to send email. Check SMTP settings.');
+            setGenerationError(e.message || 'Failed to send email. Check Resend configuration.');
         } finally {
             setIsSending(false);
         }
@@ -314,7 +376,10 @@ const AdminEmailGenerator: React.FC = () => {
                                         <label className="block text-sm font-bold text-slate-700 mb-1">Email Type *</label>
                                         <select
                                             value={emailType}
-                                            onChange={(e) => setEmailType(e.target.value)}
+                                            onChange={(e) => {
+                                                setEmailType(e.target.value);
+                                                handleLoadTemplate(e.target.value);
+                                            }}
                                             className="w-full p-2 border border-slate-300 rounded-lg text-sm"
                                             required
                                             disabled={isGenerating}
@@ -336,45 +401,49 @@ const AdminEmailGenerator: React.FC = () => {
                                     </div>
                                 </div>
                                 
-                                {/* Key Points */}
-                                <div>
-                                    <label className="block text-sm font-bold text-slate-700 mb-1">Key Points to Include (Required)</label>
-                                    <textarea 
-                                        value={keyPoints} 
-                                        onChange={(e) => setKeyPoints(e.target.value)} 
-                                        placeholder="e.g., The design mockups are ready for review. We need feedback by Friday." 
-                                        rows={3} 
-                                        className="w-full p-2 border border-slate-300 rounded-lg text-sm resize-none" 
-                                        required
-                                        disabled={isGenerating} 
-                                    />
-                                </div>
-                                
-                                {/* Call to Action */}
-                                <div>
-                                    <label className="block text-sm font-bold text-slate-700 mb-1">Call-to-Action (Optional)</label>
-                                    <input 
-                                        type="text" 
-                                        value={callToAction} 
-                                        onChange={(e) => setCallToAction(e.target.value)} 
-                                        placeholder="e.g., Click here to schedule a call." 
-                                        className="w-full p-2 border border-slate-300 rounded-lg text-sm" 
-                                        disabled={isGenerating} 
-                                    />
-                                </div>
-                                
-                                {/* Additional Notes */}
-                                <div>
-                                    <label className="block text-sm font-bold text-slate-700 mb-1">Additional Notes for AI (Optional)</label>
-                                    <textarea 
-                                        value={additionalNotes} 
-                                        onChange={(e) => setAdditionalNotes(e.target.value)} 
-                                        placeholder="e.g., Keep it under 5 sentences." 
-                                        rows={2} 
-                                        className="w-full p-2 border border-slate-300 rounded-lg text-sm resize-none" 
-                                        disabled={isGenerating} 
-                                    />
-                                </div>
+                                {/* Key Points (Hidden if template is loaded) */}
+                                {emailType !== 'Onboarding / Welcome Email' && (
+                                    <>
+                                        <div>
+                                            <label className="block text-sm font-bold text-slate-700 mb-1">Key Points to Include (Required)</label>
+                                            <textarea 
+                                                value={keyPoints} 
+                                                onChange={(e) => setKeyPoints(e.target.value)} 
+                                                placeholder="e.g., The design mockups are ready for review. We need feedback by Friday." 
+                                                rows={3} 
+                                                className="w-full p-2 border border-slate-300 rounded-lg text-sm resize-none" 
+                                                required
+                                                disabled={isGenerating} 
+                                            />
+                                        </div>
+                                        
+                                        {/* Call to Action */}
+                                        <div>
+                                            <label className="block text-sm font-bold text-slate-700 mb-1">Call-to-Action (Optional)</label>
+                                            <input 
+                                                type="text" 
+                                                value={callToAction} 
+                                                onChange={(e) => setCallToAction(e.target.value)} 
+                                                placeholder="e.g., Click here to schedule a call." 
+                                                className="w-full p-2 border border-slate-300 rounded-lg text-sm" 
+                                                disabled={isGenerating} 
+                                            />
+                                        </div>
+                                        
+                                        {/* Additional Notes */}
+                                        <div>
+                                            <label className="block text-sm font-bold text-slate-700 mb-1">Additional Notes for AI (Optional)</label>
+                                            <textarea 
+                                                value={additionalNotes} 
+                                                onChange={(e) => setAdditionalNotes(e.target.value)} 
+                                                placeholder="e.g., Keep it under 5 sentences." 
+                                                rows={2} 
+                                                className="w-full p-2 border border-slate-300 rounded-lg text-sm resize-none" 
+                                                disabled={isGenerating} 
+                                            />
+                                        </div>
+                                    </>
+                                )}
 
                                 {generationError && (
                                     <div className="p-3 bg-red-100 border border-red-300 text-red-800 rounded-lg text-sm flex items-center gap-2">
@@ -383,23 +452,25 @@ const AdminEmailGenerator: React.FC = () => {
                                     </div>
                                 )}
 
-                                <button
-                                    type="submit"
-                                    disabled={isGenerating || !selectedClient || !keyPoints}
-                                    className="w-full py-3 bg-indigo-600 text-white rounded-lg font-semibold hover:bg-indigo-700 transition-colors disabled:opacity-50 flex items-center justify-center gap-2"
-                                >
-                                    {isGenerating ? (
-                                        <>
-                                            <Loader2 className="w-5 h-5 animate-spin" />
-                                            Generating Draft...
-                                        </>
-                                    ) : (
-                                        <>
-                                            <Bot className="w-5 h-5" />
-                                            Generate Email
-                                        </>
-                                    )}
-                                </button>
+                                {emailType !== 'Onboarding / Welcome Email' && (
+                                    <button
+                                        type="submit"
+                                        disabled={isGenerating || !selectedClient || !keyPoints}
+                                        className="w-full py-3 bg-indigo-600 text-white rounded-lg font-semibold hover:bg-indigo-700 transition-colors disabled:opacity-50 flex items-center justify-center gap-2"
+                                    >
+                                        {isGenerating ? (
+                                            <>
+                                                <Loader2 className="w-5 h-5 animate-spin" />
+                                                Generating Draft...
+                                            </>
+                                        ) : (
+                                            <>
+                                                <Bot className="w-5 h-5" />
+                                                Generate Email
+                                            </>
+                                        )}
+                                    </button>
+                                )}
                             </form>
                         </div>
                     </div>
@@ -461,19 +532,32 @@ const AdminEmailGenerator: React.FC = () => {
                                             </button>
                                         </div>
                                         
-                                        <button
-                                            onClick={handleSendEmail}
-                                            disabled={isSending || !selectedClient || !currentSubject || !currentBody}
-                                            className="px-6 py-2 bg-emerald-600 text-white rounded-lg text-sm font-semibold hover:bg-emerald-700 transition-colors disabled:opacity-50 flex items-center gap-2"
-                                        >
-                                            {isSending ? <Loader2 className="w-4 h-4 animate-spin" /> : <Send className="w-4 h-4" />}
-                                            {isSending ? 'Sending...' : 'Send Email'}
-                                        </button>
+                                        <div className="flex gap-3">
+                                            {/* Send Test Button */}
+                                            <button
+                                                onClick={() => handleSendEmail(profile?.email || '', true)}
+                                                disabled={isSending || !currentSubject || !currentBody || !profile?.email}
+                                                className="px-4 py-2 bg-purple-600 text-white rounded-lg text-sm font-semibold hover:bg-purple-700 transition-colors disabled:opacity-50 flex items-center gap-2"
+                                                title={`Send test to ${profile?.email || 'Admin Email Missing'}`}
+                                            >
+                                                <User className="w-4 h-4" /> Test Send
+                                            </button>
+                                            
+                                            {/* Send to Client Button */}
+                                            <button
+                                                onClick={() => handleSendEmail(selectedClient?.billing_email || selectedClient?.email || '', false)}
+                                                disabled={isSending || !selectedClient || !currentSubject || !currentBody || !selectedClient.billing_email}
+                                                className="px-6 py-2 bg-emerald-600 text-white rounded-lg text-sm font-semibold hover:bg-emerald-700 transition-colors disabled:opacity-50 flex items-center gap-2"
+                                            >
+                                                {isSending ? <Loader2 className="w-4 h-4 animate-spin" /> : <Send className="w-4 h-4" />}
+                                                {isSending ? 'Sending...' : 'Send to Client'}
+                                            </button>
+                                        </div>
                                     </div>
                                 </>
                             ) : (
                                 <div className="text-center p-12 bg-slate-50 rounded-lg text-slate-500">
-                                    Fill out the form on the left and click 'Generate Email' to create a draft.
+                                    Fill out the form on the left and click 'Generate Email' or select 'Onboarding / Welcome Email' to load a template.
                                 </div>
                             )}
                         </div>
