@@ -6,6 +6,7 @@ import { Loader2, DollarSign, Plus, Zap, Clock, FileText, Trash2, Edit, AlertCir
 import AdminLayout from '../components/AdminLayout';
 import { AdminService } from '../services/adminService';
 import AiContentGenerator from '../components/AiContentGenerator'; // New Import
+import { useNavigate } from 'react-router-dom';
 
 interface BillingProduct {
   id: string;
@@ -20,6 +21,11 @@ interface BillingProduct {
   created_at: string;
 }
 
+interface Client {
+    id: string;
+    business_name: string;
+}
+
 const PRODUCT_FEATURES = [
     'Complete Website Rebuild',
     'Website Application',
@@ -32,10 +38,13 @@ const PRODUCT_FEATURES = [
 ];
 
 const AdminBillingProducts: React.FC = () => {
+  const navigate = useNavigate();
   const [products, setProducts] = useState<BillingProduct[]>([]);
+  const [clients, setClients] = useState<Client[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [isCreating, setIsCreating] = useState(false);
   const [formError, setFormError] = useState<string | null>(null);
+  const [selectedClient, setSelectedClient] = useState('');
   const [formData, setFormData] = useState({
     name: '',
     description: '',
@@ -45,7 +54,6 @@ const AdminBillingProducts: React.FC = () => {
   });
 
   const fetchProducts = useCallback(async () => {
-    setIsLoading(true);
     // Fetch all products, including inactive ones, for admin view
     const { data, error } = await supabase
       .from('billing_products')
@@ -57,12 +65,27 @@ const AdminBillingProducts: React.FC = () => {
     } else {
       setProducts(data as BillingProduct[]);
     }
-    setIsLoading(false);
+  }, []);
+  
+  const fetchClients = useCallback(async () => {
+    const { data, error } = await supabase
+        .from('clients')
+        .select('id, business_name')
+        .order('business_name', { ascending: true });
+    
+    if (error) {
+        console.error('Error fetching clients:', error);
+    } else {
+        setClients(data as Client[]);
+    }
   }, []);
 
   useEffect(() => {
     fetchProducts();
-  }, [fetchProducts]);
+    fetchClients();
+    // Set loading to false after initial fetches
+    setIsLoading(false);
+  }, [fetchProducts, fetchClients]);
 
   // Effect to update description when features change
   useEffect(() => {
@@ -131,6 +154,14 @@ const AdminBillingProducts: React.FC = () => {
       alert(`Product '${name}' created successfully in Stripe and Supabase!`);
       setFormData({ name: '', description: '', amount: 0, billingType: 'subscription', features: [] });
       fetchProducts(); // Refresh list
+      
+      // NEW: Handle navigation/action if a client was selected
+      if (selectedClient) {
+          const clientName = clients.find(c => c.id === selectedClient)?.business_name;
+          alert(`Product created. Redirecting to ${clientName}'s billing page to use the new product.`);
+          navigate(`/admin/clients/${selectedClient}?tab=billing`);
+      }
+      
     } catch (e: any) {
       setFormError(e.message || 'Failed to create product.');
     } finally {
@@ -273,6 +304,23 @@ const AdminBillingProducts: React.FC = () => {
                     <option value="one_time">One-Time Payment</option>
                   </select>
                 </div>
+              </div>
+              
+              {/* NEW CLIENT SELECTOR */}
+              <div>
+                <label className="block text-sm font-bold text-slate-700 mb-1">Action Client (Optional)</label>
+                <select
+                  value={selectedClient}
+                  onChange={(e) => setSelectedClient(e.target.value)}
+                  className="w-full p-2 border border-slate-300 rounded-lg text-sm"
+                  disabled={isCreating}
+                >
+                  <option value="">-- Select Client to Initiate Action --</option>
+                  {clients.map(client => (
+                    <option key={client.id} value={client.id}>{client.business_name}</option>
+                  ))}
+                </select>
+                <p className="text-xs text-slate-500 mt-1">Selecting a client redirects you to their billing page after creation.</p>
               </div>
               
               <button
