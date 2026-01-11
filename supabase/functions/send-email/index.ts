@@ -1,6 +1,7 @@
 import { serve } from "https://deno.land/std@0.190.0/http/server.ts";
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2.45.0';
 import { handleCors, jsonResponse, errorResponse } from '../_shared/utils.ts';
+import { marked } from 'https://esm.sh/marked@12.0.2'; // Import marked
 
 const RESEND_API_KEY = Deno.env.get('RESEND_API_KEY');
 const RESEND_FROM_EMAIL = Deno.env.get('SMTP_FROM_EMAIL') || 'noreply@customwebsitesplus.com';
@@ -30,16 +31,21 @@ serve(async (req) => {
   }
 
   try {
-    const { to_email, subject, html_body, client_id, sent_by } = await req.json();
+    // Accept either html_body (from AdminService) or markdown_body (from other Edge Functions)
+    const { to_email, subject, html_body, markdown_body, client_id, sent_by } = await req.json();
 
-    if (!to_email || !subject || !html_body) {
-      return errorResponse('Missing required email fields.', 400);
+    if (!to_email || !subject || (!html_body && !markdown_body)) {
+      return errorResponse('Missing required email fields (to_email, subject, and body).', 400);
     }
+    
+    // Convert markdown to HTML if markdown_body is provided
+    const finalHtmlBody = markdown_body ? marked.parse(markdown_body) : html_body;
     
     logEntry.client_id = client_id;
     logEntry.to_email = to_email;
     logEntry.subject = subject;
-    logEntry.body = html_body;
+    // Log the HTML body for consistency
+    logEntry.body = finalHtmlBody; 
     logEntry.sent_by = sent_by;
 
     // 1. Send Email via Resend
@@ -53,7 +59,7 @@ serve(async (req) => {
             from: `"${RESEND_FROM_NAME}" <${RESEND_FROM_EMAIL}>`,
             to: to_email,
             subject: subject,
-            html: html_body,
+            html: finalHtmlBody,
         }),
     });
 

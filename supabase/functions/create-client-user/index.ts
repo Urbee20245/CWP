@@ -38,19 +38,22 @@ serve(async (req) => {
     }
     
     const newUserId = authData.user.id;
+    const finalClientEmail = billingEmail || email;
     console.log(`[create-client-user] User created with ID: ${newUserId}`);
 
     // 2. Create Client Record (Requires Service Role Key)
-    const { error: clientError } = await supabaseAdmin
+    const { error: clientError, data: clientData } = await supabaseAdmin
       .from('clients')
       .insert({
         owner_profile_id: newUserId,
         business_name: businessName,
         phone: phone || null,
-        billing_email: billingEmail || email,
+        billing_email: finalClientEmail,
         status: 'active',
         access_status: 'active',
-      });
+      })
+      .select('id')
+      .single();
 
     if (clientError) {
       console.error('[create-client-user] Client record creation failed:', clientError);
@@ -68,6 +71,62 @@ serve(async (req) => {
     if (profileUpdateError) {
         console.warn('[create-client-user] Failed to update profile role/name:', profileUpdateError);
     }
+    
+    // 4. Send Welcome Email
+    const subject = `Welcome to the ${businessName} Client Portal!`;
+    const portalUrl = Deno.env.get('PUBLIC_BASE_URL') || 'https://customwebsitesplus.com/login'; // Assuming a base URL env var or hardcoded fallback
+    
+    const markdownBody = `
+Hello ${fullName},
+
+Welcome aboard! Your client portal is now active. You can log in immediately using the temporary credentials below.
+
+**Portal URL:** [Client Portal Login](${portalUrl})
+
+**Your Temporary Credentials:**
+*   **Email:** \`${email}\`
+*   **Temporary Password:** \`${password}\`
+
+We strongly recommend you change your password immediately after your first login for security.
+
+---
+
+### What you can do in the Client Portal:
+
+*   **Project Dashboard:** Track the progress of your website rebuild or service project in real-time.
+*   **Milestones & Billing:** View all invoices, payment history, and manage your maintenance subscriptions.
+*   **Messaging:** Communicate directly with our team via project-specific threads.
+*   **Files & Documents:** Upload necessary assets and access shared documents (like legal drafts or strategy plans).
+*   **Appointments:** Easily book and manage consultation calls with our team.
+
+We are excited to start working with you! If you have any questions, please reply to this email.
+
+Best regards,
+
+The Custom Websites Plus Team
+`;
+
+    try {
+        // Invoke the send-email Edge Function, passing markdown_body
+        const { data: emailData, error: emailError } = await supabaseAdmin.functions.invoke('send-email', {
+            body: JSON.stringify({
+                to_email: finalClientEmail,
+                subject: subject,
+                markdown_body: markdownBody,
+                client_id: clientData.id,
+                sent_by: newUserId, // Sent by the admin who created the user (or system user)
+            }),
+        });
+        
+        if (emailError || emailData.error) {
+            console.error('[create-client-user] Failed to send welcome email:', emailError || emailData.error);
+        } else {
+            console.log('[create-client-user] Welcome email sent successfully.');
+        }
+    } catch (e) {
+        console.error('[create-client-user] Error invoking send-email:', e);
+    }
+
 
     return jsonResponse({ success: true, userId: newUserId });
 
