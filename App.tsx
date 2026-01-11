@@ -40,6 +40,7 @@ import AdminAddonCatalog from './src/pages/AdminAddonCatalog';
 import AdminEmailDraft from './src/pages/AdminEmailDraft';
 import AdminAppointmentManagement from './src/pages/AdminAppointmentManagement'; // NEW IMPORT
 import ClientAppointmentBooking from './src/pages/ClientAppointmentBooking'; // NEW IMPORT
+import ClientJetSuitePage from './src/pages/ClientJetSuitePage'; // NEW IMPORT
 
 // Component that uses useLocation to conditionally render global elements
 const AppContent: React.FC = () => {
@@ -109,6 +110,7 @@ const AppContent: React.FC = () => {
           <Route path="billing" element={<ClientBilling />} />
           <Route path="profile" element={<ClientProfile />} />
           <Route path="addons" element={<ClientAddons />} />
+          <Route path="jetsuite" element={<ClientJetSuitePage />} /> {/* NEW ROUTE */}
         </Route>
         
         {/* Global 404 Fallback */}
