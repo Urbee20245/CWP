@@ -133,6 +133,26 @@ serve(async (req) => {
             }
         }
     };
+    
+    // --- Helper to create a temporary product and price for ad-hoc items ---
+    const createAdHocPrice = async (description: string, amountCents: number) => {
+        // 1. Create Product
+        const product = await stripe.products.create({
+            name: description,
+            type: 'service',
+            metadata: { ad_hoc: 'true' },
+        });
+        
+        // 2. Create Price
+        const price = await stripe.prices.create({
+            product: product.id,
+            unit_amount: amountCents,
+            currency: 'usd',
+            billing_scheme: 'per_unit',
+            recurring: undefined, // Ensure it's one-time
+        });
+        return price.id;
+    };
 
 
     // --- Route Handling ---
@@ -202,17 +222,14 @@ serve(async (req) => {
         // 2. Apply deposits as credit to the new invoice
         await applyUnappliedDeposits(customerId, invoice.id);
 
-        // 3. Create Invoice Items
+        // 3. Create Invoice Items (Refactored to use ad-hoc price creation)
         for (const item of line_items) {
-          // CRITICAL FIX: Rule 5 - Ensure only one-time prices are invoiced.
-          // Since line_items here are ad-hoc descriptions/amounts, they are inherently one-time.
+          const amountCents = item.amount * 100;
+          const priceId = await createAdHocPrice(item.description, amountCents);
+          
           await stripe.invoiceItems.create({
             customer: customerId,
-            price_data: {
-              currency: 'usd',
-              product_data: { name: item.description },
-              unit_amount: item.amount * 100, // Convert to cents
-            },
+            price: priceId, // Use the generated Price ID
             invoice: invoice.id, // Attach to the specific invoice
           });
         }
@@ -271,16 +288,8 @@ serve(async (req) => {
             return errorResponse('Failed to create deposit record.', 500);
         }
         
-        // 2. Create Stripe Invoice Item
-        const invoiceItem = await stripe.invoiceItems.create({
-            customer: customerId,
-            price_data: {
-                currency: 'usd',
-                product_data: { name: `Deposit: ${description}` },
-                unit_amount: amountCents,
-            },
-            description: `Deposit for project ${project_id ? project_id : 'services'} (Deposit ID: ${depositRecord.id})`,
-        });
+        // 2. Create Ad-Hoc Price for the deposit item
+        const priceId = await createAdHocPrice(`Deposit: ${description}`, amountCents);
         
         // 3. Create and Finalize Invoice
         const invoice = await stripe.invoices.create({
@@ -293,12 +302,17 @@ serve(async (req) => {
             },
         });
         
-        // Attach invoice item to the new invoice
-        await stripe.invoiceItems.update(invoiceItem.id, { invoice: invoice.id });
+        // 4. Create Invoice Item and attach to the new invoice
+        const invoiceItem = await stripe.invoiceItems.create({
+            customer: customerId,
+            price: priceId, // Use the generated Price ID
+            description: `Deposit for project ${project_id ? project_id : 'services'} (Deposit ID: ${depositRecord.id})`,
+            invoice: invoice.id,
+        });
         
         const finalizedInvoice = await stripe.invoices.sendInvoice(invoice.id);
         
-        // 4. Update deposit record with Stripe IDs
+        // 5. Update deposit record with Stripe IDs
         const { error: depositUpdateError } = await supabaseAdmin
             .from('deposits')
             .update({
@@ -310,7 +324,7 @@ serve(async (req) => {
             console.error('[stripe-api] Failed to update deposit record with invoice ID:', depositUpdateError);
         }
         
-        // 5. Store Invoice in Supabase (for history)
+        // 6. Store Invoice in Supabase (for history)
         const { error: invoiceInsertError } = await supabaseAdmin
           .from('invoices')
           .insert({
@@ -356,23 +370,22 @@ serve(async (req) => {
         
         // 2. Apply deposits as credit to the new invoice
         await applyUnappliedDeposits(customerId, invoice.id);
+        
+        // 3. Create Ad-Hoc Price for the milestone item
+        const priceId = await createAdHocPrice(description, amount_cents);
 
-        // 3. Create Invoice Item for milestone
+        // 4. Create Invoice Item for milestone
         await stripe.invoiceItems.create({
             customer: customerId,
-            price_data: {
-                currency: 'usd',
-                product_data: { name: description },
-                unit_amount: amount_cents,
-            },
+            price: priceId, // Use the generated Price ID
             description: `Milestone: ${description}`,
             invoice: invoice.id,
         });
 
-        // 4. Finalize and Send
+        // 5. Finalize and Send
         const finalizedInvoice = await stripe.invoices.sendInvoice(invoice.id);
         
-        // 5. Update Milestone status and store invoice ID
+        // 6. Update Milestone status and store invoice ID
         await supabaseAdmin
             .from('milestones')
             .update({ 
@@ -381,7 +394,7 @@ serve(async (req) => {
             })
             .eq('id', milestone_id);
 
-        // 6. Store Invoice in Supabase
+        // 7. Store Invoice in Supabase
         const { error: invoiceInsertError } = await supabaseAdmin
           .from('invoices')
           .insert({
