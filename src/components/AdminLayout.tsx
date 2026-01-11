@@ -78,6 +78,17 @@ const AdminLayout: React.FC<AdminLayoutProps> = ({ children }) => {
             ))}
           </nav>
           
+          {/* User Management Link */}
+          <div className="mt-4 pt-4 border-t border-slate-100">
+            <Link
+                to="/admin/users"
+                className="flex items-center gap-3 px-3 py-2 rounded-lg text-sm font-medium text-slate-700 hover:bg-indigo-50 hover:text-indigo-600 transition-colors w-full text-left"
+            >
+                <Users className="w-5 h-5" />
+                User Access
+            </Link>
+          </div>
+          
           {/* Profile Link */}
           <div className="mt-4 pt-4 border-t border-slate-100">
             <Link
@@ -122,8 +133,20 @@ const AdminLayout: React.FC<AdminLayoutProps> = ({ children }) => {
                         ))}
                     </nav>
                     
-                    {/* Mobile Profile Link */}
+                    {/* Mobile User Management Link */}
                     <div className="mt-6 pt-4 border-t border-slate-100">
+                        <Link
+                            to="/admin/users"
+                            onClick={() => setIsMobileMenuOpen(false)}
+                            className="flex items-center gap-3 px-3 py-2 rounded-lg text-sm font-medium text-slate-700 hover:bg-indigo-50 hover:text-indigo-600 transition-colors w-full text-left"
+                        >
+                            <Users className="w-5 h-5" />
+                            User Access
+                        </Link>
+                    </div>
+                    
+                    {/* Mobile Profile Link */}
+                    <div className="mt-4 pt-4 border-t border-slate-100">
                         <Link
                             to="/admin/profile"
                             onClick={() => setIsMobileMenuOpen(false)}
