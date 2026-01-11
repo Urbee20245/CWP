@@ -43,20 +43,33 @@ serve(async (req) => {
       );
     }
     
-    // Determine the amount to send to Stripe for the default price
-    const stripeUnitAmount = monthly_price_cents || amount_cents || 0;
+    // --- Determine amounts for Stripe and DB ---
+    let stripeUnitAmount = 0;
+    let dbAmountCents = null;
+    let dbSetupFeeCents = null;
+    let dbMonthlyPriceCents = null;
+
+    if (billing_type === 'one_time') {
+        stripeUnitAmount = amount_cents || 0;
+        dbAmountCents = amount_cents;
+    } else if (billing_type === 'subscription') {
+        stripeUnitAmount = monthly_price_cents || 0;
+        dbMonthlyPriceCents = monthly_price_cents;
+    } else if (billing_type === 'setup_plus_subscription') {
+        // Stripe requires a default price, use the monthly price for the subscription object
+        stripeUnitAmount = monthly_price_cents || 0;
+        dbSetupFeeCents = setup_fee_cents;
+        dbMonthlyPriceCents = monthly_price_cents;
+    }
     
     if (stripeUnitAmount <= 0 && billing_type !== 'setup_plus_subscription') {
       if (billing_type === 'one_time' || billing_type === 'subscription') {
         return new Response(
-          JSON.stringify({ error: 'Amount must be greater than zero for this billing type' }),
+          JSON.stringify({ error: 'Price must be greater than zero for this billing type' }),
           { status: 400, headers: corsHeaders }
         );
       }
     }
-    
-    // --- FIX: Ensure amount_cents is null for subscription types ---
-    const finalAmountCents = billing_type === 'one_time' ? amount_cents : null;
     
     console.log(`[create-billing-product] Creating product: ${name} (${billing_type})`);
 
@@ -80,9 +93,9 @@ serve(async (req) => {
         name,
         description,
         billing_type,
-        amount_cents: finalAmountCents, // Use the corrected value
-        setup_fee_cents: setup_fee_cents,
-        monthly_price_cents: monthly_price_cents,
+        amount_cents: dbAmountCents, // Corrected: NULL for subscription types
+        setup_fee_cents: dbSetupFeeCents,
+        monthly_price_cents: dbMonthlyPriceCents,
         currency,
         stripe_product_id: stripeProductId,
         stripe_price_id: stripePriceId,

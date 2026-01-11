@@ -45,6 +45,7 @@ const AdminBillingProducts: React.FC = () => {
   const [clients, setClients] = useState<Client[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [isCreating, setIsCreating] = useState(false);
+  const [isDeleting, setIsDeleting] = useState(false);
   const [formError, setFormError] = useState<string | null>(null);
   const [selectedClient, setSelectedClient] = useState('');
   const [formData, setFormData] = useState({
@@ -171,10 +172,6 @@ const AdminBillingProducts: React.FC = () => {
     const finalDescription = description;
 
     try {
-      // Determine the amount to send to Stripe for the default price (used for Stripe's price object)
-      // This is the monthly price for subscriptions, or the one-time price for one_time.
-      const stripeUnitAmount = monthlyPriceCents || amountCents || 0;
-      
       // CRITICAL FIX: Only send amount_cents if billing_type is 'one_time'
       const finalAmountCents = billingType === 'one_time' ? amountCents : null;
       
@@ -223,6 +220,30 @@ const AdminBillingProducts: React.FC = () => {
     } else {
         fetchProducts();
     }
+  };
+  
+  const handleDeleteProduct = async (product: BillingProduct) => {
+      if (!window.confirm(`WARNING: Are you sure you want to permanently delete '${product.name}'? This cannot be undone and may break existing records if this product is in use.`)) return;
+      
+      setIsDeleting(true);
+      try {
+          // 1. Delete from Supabase
+          const { error: dbError } = await supabase
+              .from('billing_products')
+              .delete()
+              .eq('id', product.id);
+              
+          if (dbError) throw dbError;
+          
+          // 2. Optionally delete from Stripe (requires more complex logic to ensure no active subscriptions exist, skipping for MVP safety)
+          
+          alert(`Product '${product.name}' deleted successfully!`);
+          fetchProducts();
+      } catch (e: any) {
+          alert(`Failed to delete product: ${e.message}`);
+      } finally {
+          setIsDeleting(false);
+      }
   };
 
   const getStatusColor = (active: boolean) => active ? 'bg-emerald-100 text-emerald-800' : 'bg-red-100 text-red-800';
@@ -486,9 +507,19 @@ const AdminBillingProducts: React.FC = () => {
                                 </div>
                                 <button 
                                     onClick={() => handleToggleActive(product)}
+                                    disabled={isDeleting}
                                     className={`p-1 rounded-full transition-colors ${product.active ? 'text-red-500 hover:bg-red-100' : 'text-emerald-500 hover:bg-emerald-100'}`}
+                                    title={product.active ? 'Archive Product' : 'Activate Product'}
                                 >
                                     {product.active ? <Trash2 className="w-4 h-4" /> : <Zap className="w-4 h-4" />}
+                                </button>
+                                <button 
+                                    onClick={() => handleDeleteProduct(product)}
+                                    disabled={isDeleting}
+                                    className="p-1 rounded-full text-red-500 hover:bg-red-100 transition-colors"
+                                    title="Permanently Delete Product"
+                                >
+                                    <X className="w-4 h-4" />
                                 </button>
                             </div>
                         </div>
