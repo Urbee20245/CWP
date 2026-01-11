@@ -2,13 +2,14 @@
 
 import React, { useState, useEffect, useCallback, useRef } from 'react';
 import AdminLayout from '../components/AdminLayout';
-import { FileText, Bot, Loader2, AlertTriangle, Save, Share2, Edit, Trash2, Download, ChevronDown, ChevronUp } from 'lucide-react';
+import { FileText, Bot, Loader2, AlertTriangle, Save, Share2, Edit, Trash2, Download, ChevronDown, ChevronUp, Zap, Lock } from 'lucide-react';
 import { supabase } from '../integrations/supabase/client';
 import { AdminService } from '../services/adminService';
 import { useAuth } from '../hooks/useAuth';
 import { format } from 'date-fns';
 import { marked } from 'marked'; // Import marked for preview
 import MarkdownToolbar from '../components/MarkdownToolbar'; // Import toolbar
+import { ensureArray } from '../utils/dataNormalization';
 
 interface Client {
     id: string;
@@ -28,11 +29,25 @@ interface Document {
     created_by: string;
 }
 
+interface MasterDocument {
+    id: string;
+    document_type: string;
+    content: string;
+    version: number;
+    is_active: boolean;
+    created_at: string;
+}
+
 const DOCUMENT_TYPES = [
     'Terms & Conditions',
     'Privacy Policy',
     'Website Disclaimer',
     'Service Agreement',
+];
+
+const MASTER_DOCUMENT_TYPES = [
+    'Master Terms & Conditions',
+    'Master Privacy Policy',
 ];
 
 const PROJECT_TYPES = [
@@ -57,12 +72,14 @@ const AdminDocumentGenerator: React.FC = () => {
     const [clients, setClients] = useState<Client[]>([]);
     const [selectedClient, setSelectedClient] = useState<Client | null>(null);
     const [documents, setDocuments] = useState<Document[]>([]);
+    const [masterDocuments, setMasterDocuments] = useState<MasterDocument[]>([]);
     const [isLoading, setIsLoading] = useState(true);
     const [isGenerating, setIsGenerating] = useState(false);
     const [generationError, setGenerationError] = useState<string | null>(null);
     
     // Generator Form State
     const [docType, setDocType] = useState(DOCUMENT_TYPES[0]);
+    const [isMasterDoc, setIsMasterDoc] = useState(false);
     const [projectType, setProjectType] = useState(PROJECT_TYPES[0]);
     const [websiteUrl, setWebsiteUrl] = useState('');
     const [contactEmail, setContactEmail] = useState('');
@@ -85,28 +102,30 @@ const AdminDocumentGenerator: React.FC = () => {
         setIsLoading(true);
         
         // Fetch Clients
-        const { data: clientsData, error: clientsError } = await supabase
+        const { data: clientsData } = await supabase
             .from('clients')
             .select('id, business_name, billing_email')
             .order('business_name', { ascending: true });
-
-        if (clientsError) {
-            console.error('Error fetching clients:', clientsError);
-            setIsLoading(false);
-            return;
-        }
         setClients(clientsData as Client[] || []);
         
-        // Fetch Documents
-        const { data: docsData, error: docsError } = await supabase
+        // Fetch Project Documents
+        const { data: docsData } = await supabase
             .from('documents')
             .select('*')
             .order('created_at', { ascending: false });
             
-        if (docsError) {
-            console.error('Error fetching documents:', docsError);
+        setDocuments(docsData as Document[] || []);
+        
+        // Fetch Master Documents
+        const { data: masterDocsData, error: masterDocsError } = await supabase
+            .from('master_legal_documents')
+            .select('*')
+            .order('created_at', { ascending: false });
+            
+        if (masterDocsError) {
+            console.error('Error fetching master documents:', masterDocsError);
         } else {
-            setDocuments(docsData as Document[] || []);
+            setMasterDocuments(ensureArray(masterDocsData) as MasterDocument[] || []);
         }
 
         setIsLoading(false);
@@ -124,8 +143,8 @@ const AdminDocumentGenerator: React.FC = () => {
 
     const handleGenerate = async (e: React.FormEvent) => {
         e.preventDefault();
-        if (!selectedClient) {
-            setGenerationError('Please select a client first.');
+        if (!selectedClient && !isMasterDoc) {
+            setGenerationError('Please select a client or check the Master Document box.');
             return;
         }
         
@@ -133,8 +152,10 @@ const AdminDocumentGenerator: React.FC = () => {
         setGenerationError(null);
         setCurrentDocumentContent('');
         
+        const finalDocType = isMasterDoc ? MASTER_DOCUMENT_TYPES.find(t => t.includes(docType)) || docType : docType;
+        
         const inputs = {
-            clientName: selectedClient.business_name,
+            clientName: isMasterDoc ? 'Custom Websites Plus (Master)' : selectedClient?.business_name,
             websiteUrl,
             contactEmail,
             jurisdiction,
@@ -142,13 +163,14 @@ const AdminDocumentGenerator: React.FC = () => {
             servicesProvided: servicesProvided.split(',').map(s => s.trim()).filter(s => s),
             dataCollected,
             specialNotes,
+            isMasterDoc,
         };
 
         try {
-            const result = await AdminService.generateDocument(docType, inputs);
+            const result = await AdminService.generateDocument(finalDocType, inputs);
             setCurrentDocumentContent(result.content);
             setCurrentDocumentId(null); // New document
-            setCurrentDocumentVersion(1);
+            setCurrentDocumentVersion(isMasterDoc ? 1 : 1);
             setIsEditing(true);
         } catch (e: any) {
             setGenerationError(e.message || 'AI generation failed.');
@@ -158,51 +180,81 @@ const AdminDocumentGenerator: React.FC = () => {
     };
     
     const handleSaveDocument = async () => {
-        if (!selectedClient || !currentDocumentContent) return;
+        if (!currentDocumentContent) return;
+        
+        if (!isMasterDoc && !selectedClient) {
+            alert("Cannot save: Please select a client for a project document.");
+            return;
+        }
+        
         setIsSaving(true);
         
-        const newVersion = currentDocumentId ? currentDocumentVersion + 1 : 1;
-        
-        const documentData = {
-            client_id: selectedClient.id,
-            document_type: docType,
-            content: currentDocumentContent,
-            version: newVersion,
-            created_by: user?.id,
-            // project_id is optional, skipping for now
-        };
-        
         try {
-            let error;
-            let data;
-            
-            if (currentDocumentId) {
-                // Update existing document (new version)
-                const result = await supabase
-                    .from('documents')
-                    .update(documentData)
-                    .eq('id', currentDocumentId)
-                    .select()
-                    .single();
-                error = result.error;
-                data = result.data;
+            if (isMasterDoc) {
+                // --- Save to Master Legal Documents ---
+                const existingMaster = masterDocuments.find(d => d.document_type === docType);
+                const newVersion = existingMaster ? existingMaster.version + 1 : 1;
+                
+                const masterData = {
+                    document_type: docType,
+                    content: currentDocumentContent,
+                    version: newVersion,
+                    is_active: true,
+                };
+                
+                const { error } = await supabase
+                    .from('master_legal_documents')
+                    .upsert(masterData, { onConflict: 'document_type' });
+                    
+                if (error) throw error;
+                
+                alert(`Master Document '${docType}' saved successfully! Version ${newVersion}.`);
+                
             } else {
-                // Insert new document
-                const result = await supabase
-                    .from('documents')
-                    .insert(documentData)
-                    .select()
-                    .single();
-                error = result.error;
-                data = result.data;
+                // --- Save to Project Documents ---
+                const newVersion = currentDocumentId ? currentDocumentVersion + 1 : 1;
+                
+                const documentData = {
+                    client_id: selectedClient!.id,
+                    document_type: docType,
+                    content: currentDocumentContent,
+                    version: newVersion,
+                    created_by: user?.id,
+                    // project_id is optional, skipping for now
+                };
+                
+                let error;
+                let data;
+                
+                if (currentDocumentId) {
+                    // Update existing document (new version)
+                    const result = await supabase
+                        .from('documents')
+                        .update(documentData)
+                        .eq('id', currentDocumentId)
+                        .select()
+                        .single();
+                    error = result.error;
+                    data = result.data;
+                } else {
+                    // Insert new document
+                    const result = await supabase
+                        .from('documents')
+                        .insert(documentData)
+                        .select()
+                        .single();
+                    error = result.error;
+                    data = result.data;
+                }
+                
+                if (error) throw error;
+                
+                setCurrentDocumentId(data.id);
+                setCurrentDocumentVersion(data.version);
+                alert(`Project Document saved successfully! Version ${data.version}.`);
             }
             
-            if (error) throw error;
-            
-            setCurrentDocumentId(data.id);
-            setCurrentDocumentVersion(data.version);
             setIsEditing(false);
-            alert(`Document saved successfully! Version ${data.version}.`);
             fetchClientsAndDocuments(); // Refresh list
             
         } catch (e: any) {
@@ -213,12 +265,24 @@ const AdminDocumentGenerator: React.FC = () => {
         }
     };
     
-    const handleLoadDocument = (doc: Document) => {
-        setSelectedClient(clients.find(c => c.id === doc.client_id) || null);
-        setDocType(doc.document_type);
-        setCurrentDocumentContent(doc.content);
-        setCurrentDocumentId(doc.id);
-        setCurrentDocumentVersion(doc.version);
+    const handleLoadDocument = (doc: Document | MasterDocument, isMaster: boolean) => {
+        if (isMaster) {
+            const masterDoc = doc as MasterDocument;
+            setDocType(masterDoc.document_type);
+            setIsMasterDoc(true);
+            setCurrentDocumentContent(masterDoc.content);
+            setCurrentDocumentId(masterDoc.id);
+            setCurrentDocumentVersion(masterDoc.version);
+            setSelectedClient(null);
+        } else {
+            const projectDoc = doc as Document;
+            setSelectedClient(clients.find(c => c.id === projectDoc.client_id) || null);
+            setDocType(projectDoc.document_type);
+            setIsMasterDoc(false);
+            setCurrentDocumentContent(projectDoc.content);
+            setCurrentDocumentId(projectDoc.id);
+            setCurrentDocumentVersion(projectDoc.version);
+        }
         setIsEditing(true);
         setGenerationError(null);
         window.scrollTo({ top: 0, behavior: 'smooth' });
@@ -286,15 +350,35 @@ const AdminDocumentGenerator: React.FC = () => {
                             </h2>
                             <form onSubmit={handleGenerate} className="space-y-4">
                                 
-                                {/* Client Selector */}
+                                {/* Master Document Toggle */}
+                                <div className="flex items-center gap-2">
+                                    <input
+                                        type="checkbox"
+                                        checked={isMasterDoc}
+                                        onChange={(e) => {
+                                            setIsMasterDoc(e.target.checked);
+                                            if (e.target.checked) {
+                                                setDocType(MASTER_DOCUMENT_TYPES[0]);
+                                                setSelectedClient(null);
+                                            } else {
+                                                setDocType(DOCUMENT_TYPES[0]);
+                                            }
+                                        }}
+                                        className="w-4 h-4 text-indigo-600 border-slate-300 rounded focus:ring-indigo-500"
+                                        disabled={isGenerating}
+                                    />
+                                    <label className="text-sm font-bold text-slate-700">Generate Master Document</label>
+                                </div>
+                                
+                                {/* Client Selector (Disabled if Master Doc) */}
                                 <div>
-                                    <label className="block text-sm font-bold text-slate-700 mb-1">Select Client *</label>
+                                    <label className="block text-sm font-bold text-slate-700 mb-1">Select Client {isMasterDoc ? '' : '*'}</label>
                                     <select
                                         value={selectedClient?.id || ''}
                                         onChange={(e) => setSelectedClient(clients.find(c => c.id === e.target.value) || null)}
                                         className="w-full p-2 border border-slate-300 rounded-lg text-sm"
-                                        required
-                                        disabled={isGenerating}
+                                        required={!isMasterDoc}
+                                        disabled={isGenerating || isMasterDoc}
                                     >
                                         <option value="">-- Select Client --</option>
                                         {clients.map(client => (
@@ -313,7 +397,7 @@ const AdminDocumentGenerator: React.FC = () => {
                                         required
                                         disabled={isGenerating}
                                     >
-                                        {DOCUMENT_TYPES.map(type => (
+                                        {(isMasterDoc ? MASTER_DOCUMENT_TYPES : DOCUMENT_TYPES).map(type => (
                                             <option key={type} value={type}>{type}</option>
                                         ))}
                                     </select>
@@ -367,11 +451,11 @@ const AdminDocumentGenerator: React.FC = () => {
                                 {/* Special Notes */}
                                 <div>
                                     <label className="block text-sm font-bold text-slate-700 mb-1">Special Notes for AI</label>
-                                    <textarea value={specialNotes} onChange={(e) => setSpecialNotes(e.target.value)} placeholder="e.g., Must mention no refunds after 30 days." rows={2} className="w-full p-2 border border-slate-300 rounded-lg text-sm resize-none" disabled={isGenerating} />
+                                    <textarea value={specialNotes} onChange={(e) => setSpecialNotes(e.target.value)} placeholder="e.g., Must mention no refunds on setup fees." rows={2} className="w-full p-2 border border-slate-300 rounded-lg text-sm resize-none" disabled={isGenerating} />
                                 </div>
 
                                 {generationError && (
-                                    <div className="p-3 bg-red-100 border border-red-300 text-red-800 rounded-lg text-sm flex items-center gap-2">
+                                    <div className="p-3 mb-4 bg-red-100 border border-red-300 text-red-800 rounded-lg text-sm flex items-center gap-2">
                                         <AlertTriangle className="w-4 h-4" />
                                         {generationError}
                                     </div>
@@ -379,7 +463,7 @@ const AdminDocumentGenerator: React.FC = () => {
 
                                 <button
                                     type="submit"
-                                    disabled={isGenerating || !selectedClient || !websiteUrl || !contactEmail}
+                                    disabled={isGenerating || (!isMasterDoc && !selectedClient) || !websiteUrl || !contactEmail}
                                     className="w-full py-3 bg-indigo-600 text-white rounded-lg font-semibold hover:bg-indigo-700 transition-colors disabled:opacity-50 flex items-center justify-center gap-2"
                                 >
                                     {isGenerating ? (
@@ -395,6 +479,35 @@ const AdminDocumentGenerator: React.FC = () => {
                                     )}
                                 </button>
                             </form>
+                        </div>
+                        
+                        {/* Master Document History */}
+                        <div className="bg-white p-6 rounded-xl shadow-lg border border-slate-100">
+                            <h2 className="text-xl font-bold mb-4 flex items-center gap-2 border-b border-slate-100 pb-4">
+                                <Lock className="w-5 h-5 text-red-600" /> Master Legal Documents
+                            </h2>
+                            <div className="space-y-3">
+                                {masterDocuments.length === 0 ? (
+                                    <p className="text-slate-500 text-sm">No master documents saved yet.</p>
+                                ) : (
+                                    masterDocuments.map(doc => (
+                                        <div key={doc.id} className="p-3 bg-red-50 rounded-lg border border-red-200 hover:bg-red-100 transition-colors">
+                                            <div className="flex justify-between items-start">
+                                                <div className="flex-1 min-w-0">
+                                                    <p className="font-bold text-sm text-red-800 truncate">{doc.document_type} (v{doc.version})</p>
+                                                    <p className="text-xs text-slate-500 mt-1">Last Updated: {format(new Date(doc.updated_at || doc.created_at), 'MMM dd, yyyy')}</p>
+                                                </div>
+                                                <button 
+                                                    onClick={() => handleLoadDocument(doc, true)}
+                                                    className="text-red-600 hover:text-red-800 text-sm"
+                                                >
+                                                    <Edit className="w-4 h-4" />
+                                                </button>
+                                            </div>
+                                        </div>
+                                    ))
+                                )}
+                            </div>
                         </div>
                     </div>
                     
@@ -453,10 +566,10 @@ const AdminDocumentGenerator: React.FC = () => {
                                         <div className="flex gap-3">
                                             <button
                                                 onClick={handleSaveDocument}
-                                                disabled={isSaving || !selectedClient}
+                                                disabled={isSaving || (!isMasterDoc && !selectedClient)}
                                                 className="px-4 py-2 bg-emerald-600 text-white rounded-lg text-sm font-semibold hover:bg-emerald-700 transition-colors disabled:opacity-50 flex items-center gap-2"
                                             >
-                                                <Save className="w-4 h-4" /> {currentDocumentId ? 'Save New Version' : 'Save Draft'}
+                                                <Save className="w-4 h-4" /> {isSaving ? 'Saving...' : (isMasterDoc ? 'Save Master Version' : 'Save Project Draft')}
                                             </button>
                                             <button
                                                 onClick={() => setIsEditing(p => !p)}
@@ -481,15 +594,15 @@ const AdminDocumentGenerator: React.FC = () => {
                             )}
                         </div>
                         
-                        {/* Document History */}
+                        {/* Project Document History */}
                         <div className="bg-white p-6 rounded-xl shadow-lg border border-slate-100">
                             <h2 className="text-xl font-bold mb-4 flex items-center gap-2 border-b border-slate-100 pb-4">
-                                <FileText className="w-5 h-5 text-indigo-600" /> Document History
+                                <FileText className="w-5 h-5 text-indigo-600" /> Project Document History
                             </h2>
                             
                             <div className="space-y-3">
                                 {documents.length === 0 ? (
-                                    <p className="text-slate-500 text-sm">No documents saved yet.</p>
+                                    <p className="text-slate-500 text-sm">No project documents saved yet.</p>
                                 ) : (
                                     documents.map(doc => {
                                         const client = clients.find(c => c.id === doc.client_id);
@@ -507,7 +620,7 @@ const AdminDocumentGenerator: React.FC = () => {
                                                         </span>
                                                         <div className="flex gap-2">
                                                             <button 
-                                                                onClick={() => handleLoadDocument(doc)}
+                                                                onClick={() => handleLoadDocument(doc, false)}
                                                                 className="text-indigo-600 hover:text-indigo-800 text-sm"
                                                             >
                                                                 <Edit className="w-4 h-4" />

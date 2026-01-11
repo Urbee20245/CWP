@@ -11,6 +11,7 @@ import { format } from 'date-fns';
 import ServiceStatusBanner from '../components/ServiceStatusBanner';
 import { mapProjectDTO, ProjectDTO, MilestoneDTO, TaskDTO, FileItemDTO, ThreadDTO } from '../utils/projectMapper'; // Import DTO and Mapper
 import { ClientBillingService } from '../services/clientBillingService'; // Import ClientBillingService
+import { ensureArray } from '../utils/dataNormalization';
 
 // Define types locally based on DTOs for clarity
 type Milestone = MilestoneDTO;
@@ -22,6 +23,14 @@ interface PauseLog {
     id: string;
     action: 'paused' | 'resumed';
     client_acknowledged: boolean;
+    created_at: string;
+}
+
+interface Document {
+    id: string;
+    document_type: string;
+    content: string;
+    version: number;
     created_at: string;
 }
 
@@ -38,7 +47,7 @@ const ClientProjectDetail: React.FC = () => {
   const [slaMetrics, setSlaMetrics] = useState<ReturnType<typeof calculateSlaMetrics> | null>(null);
   const [latestPauseLog, setLatestPauseLog] = useState<PauseLog | null>(null);
   const [documents, setDocuments] = useState<Document[]>([]);
-  const [activeTab, setActiveTab] = useState<'messages' | 'tasks' | 'files' | 'milestones' | 'documents'>('messages');
+  const [activeTab, setActiveTab] = useState<'messages' | 'tasks' | 'files' | 'milestones' | 'documents'>('documents'); // Default to documents
   const [expandedDocId, setExpandedDocId] = useState<string | null>(null);
   const [isPayingDeposit, setIsPayingDeposit] = useState(false);
   
@@ -148,7 +157,7 @@ const ClientProjectDetail: React.FC = () => {
             
         setLatestPauseLog(logData as PauseLog || null);
         
-        // 4. Fetch shared documents
+        // 4. Fetch shared documents (project-specific and master documents)
         const { data: docsData } = await supabase
             .from('documents')
             .select('id, document_type, content, version, created_at')
@@ -156,7 +165,20 @@ const ClientProjectDetail: React.FC = () => {
             .eq('is_client_visible', true)
             .order('created_at', { ascending: false });
             
-        setDocuments(docsData as Document[] || []);
+        // Also fetch master T&C if active
+        const { data: masterDocsData } = await supabase
+            .from('master_legal_documents')
+            .select('id, document_type, content, version, created_at')
+            .eq('document_type', 'Master Terms & Conditions')
+            .eq('is_active', true)
+            .limit(1);
+            
+        const allDocs = [
+            ...ensureArray(docsData) as Document[],
+            ...ensureArray(masterDocsData) as Document[]
+        ];
+            
+        setDocuments(allDocs);
       } catch (mapError) {
           console.error("Error mapping project DTO:", mapError);
           setProject(null);
@@ -374,10 +396,12 @@ const ClientProjectDetail: React.FC = () => {
   const renderDocumentContent = (content: string) => {
     // Simple markdown to HTML conversion for display
     let html = content;
-    html = html.replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>'); // Bold
-    html = html.replace(/## (.*)/g, '<h2>$1</h2>'); // H2
-    html = html.replace(/### (.*)/g, '<h3>$1</h3>'); // H3
-    html = html.replace(/\n/g, '<br/>'); // Newlines
+    try {
+        // Use marked for robust markdown rendering
+        html = marked.parse(content);
+    } catch (e) {
+        html = `<p style='color: red;'>Error rendering markdown: ${e}</p>`;
+    }
     return <div dangerouslySetInnerHTML={{ __html: html }} className="prose max-w-none text-sm text-slate-700" />;
   };
   
@@ -574,6 +598,12 @@ const ClientProjectDetail: React.FC = () => {
             <div className="border-b border-slate-200">
                 <nav className="-mb-px flex space-x-8">
                     <button
+                        onClick={() => setActiveTab('documents')}
+                        className={`whitespace-nowrap py-4 px-1 border-b-2 font-medium text-sm transition-colors ${activeTab === 'documents' ? 'border-indigo-600 text-indigo-600' : 'border-transparent text-slate-500 hover:text-slate-700 hover:border-slate-300'}`}
+                    >
+                        Documents ({documents.length})
+                    </button>
+                    <button
                         onClick={() => setActiveTab('messages')}
                         className={`whitespace-nowrap py-4 px-1 border-b-2 font-medium text-sm transition-colors ${activeTab === 'messages' ? 'border-indigo-600 text-indigo-600' : 'border-transparent text-slate-500 hover:text-slate-700 hover:border-slate-300'}`}
                     >
@@ -591,16 +621,49 @@ const ClientProjectDetail: React.FC = () => {
                     >
                         Files
                     </button>
-                    <button
-                        onClick={() => setActiveTab('documents')}
-                        className={`whitespace-nowrap py-4 px-1 border-b-2 font-medium text-sm transition-colors ${activeTab === 'documents' ? 'border-indigo-600 text-indigo-600' : 'border-transparent text-slate-500 hover:text-slate-700 hover:border-slate-300'}`}
-                    >
-                        Documents ({documents.length})
-                    </button>
                 </nav>
             </div>
             
             {/* Tab Content */}
+            
+            {/* Documents Tab */}
+            {activeTab === 'documents' && (
+                <div className="bg-white p-6 rounded-xl shadow-lg border border-slate-100">
+                    <h2 className="text-xl font-bold mb-4 flex items-center gap-2 border-b border-slate-100 pb-4">
+                        <Bot className="w-5 h-5 text-emerald-600" /> Shared Documents
+                    </h2>
+                    
+                    {documents.length === 0 ? (
+                        <div className="text-center p-8 bg-slate-50 rounded-lg text-slate-500">
+                            No legal drafts or documents have been shared by the admin team yet.
+                        </div>
+                    ) : (
+                        <div className="space-y-4">
+                            {documents.map(doc => (
+                                <div key={doc.id} className="p-4 bg-slate-50 rounded-lg border border-slate-200">
+                                    <div className="flex justify-between items-center">
+                                        <p className="font-bold text-slate-900">{doc.document_type} (v{doc.version})</p>
+                                        <p className="text-xs text-slate-500">{format(new Date(doc.created_at), 'MMM dd, yyyy')}</p>
+                                    </div>
+                                    
+                                    {expandedDocId === doc.id && (
+                                        <div className="mt-4 p-3 bg-white border border-slate-200 rounded-lg">
+                                            {renderDocumentContent(doc.content)}
+                                        </div>
+                                    )}
+                                    <button 
+                                        onClick={() => setExpandedDocId(expandedDocId === doc.id ? null : doc.id)}
+                                        className="mt-2 text-xs text-indigo-600 hover:text-indigo-800 font-medium flex items-center gap-1"
+                                    >
+                                        {expandedDocId === doc.id ? 'Hide Document' : 'View Document'}
+                                        {expandedDocId === doc.id ? <ChevronUp className="w-3 h-3" /> : <ChevronDown className="w-3 h-3" />}
+                                    </button>
+                                </div>
+                            ))}
+                        </div>
+                    )}
+                </div>
+            )}
             
             {/* Messages Tab */}
             {activeTab === 'messages' && (
@@ -791,45 +854,6 @@ const ClientProjectDetail: React.FC = () => {
                         )}
                         </button>
                     </form>
-                </div>
-            )}
-            
-            {/* Documents Tab */}
-            {activeTab === 'documents' && (
-                <div className="bg-white p-6 rounded-xl shadow-lg border border-slate-100">
-                    <h2 className="text-xl font-bold mb-4 flex items-center gap-2 border-b border-slate-100 pb-4">
-                        <Bot className="w-5 h-5 text-emerald-600" /> Shared Documents
-                    </h2>
-                    
-                    {documents.length === 0 ? (
-                        <div className="text-center p-8 bg-slate-50 rounded-lg text-slate-500">
-                            No legal drafts or documents have been shared by the admin team yet.
-                        </div>
-                    ) : (
-                        <div className="space-y-4">
-                            {documents.map(doc => (
-                                <div key={doc.id} className="p-4 bg-slate-50 rounded-lg border border-slate-200">
-                                    <div className="flex justify-between items-center">
-                                        <p className="font-bold text-slate-900">{doc.document_type} (v{doc.version})</p>
-                                        <p className="text-xs text-slate-500">{format(new Date(doc.created_at), 'MMM dd, yyyy')}</p>
-                                    </div>
-                                    
-                                    {expandedDocId === doc.id && (
-                                        <div className="mt-4 p-3 bg-white border border-slate-200 rounded-lg">
-                                            {renderDocumentContent(doc.content)}
-                                        </div>
-                                    )}
-                                    <button 
-                                        onClick={() => setExpandedDocId(expandedDocId === doc.id ? null : doc.id)}
-                                        className="mt-2 text-xs text-indigo-600 hover:text-indigo-800 font-medium flex items-center gap-1"
-                                    >
-                                        {expandedDocId === doc.id ? 'Hide Document' : 'View Document'}
-                                        {expandedDocId === doc.id ? <ChevronUp className="w-3 h-3" /> : <ChevronDown className="w-3 h-3" />}
-                                    </button>
-                                </div>
-                            ))}
-                        </div>
-                    )}
                 </div>
             )}
           </div>
