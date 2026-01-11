@@ -64,6 +64,23 @@ const AdminBillingProducts: React.FC = () => {
     fetchProducts();
   }, [fetchProducts]);
 
+  // Effect to update description when features change
+  useEffect(() => {
+    const featureList = formData.features.length > 0 
+        ? `Key Features: ${formData.features.join(', ')}. ` 
+        : '';
+    
+    // Only update the description if it currently starts with the feature list, 
+    // or if the feature list is empty. This prevents overwriting manual edits.
+    if (formData.description.startsWith('Key Features:') || formData.description === '' || featureList === '') {
+        setFormData(prev => ({
+            ...prev,
+            description: featureList + prev.description.replace(/^Key Features:.*?\.\s*/, ''),
+        }));
+    }
+  }, [formData.features]);
+
+
   const handleFormChange = (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement>) => {
     const { name, value, type } = e.target;
     setFormData(prev => ({
@@ -82,6 +99,7 @@ const AdminBillingProducts: React.FC = () => {
   };
   
   const handleAiContentGenerated = (content: string) => {
+    // When AI generates content, we replace the entire description, including the feature list prefix
     setFormData(prev => ({ ...prev, description: content }));
   };
 
@@ -90,7 +108,7 @@ const AdminBillingProducts: React.FC = () => {
     setFormError(null);
     setIsCreating(true);
 
-    const { name, description, amount, billingType, features } = formData;
+    const { name, description, amount, billingType } = formData;
     const amountCents = Math.round(amount * 100);
 
     if (!name || amountCents <= 0) {
@@ -99,11 +117,8 @@ const AdminBillingProducts: React.FC = () => {
       return;
     }
     
-    // Combine features and description for the final product description
-    const featureList = features.length > 0 
-        ? `Key Features: ${features.join(', ')}. ` 
-        : '';
-    const finalDescription = featureList + description;
+    // The description field already contains the feature list due to the useEffect hook
+    const finalDescription = description;
 
     try {
       await AdminService.createBillingProduct({
