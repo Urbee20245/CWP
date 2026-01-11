@@ -3,7 +3,7 @@ import { BrowserRouter, Routes, Route, useLocation, Navigate } from 'react-route
 import Header from './components/Header';
 import Footer from './components/Footer';
 import VoiceAgent from './components/VoiceAgent';
-import Home from './src/pages/Home';
+import Home from '@/src/pages/Home'; // Updated import path
 import JetLocalOptimizerPage from './components/JetLocalOptimizerPage';
 import JetVizPage from './components/JetVizPage';
 import JetSuitePage from './components/JetSuitePage';
@@ -38,9 +38,9 @@ import TermsAndConditions from './src/pages/TermsAndConditions';
 import ClientAddons from './src/pages/ClientAddons';
 import AdminAddonCatalog from './src/pages/AdminAddonCatalog';
 import AdminEmailDraft from './src/pages/AdminEmailDraft';
-import AdminAppointmentManagement from './src/pages/AdminAppointmentManagement'; // NEW IMPORT
-import ClientAppointmentBooking from './src/pages/ClientAppointmentBooking'; // NEW IMPORT
-import ClientJetSuitePage from './src/pages/ClientJetSuitePage'; // NEW IMPORT
+import AdminAppointmentManagement from './src/pages/AdminAppointmentManagement';
+import ClientAppointmentBooking from './src/pages/ClientAppointmentBooking';
+import ClientJetSuitePage from './src/pages/ClientJetSuitePage';
 
 // Component that uses useLocation to conditionally render global elements
 const AppContent: React.FC = () => {
@@ -90,11 +90,10 @@ const AppContent: React.FC = () => {
           <Route path="clients/:id" element={<AdminClientDetail />} />
           <Route path="projects" element={<AdminProjectList />} />
           <Route path="projects/:id" element={<AdminProjectDetail />} />
-          <Route path="appointments" element={<AdminAppointmentManagement />} /> {/* NEW ROUTE */}
+          <Route path="appointments" element={<AdminAppointmentManagement />} />
           <Route path="billing/products" element={<AdminBillingProducts />} />
           <Route path="billing/revenue" element={<AdminRevenueDashboard />} />
           <Route path="settings" element={<AdminSettingsPage />} />
-          {/* Removed SMTP route: <Route path="settings/smtp" element={<AdminSmtpSettings />} /> */}
           <Route path="settings/twilio" element={<AdminTwilioSettings />} />
           <Route path="ai-docs" element={<AdminDocumentGenerator />} />
           <Route path="ai-email" element={<AdminEmailGenerator />} />
@@ -106,11 +105,11 @@ const AppContent: React.FC = () => {
         <Route path="/client/*" element={<ProtectedRoute allowedRoles={['client']} />}>
           <Route path="dashboard" element={<ClientDashboard />} />
           <Route path="projects/:id" element={<ClientProjectDetail />} />
-          <Route path="appointments" element={<ClientAppointmentBooking />} /> {/* NEW ROUTE */}
+          <Route path="appointments" element={<ClientAppointmentBooking />} />
           <Route path="billing" element={<ClientBilling />} />
           <Route path="profile" element={<ClientProfile />} />
           <Route path="addons" element={<ClientAddons />} />
-          <Route path="jetsuite" element={<ClientJetSuitePage />} /> {/* NEW ROUTE */}
+          <Route path="jetsuite" element={<ClientJetSuitePage />} />
         </Route>
         
         {/* Global 404 Fallback */}
