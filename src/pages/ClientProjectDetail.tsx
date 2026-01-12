@@ -13,6 +13,7 @@ import { mapProjectDTO, ProjectDTO, MilestoneDTO, TaskDTO, FileItemDTO, ThreadDT
 import { ClientBillingService } from '../services/clientBillingService'; // Import ClientBillingService
 import { ensureArray } from '../utils/dataNormalization';
 import { marked } from 'marked';
+import HelpPopover from '../components/HelpPopover'; // Import HelpPopover
 
 // Define types locally based on DTOs for clarity
 type Milestone = MilestoneDTO;
@@ -434,16 +435,11 @@ const ClientProjectDetail: React.FC = () => {
   const isPaused = project.service_status === 'paused' || project.service_status === 'awaiting_payment';
 
   const renderHelpIcon = (message: string) => (
-      <button 
-          onClick={(e) => {
-              e.stopPropagation();
-              alert(message);
-          }}
-          className="text-slate-400 hover:text-indigo-600 transition-colors p-1"
-          aria-label="Help"
-      >
-          <HelpCircle className="w-4 h-4" />
-      </button>
+      <HelpPopover 
+          title="Section Info"
+          content={message}
+          className="ml-2"
+      />
   );
 
   return (
@@ -492,19 +488,10 @@ const ClientProjectDetail: React.FC = () => {
         <h1 className="text-3xl font-bold text-slate-900 mb-2 flex items-center gap-3 relative">
           <Briefcase className="w-7 h-7 text-indigo-600" />
           {project.title}
-          <button 
-              onClick={() => setIsHelpOpen(!isHelpOpen)}
-              className="text-slate-400 hover:text-indigo-600 transition-colors p-1"
-              aria-label="Help"
-          >
-              <HelpCircle className="w-5 h-5" />
-          </button>
-          {isHelpOpen && (
-              <div className="absolute z-10 top-full left-0 mt-2 w-80 p-4 bg-white rounded-lg shadow-xl border border-slate-200 text-sm text-slate-700">
-                  <p className="font-bold mb-1">Project Detail View</p>
-                  <p>Track progress, view milestones, communicate with the team via threads, and share/download project files.</p>
-              </div>
-          )}
+          <HelpPopover 
+              title="Project Detail View"
+              content="Track progress, view milestones, communicate with the team via threads, and share/download project files."
+          />
         </h1>
         <p className="text-slate-500 mb-8">{project.description}</p>
 

@@ -5,11 +5,12 @@ import { Link } from 'react-router-dom';
 import { supabase } from '../integrations/supabase/client';
 import { Users, Briefcase, DollarSign, Loader2, ArrowRight, BarChart3, Zap, MessageSquare, Bell, HelpCircle } from 'lucide-react';
 import AdminLayout from '../components/AdminLayout';
+import HelpPopover from '../components/HelpPopover'; // Import HelpPopover
 
 const AdminDashboard: React.FC = () => {
   const [stats, setStats] = useState({ totalClients: 0, activeProjects: 0, totalRevenue: 0, newMessages: 0, pendingAddonRequests: 0 });
   const [isLoading, setIsLoading] = useState(true);
-  const [isHelpOpen, setIsHelpOpen] = useState(false); // New state for help popover
+  // Removed isHelpOpen state as HelpPopover manages its own state
 
   const fetchData = useCallback(async () => {
     // Fetch Total Clients Count
@@ -82,19 +83,10 @@ const AdminDashboard: React.FC = () => {
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-12">
         <h1 className="text-3xl font-bold text-slate-900 mb-8 flex items-center gap-3 relative">
           <Zap className="w-7 h-7 text-indigo-600" /> Agency Overview
-          <button 
-              onClick={() => setIsHelpOpen(!isHelpOpen)}
-              className="text-slate-400 hover:text-indigo-600 transition-colors p-1"
-              aria-label="Help"
-          >
-              <HelpCircle className="w-5 h-5" />
-          </button>
-          {isHelpOpen && (
-              <div className="absolute z-10 top-full left-0 mt-2 w-80 p-4 bg-white rounded-lg shadow-xl border border-slate-200 text-sm text-slate-700">
-                  <p className="font-bold mb-1">Agency Overview Dashboard</p>
-                  <p>Monitor key performance indicators (KPIs) including client count, active projects, revenue, and pending requests.</p>
-              </div>
-          )}
+          <HelpPopover 
+              title="Agency Overview Dashboard"
+              content="Monitor key performance indicators (KPIs) including client count, active projects, revenue, and pending requests."
+          />
         </h1>
 
         {isLoading ? (

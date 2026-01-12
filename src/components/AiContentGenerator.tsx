@@ -3,6 +3,7 @@
 import React, { useState } from 'react';
 import { Bot, Sparkles, Loader2, X, AlertTriangle, HelpCircle } from 'lucide-react';
 import { AdminService } from '../services/adminService';
+import HelpPopover from './HelpPopover'; // Import HelpPopover
 
 interface AiContentGeneratorProps {
   entityType: string;
@@ -79,17 +80,10 @@ const AiContentGenerator: React.FC<AiContentGeneratorProps> = ({
         >
             <Sparkles className="w-3 h-3" /> Generate with AI
         </button>
-        <button 
-            type="button"
-            onClick={(e) => {
-                e.stopPropagation();
-                alert("The AI Content Generator uses Gemini to draft descriptions, emails, or documents based on the context you provide, saving you time on initial drafting.");
-            }}
-            className="text-slate-400 hover:text-indigo-600 transition-colors p-0.5"
-            aria-label="Help"
-        >
-            <HelpCircle className="w-3 h-3" />
-        </button>
+        <HelpPopover 
+            title="AI Content Generator"
+            content="The AI Content Generator uses Gemini to draft descriptions, emails, or documents based on the context you provide, saving you time on initial drafting."
+        />
       </div>
 
       {isOpen && (
