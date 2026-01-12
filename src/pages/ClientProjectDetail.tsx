@@ -3,7 +3,7 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { useParams, Link } from 'react-router-dom';
 import { supabase } from '../integrations/supabase/client';
-import { Loader2, Briefcase, CheckCircle2, MessageSquare, FileText, Upload, Download, Send, ArrowLeft, AlertTriangle, DollarSign, Clock, ExternalLink, Bot, ChevronDown, ChevronUp, Plus, X } from 'lucide-react';
+import { Loader2, Briefcase, CheckCircle2, MessageSquare, FileText, Upload, Download, Send, ArrowLeft, AlertTriangle, DollarSign, Clock, ExternalLink, Bot, ChevronDown, ChevronUp, Plus, X, HelpCircle } from 'lucide-react';
 import ClientLayout from '../components/ClientLayout';
 import { useAuth } from '../hooks/useAuth';
 import { calculateSlaMetrics, SlaStatus } from '../utils/sla';
@@ -12,6 +12,7 @@ import ServiceStatusBanner from '../components/ServiceStatusBanner';
 import { mapProjectDTO, ProjectDTO, MilestoneDTO, TaskDTO, FileItemDTO, ThreadDTO } from '../utils/projectMapper'; // Import DTO and Mapper
 import { ClientBillingService } from '../services/clientBillingService'; // Import ClientBillingService
 import { ensureArray } from '../utils/dataNormalization';
+import { marked } from 'marked';
 
 // Define types locally based on DTOs for clarity
 type Milestone = MilestoneDTO;
@@ -50,6 +51,7 @@ const ClientProjectDetail: React.FC = () => {
   const [activeTab, setActiveTab] = useState<'messages' | 'tasks' | 'files' | 'milestones' | 'documents'>('documents'); // Default to documents
   const [expandedDocId, setExpandedDocId] = useState<string | null>(null);
   const [isPayingDeposit, setIsPayingDeposit] = useState(false);
+  const [isHelpOpen, setIsHelpOpen] = useState(false); // New state for help popover
   
   // Thread State
   const [activeThreadId, setActiveThreadId] = useState<string | null>(null);
@@ -474,9 +476,22 @@ const ClientProjectDetail: React.FC = () => {
             </div>
         )}
 
-        <h1 className="text-3xl font-bold text-slate-900 mb-2 flex items-center gap-3">
+        <h1 className="text-3xl font-bold text-slate-900 mb-2 flex items-center gap-3 relative">
           <Briefcase className="w-7 h-7 text-indigo-600" />
           {project.title}
+          <button 
+              onClick={() => setIsHelpOpen(!isHelpOpen)}
+              className="text-slate-400 hover:text-indigo-600 transition-colors p-1"
+              aria-label="Help"
+          >
+              <HelpCircle className="w-5 h-5" />
+          </button>
+          {isHelpOpen && (
+              <div className="absolute z-10 top-full left-0 mt-2 w-80 p-4 bg-white rounded-lg shadow-xl border border-slate-200 text-sm text-slate-700">
+                  <p className="font-bold mb-1">Project Detail View</p>
+                  <p>Track progress, view milestones, communicate with the team via threads, and share/download project files.</p>
+              </div>
+          )}
         </h1>
         <p className="text-slate-500 mb-8">{project.description}</p>
 
@@ -487,7 +502,16 @@ const ClientProjectDetail: React.FC = () => {
             
             {/* Progress View */}
             <div className="bg-white p-6 rounded-xl shadow-lg border border-slate-100">
-              <h2 className="text-xl font-bold mb-4">Project Progress</h2>
+              <h2 className="text-xl font-bold mb-4 flex items-center gap-2">
+                Project Progress
+                <button 
+                    onClick={() => alert("Progress is updated by the project manager based on task completion and milestone delivery.")}
+                    className="text-slate-400 hover:text-indigo-600 transition-colors p-1"
+                    aria-label="Help"
+                >
+                    <HelpCircle className="w-4 h-4" />
+                </button>
+              </h2>
               <div className="text-4xl font-bold text-indigo-600 mb-4">{project.progress_percent}%</div>
               
               <div className="w-full bg-slate-200 rounded-full h-3 mb-4">
@@ -538,6 +562,13 @@ const ClientProjectDetail: React.FC = () => {
                 <div className="bg-white p-6 rounded-xl shadow-lg border border-slate-100">
                     <h2 className="text-xl font-bold mb-4 flex items-center gap-2 border-b border-slate-100 pb-4">
                         <Clock className="w-5 h-5 text-red-600" /> Project Timeline
+                        <button 
+                            onClick={() => alert("The Service Level Agreement (SLA) tracks the project timeline. It pauses when the service status is paused or awaiting payment.")}
+                            className="text-slate-400 hover:text-indigo-600 transition-colors p-1"
+                            aria-label="Help"
+                        >
+                            <HelpCircle className="w-4 h-4" />
+                        </button>
                     </h2>
                     <div className="space-y-3">
                         <div className="flex justify-between items-center">
@@ -570,6 +601,13 @@ const ClientProjectDetail: React.FC = () => {
             <div className="bg-white p-6 rounded-xl shadow-lg border border-slate-100">
               <h2 className="text-xl font-bold mb-4 flex items-center gap-2 border-b border-slate-100 pb-4">
                 <CheckCircle2 className="w-5 h-5 text-emerald-600" /> Tasks
+                <button 
+                    onClick={() => alert("Tasks are the individual steps required to complete the project. They are managed by the admin team.")}
+                    className="text-slate-400 hover:text-indigo-600 transition-colors p-1"
+                    aria-label="Help"
+                >
+                    <HelpCircle className="w-4 h-4" />
+                </button>
               </h2>
               <div className="space-y-3">
                 {project.tasks.length > 0 ? (
@@ -631,6 +669,13 @@ const ClientProjectDetail: React.FC = () => {
                 <div className="bg-white p-6 rounded-xl shadow-lg border border-slate-100">
                     <h2 className="text-xl font-bold mb-4 flex items-center gap-2 border-b border-slate-100 pb-4">
                         <Bot className="w-5 h-5 text-emerald-600" /> Shared Documents
+                        <button 
+                            onClick={() => alert("This section contains legal documents (T&Cs, Privacy Policy) and strategy documents shared by the admin team.")}
+                            className="text-slate-400 hover:text-indigo-600 transition-colors p-1"
+                            aria-label="Help"
+                        >
+                            <HelpCircle className="w-4 h-4" />
+                        </button>
                     </h2>
                     
                     {documents.length === 0 ? (
@@ -670,6 +715,13 @@ const ClientProjectDetail: React.FC = () => {
                 <div className="bg-white p-6 rounded-xl shadow-lg border border-slate-100">
                     <h2 className="text-xl font-bold mb-4 flex items-center gap-2 border-b border-slate-100 pb-4">
                         <MessageSquare className="w-5 h-5 text-indigo-600" /> Project Threads
+                        <button 
+                            onClick={() => alert("Use threads to discuss specific topics with the project team. Start a new thread for a new topic.")}
+                            className="text-slate-400 hover:text-indigo-600 transition-colors p-1"
+                            aria-label="Help"
+                        >
+                            <HelpCircle className="w-4 h-4" />
+                        </button>
                     </h2>
                     
                     {/* Thread Selector */}
@@ -769,6 +821,13 @@ const ClientProjectDetail: React.FC = () => {
                 <div className="bg-white p-6 rounded-xl shadow-lg border border-slate-100">
                     <h2 className="text-xl font-bold mb-4 flex items-center gap-2 border-b border-slate-100 pb-4">
                         <DollarSign className="w-5 h-5 text-purple-600" /> Payment Milestones
+                        <button 
+                            onClick={() => alert("Milestones are the payment schedule for your project. Once a milestone is invoiced, you will receive an email notification.")}
+                            className="text-slate-400 hover:text-indigo-600 transition-colors p-1"
+                            aria-label="Help"
+                        >
+                            <HelpCircle className="w-4 h-4" />
+                        </button>
                     </h2>
                     <div className="space-y-4">
                         {project.milestones.length > 0 ? (
@@ -805,6 +864,13 @@ const ClientProjectDetail: React.FC = () => {
                 <div className="bg-white p-6 rounded-xl shadow-lg border border-slate-100">
                     <h2 className="text-xl font-bold mb-4 flex items-center gap-2 border-b border-slate-100 pb-4">
                         <FileText className="w-5 h-5 text-purple-600" /> Project Files ({project.files.length})
+                        <button 
+                            onClick={() => alert("Upload files for the admin team (e.g., logos, content drafts) or download files shared by the team.")}
+                            className="text-slate-400 hover:text-indigo-600 transition-colors p-1"
+                            aria-label="Help"
+                        >
+                            <HelpCircle className="w-4 h-4" />
+                        </button>
                     </h2>
                     <div className="space-y-3">
                         {project.files.length > 0 ? (

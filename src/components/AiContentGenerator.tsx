@@ -1,7 +1,7 @@
 "use client";
 
 import React, { useState } from 'react';
-import { Bot, Sparkles, Loader2, X, AlertTriangle } from 'lucide-react';
+import { Bot, Sparkles, Loader2, X, AlertTriangle, HelpCircle } from 'lucide-react';
 import { AdminService } from '../services/adminService';
 
 interface AiContentGeneratorProps {
@@ -69,15 +69,28 @@ const AiContentGenerator: React.FC<AiContentGeneratorProps> = ({
 
   return (
     <>
-      <button
-        type="button"
-        onClick={() => {
-            setIsOpen(true);
-        }}
-        className="flex items-center gap-1 text-xs font-semibold text-indigo-600 hover:text-indigo-800 transition-colors"
-      >
-        <Sparkles className="w-3 h-3" /> Generate with AI
-      </button>
+      <div className="flex items-center gap-1">
+        <button
+            type="button"
+            onClick={() => {
+                setIsOpen(true);
+            }}
+            className="flex items-center gap-1 text-xs font-semibold text-indigo-600 hover:text-indigo-800 transition-colors"
+        >
+            <Sparkles className="w-3 h-3" /> Generate with AI
+        </button>
+        <button 
+            type="button"
+            onClick={(e) => {
+                e.stopPropagation();
+                alert("The AI Content Generator uses Gemini to draft descriptions, emails, or documents based on the context you provide, saving you time on initial drafting.");
+            }}
+            className="text-slate-400 hover:text-indigo-600 transition-colors p-0.5"
+            aria-label="Help"
+        >
+            <HelpCircle className="w-3 h-3" />
+        </button>
+      </div>
 
       {isOpen && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50 backdrop-blur-sm animate-fade-in">

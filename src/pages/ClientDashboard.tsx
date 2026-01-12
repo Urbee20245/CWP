@@ -4,7 +4,7 @@ import React, { useState, useEffect } from 'react';
 import { Link } from 'react-router-dom';
 import { useAuth } from '../hooks/useAuth';
 import { supabase } from '../integrations/supabase/client';
-import { Briefcase, Loader2, LogOut, AlertTriangle, Users } from 'lucide-react';
+import { Briefcase, Loader2, LogOut, AlertTriangle, Users, HelpCircle } from 'lucide-react';
 import ClientLayout from '../components/ClientLayout';
 import ServiceStatusBanner from '../components/ServiceStatusBanner';
 
@@ -25,6 +25,7 @@ const ClientDashboard: React.FC = () => {
   const [clientServiceStatus, setClientServiceStatus] = useState<'active' | 'paused' | 'onboarding' | 'completed'>('onboarding');
   const [showOverdueBanner, setShowOverdueBanner] = useState(false);
   const [isClientRecordMissing, setIsClientRecordMissing] = useState(false);
+  const [isHelpOpen, setIsHelpOpen] = useState(false); // New state for help popover
 
   useEffect(() => {
     const fetchClientData = async () => {
@@ -115,8 +116,21 @@ const ClientDashboard: React.FC = () => {
     <ClientLayout>
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-12">
         <div className="flex justify-between items-center mb-8">
-          <h1 className="text-3xl font-bold text-slate-900">
+          <h1 className="text-3xl font-bold text-slate-900 flex items-center gap-3 relative">
             Welcome, {profile?.full_name || 'Client'}
+            <button 
+                onClick={() => setIsHelpOpen(!isHelpOpen)}
+                className="text-slate-400 hover:text-indigo-600 transition-colors p-1"
+                aria-label="Help"
+            >
+                <HelpCircle className="w-5 h-5" />
+            </button>
+            {isHelpOpen && (
+                <div className="absolute z-10 top-full left-0 mt-2 w-80 p-4 bg-white rounded-lg shadow-xl border border-slate-200 text-sm text-slate-700">
+                    <p className="font-bold mb-1">Client Dashboard Overview</p>
+                    <p>This is your central hub. Track the status of your projects, view overdue invoices, and access key client information.</p>
+                </div>
+            )}
           </h1>
           <button onClick={signOut} className="flex items-center gap-2 text-sm text-red-500 hover:text-red-700">
             <LogOut className="w-4 h-4" /> Sign Out
