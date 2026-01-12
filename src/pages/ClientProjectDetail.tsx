@@ -433,6 +433,19 @@ const ClientProjectDetail: React.FC = () => {
   const isDepositRequired = project.required_deposit_cents && project.required_deposit_cents > 0;
   const isPaused = project.service_status === 'paused' || project.service_status === 'awaiting_payment';
 
+  const renderHelpIcon = (message: string) => (
+      <button 
+          onClick={(e) => {
+              e.stopPropagation();
+              alert(message);
+          }}
+          className="text-slate-400 hover:text-indigo-600 transition-colors p-1"
+          aria-label="Help"
+      >
+          <HelpCircle className="w-4 h-4" />
+      </button>
+  );
+
   return (
     <ClientLayout>
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-12">
@@ -504,13 +517,7 @@ const ClientProjectDetail: React.FC = () => {
             <div className="bg-white p-6 rounded-xl shadow-lg border border-slate-100">
               <h2 className="text-xl font-bold mb-4 flex items-center gap-2">
                 Project Progress
-                <button 
-                    onClick={() => alert("Progress is updated by the project manager based on task completion and milestone delivery.")}
-                    className="text-slate-400 hover:text-indigo-600 transition-colors p-1"
-                    aria-label="Help"
-                >
-                    <HelpCircle className="w-4 h-4" />
-                </button>
+                {renderHelpIcon("Progress is updated by the project manager based on task completion and milestone delivery.")}
               </h2>
               <div className="text-4xl font-bold text-indigo-600 mb-4">{project.progress_percent}%</div>
               
@@ -562,13 +569,7 @@ const ClientProjectDetail: React.FC = () => {
                 <div className="bg-white p-6 rounded-xl shadow-lg border border-slate-100">
                     <h2 className="text-xl font-bold mb-4 flex items-center gap-2 border-b border-slate-100 pb-4">
                         <Clock className="w-5 h-5 text-red-600" /> Project Timeline
-                        <button 
-                            onClick={() => alert("The Service Level Agreement (SLA) tracks the project timeline. It pauses when the service status is paused or awaiting payment.")}
-                            className="text-slate-400 hover:text-indigo-600 transition-colors p-1"
-                            aria-label="Help"
-                        >
-                            <HelpCircle className="w-4 h-4" />
-                        </button>
+                        {renderHelpIcon("The Service Level Agreement (SLA) tracks the project timeline. It pauses when the service status is paused or awaiting payment.")}
                     </h2>
                     <div className="space-y-3">
                         <div className="flex justify-between items-center">
@@ -601,13 +602,7 @@ const ClientProjectDetail: React.FC = () => {
             <div className="bg-white p-6 rounded-xl shadow-lg border border-slate-100">
               <h2 className="text-xl font-bold mb-4 flex items-center gap-2 border-b border-slate-100 pb-4">
                 <CheckCircle2 className="w-5 h-5 text-emerald-600" /> Tasks
-                <button 
-                    onClick={() => alert("Tasks are the individual steps required to complete the project. They are managed by the admin team.")}
-                    className="text-slate-400 hover:text-indigo-600 transition-colors p-1"
-                    aria-label="Help"
-                >
-                    <HelpCircle className="w-4 h-4" />
-                </button>
+                {renderHelpIcon("Tasks are the individual steps required to complete the project. They are managed by the admin team.")}
               </h2>
               <div className="space-y-3">
                 {project.tasks.length > 0 ? (
@@ -669,13 +664,7 @@ const ClientProjectDetail: React.FC = () => {
                 <div className="bg-white p-6 rounded-xl shadow-lg border border-slate-100">
                     <h2 className="text-xl font-bold mb-4 flex items-center gap-2 border-b border-slate-100 pb-4">
                         <Bot className="w-5 h-5 text-emerald-600" /> Shared Documents
-                        <button 
-                            onClick={() => alert("This section contains legal documents (T&Cs, Privacy Policy) and strategy documents shared by the admin team.")}
-                            className="text-slate-400 hover:text-indigo-600 transition-colors p-1"
-                            aria-label="Help"
-                        >
-                            <HelpCircle className="w-4 h-4" />
-                        </button>
+                        {renderHelpIcon("This section contains legal documents (T&Cs, Privacy Policy) and strategy documents shared by the admin team.")}
                     </h2>
                     
                     {documents.length === 0 ? (
@@ -715,13 +704,7 @@ const ClientProjectDetail: React.FC = () => {
                 <div className="bg-white p-6 rounded-xl shadow-lg border border-slate-100">
                     <h2 className="text-xl font-bold mb-4 flex items-center gap-2 border-b border-slate-100 pb-4">
                         <MessageSquare className="w-5 h-5 text-indigo-600" /> Project Threads
-                        <button 
-                            onClick={() => alert("Use threads to discuss specific topics with the project team. Start a new thread for a new topic.")}
-                            className="text-slate-400 hover:text-indigo-600 transition-colors p-1"
-                            aria-label="Help"
-                        >
-                            <HelpCircle className="w-4 h-4" />
-                        </button>
+                        {renderHelpIcon("Use threads to discuss specific topics with the project team. Start a new thread for a new topic.")}
                     </h2>
                     
                     {/* Thread Selector */}
@@ -821,13 +804,7 @@ const ClientProjectDetail: React.FC = () => {
                 <div className="bg-white p-6 rounded-xl shadow-lg border border-slate-100">
                     <h2 className="text-xl font-bold mb-4 flex items-center gap-2 border-b border-slate-100 pb-4">
                         <DollarSign className="w-5 h-5 text-purple-600" /> Payment Milestones
-                        <button 
-                            onClick={() => alert("Milestones are the payment schedule for your project. Once a milestone is invoiced, you will receive an email notification.")}
-                            className="text-slate-400 hover:text-indigo-600 transition-colors p-1"
-                            aria-label="Help"
-                        >
-                            <HelpCircle className="w-4 h-4" />
-                        </button>
+                        {renderHelpIcon("Milestones are the payment schedule for your project. Once a milestone is invoiced, you will receive an email notification.")}
                     </h2>
                     <div className="space-y-4">
                         {project.milestones.length > 0 ? (
@@ -864,13 +841,7 @@ const ClientProjectDetail: React.FC = () => {
                 <div className="bg-white p-6 rounded-xl shadow-lg border border-slate-100">
                     <h2 className="text-xl font-bold mb-4 flex items-center gap-2 border-b border-slate-100 pb-4">
                         <FileText className="w-5 h-5 text-purple-600" /> Project Files ({project.files.length})
-                        <button 
-                            onClick={() => alert("Upload files for the admin team (e.g., logos, content drafts) or download files shared by the team.")}
-                            className="text-slate-400 hover:text-indigo-600 transition-colors p-1"
-                            aria-label="Help"
-                        >
-                            <HelpCircle className="w-4 h-4" />
-                        </button>
+                        {renderHelpIcon("Upload files for the admin team (e.g., logos, content drafts) or download files shared by the team.")}
                     </h2>
                     <div className="space-y-3">
                         {project.files.length > 0 ? (
