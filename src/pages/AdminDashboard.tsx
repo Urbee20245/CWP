@@ -3,14 +3,22 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import { Link } from 'react-router-dom';
 import { supabase } from '../integrations/supabase/client';
-import { Users, Briefcase, DollarSign, Loader2, ArrowRight, BarChart3, Zap, MessageSquare, Bell, HelpCircle } from 'lucide-react';
+import { Users, Briefcase, DollarSign, Loader2, ArrowRight, BarChart3, Zap, MessageSquare, Bell, HelpCircle, Clock } from 'lucide-react';
 import AdminLayout from '../components/AdminLayout';
 import HelpPopover from '../components/HelpPopover'; // Import HelpPopover
+import { format, isPast } from 'date-fns';
+
+interface ReminderSummary {
+    id: string;
+    note: string;
+    reminder_date: string;
+    clients: { business_name: string };
+}
 
 const AdminDashboard: React.FC = () => {
   const [stats, setStats] = useState({ totalClients: 0, activeProjects: 0, totalRevenue: 0, newMessages: 0, pendingAddonRequests: 0 });
+  const [reminders, setReminders] = useState<ReminderSummary[]>([]);
   const [isLoading, setIsLoading] = useState(true);
-  // Removed isHelpOpen state as HelpPopover manages its own state
 
   const fetchData = useCallback(async () => {
     // Fetch Total Clients Count
@@ -42,6 +50,23 @@ const AdminDashboard: React.FC = () => {
         .from('client_addon_requests')
         .select('*', { count: 'exact', head: true })
         .eq('status', 'requested');
+        
+    // NEW: Fetch Pending Reminders
+    const { data: remindersData, error: remindersError } = await supabase
+        .from('client_reminders')
+        .select(`
+            id, note, reminder_date,
+            clients (business_name)
+        `)
+        .eq('is_completed', false)
+        .order('reminder_date', { ascending: true })
+        .limit(5);
+        
+    if (remindersError) {
+        console.error('Error fetching reminders:', remindersError);
+    } else {
+        setReminders(remindersData as ReminderSummary[] || []);
+    }
 
     let totalRevenue = 0;
     if (revenueData) {
@@ -72,7 +97,7 @@ const AdminDashboard: React.FC = () => {
   const notificationCard = {
       title: 'Pending Add-on Requests',
       value: stats.pendingAddonRequests,
-      icon: Bell,
+      icon: Zap,
       color: stats.pendingAddonRequests > 0 ? 'text-amber-600' : 'text-slate-600',
       bg: stats.pendingAddonRequests > 0 ? 'bg-amber-50' : 'bg-slate-50',
       link: '/admin/clients', // Link to client list where requests can be reviewed
@@ -113,7 +138,7 @@ const AdminDashboard: React.FC = () => {
               ))}
             </div>
             
-            {/* Notification Card */}
+            {/* Notification Cards */}
             <div className="grid grid-cols-1 md:grid-cols-4 gap-6 mb-12">
                 <Link to={notificationCard.link} className="bg-white p-6 rounded-xl shadow-lg border border-slate-100 hover:shadow-xl hover:border-amber-200 transition-all block">
                   <div className="flex items-center justify-between">
@@ -127,6 +152,34 @@ const AdminDashboard: React.FC = () => {
                     Review Requests <ArrowRight className="w-3 h-3" />
                   </div>
                 </Link>
+                
+                {/* NEW: Reminders Card */}
+                <div className="md:col-span-3 bg-white p-6 rounded-xl shadow-lg border border-slate-100">
+                    <h2 className="text-xl font-bold text-slate-900 mb-4 flex items-center gap-2 border-b border-slate-100 pb-4">
+                        <Bell className="w-5 h-5 text-red-600" /> Upcoming Client Reminders ({reminders.length} Pending)
+                    </h2>
+                    <div className="space-y-3 max-h-40 overflow-y-auto">
+                        {reminders.length > 0 ? (
+                            reminders.map(reminder => (
+                                <Link 
+                                    key={reminder.id} 
+                                    to={`/admin/clients/${reminder.clients.business_name}?tab=reminders`} // Link to client detail page
+                                    className={`p-3 rounded-lg border flex justify-between items-center hover:bg-red-50 transition-colors ${isPast(new Date(reminder.reminder_date)) ? 'bg-red-100 border-red-300' : 'bg-amber-50 border-amber-200'}`}
+                                >
+                                    <div className="flex-1 min-w-0 pr-4">
+                                        <p className="font-bold text-sm text-slate-900 truncate">{reminder.note}</p>
+                                        <p className="text-xs text-slate-600 mt-1">
+                                            Client: {reminder.clients.business_name} | Due: {format(new Date(reminder.reminder_date), 'MMM dd, yyyy')}
+                                        </p>
+                                    </div>
+                                    <Clock className="w-4 h-4 text-red-600 flex-shrink-0" />
+                                </Link>
+                            ))
+                        ) : (
+                            <p className="text-slate-500 text-sm">No pending reminders.</p>
+                        )}
+                    </div>
+                </div>
             </div>
 
             {/* Quick Links */}

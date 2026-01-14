@@ -181,5 +181,30 @@ The Custom Websites Plus Team
           
       if (error) throw error;
       return { success: true };
-  }
+  },
+  
+  // --- Reminders ---
+  createClientReminder: async (clientId: string, adminId: string, reminderDate: string, note: string) => {
+    const { data, error } = await supabase
+        .from('client_reminders')
+        .insert({
+            client_id: clientId,
+            admin_id: adminId,
+            reminder_date: reminderDate,
+            note: note,
+        });
+        
+    if (error) throw error;
+    return data;
+  },
+  
+  completeClientReminder: async (reminderId: string) => {
+    const { data, error } = await supabase
+        .from('client_reminders')
+        .update({ is_completed: true })
+        .eq('id', reminderId);
+        
+    if (error) throw error;
+    return data;
+  },
 };

@@ -3,7 +3,7 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import { useParams, Link, useNavigate } from 'react-router-dom';
 import { supabase } from '../integrations/supabase/client';
-import { Loader2, Briefcase, FileText, DollarSign, Plus, CreditCard, Zap, ExternalLink, ShieldCheck, Lock, Trash2, Send, AlertCircle, MessageSquare, Phone, CheckCircle2, Pause, Play, Clock, Download, Edit, Bell, BellOff, Users, Percent } from 'lucide-react';
+import { Loader2, Briefcase, FileText, DollarSign, Plus, CreditCard, Zap, ExternalLink, ShieldCheck, Lock, Trash2, Send, AlertCircle, MessageSquare, Phone, CheckCircle2, Pause, Play, Clock, Download, Edit, Bell, BellOff, Users, Percent, Calendar } from 'lucide-react';
 import AdminLayout from '../components/AdminLayout';
 import { Profile } from '../types/auth';
 import { AdminService } from '../services/adminService'; // Use AdminService for admin functions
@@ -79,6 +79,16 @@ interface AddonRequest {
     requested_at: string;
 }
 
+interface ClientReminder { // NEW INTERFACE
+    id: string;
+    note: string;
+    reminder_date: string;
+    is_completed: boolean;
+    admin_id: string;
+    profiles: { full_name: string };
+    created_at: string;
+}
+
 type ClientServiceStatus = 'active' | 'paused' | 'onboarding' | 'completed' | 'awaiting_payment';
 
 interface Client {
@@ -101,6 +111,7 @@ interface Client {
   deposits: DepositSummary[];
   pause_logs: PauseLog[]; // New field
   addon_requests: AddonRequest[]; // New field
+  reminders: ClientReminder[]; // NEW FIELD
 }
 
 interface BillingProduct {
@@ -119,7 +130,7 @@ const AdminClientDetail: React.FC = () => {
   const { user } = useAuth();
   const [client, setClient] = useState<Client | null>(null);
   const [isLoading, setIsLoading] = useState(true);
-  const [activeTab, setActiveTab] = useState<'projects' | 'billing' | 'notes' | 'addons'>('billing'); // Default to billing
+  const [activeTab, setActiveTab] = useState<'projects' | 'billing' | 'reminders' | 'addons'>('billing'); // Default to billing
   const [fetchError, setFetchError] = useState<string | null>(null); // New state for fetch errors
   
   // Dialog State
@@ -149,6 +160,11 @@ const AdminClientDetail: React.FC = () => {
       discountValue: 0,
   });
   const [discountError, setDiscountError] = useState<string | null>(null);
+  
+  // Reminder State (NEW)
+  const [newReminderNote, setNewReminderNote] = useState('');
+  const [newReminderDate, setNewReminderDate] = useState('');
+  const [isReminderSaving, setIsReminderSaving] = useState(false);
 
   const fetchClientData = useCallback(async () => {
     if (!id) return;
@@ -183,6 +199,7 @@ const AdminClientDetail: React.FC = () => {
         { data: pauseLogsData },
         { data: addonRequestsData },
         { data: discountsData }, // Fetch Discounts
+        { data: remindersData }, // NEW: Fetch Reminders
     ] = await Promise.all([
         supabase.from('projects').select('id, title, status, progress_percent').eq('client_id', id).order('created_at', { ascending: false }),
         supabase.from('invoices').select('id, amount_due, status, hosted_invoice_url, pdf_url, created_at, last_reminder_sent_at, disable_reminders, stripe_invoice_id').eq('client_id', id).order('created_at', { ascending: false }),
@@ -191,6 +208,7 @@ const AdminClientDetail: React.FC = () => {
         supabase.from('service_pause_logs').select('id, action, internal_note, client_acknowledged, created_at').eq('client_id', id).order('created_at', { ascending: false }),
         supabase.from('client_addon_requests').select('id, addon_key, addon_name, status, notes, requested_at').eq('client_id', id).order('requested_at', { ascending: false }),
         supabase.from('invoice_discounts').select('*'), // Fetch all discounts
+        supabase.from('client_reminders').select('*, profiles(full_name)').eq('client_id', id).order('reminder_date', { ascending: true }), // NEW: Fetch Reminders
     ]);
     
     const allDiscounts = ensureArray(discountsData) as InvoiceDiscount[];
@@ -208,6 +226,7 @@ const AdminClientDetail: React.FC = () => {
         deposits: ensureArray(depositsData) as DepositSummary[],
         pause_logs: ensureArray(pauseLogsData) as PauseLog[],
         addon_requests: ensureArray(addonRequestsData) as AddonRequest[],
+        reminders: ensureArray(remindersData) as ClientReminder[], // NEW
     };
     
     setClient(mergedClient);
@@ -575,6 +594,48 @@ const AdminClientDetail: React.FC = () => {
       }
   };
   
+  // --- Reminder Handlers (NEW) ---
+  const handleCreateReminder = async (e: React.FormEvent) => {
+      e.preventDefault();
+      if (!client || !newReminderNote || !newReminderDate || !user) return;
+      
+      setIsReminderSaving(true);
+      setSaveError(null);
+      
+      try {
+          await AdminService.createClientReminder(
+              client.id,
+              user.id,
+              new Date(newReminderDate).toISOString(),
+              newReminderNote
+          );
+          
+          alert('Reminder set successfully!');
+          setNewReminderNote('');
+          setNewReminderDate('');
+          fetchClientData();
+      } catch (e: any) {
+          setSaveError(e.message || 'Failed to create reminder.');
+      } finally {
+          setIsReminderSaving(false);
+      }
+  };
+  
+  const handleCompleteReminder = async (reminderId: string) => {
+      if (!window.confirm("Mark this reminder as complete?")) return;
+      
+      setIsProcessing(true);
+      try {
+          await AdminService.completeClientReminder(reminderId);
+          alert('Reminder marked complete.');
+          fetchClientData();
+      } catch (e: any) {
+          alert(`Failed to complete reminder: ${e.message}`);
+      } finally {
+          setIsProcessing(false);
+      }
+  };
+  
   const getStatusColor = (status: string) => {
     switch (status) {
       case 'active': return 'bg-emerald-100 text-emerald-800';
@@ -640,7 +701,7 @@ const AdminClientDetail: React.FC = () => {
     return (
       <AdminLayout>
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-12 text-center">
-          <AlertCircle className="w-16 h-16 text-red-500 mx-auto mb-6" />
+          <AlertTriangle className="w-16 h-16 text-red-500 mx-auto mb-6" />
           <h1 className="text-3xl font-bold text-red-500">Unable to load client details.</h1>
           <p className="text-slate-500 mt-4">Error: {fetchError || 'Client not found or data is corrupted.'}</p>
           <button 
@@ -704,14 +765,14 @@ const AdminClientDetail: React.FC = () => {
         <div className="border-b border-slate-200 mb-8">
           <nav className="-mb-px flex space-x-8">
             <button
-              onClick={() => setActiveTab('addons')}
+              onClick={() => setActiveTab('reminders')}
               className={`whitespace-nowrap py-4 px-1 border-b-2 font-medium text-sm transition-colors ${
-                activeTab === 'addons'
+                activeTab === 'reminders'
                   ? 'border-indigo-600 text-indigo-600'
                   : 'border-transparent text-slate-500 hover:text-slate-700 hover:border-slate-300'
               }`}
             >
-              Add-on Requests ({client.addon_requests?.filter(r => r.status === 'requested').length || 0})
+              Reminders ({client.reminders?.filter(r => !r.is_completed).length || 0} Pending)
             </button>
             <button
               onClick={() => setActiveTab('projects')}
@@ -734,14 +795,14 @@ const AdminClientDetail: React.FC = () => {
               Billing
             </button>
             <button
-              onClick={() => setActiveTab('notes')}
+              onClick={() => setActiveTab('addons')}
               className={`whitespace-nowrap py-4 px-1 border-b-2 font-medium text-sm transition-colors ${
-                activeTab === 'notes'
+                activeTab === 'addons'
                   ? 'border-indigo-600 text-indigo-600'
                   : 'border-transparent text-slate-500 hover:text-slate-700 hover:border-slate-300'
               }`}
             >
-              Notes
+              Add-on Requests
             </button>
           </nav>
         </div>
@@ -749,7 +810,7 @@ const AdminClientDetail: React.FC = () => {
         {/* Tab Content */}
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
           
-          {/* Left Column: Service Control & Notes */}
+          {/* Left Column: Service Control, Notes & Reminders */}
           <div className="lg:col-span-1 space-y-8">
             
             {/* Service Control */}
@@ -855,9 +916,77 @@ const AdminClientDetail: React.FC = () => {
             </div>
           </div>
           
-          {/* Right Column: Projects, Billing & Addons */}
+          {/* Right Column: Tab Content */}
           <div className="lg:col-span-2 space-y-8">
             
+            {/* Reminders Tab Content (NEW) */}
+            {activeTab === 'reminders' && (
+                <div className="bg-white p-6 rounded-xl shadow-lg border border-slate-100">
+                    <h2 className="text-xl font-bold mb-4 flex items-center gap-2 text-slate-900 border-b border-slate-100 pb-4">
+                        <Bell className="w-5 h-5 text-red-600" /> Client Reminders ({client.reminders?.filter(r => !r.is_completed).length || 0} Pending)
+                    </h2>
+                    
+                    {/* Reminder Creation Form */}
+                    <form onSubmit={handleCreateReminder} className="space-y-3 mb-6 p-4 bg-slate-50 rounded-lg border border-slate-200">
+                        <h3 className="font-bold text-sm text-slate-900">Set New Reminder</h3>
+                        <textarea
+                            value={newReminderNote}
+                            onChange={(e) => setNewReminderNote(e.target.value)}
+                            placeholder="Reminder note (e.g., Follow up on design mockups)"
+                            rows={2}
+                            className="w-full p-2 border border-slate-300 rounded-lg text-sm resize-none"
+                            required
+                            disabled={isReminderSaving}
+                        />
+                        <div className="flex gap-3 items-center">
+                            <input
+                                type="date"
+                                value={newReminderDate}
+                                onChange={(e) => setNewReminderDate(e.target.value)}
+                                className="flex-1 p-2 border border-slate-300 rounded-lg text-sm"
+                                required
+                                disabled={isReminderSaving}
+                            />
+                            <button
+                                type="submit"
+                                disabled={isReminderSaving || !newReminderNote || !newReminderDate}
+                                className="py-2 px-4 bg-red-600 text-white rounded-lg text-sm font-semibold hover:bg-red-700 transition-colors disabled:opacity-50 flex items-center justify-center gap-2"
+                            >
+                                {isReminderSaving ? <Loader2 className="w-4 h-4 animate-spin" /> : <Plus className="w-4 h-4" />}
+                                Set Reminder
+                            </button>
+                        </div>
+                    </form>
+                    
+                    {/* Reminder List */}
+                    <div className="space-y-3">
+                        {client.reminders && client.reminders.length > 0 ? (
+                            client.reminders.map(reminder => (
+                                <div key={reminder.id} className={`p-3 rounded-lg border flex justify-between items-center ${reminder.is_completed ? 'bg-emerald-50 border-emerald-200 opacity-70' : 'bg-red-50 border-red-200'}`}>
+                                    <div className="flex-1 min-w-0 pr-4">
+                                        <p className={`font-bold text-sm ${reminder.is_completed ? 'text-emerald-800 line-through' : 'text-red-800'}`}>{reminder.note}</p>
+                                        <p className="text-xs text-slate-600 mt-1">
+                                            Due: {format(new Date(reminder.reminder_date), 'MMM dd, yyyy')} | Set by: {reminder.profiles?.full_name || 'Admin'}
+                                        </p>
+                                    </div>
+                                    {!reminder.is_completed && (
+                                        <button 
+                                            onClick={() => handleCompleteReminder(reminder.id)}
+                                            disabled={isProcessing}
+                                            className="flex-shrink-0 px-3 py-1 bg-white text-emerald-600 rounded-lg text-xs font-semibold hover:bg-emerald-100 transition-colors disabled:opacity-50"
+                                        >
+                                            <CheckCircle2 className="w-4 h-4 inline mr-1" /> Done
+                                        </button>
+                                    )}
+                                </div>
+                            ))
+                        ) : (
+                            <p className="text-slate-500 text-sm">No reminders set for this client.</p>
+                        )}
+                    </div>
+                </div>
+            )}
+
             {/* Add-on Requests Tab Content */}
             {activeTab === 'addons' && (
                 <div className="bg-white p-6 rounded-xl shadow-lg border border-slate-100">
@@ -1131,7 +1260,7 @@ const AdminClientDetail: React.FC = () => {
                         <form onSubmit={handleApplyDiscount} className="space-y-4">
                             
                             {discountError && (
-                                <div className="p-3 bg-red-100 border border-red-300 text-red-800 rounded-lg text-sm flex items-center gap-2">
+                                <div className="p-3 mb-4 bg-red-100 border border-red-300 text-red-800 rounded-lg text-sm flex items-center gap-2">
                                     <AlertCircle className="w-4 h-4" />
                                     {discountError}
                                 </div>
