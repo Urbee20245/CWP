@@ -164,7 +164,7 @@ const AdminClientDetail: React.FC = () => {
   // Reminder State (NEW)
   const [newReminderNote, setNewReminderNote] = useState('');
   const [newReminderDate, setNewReminderDate] = useState('');
-  const [isReminderSaving, setIsReminderSaving] = useState(false);
+  // Removed isReminderSaving state, using isProcessing instead
 
   const fetchClientData = useCallback(async () => {
     if (!id) return;
@@ -599,7 +599,7 @@ const AdminClientDetail: React.FC = () => {
       e.preventDefault();
       if (!client || !newReminderNote || !newReminderDate || !user) return;
       
-      setIsReminderSaving(true);
+      setIsProcessing(true); // Use global processing state
       setSaveError(null);
       
       try {
@@ -613,11 +613,11 @@ const AdminClientDetail: React.FC = () => {
           alert('Reminder set successfully!');
           setNewReminderNote('');
           setNewReminderDate('');
-          fetchClientData();
+          await fetchClientData(); // Await the fetch
       } catch (e: any) {
           setSaveError(e.message || 'Failed to create reminder.');
       } finally {
-          setIsReminderSaving(false);
+          setIsProcessing(false); // Reset global processing state
       }
   };
   
@@ -628,7 +628,7 @@ const AdminClientDetail: React.FC = () => {
       try {
           await AdminService.completeClientReminder(reminderId);
           alert('Reminder marked complete.');
-          fetchClientData();
+          await fetchClientData();
       } catch (e: any) {
           alert(`Failed to complete reminder: ${e.message}`);
       } finally {
@@ -936,7 +936,7 @@ const AdminClientDetail: React.FC = () => {
                             rows={2}
                             className="w-full p-2 border border-slate-300 rounded-lg text-sm resize-none"
                             required
-                            disabled={isReminderSaving}
+                            disabled={isProcessing}
                         />
                         <div className="flex gap-3 items-center">
                             <input
@@ -945,14 +945,14 @@ const AdminClientDetail: React.FC = () => {
                                 onChange={(e) => setNewReminderDate(e.target.value)}
                                 className="flex-1 p-2 border border-slate-300 rounded-lg text-sm"
                                 required
-                                disabled={isReminderSaving}
+                                disabled={isProcessing}
                             />
                             <button
                                 type="submit"
-                                disabled={isReminderSaving || !newReminderNote || !newReminderDate}
+                                disabled={isProcessing || !newReminderNote || !newReminderDate}
                                 className="py-2 px-4 bg-red-600 text-white rounded-lg text-sm font-semibold hover:bg-red-700 transition-colors disabled:opacity-50 flex items-center justify-center gap-2"
                             >
-                                {isReminderSaving ? <Loader2 className="w-4 h-4 animate-spin" /> : <Plus className="w-4 h-4" />}
+                                {isProcessing ? <Loader2 className="w-4 h-4 animate-spin" /> : <Plus className="w-4 h-4" />}
                                 Set Reminder
                             </button>
                         </div>
