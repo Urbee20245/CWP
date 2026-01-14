@@ -75,7 +75,7 @@ const ClientProjectDetail: React.FC = () => {
         .single();
 
     if (clientError || !clientData) {
-        console.error('Error fetching client record:', clientError);
+        console.error('Client record not found:', clientError);
         setIsLoading(false);
         return;
     }
@@ -106,7 +106,7 @@ const ClientProjectDetail: React.FC = () => {
         milestones (id, name, amount_cents, status, order_index, stripe_invoice_id),
         project_threads (
             id, title, status, created_at, created_by,
-            messages (id, body, created_at, sender_profile_id, profiles (full_name))
+            messages (id, body, created_at, sender_profile_id, profiles (full_name), profiles!sender_profile_id (role))
         )
       `)
       .eq('id', id)
@@ -727,16 +727,30 @@ const ClientProjectDetail: React.FC = () => {
                     {/* Message List */}
                     <div className="h-80 overflow-y-auto space-y-4 p-2 flex flex-col">
                         {activeThread?.messages.length ? (
-                        activeThread.messages.map(message => (
-                            <div key={message.id} className={`flex ${message.sender_profile_id === profile?.id ? 'justify-end' : 'justify-start'}`}>
-                                <div className={`max-w-[85%] p-3 rounded-xl text-sm ${message.sender_profile_id === profile?.id ? 'bg-indigo-600 text-white rounded-br-none' : 'bg-slate-100 text-slate-800 rounded-tl-none'}`}>
-                                    <div className={`text-xs mb-1 ${message.sender_profile_id === profile?.id ? 'text-indigo-200' : 'text-slate-500'}`}>
-                                        {message.sender_profile_id === profile?.id ? 'You' : message.profiles?.full_name || 'Admin'} - {new Date(message.created_at).toLocaleTimeString()}
+                        activeThread.messages.map(message => {
+                            const isClient = message.sender_profile_id === profile?.id;
+                            const senderRole = (message.profiles as any)?.role; // Access role from the nested profile object
+                            
+                            let senderName = 'Unknown';
+                            if (isClient) {
+                                senderName = 'You';
+                            } else if (senderRole === 'admin') {
+                                senderName = 'CWP Support'; // Override for admin messages
+                            } else {
+                                senderName = message.profiles?.full_name || 'Admin';
+                            }
+
+                            return (
+                                <div key={message.id} className={`flex ${isClient ? 'justify-end' : 'justify-start'}`}>
+                                    <div className={`max-w-[85%] p-3 rounded-xl text-sm ${isClient ? 'bg-indigo-600 text-white rounded-br-none' : 'bg-slate-100 text-slate-800 rounded-tl-none'}`}>
+                                        <div className={`text-xs mb-1 ${isClient ? 'text-indigo-200' : 'text-slate-500'}`}>
+                                            {senderName} - {new Date(message.created_at).toLocaleTimeString()}
+                                        </div>
+                                        {message.body}
                                     </div>
-                                    {message.body}
                                 </div>
-                            </div>
-                        ))
+                            );
+                        })
                         ) : (
                         <div className="flex-1 flex items-center justify-center text-slate-500">Start the conversation!</div>
                         )}
