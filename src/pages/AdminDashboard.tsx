@@ -38,12 +38,17 @@ const AdminDashboard: React.FC = () => {
       .select('amount_due')
       .eq('status', 'paid');
       
-    // Fetch New Messages Count (last 24 hours)
+    // Fetch New Messages Count (last 24 hours) - FILTERED BY CLIENT ROLE
     const twentyFourHoursAgo = new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString();
+    
     const { count: newMessagesCount } = await supabase
       .from('messages')
-      .select('*', { count: 'exact', head: true })
-      .gte('created_at', twentyFourHoursAgo);
+      .select(`
+        id, created_at,
+        profiles!sender_profile_id (role)
+      `, { count: 'exact', head: true })
+      .gte('created_at', twentyFourHoursAgo)
+      .eq('profiles.role', 'client'); // Filter messages sent by clients
       
     // Fetch Pending Add-on Requests Count
     const { count: pendingAddonRequestsCount } = await supabase
