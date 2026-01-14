@@ -106,7 +106,7 @@ const ClientProjectDetail: React.FC = () => {
         milestones (id, name, amount_cents, status, order_index, stripe_invoice_id),
         project_threads (
             id, title, status, created_at, created_by,
-            messages (id, body, created_at, sender_profile_id, profiles (full_name), profiles!sender_profile_id (role))
+            messages (id, body, created_at, sender_profile_id, profiles (full_name, role))
         )
       `)
       .eq('id', id)
