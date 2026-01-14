@@ -164,7 +164,7 @@ const AdminClientDetail: React.FC = () => {
   // Reminder State (NEW)
   const [newReminderNote, setNewReminderNote] = useState('');
   const [newReminderDate, setNewReminderDate] = useState('');
-  // Removed isReminderSaving state, using isProcessing instead
+  const [saveError, setSaveError] = useState<string | null>(null); // ADDED missing state
 
   const fetchClientData = useCallback(async () => {
     if (!id) return;
@@ -956,6 +956,12 @@ const AdminClientDetail: React.FC = () => {
                                 Set Reminder
                             </button>
                         </div>
+                        {saveError && (
+                            <div className="p-2 bg-red-100 border border-red-300 text-red-800 rounded-lg text-xs flex items-center gap-2">
+                                <AlertCircle className="w-4 h-4" />
+                                {saveError}
+                            </div>
+                        )}
                     </form>
                     
                     {/* Reminder List */}
