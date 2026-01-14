@@ -21,6 +21,7 @@ interface BillingProduct {
 export interface RevenueMetrics {
   mrr: number;
   activeSubscriptions: number;
+  pendingSubscriptions: number; // NEW FIELD
   newSubscriptions30Days: number;
   canceledSubscriptions30Days: number;
   churnRate: number;
@@ -53,11 +54,12 @@ export async function fetchBillingMetrics(): Promise<RevenueMetrics> {
 
   let mrr = 0;
   let activeSubscriptions = 0;
+  let pendingSubscriptions = 0; // Initialize new counter
   let newSubscriptions30Days = 0;
   let canceledSubscriptions30Days = 0;
   let oneTimeRevenue30Days = 0;
 
-  // 1. Calculate MRR and Active Subscriptions
+  // 1. Calculate MRR, Active, and Pending Subscriptions
   subscriptions.forEach(sub => {
     const product = productMap.get(sub.stripe_price_id);
     if (product && product.billing_type === 'subscription') {
@@ -66,6 +68,11 @@ export async function fetchBillingMetrics(): Promise<RevenueMetrics> {
       if (sub.status === 'active' || sub.status === 'trialing') {
         mrr += monthlyAmount;
         activeSubscriptions++;
+      }
+      
+      // Count pending subscriptions (Stripe statuses for incomplete payment flows)
+      if (sub.status === 'incomplete' || sub.status === 'incomplete_expired' || sub.status === 'past_due') {
+          pendingSubscriptions++;
       }
 
       // New subscriptions (created in last 30 days)
@@ -97,6 +104,7 @@ export async function fetchBillingMetrics(): Promise<RevenueMetrics> {
   return {
     mrr: Math.round(mrr),
     activeSubscriptions,
+    pendingSubscriptions, // Include new metric
     newSubscriptions30Days,
     canceledSubscriptions30Days,
     churnRate: parseFloat(churnRate.toFixed(2)),

@@ -2,7 +2,7 @@
 
 import React, { useState, useEffect } from 'react';
 import AdminLayout from '../components/AdminLayout';
-import { Loader2, DollarSign, TrendingUp, TrendingDown, Users, Zap, Clock, FileText, BarChart3 } from 'lucide-react';
+import { Loader2, DollarSign, TrendingUp, TrendingDown, Users, Zap, Clock, FileText, BarChart3, AlertTriangle } from 'lucide-react';
 import { fetchBillingMetrics, RevenueMetrics } from '../utils/billingMetrics';
 
 const AdminRevenueDashboard: React.FC = () => {
@@ -78,7 +78,7 @@ const AdminRevenueDashboard: React.FC = () => {
                 <h2 className="text-xl font-bold text-slate-900 mb-6 border-b border-slate-100 pb-4">
                     Subscription Activity (30 Days)
                 </h2>
-                <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+                <div className="grid grid-cols-1 md:grid-cols-4 gap-6">
                     <div className="p-4 bg-emerald-50 rounded-lg border border-emerald-200">
                         <p className="text-xs text-emerald-600 uppercase font-semibold mb-1">New Subscriptions</p>
                         <p className="text-2xl font-bold text-slate-900">{metrics?.newSubscriptions30Days}</p>
@@ -87,11 +87,22 @@ const AdminRevenueDashboard: React.FC = () => {
                         <p className="text-xs text-red-600 uppercase font-semibold mb-1">Canceled Subscriptions</p>
                         <p className="text-2xl font-bold text-slate-900">{metrics?.canceledSubscriptions30Days}</p>
                     </div>
+                    <div className="p-4 bg-amber-50 rounded-lg border border-amber-200">
+                        <p className="text-xs text-amber-600 uppercase font-semibold mb-1">Pending Subscriptions</p>
+                        <p className="text-2xl font-bold text-slate-900">{metrics?.pendingSubscriptions}</p>
+                    </div>
                     <div className="p-4 bg-indigo-50 rounded-lg border border-indigo-200">
-                        <p className="text-xs text-indigo-600 uppercase font-semibold mb-1">Total Clients</p>
+                        <p className="text-xs text-indigo-600 uppercase font-semibold mb-1">Total Active Clients</p>
                         <p className="text-2xl font-bold text-slate-900">{metrics?.activeSubscriptions}</p>
                     </div>
                 </div>
+                
+                {metrics?.pendingSubscriptions && metrics.pendingSubscriptions > 0 && (
+                    <div className="mt-6 p-3 bg-amber-100 border border-amber-300 text-amber-800 rounded-lg text-sm flex items-center gap-2">
+                        <AlertTriangle className="w-4 h-4" />
+                        {metrics.pendingSubscriptions} subscriptions are awaiting payment or confirmation.
+                    </div>
+                )}
             </div>
           </>
         )}
