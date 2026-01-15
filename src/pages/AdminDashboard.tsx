@@ -15,12 +15,32 @@ interface ReminderSummary {
     clients: { business_name: string };
 }
 
+interface RecentMessage {
+    id: string;
+    body: string;
+    created_at: string;
+    thread_id: string;
+    project_threads: {
+        project_id: string;
+        projects: {
+            title: string;
+            clients: {
+                business_name: string;
+                id: string;
+            };
+        };
+    };
+}
+
 const AdminDashboard: React.FC = () => {
-  const [stats, setStats] = useState({ totalClients: 0, activeProjects: 0, totalRevenue: 0, newMessages: 0, pendingAddonRequests: 0 });
+  const [stats, setStats] = useState({ totalClients: 0, activeProjects: 0, totalRevenue: 0, pendingAddonRequests: 0 });
   const [reminders, setReminders] = useState<ReminderSummary[]>([]);
+  const [recentMessages, setRecentMessages] = useState<RecentMessage[]>([]); // NEW STATE
   const [isLoading, setIsLoading] = useState(true);
 
   const fetchData = useCallback(async () => {
+    const twentyFourHoursAgo = new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString();
+    
     // Fetch Total Clients Count
     const { count: totalClients } = await supabase
       .from('clients')
@@ -38,25 +58,13 @@ const AdminDashboard: React.FC = () => {
       .select('amount_due')
       .eq('status', 'paid');
       
-    // Fetch New Messages Count (last 24 hours) - FILTERED BY CLIENT ROLE
-    const twentyFourHoursAgo = new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString();
-    
-    const { count: newMessagesCount } = await supabase
-      .from('messages')
-      .select(`
-        id, created_at,
-        profiles!sender_profile_id (role)
-      `, { count: 'exact', head: true })
-      .gte('created_at', twentyFourHoursAgo)
-      .eq('profiles.role', 'client'); // Filter messages sent by clients
-      
     // Fetch Pending Add-on Requests Count
     const { count: pendingAddonRequestsCount } = await supabase
         .from('client_addon_requests')
         .select('*', { count: 'exact', head: true })
         .eq('status', 'requested');
         
-    // NEW: Fetch Pending Reminders
+    // Fetch Pending Reminders
     const { data: remindersData, error: remindersError } = await supabase
         .from('client_reminders')
         .select(`
@@ -72,6 +80,31 @@ const AdminDashboard: React.FC = () => {
     } else {
         setReminders(remindersData as ReminderSummary[] || []);
     }
+    
+    // NEW: Fetch Recent Client Messages (last 24 hours)
+    const { data: messagesData, error: messagesError } = await supabase
+        .from('messages')
+        .select(`
+            id, body, created_at, thread_id,
+            project_threads (
+                project_id,
+                projects (
+                    title,
+                    clients (business_name, id)
+                )
+            ),
+            profiles!sender_profile_id (role)
+        `)
+        .gte('created_at', twentyFourHoursAgo)
+        .eq('profiles.role', 'client') // Only messages sent by clients
+        .order('created_at', { ascending: false })
+        .limit(5);
+        
+    if (messagesError) {
+        console.error('Error fetching recent messages:', messagesError);
+    } else {
+        setRecentMessages(messagesData as RecentMessage[] || []);
+    }
 
     let totalRevenue = 0;
     if (revenueData) {
@@ -82,7 +115,6 @@ const AdminDashboard: React.FC = () => {
         totalClients: totalClients || 0,
         activeProjects: activeProjectsCount || 0,
         totalRevenue: totalRevenue,
-        newMessages: newMessagesCount || 0,
         pendingAddonRequests: pendingAddonRequestsCount || 0,
     });
     setIsLoading(false);
@@ -96,7 +128,7 @@ const AdminDashboard: React.FC = () => {
     { title: 'Total Clients', value: stats.totalClients, icon: Users, color: 'text-indigo-600', bg: 'bg-indigo-50', link: '/admin/clients' },
     { title: 'Active Projects', value: stats.activeProjects, icon: Briefcase, color: 'text-emerald-600', bg: 'bg-emerald-50', link: '/admin/projects' },
     { title: 'Total Revenue', value: `$${stats.totalRevenue.toLocaleString(undefined, { minimumFractionDigits: 0, maximumFractionDigits: 0 })}`, icon: DollarSign, color: 'text-purple-600', bg: 'bg-purple-50', link: '/admin/billing/revenue' },
-    { title: 'New Messages (24h)', value: stats.newMessages, icon: MessageSquare, color: 'text-red-600', bg: 'bg-red-50', link: '/admin/projects' },
+    { title: 'New Messages (24h)', value: recentMessages.length, icon: MessageSquare, color: recentMessages.length > 0 ? 'text-red-600' : 'text-slate-600', bg: recentMessages.length > 0 ? 'bg-red-50' : 'bg-slate-50', link: '/admin/projects' },
   ];
   
   const notificationCard = {
@@ -158,30 +190,38 @@ const AdminDashboard: React.FC = () => {
                   </div>
                 </Link>
                 
-                {/* NEW: Reminders Card */}
+                {/* Recent Messages List */}
                 <div className="md:col-span-3 bg-white p-6 rounded-xl shadow-lg border border-slate-100">
                     <h2 className="text-xl font-bold text-slate-900 mb-4 flex items-center gap-2 border-b border-slate-100 pb-4">
-                        <Bell className="w-5 h-5 text-red-600" /> Upcoming Client Reminders ({reminders.length} Pending)
+                        <MessageSquare className="w-5 h-5 text-red-600" /> Recent Client Messages ({recentMessages.length})
                     </h2>
                     <div className="space-y-3 max-h-40 overflow-y-auto">
-                        {reminders.length > 0 ? (
-                            reminders.map(reminder => (
-                                <Link 
-                                    key={reminder.id} 
-                                    to={`/admin/clients/${reminder.clients.business_name}?tab=reminders`} // Link to client detail page
-                                    className={`p-3 rounded-lg border flex justify-between items-center hover:bg-red-50 transition-colors ${isPast(new Date(reminder.reminder_date)) ? 'bg-red-100 border-red-300' : 'bg-amber-50 border-amber-200'}`}
-                                >
-                                    <div className="flex-1 min-w-0 pr-4">
-                                        <p className="font-bold text-sm text-slate-900 truncate">{reminder.note}</p>
-                                        <p className="text-xs text-slate-600 mt-1">
-                                            Client: {reminder.clients.business_name} | Due: {format(new Date(reminder.reminder_date), 'MMM dd, yyyy')}
-                                        </p>
-                                    </div>
-                                    <Clock className="w-4 h-4 text-red-600 flex-shrink-0" />
-                                </Link>
-                            ))
+                        {recentMessages.length > 0 ? (
+                            recentMessages.map(message => {
+                                const clientName = message.project_threads.projects.clients.business_name;
+                                const projectId = message.project_threads.projects.clients.id;
+                                const projectTitle = message.project_threads.projects.title;
+                                
+                                return (
+                                    <Link 
+                                        key={message.id} 
+                                        to={`/admin/projects/${message.project_threads.projects.clients.id}`} // Link to project detail
+                                        className="p-3 rounded-lg border flex justify-between items-center bg-red-50 border-red-200 hover:bg-red-100 transition-colors"
+                                    >
+                                        <div className="flex-1 min-w-0 pr-4">
+                                            <p className="font-bold text-sm text-slate-900 truncate">
+                                                {clientName} - {projectTitle}
+                                            </p>
+                                            <p className="text-xs text-slate-600 mt-1 truncate">
+                                                "{message.body}"
+                                            </p>
+                                        </div>
+                                        <Clock className="w-4 h-4 text-red-600 flex-shrink-0" />
+                                    </Link>
+                                );
+                            })
                         ) : (
-                            <p className="text-slate-500 text-sm">No pending reminders.</p>
+                            <p className="text-slate-500 text-sm">No new client messages in the last 24 hours.</p>
                         )}
                     </div>
                 </div>
