@@ -175,54 +175,95 @@ const AdminDashboard: React.FC = () => {
               ))}
             </div>
             
-            {/* Notification Cards */}
-            <div className="grid grid-cols-1 md:grid-cols-4 gap-6 mb-12">
-                <Link to={notificationCard.link} className="bg-white p-6 rounded-xl shadow-lg border border-slate-100 hover:shadow-xl hover:border-amber-200 transition-all block">
-                  <div className="flex items-center justify-between">
-                    <p className="text-sm font-medium text-slate-500">{notificationCard.title}</p>
-                    <div className={`w-8 h-8 rounded-full ${notificationCard.bg} flex items-center justify-center ${notificationCard.color}`}>
-                      <notificationCard.icon className="w-4 h-4" />
-                    </div>
-                  </div>
-                  <p className="mt-1 text-3xl font-bold text-slate-900">{notificationCard.value}</p>
-                  <div className="mt-3 text-sm font-medium text-indigo-600 flex items-center gap-1">
-                    Review Requests <ArrowRight className="w-3 h-3" />
-                  </div>
-                </Link>
+            {/* Reminders and Recent Messages Section (New 2-column layout) */}
+            <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-12">
                 
-                {/* Recent Messages List */}
-                <div className="md:col-span-3 bg-white p-6 rounded-xl shadow-lg border border-slate-100">
+                {/* 1. Pending Reminders */}
+                <div className="bg-white p-6 rounded-xl shadow-lg border border-slate-100">
                     <h2 className="text-xl font-bold text-slate-900 mb-4 flex items-center gap-2 border-b border-slate-100 pb-4">
-                        <MessageSquare className="w-5 h-5 text-red-600" /> Recent Client Messages ({recentMessages.length})
+                        <Bell className="w-5 h-5 text-amber-600" /> Pending Reminders ({reminders.filter(r => !isPast(new Date(r.reminder_date))).length})
                     </h2>
                     <div className="space-y-3 max-h-40 overflow-y-auto">
-                        {recentMessages.length > 0 ? (
-                            recentMessages.map(message => {
-                                const clientName = message.project_threads.projects.clients.business_name;
-                                const projectId = message.project_threads.projects.clients.id;
-                                const projectTitle = message.project_threads.projects.title;
-                                
+                        {reminders.length > 0 ? (
+                            reminders.map(reminder => {
+                                const isOverdue = isPast(new Date(reminder.reminder_date));
                                 return (
                                     <Link 
-                                        key={message.id} 
-                                        to={`/admin/projects/${message.project_threads.projects.clients.id}`} // Link to project detail
-                                        className="p-3 rounded-lg border flex justify-between items-center bg-red-50 border-red-200 hover:bg-red-100 transition-colors"
+                                        key={reminder.id} 
+                                        to={`/admin/clients/${reminder.clients.business_name}?tab=reminders`} // Placeholder link to client detail
+                                        className={`p-3 rounded-lg border flex justify-between items-center transition-colors ${isOverdue ? 'bg-red-50 border-red-200 hover:bg-red-100' : 'bg-slate-50 border-slate-200 hover:bg-indigo-50'}`}
                                     >
                                         <div className="flex-1 min-w-0 pr-4">
                                             <p className="font-bold text-sm text-slate-900 truncate">
-                                                {clientName} - {projectTitle}
+                                                {reminder.clients.business_name}
                                             </p>
-                                            <p className="text-xs text-slate-600 mt-1 truncate">
-                                                "{message.body}"
+                                            <p className={`text-xs mt-1 truncate ${isOverdue ? 'text-red-600 font-semibold' : 'text-slate-600'}`}>
+                                                {reminder.note}
                                             </p>
                                         </div>
-                                        <Clock className="w-4 h-4 text-red-600 flex-shrink-0" />
+                                        <div className="flex flex-col items-end flex-shrink-0">
+                                            <Clock className={`w-4 h-4 ${isOverdue ? 'text-red-600' : 'text-slate-500'}`} />
+                                            <span className="text-xs text-slate-500 mt-1">{format(new Date(reminder.reminder_date), 'MMM dd')}</span>
+                                        </div>
                                     </Link>
                                 );
                             })
                         ) : (
-                            <p className="text-slate-500 text-sm">No new client messages in the last 24 hours.</p>
+                            <p className="text-slate-500 text-sm">No pending reminders.</p>
                         )}
+                    </div>
+                </div>
+                
+                {/* 2. Add-on Requests & Recent Messages */}
+                <div className="space-y-6">
+                    {/* Add-on Requests Card */}
+                    <Link to={notificationCard.link} className={`bg-white p-6 rounded-xl shadow-lg border border-slate-100 hover:shadow-xl hover:border-amber-200 transition-all block ${notificationCard.bg}`}>
+                        <div className="flex items-center justify-between">
+                            <p className="text-sm font-medium text-slate-500">{notificationCard.title}</p>
+                            <div className={`w-8 h-8 rounded-full ${notificationCard.bg} flex items-center justify-center ${notificationCard.color}`}>
+                                <notificationCard.icon className="w-4 h-4" />
+                            </div>
+                        </div>
+                        <p className="mt-1 text-3xl font-bold text-slate-900">{notificationCard.value}</p>
+                        <div className="mt-3 text-sm font-medium text-indigo-600 flex items-center gap-1">
+                            Review Requests <ArrowRight className="w-3 h-3" />
+                        </div>
+                    </Link>
+                    
+                    {/* Recent Messages List (Condensed) */}
+                    <div className="bg-white p-6 rounded-xl shadow-lg border border-slate-100">
+                        <h2 className="text-xl font-bold text-slate-900 mb-4 flex items-center gap-2 border-b border-slate-100 pb-4">
+                            <MessageSquare className="w-5 h-5 text-red-600" /> Recent Client Messages
+                        </h2>
+                        <div className="space-y-3 max-h-40 overflow-y-auto">
+                            {recentMessages.length > 0 ? (
+                                recentMessages.map(message => {
+                                    const clientName = message.project_threads.projects.clients.business_name;
+                                    const projectId = message.project_threads.projects.clients.id;
+                                    const projectTitle = message.project_threads.projects.title;
+                                    
+                                    return (
+                                        <Link 
+                                            key={message.id} 
+                                            to={`/admin/projects/${message.project_threads.projects.clients.id}`} 
+                                            className="p-3 rounded-lg border flex justify-between items-center bg-red-50 border-red-200 hover:bg-red-100 transition-colors"
+                                        >
+                                            <div className="flex-1 min-w-0 pr-4">
+                                                <p className="font-bold text-sm text-slate-900 truncate">
+                                                    {clientName} - {projectTitle}
+                                                </p>
+                                                <p className="text-xs text-slate-600 mt-1 truncate">
+                                                    "{message.body.substring(0, 30)}..."
+                                                </p>
+                                            </div>
+                                            <Clock className="w-4 h-4 text-red-600 flex-shrink-0" />
+                                        </Link>
+                                    );
+                                })
+                            ) : (
+                                <p className="text-slate-500 text-sm">No new client messages in the last 24 hours.</p>
+                            )}
+                        </div>
                     </div>
                 </div>
             </div>
