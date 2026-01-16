@@ -115,13 +115,14 @@ const ClientProjectDetail: React.FC = () => {
       .order('order_index', { foreignTable: 'milestones', ascending: true })
       .order('created_at', { foreignTable: 'project_threads', ascending: false })
       .order('created_at', { foreignTable: 'project_threads.messages', ascending: true }) // Nested order for messages
-      .single();
+      .maybeSingle(); // <-- FIX: Use maybeSingle()
 
     if (error) {
       console.error('Error fetching project details:', error);
       setProject(null);
     } else {
       try {
+        // If data is null (maybeSingle() returned no row), mapProjectDTO will throw, which is caught below.
         const projectDTO = mapProjectDTO(data);
         setProject(projectDTO);
         
@@ -156,7 +157,7 @@ const ClientProjectDetail: React.FC = () => {
             .eq('client_acknowledged', false)
             .order('created_at', { ascending: false })
             .limit(1)
-            .single();
+            .maybeSingle();
             
         setLatestPauseLog(logData as PauseLog || null);
         

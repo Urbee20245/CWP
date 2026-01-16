@@ -106,7 +106,7 @@ const AdminProjectDetail: React.FC = () => {
       .order('order_index', { foreignTable: 'milestones', ascending: true })
       .order('created_at', { foreignTable: 'project_threads', ascending: false })
       .order('created_at', { foreignTable: 'project_threads.messages', ascending: true })
-      .single();
+      .maybeSingle(); // <-- FIX: Use maybeSingle()
 
     if (error) {
       console.error('Error fetching project details:', error);
@@ -114,7 +114,7 @@ const AdminProjectDetail: React.FC = () => {
       setFetchError(error.message || 'Failed to load project data.');
     } else {
       try {
-        // Map raw data to safe DTO
+        // If data is null (maybeSingle() returned no row), mapProjectDTO will throw, which is caught below.
         const projectDTO = mapProjectDTO(data);
         setProject(projectDTO);
         setNewProgress(projectDTO.progress_percent);
@@ -498,23 +498,154 @@ const AdminProjectDetail: React.FC = () => {
   
   const handleApplyDepositToMilestone = async (e: React.FormEvent) => {
       e.preventDefault();
-      // Logic removed from client view
+      if (!selectedDepositId || !selectedMilestoneId || !project) return;
+      
+      setIsUpdating(true);
+      
+      try {
+          await AdminService.applyDepositToMilestone(
+              selectedDepositId,
+              selectedMilestoneId,
+              project.id
+          );
+          
+          alert('Deposit applied and milestone marked as paid!');
+          setSelectedDepositId('');
+          setSelectedMilestoneId('');
+          fetchProjectData();
+      } catch (e: any) {
+          alert(`Failed to apply deposit: ${e.message}`);
+      } finally {
+          setIsUpdating(false);
+      }
   };
   
   const handleUpdateDepositRequirement = async () => {
-    // Logic removed from client view
+    if (!project) return;
+    setIsUpdating(true);
+    
+    const amountCents = Math.round((requiredDeposit as number) * 100);
+    
+    let updates: Partial<ProjectDTO> = {
+        required_deposit_cents: amountCents,
+    };
+    
+    if (amountCents > 0 && !project.deposit_paid) {
+        updates.status = 'awaiting_deposit';
+    } else if (amountCents === 0) {
+        updates.deposit_paid = false;
+        if (project.status === 'awaiting_deposit') {
+            updates.status = 'draft'; // Revert status if deposit is removed
+        }
+    }
+    
+    const { error } = await supabase
+        .from('projects')
+        .update(updates)
+        .eq('id', project.id);
+        
+    if (error) {
+        console.error('Error updating deposit requirement:', error);
+        alert('Failed to update deposit requirement.');
+    } else {
+        alert('Deposit requirement updated!');
+        fetchProjectData();
+    }
+    setIsUpdating(false);
   };
   
   const handleSendDepositInvoice = async () => {
-    // Logic removed from client view
+    if (!project || !project.client_id || !project.required_deposit_cents) return;
+    setIsUpdating(true);
+    
+    try {
+        const result = await AdminService.createDepositInvoice(
+            project.client_id,
+            project.required_deposit_cents / 100,
+            `Required Project Deposit for ${project.title}`,
+            project.id
+        );
+        
+        alert(`Deposit invoice sent! Client must pay via hosted URL: ${result.hosted_url}`);
+        fetchProjectData();
+    } catch (e: any) {
+        alert(`Failed to send deposit invoice: ${e.message}`);
+    } finally {
+        setIsUpdating(false);
+    }
   };
   
   const handleUpdateProjectStatus = async (newStatus: ProjectDTO['status']) => {
-    // Logic removed from client view
+    if (!project) return;
+    setIsUpdating(true);
+    
+    const { error } = await supabase
+        .from('projects')
+        .update({ status: newStatus })
+        .eq('id', project.id);
+        
+    if (error) {
+        console.error('Error updating project status:', error);
+        alert('Failed to update project status.');
+    } else {
+        alert(`Project status updated to ${newStatus}!`);
+        fetchProjectData();
+    }
+    setIsUpdating(false);
   };
   
   const handleUpdateServiceStatus = async (newStatus: ProjectServiceStatus) => {
-    // Logic removed from client view
+    if (!project) return;
+    setIsUpdating(true);
+    
+    const action = newStatus === 'paused' || newStatus === 'awaiting_payment' ? 'paused' : 'resumed';
+    
+    let updates: Partial<ProjectDTO> = {
+        service_status: newStatus,
+        sla_paused_at: action === 'paused' ? new Date().toISOString() : null,
+    };
+    
+    // If resuming, calculate the offset days and update the due date
+    if (action === 'resumed' && project.sla_paused_at && project.sla_due_date) {
+        const pausedSince = parseISO(project.sla_paused_at);
+        const pauseDurationDays = differenceInDays(new Date(), pausedSince);
+        const newOffsetDays = project.sla_resume_offset_days + pauseDurationDays;
+        
+        updates.sla_resume_offset_days = newOffsetDays;
+        updates.sla_due_date = adjustSlaDueDate(project.sla_due_date, pauseDurationDays);
+        updates.sla_paused_at = null;
+    }
+
+    try {
+        // 1. Update project status and SLA
+        const { error: updateError } = await supabase
+            .from('projects')
+            .update(updates)
+            .eq('id', project.id);
+            
+        if (updateError) throw updateError;
+
+        // 2. Log the action
+        const { error: logError } = await supabase
+            .from('service_pause_logs')
+            .insert({
+                client_id: project.client_id,
+                project_id: project.id,
+                action: action,
+                internal_note: serviceActionNote,
+            });
+            
+        if (logError) console.error('Error logging service action:', logError);
+
+        alert(`Project service status updated to ${newStatus}!`);
+        setServiceActionNote('');
+        fetchProjectData();
+    } catch (e: any) {
+        console.error('Error updating service status:', e);
+        alert('Failed to update service status.');
+    } finally {
+        setIsUpdating(false);
+    }
   };
   
   // --- Thread Management ---
