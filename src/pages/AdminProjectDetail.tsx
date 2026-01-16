@@ -43,6 +43,7 @@ const AdminProjectDetail: React.FC = () => {
   const { user } = useAuth();
   const [project, setProject] = useState<ProjectDTO | null>(null); // Use ProjectDTO
   const [isLoading, setIsLoading] = useState(true);
+  const [fetchError, setFetchError] = useState<string | null>(null); // New state for fetch errors
   const [newProgress, setNewProgress] = useState(0);
   const [newMessage, setNewMessage] = useState('');
   const [isUpdating, setIsUpdating] = useState(false);
@@ -85,11 +86,9 @@ const AdminProjectDetail: React.FC = () => {
   };
 
   const fetchProjectData = useCallback(async () => {
-    if (!id) {
-        setIsLoading(false);
-        return;
-    }
+    if (!id) return;
     setIsLoading(true);
+    setFetchError(null);
 
     try {
         const { data, error } = await supabase
@@ -165,6 +164,7 @@ const AdminProjectDetail: React.FC = () => {
     } catch (err: any) {
         console.error('Error fetching project details:', err);
         setProject(null);
+        setFetchError(err.message || 'Failed to load project data.');
     } finally {
         setIsLoading(false);
     }
@@ -1002,7 +1002,7 @@ const AdminProjectDetail: React.FC = () => {
                     {/* Thread Selector */}
                     <div className="flex gap-3 mb-4 overflow-x-auto pb-2 border-b border-slate-100">
                         {project.threads.map(thread => (
-                            <div key={thread.id} className="flex items-center gap-1">
+                            <div key={thread.id} className="flex items-center gap-2">
                                 <button
                                     onClick={() => setActiveThreadId(thread.id)}
                                     className={`flex-shrink-0 px-4 py-2 rounded-full text-sm font-semibold transition-all duration-200 ${
@@ -1021,28 +1021,28 @@ const AdminProjectDetail: React.FC = () => {
                                     <button 
                                         onClick={() => handleCloseThread(thread.id)}
                                         disabled={isUpdating}
-                                        className="p-1 text-red-500 hover:bg-red-100 rounded-full"
+                                        className="px-2 py-1 text-xs font-semibold text-red-600 bg-red-100 rounded-md hover:bg-red-200"
                                         title="Close Thread"
                                     >
-                                        <X className="w-4 h-4" />
+                                        Close
                                     </button>
                                 ) : (
-                                    <div className="flex gap-1">
+                                    <div className="flex gap-2">
                                         <button 
                                             onClick={() => handleReopenThread(thread.id)}
                                             disabled={isUpdating}
-                                            className="p-1 text-emerald-500 hover:bg-emerald-100 rounded-full"
+                                            className="px-2 py-1 text-xs font-semibold text-emerald-600 bg-emerald-100 rounded-md hover:bg-emerald-200"
                                             title="Reopen Thread"
                                         >
-                                            <Play className="w-4 h-4" />
+                                            Reopen
                                         </button>
                                         <button 
                                             onClick={() => handleThreadDelete(thread.id)}
                                             disabled={isUpdating}
-                                            className="p-1 text-red-500 hover:bg-red-100 rounded-full"
+                                            className="px-2 py-1 text-xs font-semibold text-red-600 bg-red-100 rounded-md hover:bg-red-200"
                                             title="Delete Thread"
                                         >
-                                            <Trash2 className="w-4 h-4" />
+                                            Delete
                                         </button>
                                     </div>
                                 )}
