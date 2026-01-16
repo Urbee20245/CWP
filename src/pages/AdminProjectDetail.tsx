@@ -43,7 +43,6 @@ const AdminProjectDetail: React.FC = () => {
   const { user } = useAuth();
   const [project, setProject] = useState<ProjectDTO | null>(null); // Use ProjectDTO
   const [isLoading, setIsLoading] = useState(true);
-  const [fetchError, setFetchError] = useState<string | null>(null); // New state for fetch errors
   const [newProgress, setNewProgress] = useState(0);
   const [newMessage, setNewMessage] = useState('');
   const [isUpdating, setIsUpdating] = useState(false);
@@ -86,9 +85,11 @@ const AdminProjectDetail: React.FC = () => {
   };
 
   const fetchProjectData = useCallback(async () => {
-    if (!id) return;
+    if (!id) {
+        setIsLoading(false);
+        return;
+    }
     setIsLoading(true);
-    setFetchError(null);
 
     try {
         const { data, error } = await supabase
@@ -164,7 +165,6 @@ const AdminProjectDetail: React.FC = () => {
     } catch (err: any) {
         console.error('Error fetching project details:', err);
         setProject(null);
-        setFetchError(err.message || 'Failed to load project data.');
     } finally {
         setIsLoading(false);
     }
@@ -759,6 +759,34 @@ const AdminProjectDetail: React.FC = () => {
     }
     return <div dangerouslySetInnerHTML={{ __html: html }} className="prose max-w-none text-sm text-slate-700" />;
   };
+  
+  if (isLoading) {
+    return (
+      <AdminLayout>
+        <div className="min-h-[60vh] flex items-center justify-center">
+          <Loader2 className="w-8 h-8 animate-spin text-indigo-600" />
+        </div>
+      </AdminLayout>
+    );
+  }
+
+  if (!project) {
+    return (
+      <AdminLayout>
+        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-12 text-center">
+          <AlertTriangle className="w-16 h-16 text-red-500 mx-auto mb-6" />
+          <h1 className="text-3xl font-bold text-red-500">Unable to load project details.</h1>
+          <p className="text-slate-500 mt-4">The project may not exist or an error occurred while fetching the data.</p>
+          <button 
+            onClick={() => fetchProjectData()}
+            className="mt-6 px-6 py-3 bg-indigo-600 text-white rounded-lg font-semibold hover:bg-indigo-700 transition-colors flex items-center justify-center gap-2 mx-auto"
+          >
+            <Loader2 className="w-4 h-4" /> Try Again
+          </button>
+        </div>
+      </AdminLayout>
+    );
+  }
   
   const isDepositRequired = project.required_deposit_cents && project.required_deposit_cents > 0;
   const isPaused = project.service_status === 'paused' || project.service_status === 'awaiting_payment';
