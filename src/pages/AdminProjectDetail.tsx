@@ -88,96 +88,90 @@ const AdminProjectDetail: React.FC = () => {
     if (!id) return;
     setIsLoading(true);
     setFetchError(null);
-    
-    const { data, error } = await supabase
-      .from('projects')
-      .select(`
-        *,
-        clients (business_name, billing_email),
-        tasks (id, title, status, due_date),
-        files (id, file_name, file_type, file_size, storage_path, created_at, profiles (full_name)),
-        milestones (id, name, amount_cents, status, order_index, stripe_invoice_id),
-        project_threads (
-            id, title, status, created_at, created_by,
-            messages (id, body, created_at, sender_profile_id, profiles (full_name, role))
-        )
-      `)
-      .eq('id', id)
-      .order('due_date', { foreignTable: 'tasks', ascending: true })
-      .order('order_index', { foreignTable: 'milestones', ascending: true })
-      .order('created_at', { foreignTable: 'project_threads', ascending: false })
-      .order('created_at', { foreignTable: 'project_threads.messages', ascending: true })
-      .maybeSingle();
 
-    if (error) {
-      console.error('Error fetching project details:', error);
-      setProject(null);
-      setFetchError(error.message || 'Failed to load project data.');
-    } else {
-      try {
+    try {
+        const { data, error } = await supabase
+            .from('projects')
+            .select(`
+                *,
+                clients (business_name, billing_email),
+                tasks (id, title, status, due_date),
+                files (id, file_name, file_type, file_size, storage_path, created_at, profiles (full_name)),
+                milestones (id, name, amount_cents, status, order_index, stripe_invoice_id),
+                project_threads (
+                    id, title, status, created_at, created_by,
+                    messages (id, body, created_at, sender_profile_id, profiles (full_name, role))
+                )
+            `)
+            .eq('id', id)
+            .order('due_date', { foreignTable: 'tasks', ascending: true })
+            .order('order_index', { foreignTable: 'milestones', ascending: true })
+            .order('created_at', { foreignTable: 'project_threads', ascending: false })
+            .order('created_at', { foreignTable: 'project_threads.messages', ascending: true })
+            .maybeSingle();
+
+        if (error) throw error;
+        if (!data) throw new Error("Project not found.");
+
         const projectDTO = mapProjectDTO(data);
         setProject(projectDTO);
         setNewProgress(projectDTO.progress_percent);
         setSlaDays(projectDTO.sla_days || '');
         setSlaStartDate(projectDTO.sla_start_date ? format(new Date(projectDTO.sla_start_date), 'yyyy-MM-dd') : '');
         setRequiredDeposit(projectDTO.required_deposit_cents ? projectDTO.required_deposit_cents / 100 : '');
-        
+
         if (projectDTO.threads.length > 0) {
             const openThread = projectDTO.threads.find(t => t.status === 'open');
             setActiveThreadId(openThread?.id || projectDTO.threads[0].id);
         } else {
             setActiveThreadId(null);
         }
-        
+
         if (projectDTO.sla_days && projectDTO.sla_start_date && projectDTO.sla_due_date) {
-          const metrics = calculateSlaMetrics(
-            projectDTO.progress_percent,
-            projectDTO.sla_days,
-            projectDTO.sla_start_date,
-            projectDTO.sla_due_date,
-            projectDTO.sla_paused_at,
-            projectDTO.sla_resume_offset_days
-          );
-          setSlaMetrics(metrics);
-          if (metrics.slaStatus !== projectDTO.sla_status) {
-              await supabase.from('projects').update({ sla_status: metrics.slaStatus }).eq('id', id);
-          }
+            const metrics = calculateSlaMetrics(
+                projectDTO.progress_percent,
+                projectDTO.sla_days,
+                projectDTO.sla_start_date,
+                projectDTO.sla_due_date,
+                projectDTO.sla_paused_at,
+                projectDTO.sla_resume_offset_days
+            );
+            setSlaMetrics(metrics);
+            if (metrics.slaStatus !== projectDTO.sla_status) {
+                await supabase.from('projects').update({ sla_status: metrics.slaStatus }).eq('id', id);
+            }
         } else {
             setSlaMetrics(null);
         }
-        
+
         const { data: logsData, error: logsError } = await supabase
             .from('service_pause_logs')
             .select('*')
             .eq('project_id', id)
             .order('created_at', { ascending: false });
-            
-        if (logsError) {
-            console.error('Error fetching pause logs:', logsError);
-        } else {
-            setPauseLogs(ensureArray(logsData) as PauseLog[] ?? []);
-        }
-        
+        if (logsError) throw logsError;
+        setPauseLogs(ensureArray(logsData) as PauseLog[] ?? []);
+
         const { data: depositsData, error: depositsError } = await supabase
             .from('deposits')
             .select('*')
             .eq('client_id', projectDTO.client_id)
             .order('created_at', { ascending: false });
-            
-        if (depositsError) {
-            console.error('Error fetching deposits:', depositsError);
-        } else {
-            setDeposits(ensureArray(depositsData) as DepositSummary[] ?? []);
-        }
-        
-      } catch (mapError: any) {
-          console.error("Error mapping project DTO:", mapError);
-          setProject(null);
-          setFetchError(mapError.message || 'Failed to process project data.');
-      }
+        if (depositsError) throw depositsError;
+        setDeposits(ensureArray(depositsData) as DepositSummary[] ?? []);
+
+    } catch (err: any) {
+        console.error('Error fetching project details:', err);
+        setProject(null);
+        setFetchError(err.message || 'Failed to load project data.');
+    } finally {
+        setIsLoading(false);
     }
-    setIsLoading(false);
   }, [id]);
+  
+  useEffect(() => {
+    fetchProjectData();
+  }, [fetchProjectData]);
   
   useEffect(() => {
     scrollToBottom();
