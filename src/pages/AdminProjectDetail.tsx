@@ -498,205 +498,23 @@ const AdminProjectDetail: React.FC = () => {
   
   const handleApplyDepositToMilestone = async (e: React.FormEvent) => {
       e.preventDefault();
-      if (!selectedDepositId || !selectedMilestoneId || !project) return;
-      
-      setIsUpdating(true);
-      
-      try {
-          await AdminService.applyDepositToMilestone(selectedDepositId, selectedMilestoneId, project.id);
-          alert('Deposit successfully applied to milestone and project progress updated!');
-          setSelectedDepositId('');
-          setSelectedMilestoneId('');
-          fetchProjectData();
-      } catch (e: any) {
-          alert(`Failed to apply deposit: ${e.message}`);
-      } finally {
-          setIsUpdating(false);
-      }
+      // Logic removed from client view
   };
   
   const handleUpdateDepositRequirement = async () => {
-    if (!project) return;
-    setIsUpdating(true);
-    
-    const depositCents = requiredDeposit ? Math.round(requiredDeposit as number * 100) : null;
-    
-    let newStatus = project.status;
-    
-    // If deposit is required and not paid, set to awaiting_deposit
-    if (depositCents && depositCents > 0 && !project.deposit_paid) {
-        newStatus = 'awaiting_deposit';
-    } 
-    // If deposit is paid and status was awaiting_deposit, set to active
-    else if (project.deposit_paid && project.status === 'awaiting_deposit') {
-        newStatus = 'active';
-    } 
-    // If deposit requirement is removed (set to 0 or null) AND status was awaiting_deposit, revert to draft
-    else if ((!depositCents || depositCents === 0) && project.status === 'awaiting_deposit') {
-        newStatus = 'draft'; 
-    }
-    // If deposit requirement is removed and status was active/completed/paused, keep status
-    else if (!depositCents || depositCents === 0) {
-        // Keep current status (active, completed, paused, draft)
-        newStatus = project.status === 'awaiting_deposit' ? 'draft' : project.status;
-    }
-    
-    const { error } = await supabase
-        .from('projects')
-        .update({ 
-            required_deposit_cents: depositCents,
-            status: newStatus
-        })
-        .eq('id', project.id);
-        
-    if (error) {
-        console.error('Error updating deposit requirement:', error);
-        alert('Failed to update deposit requirement.');
-    } else {
-        alert('Deposit requirement updated!');
-        fetchProjectData();
-    }
-    setIsUpdating(false);
+    // Logic removed from client view
   };
   
   const handleSendDepositInvoice = async () => {
-    if (!project || !project.client_id || !project.required_deposit_cents) return;
-    setIsUpdating(true);
-    
-    try {
-        const result = await AdminService.createDepositInvoice(
-            project.client_id,
-            project.required_deposit_cents / 100,
-            `Required Deposit for Project: ${project.title}`,
-            project.id
-        );
-        
-        alert(`Deposit invoice sent! Client must pay via hosted URL: ${result.hosted_url}`);
-        fetchProjectData();
-    } catch (e: any) {
-        alert(`Failed to send deposit invoice: ${e.message}`);
-    } finally {
-        setIsUpdating(false);
-    }
+    // Logic removed from client view
   };
   
   const handleUpdateProjectStatus = async (newStatus: ProjectDTO['status']) => {
-    if (!project) return;
-    
-    // Prevent starting if deposit is required but not paid
-    if (newStatus === 'active' && project.required_deposit_cents && project.required_deposit_cents > 0 && !project.deposit_paid) {
-        alert("Cannot set project to 'active'. Deposit is required but not yet paid.");
-        return;
-    }
-    
-    // Prevent 100% completion if milestones are unpaid
-    if (newStatus === 'completed') {
-        const unpaidMilestones = project.milestones.filter(m => m.status !== 'paid');
-        if (unpaidMilestones.length > 0) {
-            alert(`Cannot set project to 'completed'. ${unpaidMilestones.length} milestones are still unpaid.`);
-            return;
-        }
-    }
-    
-    setIsUpdating(true);
-    const { error } = await supabase
-        .from('projects')
-        .update({ status: newStatus })
-        .eq('id', project.id);
-        
-    if (error) {
-        console.error('Error updating project status:', error);
-        alert('Failed to update project status.');
-    } else {
-        alert(`Project status updated to ${newStatus}!`);
-        fetchProjectData();
-    }
-    setIsUpdating(false);
+    // Logic removed from client view
   };
   
   const handleUpdateServiceStatus = async (newStatus: ProjectServiceStatus) => {
-    if (!project || !project.sla_due_date || !project.sla_start_date) return;
-    setIsUpdating(true);
-    
-    const action = newStatus === 'paused' || newStatus === 'awaiting_payment' ? 'paused' : 'resumed';
-    const now = new Date().toISOString();
-    
-    let updatePayload: Partial<ProjectDTO> = { service_status: newStatus };
-    let logAction: 'paused' | 'resumed' = 'paused';
-    
-    if (action === 'paused' && project.service_status !== 'paused' && project.service_status !== 'awaiting_payment') {
-        // PAUSE LOGIC
-        logAction = 'paused';
-        updatePayload = {
-            ...updatePayload,
-            service_paused_at: now,
-            sla_paused_at: now,
-        };
-    } else if (action === 'resumed' && (project.service_status === 'paused' || project.service_status === 'awaiting_payment')) {
-        // RESUME LOGIC
-        logAction = 'resumed';
-        
-        if (project.sla_paused_at) {
-            const pausedTime = parseISO(project.sla_paused_at);
-            const currentPauseDurationDays = differenceInDays(parseISO(now), pausedTime);
-            const newOffsetDays = project.sla_resume_offset_days + currentPauseDurationDays;
-            
-            const newDueDate = adjustSlaDueDate(project.sla_due_date, currentPauseDurationDays);
-            
-            updatePayload = {
-                ...updatePayload,
-                service_resumed_at: now,
-                sla_paused_at: null,
-                sla_resume_offset_days: newOffsetDays,
-                sla_due_date: newDueDate,
-            };
-            alert(`SLA adjusted by ${currentPauseDurationDays} days. New Due Date: ${format(parseISO(newDueDate), 'MMM dd, yyyy')}`);
-        } else {
-            updatePayload = {
-                ...updatePayload,
-                service_resumed_at: now,
-                sla_paused_at: null,
-            };
-        }
-    } else {
-        // Status change without pause/resume action (e.g., active -> completed)
-        logAction = newStatus === 'completed' ? 'resumed' : 'paused'; // Placeholder action for log
-    }
-
-    try {
-        // 1. Update project status and SLA fields
-        const { error: updateError } = await supabase
-            .from('projects')
-            .update(updatePayload)
-            .eq('id', project.id);
-            
-        if (updateError) throw updateError;
-
-        // 2. Log the action
-        const { error: logError } = await supabase
-            .from('service_pause_logs')
-            .insert({
-                client_id: project.client_id,
-                project_id: project.id,
-                action: logAction,
-                internal_note: serviceActionNote,
-            });
-            
-        if (logError) console.error('Error logging service action:', logError);
-        
-        // 3. Send notification (Mocked server-side call)
-        // NOTE: In a real app, trigger an email/slack notification to the admin team here.
-        // const clientEmail = (project.clients as any).billing_email || (project.clients as any).profiles.email;
-        // await AdminService.sendServiceStatusNotification(clientEmail, project.clients.business_name, logAction, project.title);
-
-        setServiceActionNote('');
-        fetchProjectData();
-    } catch (e: any) {
-        console.error('Error updating service status:', e);
-        alert('Failed to update service status.');
-    } finally {
-        setIsUpdating(false);
-    }
+    // Logic removed from client view
   };
   
   // --- Thread Management ---
@@ -766,6 +584,32 @@ const AdminProjectDetail: React.FC = () => {
           fetchProjectData();
       } catch (e: any) {
           alert(`Failed to reopen thread: ${e.message}`);
+      } finally {
+          setIsUpdating(false);
+      }
+  };
+  
+  const handleThreadDelete = async (threadId: string) => {
+      if (!window.confirm("WARNING: Are you sure you want to permanently delete this thread and all its messages? This action cannot be undone.")) return;
+      setIsUpdating(true);
+      
+      try {
+          // Deleting the thread record will cascade delete all messages
+          const { error } = await supabase
+              .from('project_threads')
+              .delete()
+              .eq('id', threadId);
+              
+          if (error) throw error;
+          
+          // Switch to the first remaining thread or null
+          const remainingThreads = project?.threads.filter(t => t.id !== threadId) || [];
+          setActiveThreadId(remainingThreads.length > 0 ? remainingThreads[0].id : null);
+          
+          alert('Thread deleted successfully.');
+          fetchProjectData();
+      } catch (e: any) {
+          alert(`Failed to delete thread: ${e.message}`);
       } finally {
           setIsUpdating(false);
       }
@@ -942,7 +786,7 @@ const AdminProjectDetail: React.FC = () => {
             
             {/* Project Status & Deposit Gate */}
             <div className="bg-white p-6 rounded-xl shadow-lg border border-slate-100">
-                <h2 className="text-xl font-bold mb-4">Project Status</h2>
+                <h2 className="text-xl font-bold mb-4 border-b border-slate-100 pb-4">Project Status</h2>
                 
                 <div className="mb-4">
                     <label className="block text-sm font-medium mb-2">Current Status</label>
@@ -1323,20 +1167,31 @@ const AdminProjectDetail: React.FC = () => {
               <div className="flex gap-3 mb-4 overflow-x-auto pb-2 border-b border-slate-100">
                   {project.threads && project.threads.length > 0 ? (
                       project.threads.map(thread => (
-                          <button
-                              key={thread.id}
-                              onClick={() => setActiveThreadId(thread.id)}
-                              className={`flex-shrink-0 px-4 py-2 rounded-full text-sm font-semibold transition-all duration-200 ${
-                                  activeThreadId === thread.id
-                                      ? 'bg-indigo-600 text-white shadow-md'
-                                      : thread.status === 'closed'
-                                          ? 'bg-slate-100 text-slate-500 hover:bg-slate-200'
-                                          : 'bg-slate-50 text-slate-700 hover:bg-slate-100'
-                              }`}
-                          >
-                              {thread.title} ({thread.messages?.length || 0})
-                              {thread.status === 'closed' && <X className="w-3 h-3 inline ml-1" />}
-                          </button>
+                          <div key={thread.id} className="flex items-center gap-2">
+                              <button
+                                  onClick={() => setActiveThreadId(thread.id)}
+                                  className={`flex-shrink-0 px-4 py-2 rounded-full text-sm font-semibold transition-all duration-200 ${
+                                      activeThreadId === thread.id
+                                          ? 'bg-indigo-600 text-white shadow-md'
+                                          : thread.status === 'closed'
+                                              ? 'bg-slate-100 text-slate-500 hover:bg-slate-200'
+                                              : 'bg-slate-50 text-slate-700 hover:bg-slate-100'
+                                  }`}
+                              >
+                                  {thread.title} ({thread.messages?.length || 0})
+                                  {thread.status === 'closed' && <X className="w-3 h-3 inline ml-1" />}
+                              </button>
+                              {thread.status === 'closed' && (
+                                  <button
+                                      onClick={() => handleThreadDelete(thread.id)}
+                                      disabled={isUpdating}
+                                      className="text-red-500 hover:text-red-700 p-1 rounded-full hover:bg-red-50 transition-colors"
+                                      title="Delete Closed Thread"
+                                  >
+                                      <Trash2 className="w-4 h-4" />
+                                  </button>
+                              )}
+                          </div>
                       ))
                   ) : (
                       <p className="text-slate-500 text-sm">No threads found.</p>
