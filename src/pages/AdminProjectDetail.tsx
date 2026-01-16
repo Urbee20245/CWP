@@ -12,6 +12,7 @@ import { AdminService } from '../services/adminService';
 import { useAuth } from '../hooks/useAuth';
 import { mapProjectDTO, ProjectDTO, MilestoneDTO, TaskDTO, FileItemDTO, ThreadDTO } from '../utils/projectMapper'; // Import DTO and Mapper
 import { ensureArray } from '../utils/dataNormalization';
+import { marked } from 'marked';
 
 // Define types locally based on DTOs for clarity
 type Milestone = MilestoneDTO;
@@ -83,7 +84,7 @@ const AdminProjectDetail: React.FC = () => {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
   };
 
-  const fetchProjectData = async () => {
+  const fetchProjectData = useCallback(async () => {
     if (!id) return;
     setIsLoading(true);
     setFetchError(null);
@@ -98,7 +99,7 @@ const AdminProjectDetail: React.FC = () => {
         milestones (id, name, amount_cents, status, order_index, stripe_invoice_id),
         project_threads (
             id, title, status, created_at, created_by,
-            messages (id, body, created_at, sender_profile_id, profiles (full_name))
+            messages (id, body, created_at, sender_profile_id, profiles (full_name, role))
         )
       `)
       .eq('id', id)
@@ -106,7 +107,7 @@ const AdminProjectDetail: React.FC = () => {
       .order('order_index', { foreignTable: 'milestones', ascending: true })
       .order('created_at', { foreignTable: 'project_threads', ascending: false })
       .order('created_at', { foreignTable: 'project_threads.messages', ascending: true })
-      .maybeSingle(); // <-- FIX: Use maybeSingle()
+      .maybeSingle();
 
     if (error) {
       console.error('Error fetching project details:', error);
@@ -114,7 +115,6 @@ const AdminProjectDetail: React.FC = () => {
       setFetchError(error.message || 'Failed to load project data.');
     } else {
       try {
-        // If data is null (maybeSingle() returned no row), mapProjectDTO will throw, which is caught below.
         const projectDTO = mapProjectDTO(data);
         setProject(projectDTO);
         setNewProgress(projectDTO.progress_percent);
@@ -122,7 +122,6 @@ const AdminProjectDetail: React.FC = () => {
         setSlaStartDate(projectDTO.sla_start_date ? format(new Date(projectDTO.sla_start_date), 'yyyy-MM-dd') : '');
         setRequiredDeposit(projectDTO.required_deposit_cents ? projectDTO.required_deposit_cents / 100 : '');
         
-        // Set active thread to the first open thread, or the first thread if none are open
         if (projectDTO.threads.length > 0) {
             const openThread = projectDTO.threads.find(t => t.status === 'open');
             setActiveThreadId(openThread?.id || projectDTO.threads[0].id);
@@ -130,7 +129,6 @@ const AdminProjectDetail: React.FC = () => {
             setActiveThreadId(null);
         }
         
-        // Calculate SLA metrics immediately
         if (projectDTO.sla_days && projectDTO.sla_start_date && projectDTO.sla_due_date) {
           const metrics = calculateSlaMetrics(
             projectDTO.progress_percent,
@@ -141,7 +139,6 @@ const AdminProjectDetail: React.FC = () => {
             projectDTO.sla_resume_offset_days
           );
           setSlaMetrics(metrics);
-          // Update DB status if calculated status differs (optional auto-sync)
           if (metrics.slaStatus !== projectDTO.sla_status) {
               await supabase.from('projects').update({ sla_status: metrics.slaStatus }).eq('id', id);
           }
@@ -149,7 +146,6 @@ const AdminProjectDetail: React.FC = () => {
             setSlaMetrics(null);
         }
         
-        // Fetch Pause Logs
         const { data: logsData, error: logsError } = await supabase
             .from('service_pause_logs')
             .select('*')
@@ -162,7 +158,6 @@ const AdminProjectDetail: React.FC = () => {
             setPauseLogs(ensureArray(logsData) as PauseLog[] ?? []);
         }
         
-        // Fetch Deposits for this client
         const { data: depositsData, error: depositsError } = await supabase
             .from('deposits')
             .select('*')
@@ -182,14 +177,9 @@ const AdminProjectDetail: React.FC = () => {
       }
     }
     setIsLoading(false);
-  };
-
-  useEffect(() => {
-    fetchProjectData();
   }, [id]);
   
   useEffect(() => {
-    // Scroll to bottom whenever the active thread changes or new messages arrive
     scrollToBottom();
   }, [activeThreadId, project?.threads.find(t => t.id === activeThreadId)?.messages.length]);
 
@@ -197,12 +187,11 @@ const AdminProjectDetail: React.FC = () => {
     if (!project) return;
     setIsUpdating(true);
     
-    // Rule: Project cannot reach 100% unless all milestones are paid
     if (newProgress === 100) {
         const unpaidMilestones = project.milestones.filter(m => m.status !== 'paid');
         if (unpaidMilestones.length > 0) {
             alert(`Cannot set progress to 100%. ${unpaidMilestones.length} milestones are still unpaid.`);
-            setNewProgress(project.progress_percent); // Revert local state
+            setNewProgress(project.progress_percent);
             setIsUpdating(false);
             return;
         }
@@ -218,7 +207,7 @@ const AdminProjectDetail: React.FC = () => {
       alert('Failed to update progress.');
     } else {
       alert('Progress updated successfully!');
-      fetchProjectData(); // Re-fetch data to update UI
+      fetchProjectData();
     }
     setIsUpdating(false);
   };
@@ -242,8 +231,8 @@ const AdminProjectDetail: React.FC = () => {
           sla_days: days,
           sla_start_date: new Date(slaStartDate).toISOString(),
           sla_due_date: newSlaDueDate,
-          sla_status: 'on_track', // Reset status on manual update
-          sla_resume_offset_days: 0, // Reset offset days
+          sla_status: 'on_track',
+          sla_resume_offset_days: 0,
           sla_paused_at: null,
       })
       .eq('id', project.id);
@@ -348,7 +337,6 @@ const AdminProjectDetail: React.FC = () => {
 
     setIsUploading(true);
     
-    // 1. Upload file to storage
     const storagePath = `${project.client_id}/${project.id}/${Date.now()}-${fileToUpload.name}`;
 
     const { data: uploadData, error: uploadError } = await supabase.storage
@@ -365,7 +353,6 @@ const AdminProjectDetail: React.FC = () => {
       return;
     }
 
-    // 2. Insert file record into database
     const { error: dbError } = await supabase
       .from('files')
       .insert({
@@ -379,7 +366,6 @@ const AdminProjectDetail: React.FC = () => {
 
     if (dbError) {
       console.error('Error saving file record:', dbError);
-      // Optionally delete file from storage if DB insert fails
       await supabase.storage.from('client_files').remove([storagePath]);
       alert('Failed to save file record.');
     } else {
@@ -416,7 +402,6 @@ const AdminProjectDetail: React.FC = () => {
     
     setIsUpdating(true);
     
-    // 1. Delete from storage
     const { error: storageError } = await supabase.storage
         .from('client_files')
         .remove([storagePath]);
@@ -428,7 +413,6 @@ const AdminProjectDetail: React.FC = () => {
         return;
     }
     
-    // 2. Delete record from database
     const { error: dbError } = await supabase
         .from('files')
         .delete()
@@ -469,7 +453,7 @@ const AdminProjectDetail: React.FC = () => {
     } else {
         setNewMilestoneName('');
         setNewMilestoneAmount('');
-        fetchClientData();
+        fetchProjectData();
     }
     setIsUpdating(false);
   };
@@ -488,7 +472,7 @@ const AdminProjectDetail: React.FC = () => {
         );
         
         alert(`Milestone '${milestone.name}' invoiced successfully! Hosted URL: ${result.hosted_url}`);
-        fetchClientData();
+        fetchProjectData();
     } catch (e: any) {
         alert(`Failed to invoice milestone: ${e.message}`);
     } finally {
@@ -512,7 +496,7 @@ const AdminProjectDetail: React.FC = () => {
           alert('Deposit applied and milestone marked as paid!');
           setSelectedDepositId('');
           setSelectedMilestoneId('');
-          fetchClientData();
+          fetchProjectData();
       } catch (e: any) {
           alert(`Failed to apply deposit: ${e.message}`);
       } finally {
@@ -535,7 +519,7 @@ const AdminProjectDetail: React.FC = () => {
     } else if (amountCents === 0) {
         updates.deposit_paid = false;
         if (project.status === 'awaiting_deposit') {
-            updates.status = 'draft'; // Revert status if deposit is removed
+            updates.status = 'draft';
         }
     }
     
@@ -549,7 +533,7 @@ const AdminProjectDetail: React.FC = () => {
         alert('Failed to update deposit requirement.');
     } else {
         alert('Deposit requirement updated!');
-        fetchClientData();
+        fetchProjectData();
     }
     setIsUpdating(false);
   };
@@ -567,7 +551,7 @@ const AdminProjectDetail: React.FC = () => {
         );
         
         alert(`Deposit invoice sent! Client must pay via hosted URL: ${result.hosted_url}`);
-        fetchClientData();
+        fetchProjectData();
     } catch (e: any) {
         alert(`Failed to send deposit invoice: ${e.message}`);
     } finally {
@@ -589,7 +573,7 @@ const AdminProjectDetail: React.FC = () => {
         alert('Failed to update project status.');
     } else {
         alert(`Project status updated to ${newStatus}!`);
-        fetchClientData();
+        fetchProjectData();
     }
     setIsUpdating(false);
   };
@@ -605,7 +589,6 @@ const AdminProjectDetail: React.FC = () => {
         sla_paused_at: action === 'paused' ? new Date().toISOString() : null,
     };
     
-    // If resuming, calculate the offset days and update the due date
     if (action === 'resumed' && project.sla_paused_at && project.sla_due_date) {
         const pausedSince = parseISO(project.sla_paused_at);
         const pauseDurationDays = differenceInDays(new Date(), pausedSince);
@@ -617,7 +600,6 @@ const AdminProjectDetail: React.FC = () => {
     }
 
     try {
-        // 1. Update project status and SLA
         const { error: updateError } = await supabase
             .from('projects')
             .update(updates)
@@ -625,7 +607,6 @@ const AdminProjectDetail: React.FC = () => {
             
         if (updateError) throw updateError;
 
-        // 2. Log the action
         const { error: logError } = await supabase
             .from('service_pause_logs')
             .insert({
@@ -639,7 +620,7 @@ const AdminProjectDetail: React.FC = () => {
 
         alert(`Project service status updated to ${newStatus}!`);
         setServiceActionNote('');
-        fetchClientData();
+        fetchProjectData();
     } catch (e: any) {
         console.error('Error updating service status:', e);
         alert('Failed to update service status.');
@@ -670,7 +651,7 @@ const AdminProjectDetail: React.FC = () => {
           
           setNewThreadTitle('');
           setActiveThreadId(data.id);
-          fetchClientData();
+          fetchProjectData();
       } catch (e: any) {
           alert(`Failed to create thread: ${e.message}`);
       } finally {
@@ -690,11 +671,10 @@ const AdminProjectDetail: React.FC = () => {
               
           if (error) throw error;
           
-          // Try to switch to the next open thread or the first thread
           const nextOpenThread = project?.threads.find(t => t.id !== threadId && t.status === 'open');
           setActiveThreadId(nextOpenThread?.id || project?.threads.find(t => t.id !== threadId)?.id || null);
           
-          fetchClientData();
+          fetchProjectData();
       } catch (e: any) {
           alert(`Failed to close thread: ${e.message}`);
       } finally {
@@ -712,7 +692,7 @@ const AdminProjectDetail: React.FC = () => {
               
           if (error) throw error;
           setActiveThreadId(threadId);
-          fetchClientData();
+          fetchProjectData();
       } catch (e: any) {
           alert(`Failed to reopen thread: ${e.message}`);
       } finally {
@@ -733,12 +713,11 @@ const AdminProjectDetail: React.FC = () => {
               
           if (error) throw error;
           
-          // Switch to the first remaining thread or null
           const remainingThreads = project?.threads.filter(t => t.id !== threadId) || [];
           setActiveThreadId(remainingThreads.length > 0 ? remainingThreads[0].id : null);
           
           alert('Thread deleted successfully.');
-          fetchClientData();
+          fetchProjectData();
       } catch (e: any) {
           alert(`Failed to delete thread: ${e.message}`);
       } finally {
@@ -777,10 +756,8 @@ const AdminProjectDetail: React.FC = () => {
   };
   
   const renderDocumentContent = (content: string) => {
-    // Simple markdown to HTML conversion for display
     let html = content;
     try {
-        // Use marked for robust markdown rendering
         html = marked.parse(content);
     } catch (e) {
         html = `<p style='color: red;'>Error rendering markdown: ${e}</p>`;
@@ -788,68 +765,53 @@ const AdminProjectDetail: React.FC = () => {
     return <div dangerouslySetInnerHTML={{ __html: html }} className="prose max-w-none text-sm text-slate-700" />;
   };
   
-  const isDepositRequired = project.required_deposit_cents && project.required_deposit_cents > 0;
-  const isPaused = project.service_status === 'paused' || project.service_status === 'awaiting_payment';
+  const isDepositRequired = project?.required_deposit_cents && project.required_deposit_cents > 0;
+  const isPaused = project?.service_status === 'paused' || project?.service_status === 'awaiting_payment';
 
-  const renderHelpIcon = (message: string) => (
-      <HelpPopover 
-          title="Section Info"
-          content={message}
-          className="ml-2"
-      />
-  );
+  if (isLoading) {
+    return (
+      <AdminLayout>
+        <div className="min-h-[60vh] flex items-center justify-center">
+          <Loader2 className="w-8 h-8 animate-spin text-indigo-600" />
+        </div>
+      </AdminLayout>
+    );
+  }
+
+  if (fetchError || !project) {
+    return (
+      <AdminLayout>
+        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-12 text-center">
+          <AlertTriangle className="w-16 h-16 text-red-500 mx-auto mb-6" />
+          <h1 className="text-3xl font-bold text-red-500">Unable to load project details.</h1>
+          <p className="text-slate-500 mt-4">Error: {fetchError || 'Project not found or data is corrupted.'}</p>
+          <button 
+            onClick={() => fetchProjectData()}
+            className="mt-6 px-6 py-3 bg-indigo-600 text-white rounded-lg font-semibold hover:bg-indigo-700 transition-colors flex items-center justify-center gap-2 mx-auto"
+          >
+            <Loader2 className="w-4 h-4" /> Try Again
+          </button>
+        </div>
+      </AdminLayout>
+    );
+  }
 
   return (
-    <ClientLayout>
+    <AdminLayout>
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-12">
-        <Link to="/client/dashboard" className="text-indigo-600 hover:text-indigo-800 text-sm font-medium mb-4 block">
-          ← Back to Projects
+        <Link to="/admin/projects" className="text-indigo-600 hover:text-indigo-800 text-sm font-medium mb-4 block">
+          ← Back to Project List
         </Link>
         
-        {/* Service Status Banner (Non-blocking) */}
-        <ServiceStatusBanner status={project.service_status} type="project" />
-
-        {/* Client Acknowledgment Banner */}
-        {isPaused && latestPauseLog && !latestPauseLog.client_acknowledged && (
-            <div className="p-4 mb-8 bg-indigo-50 border border-indigo-200 rounded-xl flex justify-between items-center">
-                <div className="flex items-center gap-3">
-                    <AlertTriangle className="w-5 h-5 text-indigo-600 flex-shrink-0" />
-                    <p className="text-sm text-indigo-800">
-                        <strong>Action Required:</strong> Please acknowledge the service pause.
-                    </p>
-                </div>
-                <button 
-                    onClick={handleAcknowledgePause}
-                    className="text-indigo-600 hover:text-indigo-800 text-sm font-medium flex-shrink-0 px-4 py-2 bg-white rounded-lg border border-indigo-300 hover:bg-indigo-100"
-                >
-                    <CheckCircle2 className="w-4 h-4 inline mr-1" /> Acknowledge
-                </button>
-            </div>
-        )}
-
-        {/* Overdue Warning Banner (Non-blocking) */}
-        {showOverdueBanner && (
-            <div className="p-4 mb-8 bg-amber-50 border border-amber-200 rounded-xl flex justify-between items-center">
-                <div className="flex items-center gap-3">
-                    <AlertTriangle className="w-5 h-5 text-amber-600 flex-shrink-0" />
-                    <p className="text-sm text-amber-800">
-                        <strong>Billing Notice:</strong> You have one or more overdue invoices. Please visit the billing section to resolve.
-                    </p>
-                </div>
-                <Link to="/client/billing" className="text-amber-600 hover:text-amber-800 text-sm font-medium flex-shrink-0">
-                    View Billing
-                </Link>
-            </div>
-        )}
-
-        <h1 className="text-3xl font-bold text-slate-900 mb-2 flex items-center gap-3 relative">
-          <Briefcase className="w-7 h-7 text-indigo-600" />
-          {project.title}
-          <HelpPopover 
-              title="Project Detail View"
-              content="Track progress, view milestones, communicate with the team via threads, and share/download project files."
-          />
-        </h1>
+        <div className="flex justify-between items-center mb-2">
+            <h1 className="text-3xl font-bold text-slate-900 flex items-center gap-3">
+                <Briefcase className="w-7 h-7 text-indigo-600" />
+                {project.title}
+            </h1>
+            <Link to={`/admin/clients/${project.client_id}`} className="text-sm font-medium text-slate-600 hover:text-indigo-600 flex items-center gap-1">
+                Client: {project.clients.business_name} <ExternalLink className="w-4 h-4" />
+            </Link>
+        </div>
         <p className="text-slate-500 mb-8">{project.description}</p>
 
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
@@ -857,108 +819,148 @@ const AdminProjectDetail: React.FC = () => {
           {/* Left Column: Progress, SLA & Tasks */}
           <div className="lg:col-span-1 space-y-8">
             
-            {/* Progress View */}
+            {/* Progress Update */}
             <div className="bg-white p-6 rounded-xl shadow-lg border border-slate-100">
-              <h2 className="text-xl font-bold mb-4 flex items-center gap-2">
-                Project Progress
-                {renderHelpIcon("Progress is updated by the project manager based on task completion and milestone delivery.")}
-              </h2>
-              <div className="text-4xl font-bold text-indigo-600 mb-4">{project.progress_percent}%</div>
-              
-              <div className="w-full bg-slate-200 rounded-full h-3 mb-4">
-                <div 
-                  className={`${getProgressColor(project.progress_percent)} h-3 rounded-full transition-all duration-500`} 
-                  style={{ width: `${project.progress_percent}%` }}
-                ></div>
+              <h2 className="text-xl font-bold mb-4 border-b border-slate-100 pb-4">Update Progress</h2>
+              <div className="mb-4">
+                <label className="block text-sm font-medium text-slate-700 mb-2">Current Progress: {newProgress}%</label>
+                <input
+                  type="range"
+                  min="0"
+                  max="100"
+                  step="5"
+                  value={newProgress}
+                  onChange={(e) => setNewProgress(parseInt(e.target.value))}
+                  className="w-full h-2 bg-slate-200 rounded-lg appearance-none cursor-pointer range-lg"
+                  disabled={isUpdating}
+                />
               </div>
-
-              <p className="text-sm text-slate-600">{completedTasks}/{totalTasks} Tasks Completed</p>
+              <button
+                onClick={handleProgressUpdate}
+                disabled={isUpdating}
+                className="w-full py-2 bg-indigo-600 text-white rounded-lg text-sm font-semibold hover:bg-indigo-700 transition-colors disabled:opacity-50 flex items-center justify-center gap-2"
+              >
+                {isUpdating ? <Loader2 className="w-4 h-4 animate-spin" /> : <CheckCircle2 className="w-4 h-4" />}
+                Update Progress
+              </button>
             </div>
             
-            {/* Deposit Status */}
-            {isDepositRequired && (
-                <div className={`p-6 rounded-xl border ${project.deposit_paid ? 'bg-emerald-50 border-emerald-200' : 'bg-red-50 border-red-200'} shadow-lg`}>
-                    <h2 className="text-xl font-bold mb-2 flex items-center gap-2">
-                        <DollarSign className="w-5 h-5" /> Deposit Required
-                    </h2>
-                    <p className="text-lg font-bold mt-1 text-slate-900">
-                        Required: ${project.required_deposit_cents ? (project.required_deposit_cents / 100).toFixed(2) : 'N/A'}
-                    </p>
-                    <p className={`text-sm font-semibold mt-2 ${project.deposit_paid ? 'text-emerald-700' : 'text-red-700'}`}>
-                        Status: {project.deposit_paid ? 'PAID' : 'AWAITING PAYMENT'}
-                    </p>
-                    
-                    {!project.deposit_paid && (
-                        <button 
-                            onClick={handlePayDeposit}
-                            disabled={isPayingDeposit}
-                            className="mt-4 w-full py-3 bg-indigo-600 text-white rounded-lg font-semibold hover:bg-indigo-700 transition-colors disabled:opacity-50 flex items-center justify-center gap-2"
-                        >
-                            {isPayingDeposit ? (
-                                <>
-                                    <Loader2 className="w-5 h-5 animate-spin" /> Redirecting...
-                                </>
-                            ) : (
-                                <>
-                                    <DollarSign className="w-5 h-5" /> Pay Deposit Now
-                                </>
-                            )}
-                        </button>
-                    )}
-                </div>
-            )}
-            
-            {/* SLA Status (Client View) */}
-            {project.sla_due_date && slaMetrics && (
-                <div className="bg-white p-6 rounded-xl shadow-lg border border-slate-100">
-                    <h2 className="text-xl font-bold mb-4 flex items-center gap-2 border-b border-slate-100 pb-4">
-                        <Clock className="w-5 h-5 text-red-600" /> Project Timeline
-                        {renderHelpIcon("The Service Level Agreement (SLA) tracks the project timeline. It pauses when the service status is paused or awaiting payment.")}
-                    </h2>
-                    <div className="space-y-3">
-                        <div className="flex justify-between items-center">
-                            <p className="text-sm font-medium text-slate-700">Status:</p>
-                            <span className={`px-2 py-0.5 rounded-full text-sm font-bold ${getSlaColor(slaMetrics.slaStatus)}`}>
-                                {slaMetrics.slaStatus.replace('_', ' ')}
-                            </span>
-                        </div>
-                        <div className="flex justify-between items-center">
-                            <p className="text-sm font-medium text-slate-700">Due Date:</p>
-                            <p className="text-sm text-slate-600">{format(new Date(project.sla_due_date), 'MMM dd, yyyy')}</p>
-                        </div>
-                        <div className="flex justify-between items-center">
-                            <p className="text-sm font-medium text-slate-700">Days Remaining:</p>
-                            <p className={`text-sm font-bold ${slaMetrics.daysRemaining < 0 ? 'text-red-600' : 'text-emerald-600'}`}>
-                                {slaMetrics.daysRemaining}
-                            </p>
-                        </div>
-                        {project.sla_paused_at && (
-                            <div className="flex justify-between items-center text-xs text-amber-600 pt-2 border-t border-slate-100">
-                                <span>SLA Paused Since:</span>
-                                <span>{format(new Date(project.sla_paused_at), 'MMM dd')}</span>
-                            </div>
-                        )}
-                    </div>
-                </div>
-            )}
-
-            {/* Tasks List */}
+            {/* SLA Management */}
             <div className="bg-white p-6 rounded-xl shadow-lg border border-slate-100">
-              <h2 className="text-xl font-bold mb-4 flex items-center gap-2 border-b border-slate-100 pb-4">
-                <CheckCircle2 className="w-5 h-5 text-emerald-600" /> Tasks
-                {renderHelpIcon("Tasks are the individual steps required to complete the project. They are managed by the admin team.")}
-              </h2>
+              <h2 className="text-xl font-bold mb-4 border-b border-slate-100 pb-4">SLA Management</h2>
+              
+              {project.sla_due_date && slaMetrics ? (
+                  <div className="mb-4 p-3 rounded-lg border border-slate-200">
+                      <p className="text-xs text-slate-500 uppercase font-semibold mb-1">Current SLA Status</p>
+                      <div className="flex justify-between items-center">
+                          <span className={`px-2 py-0.5 rounded-full text-sm font-bold ${getSlaColor(slaMetrics.slaStatus)}`}>
+                              {slaMetrics.slaStatus.replace('_', ' ')}
+                          </span>
+                          <span className="text-sm font-bold text-slate-900">{slaMetrics.daysRemaining} Days Left</span>
+                      </div>
+                      <p className="text-xs text-slate-500 mt-2">Due: {format(new Date(project.sla_due_date), 'MMM dd, yyyy')}</p>
+                      {project.sla_paused_at && (
+                          <p className="text-xs text-amber-600 mt-1">Paused Since: {format(parseISO(project.sla_paused_at), 'MMM dd')}</p>
+                      )}
+                  </div>
+              ) : (
+                  <p className="text-sm text-slate-500 mb-4">SLA not configured.</p>
+              )}
+              
+              <h3 className="font-bold text-sm mb-2">Set/Reset SLA</h3>
               <div className="space-y-3">
+                  <div>
+                      <label className="block text-xs font-medium text-slate-600 mb-1">Total SLA Days</label>
+                      <input
+                          type="number"
+                          value={slaDays}
+                          onChange={(e) => setSlaDays(parseInt(e.target.value) || '')}
+                          placeholder="e.g., 45"
+                          className="w-full p-2 border border-slate-300 rounded-lg text-sm"
+                          disabled={isUpdating}
+                      />
+                  </div>
+                  <div>
+                      <label className="block text-xs font-medium text-slate-600 mb-1">Start Date</label>
+                      <input
+                          type="date"
+                          value={slaStartDate}
+                          onChange={(e) => setSlaStartDate(e.target.value)}
+                          className="w-full p-2 border border-slate-300 rounded-lg text-sm"
+                          disabled={isUpdating}
+                      />
+                  </div>
+                  <button
+                      onClick={handleSlaUpdate}
+                      disabled={isUpdating || !slaDays || !slaStartDate}
+                      className="w-full py-2 bg-red-600 text-white rounded-lg text-sm font-semibold hover:bg-red-700 transition-colors disabled:opacity-50 flex items-center justify-center gap-2"
+                  >
+                      <Clock className="w-4 h-4" /> Set/Reset SLA
+                  </button>
+              </div>
+            </div>
+            
+            {/* Task Management */}
+            <div className="bg-white p-6 rounded-xl shadow-lg border border-slate-100">
+              <h2 className="text-xl font-bold mb-4 border-b border-slate-100 pb-4">Task Management</h2>
+              
+              <h3 className="font-bold text-sm mb-2">Add New Task</h3>
+              <form onSubmit={handleTaskCreation} className="space-y-3 mb-6">
+                  <input
+                      type="text"
+                      value={newTaskTitle}
+                      onChange={(e) => setNewTaskTitle(e.target.value)}
+                      placeholder="Task Title"
+                      className="w-full p-2 border border-slate-300 rounded-lg text-sm"
+                      required
+                      disabled={isUpdating}
+                  />
+                  <input
+                      type="date"
+                      value={newTaskDueDate}
+                      onChange={(e) => setNewTaskDueDate(e.target.value)}
+                      className="w-full p-2 border border-slate-300 rounded-lg text-sm"
+                      disabled={isUpdating}
+                  />
+                  <button
+                      type="submit"
+                      disabled={isUpdating || !newTaskTitle}
+                      className="w-full py-2 bg-emerald-600 text-white rounded-lg text-sm font-semibold hover:bg-emerald-700 transition-colors disabled:opacity-50 flex items-center justify-center gap-2"
+                  >
+                      <Plus className="w-4 h-4" /> Add Task
+                  </button>
+              </form>
+              
+              <h3 className="font-bold text-sm mb-2 border-t border-slate-100 pt-4">Task List ({totalTasks})</h3>
+              <div className="space-y-3 max-h-60 overflow-y-auto">
                 {project.tasks.length > 0 ? (
                   project.tasks.map(task => (
                     <div key={task.id} className="p-3 bg-slate-50 rounded-lg border border-slate-100 flex justify-between items-center">
-                      <div>
-                        <p className="font-medium text-sm text-slate-900">{task.title}</p>
+                      <div className="flex-1 min-w-0 pr-2">
+                        <p className="font-medium text-sm text-slate-900 truncate">{task.title}</p>
                         {task.due_date && <p className="text-xs text-slate-500 mt-0.5">Due: {new Date(task.due_date).toLocaleDateString()}</p>}
                       </div>
-                      <span className={`px-2 py-0.5 rounded-full text-xs font-semibold ${task.status === 'done' ? 'bg-emerald-100 text-emerald-800' : 'bg-amber-100 text-amber-800'}`}>
-                        {task.status.replace('_', ' ')}
-                      </span>
+                      <div className="flex items-center gap-2 flex-shrink-0">
+                          <select
+                              value={task.status}
+                              onChange={(e) => handleTaskStatusUpdate(task.id, e.target.value as Task['status'])}
+                              className={`px-2 py-1 rounded-full text-xs font-semibold border ${task.status === 'done' ? 'bg-emerald-100 text-emerald-800 border-emerald-300' : 'bg-amber-100 text-amber-800 border-amber-300'}`}
+                              disabled={isUpdating}
+                          >
+                              <option value="todo">To Do</option>
+                              <option value="in_progress">In Progress</option>
+                              <option value="done">Done</option>
+                              <option value="blocked">Blocked</option>
+                          </select>
+                          <button 
+                              onClick={() => handleTaskStatusUpdate(task.id, 'done')}
+                              disabled={isUpdating || task.status === 'done'}
+                              className="text-emerald-600 hover:text-emerald-800 disabled:opacity-50"
+                              title="Mark as Done"
+                          >
+                              <CheckCircle2 className="w-4 h-4" />
+                          </button>
+                      </div>
                     </div>
                   ))
                 ) : (
@@ -974,12 +976,6 @@ const AdminProjectDetail: React.FC = () => {
             {/* Tabs Navigation */}
             <div className="border-b border-slate-200">
                 <nav className="-mb-px flex space-x-8">
-                    <button
-                        onClick={() => setActiveTab('documents')}
-                        className={`whitespace-nowrap py-4 px-1 border-b-2 font-medium text-sm transition-colors ${activeTab === 'documents' ? 'border-indigo-600 text-indigo-600' : 'border-transparent text-slate-500 hover:text-slate-700 hover:border-slate-300'}`}
-                    >
-                        Documents ({documents.length})
-                    </button>
                     <button
                         onClick={() => setActiveTab('messages')}
                         className={`whitespace-nowrap py-4 px-1 border-b-2 font-medium text-sm transition-colors ${activeTab === 'messages' ? 'border-indigo-600 text-indigo-600' : 'border-transparent text-slate-500 hover:text-slate-700 hover:border-slate-300'}`}
@@ -1001,73 +997,61 @@ const AdminProjectDetail: React.FC = () => {
                 </nav>
             </div>
             
-            {/* Tab Content */}
-            
-            {/* Documents Tab */}
-            {activeTab === 'documents' && (
-                <div className="bg-white p-6 rounded-xl shadow-lg border border-slate-100">
-                    <h2 className="text-xl font-bold mb-4 flex items-center gap-2 border-b border-slate-100 pb-4">
-                        <Bot className="w-5 h-5 text-emerald-600" /> Shared Documents
-                        {renderHelpIcon("This section contains legal documents (T&Cs, Privacy Policy) and strategy documents shared by the admin team.")}
-                    </h2>
-                    
-                    {documents.length === 0 ? (
-                        <div className="text-center p-8 bg-slate-50 rounded-lg text-slate-500">
-                            No legal drafts or documents have been shared by the admin team yet.
-                        </div>
-                    ) : (
-                        <div className="space-y-4">
-                            {documents.map(doc => (
-                                <div key={doc.id} className="p-4 bg-slate-50 rounded-lg border border-slate-200">
-                                    <div className="flex justify-between items-center">
-                                        <p className="font-bold text-slate-900">{doc.document_type} (v{doc.version})</p>
-                                        <p className="text-xs text-slate-500">{format(new Date(doc.created_at), 'MMM dd, yyyy')}</p>
-                                    </div>
-                                    
-                                    {expandedDocId === doc.id && (
-                                        <div className="mt-4 p-3 bg-white border border-slate-200 rounded-lg">
-                                            {renderDocumentContent(doc.content)}
-                                        </div>
-                                    )}
-                                    <button 
-                                        onClick={() => setExpandedDocId(expandedDocId === doc.id ? null : doc.id)}
-                                        className="mt-2 text-xs text-indigo-600 hover:text-indigo-800 font-medium flex items-center gap-1"
-                                    >
-                                        {expandedDocId === doc.id ? 'Hide Document' : 'View Document'}
-                                        {expandedDocId === doc.id ? <ChevronUp className="w-3 h-3" /> : <ChevronDown className="w-3 h-3" />}
-                                    </button>
-                                </div>
-                            ))}
-                        </div>
-                    )}
-                </div>
-            )}
-            
             {/* Messages Tab */}
             {activeTab === 'messages' && (
                 <div className="bg-white p-6 rounded-xl shadow-lg border border-slate-100">
                     <h2 className="text-xl font-bold mb-4 flex items-center gap-2 border-b border-slate-100 pb-4">
                         <MessageSquare className="w-5 h-5 text-indigo-600" /> Project Threads
-                        {renderHelpIcon("Use threads to discuss specific topics with the project team. Start a new thread for a new topic.")}
                     </h2>
                     
                     {/* Thread Selector */}
                     <div className="flex gap-3 mb-4 overflow-x-auto pb-2 border-b border-slate-100">
                         {project.threads.map(thread => (
-                            <button
-                                key={thread.id}
-                                onClick={() => setActiveThreadId(thread.id)}
-                                className={`flex-shrink-0 px-4 py-2 rounded-full text-sm font-semibold transition-all duration-200 ${
-                                    activeThreadId === thread.id
-                                        ? 'bg-indigo-600 text-white shadow-md'
-                                        : thread.status === 'closed'
-                                            ? 'bg-slate-100 text-slate-500 hover:bg-slate-200'
-                                            : 'bg-slate-50 text-slate-700 hover:bg-slate-100'
-                                }`}
-                            >
-                                {thread.title} ({thread.messages.length})
-                                {thread.status === 'closed' && <X className="w-3 h-3 inline ml-1" />}
-                            </button>
+                            <div key={thread.id} className="flex items-center gap-1">
+                                <button
+                                    onClick={() => setActiveThreadId(thread.id)}
+                                    className={`flex-shrink-0 px-4 py-2 rounded-full text-sm font-semibold transition-all duration-200 ${
+                                        activeThreadId === thread.id
+                                            ? 'bg-indigo-600 text-white shadow-md'
+                                            : thread.status === 'closed'
+                                                ? 'bg-slate-100 text-slate-500 hover:bg-slate-200'
+                                                : 'bg-slate-50 text-slate-700 hover:bg-slate-100'
+                                    }`}
+                                >
+                                    {thread.title} ({thread.messages.length})
+                                </button>
+                                
+                                {/* Thread Actions */}
+                                {thread.status === 'open' ? (
+                                    <button 
+                                        onClick={() => handleCloseThread(thread.id)}
+                                        disabled={isUpdating}
+                                        className="p-1 text-red-500 hover:bg-red-100 rounded-full"
+                                        title="Close Thread"
+                                    >
+                                        <X className="w-4 h-4" />
+                                    </button>
+                                ) : (
+                                    <div className="flex gap-1">
+                                        <button 
+                                            onClick={() => handleReopenThread(thread.id)}
+                                            disabled={isUpdating}
+                                            className="p-1 text-emerald-500 hover:bg-emerald-100 rounded-full"
+                                            title="Reopen Thread"
+                                        >
+                                            <Play className="w-4 h-4" />
+                                        </button>
+                                        <button 
+                                            onClick={() => handleThreadDelete(thread.id)}
+                                            disabled={isUpdating}
+                                            className="p-1 text-red-500 hover:bg-red-100 rounded-full"
+                                            title="Delete Thread"
+                                        >
+                                            <Trash2 className="w-4 h-4" />
+                                        </button>
+                                    </div>
+                                )}
+                            </div>
                         ))}
                     </div>
                     
@@ -1076,7 +1060,7 @@ const AdminProjectDetail: React.FC = () => {
                         <div className="mb-4 p-3 bg-slate-50 rounded-lg border border-slate-200">
                             <h3 className="font-bold text-slate-900 text-lg">{activeThread.title}</h3>
                             {activeThread.status === 'closed' && (
-                                <p className="text-sm text-red-600 mt-1">This thread is closed. Please start a new one for a new topic.</p>
+                                <p className="text-sm text-red-600 mt-1">This thread is closed. Reopen to send messages.</p>
                             )}
                         </div>
                     )}
@@ -1085,25 +1069,25 @@ const AdminProjectDetail: React.FC = () => {
                     <div className="h-80 overflow-y-auto space-y-4 p-2 flex flex-col">
                         {activeThread?.messages.length ? (
                         activeThread.messages.map(message => {
-                            const isClient = message.sender_profile_id === profile?.id;
-                            const senderRole = (message.profiles as any)?.role; // Access role from the nested profile object
-                            
-                            let senderName = 'Unknown';
-                            if (isClient) {
-                                senderName = 'You';
-                            } else if (senderRole === 'admin') {
-                                senderName = 'CWP Support'; // Override for admin messages
-                            } else {
-                                senderName = message.profiles?.full_name || 'Admin';
-                            }
+                            const isClient = (message.profiles as any)?.role === 'client';
+                            const senderName = message.profiles?.full_name || 'Admin';
 
                             return (
-                                <div key={message.id} className={`flex ${isClient ? 'justify-end' : 'justify-start'}`}>
-                                    <div className={`max-w-[85%] p-3 rounded-xl text-sm ${isClient ? 'bg-indigo-600 text-white rounded-br-none' : 'bg-slate-100 text-slate-800 rounded-tl-none'}`}>
-                                        <div className={`text-xs mb-1 ${isClient ? 'text-indigo-200' : 'text-slate-500'}`}>
-                                            {senderName} - {new Date(message.created_at).toLocaleTimeString()}
+                                <div key={message.id} className={`flex ${isClient ? 'justify-start' : 'justify-end'}`}>
+                                    <div className={`max-w-[85%] p-3 rounded-xl text-sm ${isClient ? 'bg-slate-100 text-slate-800 rounded-tl-none' : 'bg-indigo-600 text-white rounded-br-none'}`}>
+                                        <div className={`text-xs mb-1 ${isClient ? 'text-slate-500' : 'text-indigo-200'} flex justify-between items-center`}>
+                                            <span>{senderName}</span>
+                                            <span className="text-xs text-slate-400 ml-2">{new Date(message.created_at).toLocaleTimeString()}</span>
                                         </div>
                                         {message.body}
+                                        <button 
+                                            onClick={() => handleMessageDelete(message.id)}
+                                            disabled={isUpdating}
+                                            className={`mt-1 text-red-300 hover:text-red-100 text-xs float-right ${isClient ? 'text-red-300' : 'text-red-100'}`}
+                                            title="Delete Message"
+                                        >
+                                            <Trash2 className="w-3 h-3 inline" />
+                                        </button>
                                     </div>
                                 </div>
                             );
@@ -1120,7 +1104,7 @@ const AdminProjectDetail: React.FC = () => {
                             <textarea
                             value={newMessage}
                             onChange={(e) => setNewMessage(e.target.value)}
-                            placeholder="Send a message to the team..."
+                            placeholder="Send a message to the client..."
                             rows={2}
                             className="flex-1 p-3 border border-slate-300 rounded-lg text-sm resize-none focus:border-indigo-500 outline-none"
                             />
@@ -1130,7 +1114,7 @@ const AdminProjectDetail: React.FC = () => {
                         </form>
                     ) : (
                         <div className="mt-4 p-3 bg-slate-100 text-slate-600 rounded-lg text-sm text-center">
-                            This thread is closed.
+                            This thread is closed. Reopen it to send messages.
                         </div>
                     )}
                     
@@ -1162,8 +1146,52 @@ const AdminProjectDetail: React.FC = () => {
                 <div className="bg-white p-6 rounded-xl shadow-lg border border-slate-100">
                     <h2 className="text-xl font-bold mb-4 flex items-center gap-2 border-b border-slate-100 pb-4">
                         <DollarSign className="w-5 h-5 text-purple-600" /> Payment Milestones
-                        {renderHelpIcon("Milestones are the payment schedule for your project. Once a milestone is invoiced, you will receive an email notification.")}
                     </h2>
+                    
+                    {/* Deposit Application */}
+                    <div className="p-4 mb-6 bg-blue-50 border border-blue-200 rounded-lg">
+                        <h3 className="font-bold text-sm text-blue-800 mb-2">Apply Deposit to Milestone</h3>
+                        <form onSubmit={handleApplyDepositToMilestone} className="space-y-3">
+                            <select
+                                value={selectedDepositId}
+                                onChange={(e) => setSelectedDepositId(e.target.value)}
+                                className="w-full p-2 border border-slate-300 rounded-lg text-sm"
+                                required
+                                disabled={isUpdating || deposits.filter(d => d.status === 'paid' && !d.applied_to_invoice_id).length === 0}
+                            >
+                                <option value="">-- Select Unapplied Deposit --</option>
+                                {deposits.filter(d => d.status === 'paid' && !d.applied_to_invoice_id).map(deposit => (
+                                    <option key={deposit.id} value={deposit.id}>
+                                        ${(deposit.amount_cents / 100).toFixed(2)} - {format(new Date(deposit.created_at), 'MMM dd')}
+                                    </option>
+                                ))}
+                            </select>
+                            <select
+                                value={selectedMilestoneId}
+                                onChange={(e) => setSelectedMilestoneId(e.target.value)}
+                                className="w-full p-2 border border-slate-300 rounded-lg text-sm"
+                                required
+                                disabled={isUpdating || project.milestones.filter(m => m.status === 'pending').length === 0}
+                            >
+                                <option value="">-- Select Pending Milestone --</option>
+                                {project.milestones.filter(m => m.status === 'pending').map(milestone => (
+                                    <option key={milestone.id} value={milestone.id}>
+                                        {milestone.order_index}. {milestone.name} (${(milestone.amount_cents / 100).toFixed(2)})
+                                    </option>
+                                ))}
+                            </select>
+                            <button
+                                type="submit"
+                                disabled={isUpdating || !selectedDepositId || !selectedMilestoneId}
+                                className="w-full py-2 bg-blue-600 text-white rounded-lg text-sm font-semibold hover:bg-blue-700 transition-colors disabled:opacity-50 flex items-center justify-center gap-2"
+                            >
+                                {isUpdating ? <Loader2 className="w-4 h-4 animate-spin" /> : <DollarSign className="w-4 h-4" />}
+                                Apply Deposit
+                            </button>
+                        </form>
+                    </div>
+                    
+                    {/* Milestone List */}
                     <div className="space-y-4">
                         {project.milestones.length > 0 ? (
                             project.milestones.map(milestone => (
@@ -1176,21 +1204,67 @@ const AdminProjectDetail: React.FC = () => {
                                         <span className={`px-2 py-0.5 rounded-full text-xs font-semibold ${getMilestoneStatusColor(milestone.status)}`}>
                                             {milestone.status}
                                         </span>
+                                        {milestone.status === 'pending' && (
+                                            <button 
+                                                onClick={() => handleInvoiceMilestone(milestone)}
+                                                disabled={isUpdating}
+                                                className="text-indigo-600 hover:text-indigo-800 text-xs font-semibold flex items-center gap-1"
+                                            >
+                                                <Send className="w-3 h-3" /> Invoice
+                                            </button>
+                                        )}
                                         {milestone.stripe_invoice_id && milestone.status !== 'paid' && (
-                                            <Link 
-                                                to="/client/billing" 
+                                            <a 
+                                                href={`https://dashboard.stripe.com/invoices/${milestone.stripe_invoice_id}`} 
+                                                target="_blank" 
+                                                rel="noopener noreferrer" 
                                                 className="text-red-600 hover:text-red-800 text-xs font-semibold flex items-center gap-1"
                                             >
-                                                <ExternalLink className="w-3 h-3" /> Pay Now
-                                            </Link>
+                                                <ExternalLink className="w-3 h-3" /> View
+                                            </a>
                                         )}
                                     </div>
                                 </div>
                             ))
                         ) : (
-                            <div className="text-center p-8 bg-slate-50 rounded-lg text-slate-500">No payment milestones defined for this project.</div>
+                            <div className="text-center p-8 bg-slate-50 rounded-lg text-slate-500">No payment milestones defined.</div>
                         )}
                     </div>
+                    
+                    <h3 className="font-bold text-sm mb-2 border-t border-slate-100 pt-4">Add New Milestone</h3>
+                    <form onSubmit={handleAddMilestone} className="space-y-3">
+                        <input
+                            type="text"
+                            value={newMilestoneName}
+                            onChange={(e) => setNewMilestoneName(e.target.value)}
+                            placeholder="Milestone Name (e.g., Design Approval)"
+                            className="w-full p-2 border border-slate-300 rounded-lg text-sm"
+                            required
+                            disabled={isUpdating}
+                        />
+                        <div className="relative">
+                            <span className="absolute left-3 top-2.5 text-slate-500 text-sm">$</span>
+                            <input
+                                type="number"
+                                value={newMilestoneAmount}
+                                onChange={(e) => setNewMilestoneAmount(parseFloat(e.target.value) || '')}
+                                placeholder="Amount"
+                                className="w-full pl-6 pr-2 py-2 border border-slate-300 rounded-lg text-sm"
+                                required
+                                min="0.01"
+                                step="0.01"
+                                disabled={isUpdating}
+                            />
+                        </div>
+                        <button
+                            type="submit"
+                            disabled={isUpdating || !newMilestoneName || !newMilestoneAmount}
+                            className="w-full py-2 bg-indigo-600 text-white rounded-lg text-sm font-semibold hover:bg-indigo-700 transition-colors disabled:opacity-50 flex items-center justify-center gap-2"
+                        >
+                            {isUpdating ? <Loader2 className="w-4 h-4 animate-spin" /> : <Plus className="w-4 h-4" />}
+                            Add Milestone
+                        </button>
+                    </form>
                 </div>
             )}
             
@@ -1199,7 +1273,6 @@ const AdminProjectDetail: React.FC = () => {
                 <div className="bg-white p-6 rounded-xl shadow-lg border border-slate-100">
                     <h2 className="text-xl font-bold mb-4 flex items-center gap-2 border-b border-slate-100 pb-4">
                         <FileText className="w-5 h-5 text-purple-600" /> Project Files ({project.files.length})
-                        {renderHelpIcon("Upload files for the admin team (e.g., logos, content drafts) or download files shared by the team.")}
                     </h2>
                     <div className="space-y-3">
                         {project.files.length > 0 ? (
@@ -1209,15 +1282,24 @@ const AdminProjectDetail: React.FC = () => {
                                 <FileText className="w-5 h-5 text-purple-500" />
                                 <div>
                                 <p className="font-medium text-sm text-slate-900">{file.file_name}</p>
-                                <p className="text-xs text-slate-500">{file.file_type} | {(file.file_size / 1024 / 1024).toFixed(2)} MB</p>
+                                <p className="text-xs text-slate-500">Uploaded by: {file.profiles?.full_name || 'N/A'}</p>
                                 </div>
                             </div>
-                            <button 
-                                onClick={() => handleFileDownload(file.storage_path, file.file_name)}
-                                className="text-indigo-600 hover:text-indigo-800 text-sm flex items-center gap-1"
-                            >
-                                <Download className="w-4 h-4" /> Download
-                            </button>
+                            <div className="flex items-center gap-2">
+                                <button 
+                                    onClick={() => handleFileDownload(file.storage_path, file.file_name)}
+                                    className="text-indigo-600 hover:text-indigo-800 text-sm flex items-center gap-1"
+                                >
+                                    <Download className="w-4 h-4" />
+                                </button>
+                                <button 
+                                    onClick={() => handleFileDelete(file.id, file.storage_path)}
+                                    disabled={isUpdating}
+                                    className="text-red-600 hover:text-red-800 text-sm flex items-center gap-1 disabled:opacity-50"
+                                >
+                                    <Trash2 className="w-4 h-4" />
+                                </button>
+                            </div>
                             </div>
                         ))
                         ) : (
@@ -1254,8 +1336,8 @@ const AdminProjectDetail: React.FC = () => {
           </div>
         </div>
       </div>
-    </ClientLayout>
+    </AdminLayout>
   );
 };
 
-export default ClientProjectDetail;
+export default AdminProjectDetail;
