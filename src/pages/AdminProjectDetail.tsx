@@ -49,6 +49,7 @@ const AdminProjectDetail: React.FC = () => {
   const [isUpdating, setIsUpdating] = useState(false);
   const [isUploading, setIsUploading] = useState(false);
   const [fileToUpload, setFileToUpload] = useState<File | null>(null);
+  const [activeTab, setActiveTab] = useState<'messages' | 'milestones' | 'files'>('messages');
   
   // Thread State
   const [activeThreadId, setActiveThreadId] = useState<string | null>(null);
@@ -759,36 +760,8 @@ const AdminProjectDetail: React.FC = () => {
     return <div dangerouslySetInnerHTML={{ __html: html }} className="prose max-w-none text-sm text-slate-700" />;
   };
   
-  const isDepositRequired = project?.required_deposit_cents && project.required_deposit_cents > 0;
-  const isPaused = project?.service_status === 'paused' || project?.service_status === 'awaiting_payment';
-
-  if (isLoading) {
-    return (
-      <AdminLayout>
-        <div className="min-h-[60vh] flex items-center justify-center">
-          <Loader2 className="w-8 h-8 animate-spin text-indigo-600" />
-        </div>
-      </AdminLayout>
-    );
-  }
-
-  if (fetchError || !project) {
-    return (
-      <AdminLayout>
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-12 text-center">
-          <AlertTriangle className="w-16 h-16 text-red-500 mx-auto mb-6" />
-          <h1 className="text-3xl font-bold text-red-500">Unable to load project details.</h1>
-          <p className="text-slate-500 mt-4">Error: {fetchError || 'Project not found or data is corrupted.'}</p>
-          <button 
-            onClick={() => fetchProjectData()}
-            className="mt-6 px-6 py-3 bg-indigo-600 text-white rounded-lg font-semibold hover:bg-indigo-700 transition-colors flex items-center justify-center gap-2 mx-auto"
-          >
-            <Loader2 className="w-4 h-4" /> Try Again
-          </button>
-        </div>
-      </AdminLayout>
-    );
-  }
+  const isDepositRequired = project.required_deposit_cents && project.required_deposit_cents > 0;
+  const isPaused = project.service_status === 'paused' || project.service_status === 'awaiting_payment';
 
   return (
     <AdminLayout>
