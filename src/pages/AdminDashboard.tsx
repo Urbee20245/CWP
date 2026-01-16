@@ -239,13 +239,13 @@ const AdminDashboard: React.FC = () => {
                             {recentMessages.length > 0 ? (
                                 recentMessages.map(message => {
                                     const clientName = message.project_threads.projects.clients.business_name;
-                                    const projectId = message.project_threads.projects.clients.id;
+                                    const projectId = message.project_threads.project_id; // CORRECTED: Use project_id
                                     const projectTitle = message.project_threads.projects.title;
                                     
                                     return (
                                         <Link 
                                             key={message.id} 
-                                            to={`/admin/projects/${message.project_threads.projects.clients.id}`} 
+                                            to={`/admin/projects/${projectId}`} // CORRECTED: Link to project ID
                                             className="p-3 rounded-lg border flex justify-between items-center bg-red-50 border-red-200 hover:bg-red-100 transition-colors"
                                         >
                                             <div className="flex-1 min-w-0 pr-4">
