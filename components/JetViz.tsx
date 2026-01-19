@@ -106,9 +106,15 @@ const JetViz: React.FC = () => {
           
           {/* =======================
               RIGHT SIDE (OLD / BAD) 
-              Forcing 'Times New Roman' to bypass Inter override for visual contrast
+              Applying clipPath to hide content when slider moves right
              ======================= */}
-          <div className="absolute inset-0 bg-[#d4d1cb] flex flex-col" style={{ fontFamily: '"Times New Roman", Times, serif' }}>
+          <div 
+            className="absolute inset-0 bg-[#d4d1cb] flex flex-col" 
+            style={{ 
+                fontFamily: '"Times New Roman", Times, serif',
+                clipPath: `polygon(${sliderPosition}% 0, 100% 0, 100% 100%, ${sliderPosition}% 100%)`
+            }}
+          >
              {/* Header */}
              <div className="bg-[#8b0000] text-white p-4 text-center">
                 <h3 className="text-xl font-bold tracking-wide">GWINNETT PLUMBING INC.</h3>
@@ -196,7 +202,7 @@ const JetViz: React.FC = () => {
                  </div>
 
                  {/* Trust Badge Overlay - Floating */}
-                 <div className="absolute bottom-8 right-8 bg-white/10 backdrop-blur-xl border border-white/10 p-4 rounded-xl shadow-xl hidden md:flex items-center gap-3 animate-fade-in-up">
+                 <div className="absolute bottom-8 right-8 bg-white/10 backdrop-blur-xl border border-white/10 p-4 rounded-xl shadow-2xl hidden md:flex items-center gap-3 animate-fade-in-up">
                      <div className="w-10 h-10 rounded-full bg-emerald-500/20 flex items-center justify-center border border-emerald-500/30">
                          <CheckCircle2 className="w-6 h-6 text-emerald-400" />
                      </div>
@@ -207,11 +213,11 @@ const JetViz: React.FC = () => {
                  </div>
              </div>
 
-             {/* Success Overlay */}
-             <div className="absolute top-6 left-6 bg-emerald-600 text-white px-5 py-3 rounded-full shadow-[0_0_25px_rgba(5,150,105,0.6)] border border-emerald-400/30 flex items-center gap-2 z-20">
-                <CheckCircle2 className="w-5 h-5 text-white drop-shadow-md" />
-                <span className="font-bold text-sm tracking-wide drop-shadow-[0_0_8px_rgba(255,255,255,0.5)]">Conversion Optimized</span>
-             </div>
+                         {/* Success Overlay */}
+                         <div className="absolute top-6 left-6 bg-emerald-600 text-white px-5 py-3 rounded-full shadow-[0_0_25px_rgba(5,150,105,0.6)] border border-emerald-400/30 flex items-center gap-2 z-20">
+                            <CheckCircle2 className="w-5 h-5 text-white drop-shadow-md" />
+                            <span className="font-bold text-sm tracking-wide drop-shadow-[0_0_8px_rgba(255,255,255,0.5)]">Conversion Optimized</span>
+                         </div>
           </div>
 
           {/* Slider Handle */}
