@@ -18,10 +18,10 @@ const TrustAuthority: React.FC = () => {
         {/* Header */}
         <div className="text-center max-w-3xl mx-auto mb-20">
             <h2 className="text-3xl md:text-4xl font-serif text-slate-900 mb-6">
-                Built for established businesses in Walton & Gwinnett County.
+                Built for established businesses in Atlanta and the Metro Area.
             </h2>
             <p className="text-lg text-slate-500 leading-relaxed">
-                We aren't a fit for everyone. We specialize in high-ticket service providers who rely on trust, reputation, and phone calls to grow their business.
+                We aren't a fit for everyone. We specialize in high-ticket service providers who rely on trust, reputation, and phone calls to grow their business in competitive local markets.
             </p>
         </div>
 

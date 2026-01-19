@@ -8,7 +8,7 @@ const Testimonials: React.FC = () => {
     {
       name: "Michael R.",
       role: "Plumbing Contractor",
-      location: "Loganville, GA",
+      location: "Atlanta, GA",
       text: "We went from 5 calls a week to 5 calls a day. The website rebuild completely changed how customers perceive us.",
       rating: 5,
       gradient: "from-blue-500 to-cyan-500"
@@ -103,7 +103,7 @@ const Testimonials: React.FC = () => {
             <span className="text-slate-400 font-bold text-lg ml-2">5.0/5.0</span>
         </div>
         <p className="text-lg text-slate-500 max-w-2xl mx-auto">
-            We don't just build websites; we build business assets. See what business owners in Walton & Gwinnett County have to say.
+            We don't just build websites; we build business assets. See what business owners in Atlanta and the Metro area have to say.
         </p>
       </div>
 

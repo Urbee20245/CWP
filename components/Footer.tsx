@@ -19,7 +19,7 @@ const Footer: React.FC = () => {
                   className="h-12 w-auto mb-6 object-contain"
                 />
                 <p className="text-sm leading-relaxed text-slate-400 mb-6">
-                    We help local service businesses in Georgia stop losing leads to outdated websites. We build fast, high-performance digital assets that rank locally and convert visitors into calls.
+                    We help local service businesses in Atlanta stop losing leads to outdated websites. We build fast, high-performance digital assets that rank locally and convert visitors into calls across the Metro area.
                 </p>
                 <div className="flex gap-4">
                     <a href="#" className="p-2 bg-slate-800 rounded-full hover:bg-indigo-600 transition-colors"><Facebook className="w-4 h-4" /></a>
@@ -43,13 +43,13 @@ const Footer: React.FC = () => {
             <div>
                 <h4 className="text-white font-bold mb-6">Service Area</h4>
                 <p className="text-sm text-slate-400 mb-4 leading-relaxed">
-                    Proudly serving local business owners in Walton County, Gwinnett County, and the greater Metro Atlanta area.
+                    Proudly serving business owners in Atlanta, Walton County, Gwinnett County, and the entire Metro Atlanta area.
                 </p>
                 <ul className="space-y-2 text-sm text-slate-500">
+                    <li className="flex items-center gap-2"><MapPin className="w-3 h-3" /> Atlanta, GA</li>
                     <li className="flex items-center gap-2"><MapPin className="w-3 h-3" /> Loganville, GA</li>
-                    <li className="flex items-center gap-2"><MapPin className="w-3 h-3" /> Monroe, GA</li>
-                    <li className="flex items-center gap-2"><MapPin className="w-3 h-3" /> Snellville, GA</li>
                     <li className="flex items-center gap-2"><MapPin className="w-3 h-3" /> Lawrenceville, GA</li>
+                    <li className="flex items-center gap-2"><MapPin className="w-3 h-3" /> Snellville & Monroe</li>
                 </ul>
             </div>
 
