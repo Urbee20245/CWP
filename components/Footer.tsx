@@ -76,7 +76,12 @@ const Footer: React.FC = () => {
         </div>
         
         <div className="border-t border-slate-800 pt-8 flex flex-col md:flex-row justify-between items-center gap-4 text-xs text-slate-500">
-            <p>© {currentYear} Custom Websites Plus. Built by <a href="https://jetautomations.ai" target="_blank" rel="noopener noreferrer" className="text-indigo-400 hover:text-indigo-300 transition-colors">Jetautomations.AI</a></p>
+            <div className="text-center md:text-left">
+                <p>© {currentYear} Built with ❤️ by us <a href="https://customwebsitesplus.com" target="_blank" rel="noopener noreferrer" className="text-indigo-400 hover:text-indigo-300 transition-colors font-bold">Customwebsitesplus</a></p>
+                <p className="mt-2 text-[10px] uppercase tracking-widest font-bold opacity-70">
+                    <a href="https://getjetsuite.com" target="_blank" rel="noopener noreferrer" className="text-indigo-400 hover:text-indigo-300 transition-colors">Jetsuite</a> All in one tool for business growth
+                </p>
+            </div>
             <div className="flex gap-6 items-center">
                 <Link to="/login" className="flex items-center gap-1 text-indigo-400 hover:text-white transition-colors font-bold">
                     <LogIn className="w-3 h-3" />
