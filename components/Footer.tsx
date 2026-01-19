@@ -77,9 +77,9 @@ const Footer: React.FC = () => {
         
         <div className="border-t border-slate-800 pt-8 flex flex-col md:flex-row justify-between items-center gap-4 text-xs text-slate-500">
             <div className="text-center md:text-left">
-                <p>© {currentYear} Built with ❤️ by us <a href="https://customwebsitesplus.com" target="_blank" rel="noopener noreferrer" className="text-indigo-400 hover:text-indigo-300 transition-colors font-bold">Customwebsitesplus</a></p>
+                <p>© {currentYear} Built with ❤️ <a href="https://customwebsitesplus.com" target="_blank" rel="noopener noreferrer" className="text-indigo-400 hover:text-indigo-300 transition-colors font-bold">Customwebsitesplus</a></p>
                 <p className="mt-2 text-[10px] uppercase tracking-widest font-bold opacity-70">
-                    <a href="https://getjetsuite.com" target="_blank" rel="noopener noreferrer" className="text-indigo-400 hover:text-indigo-300 transition-colors">Jetsuite</a> All in one tool for business growth
+                    Get more customers visit <a href="https://getjetsuite.com" target="_blank" rel="noopener noreferrer" className="text-indigo-400 hover:text-indigo-300 transition-colors">Jetsuite All in one tool for business growth</a>
                 </p>
             </div>
             <div className="flex gap-6 items-center">
