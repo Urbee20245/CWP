@@ -6,6 +6,7 @@ import { useAuth } from '../hooks/useAuth';
 import { supabase } from '../integrations/supabase/client';
 import { User, Loader2, Save, AlertTriangle, CheckCircle2, Briefcase, Phone, MapPin, Lock } from 'lucide-react';
 import { Profile } from '../types/auth';
+import ClientTwilioIntegration from '../components/ClientTwilioIntegration'; // NEW IMPORT
 
 interface ClientDetails {
     businessName: string;
@@ -188,10 +189,13 @@ const ClientProfile: React.FC = () => {
           <User className="w-7 h-7 text-indigo-600" /> My Profile & Business Details
         </h1>
 
-        <div className="bg-white p-6 rounded-xl shadow-lg border border-slate-100 space-y-8">
+        <div className="space-y-8">
+          
+          {/* Phone & Messaging Integration (NEW SECTION) */}
+          {clientId && <ClientTwilioIntegration clientId={clientId} />}
           
           {/* Profile & Business Details Form */}
-          <div>
+          <div className="bg-white p-6 rounded-xl shadow-lg border border-slate-100">
             <h2 className="text-xl font-bold mb-4 border-b border-slate-100 pb-4">
               Update Information
             </h2>
@@ -305,7 +309,7 @@ const ClientProfile: React.FC = () => {
           </div>
           
           {/* Password Change Form */}
-          <div>
+          <div className="bg-white p-6 rounded-xl shadow-lg border border-slate-100">
             <h2 className="text-xl font-bold mb-4 border-b border-slate-100 pb-4 flex items-center gap-2">
                 <Lock className="w-5 h-5 text-red-600" /> Change Password
             </h2>
