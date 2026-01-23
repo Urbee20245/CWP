@@ -1,8 +1,10 @@
 "use client";
 
-import React, { useState } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import { Link } from 'react-router-dom';
 import { Zap, Eye, MapPin, Sparkles, ArrowRight, Bell, CheckCircle2, ExternalLink, MessageSquare, DollarSign, Home, Search, List, Image, Star, TrendingUp, Clock, User, FileText, Gauge } from 'lucide-react';
+import { useAuth } from '../hooks/useAuth'; // <-- ADDED IMPORT
+import ClientLayout from '../components/ClientLayout'; // ADDED IMPORT
 
 const ToolCard: React.FC<any> = ({ icon: Icon, title, subtitle, description, replaces, isFeatured, iconColor }) => (
     <div className="relative p-6 bg-slate-800/50 border border-slate-700 rounded-xl shadow-lg hover:border-indigo-500/50 transition-all duration-300">
