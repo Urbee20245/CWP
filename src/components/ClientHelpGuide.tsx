@@ -82,17 +82,17 @@ const ClientHelpGuide: React.FC<ClientHelpGuideProps> = ({ filter }) => {
         // 4. JetSuite Section
         {
             id: 'jetsuite',
-            title: 'JetSuite DIY Tools',
+            title: 'JetSuite Tools',
             icon: <Zap className="w-5 h-5 text-red-600" />,
             content: (
                 <div className="p-4 bg-red-50 border border-red-200 rounded-lg text-sm text-red-800 flex items-start gap-3">
                     <Bot className="w-5 h-5 flex-shrink-0 mt-0.5" />
                     <p>
-                        Access the full suite of AI tools via the <Link to="/client/jetsuite" className="font-bold text-red-600 hover:underline">JetSuite DIY</Link> link in the sidebar. Use tools like JetViz and Jet Local Optimizer to continuously monitor your website's performance and local SEO health.
+                        Access the full suite of AI tools via the <Link to="/client/jetsuite" className="font-bold text-red-600 hover:underline">JetSuite</Link> link in the sidebar. Use tools like JetViz and Jet Local Optimizer to continuously monitor your website's performance and local SEO health.
                     </p>
                 </div>
             ),
-            keywords: 'jetsuite diy tools optimizer jetviz seo audit performance',
+            keywords: 'jetsuite tools optimizer jetviz seo audit performance',
         },
         // 5. NEW TWILIO SETUP GUIDE
         {

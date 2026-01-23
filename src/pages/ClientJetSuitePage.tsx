@@ -1,12 +1,8 @@
 "use client";
 
-import React, { useState, useEffect, useCallback } from 'react';
-import ClientLayout from '../components/ClientLayout';
+import React, { useState } from 'react';
 import { Link } from 'react-router-dom';
 import { Zap, Eye, MapPin, Sparkles, ArrowRight, Bell, CheckCircle2, ExternalLink, MessageSquare, DollarSign, Home, Search, List, Image, Star, TrendingUp, Clock, User, FileText, Gauge } from 'lucide-react';
-import { useAuth } from '../hooks/useAuth';
-import { supabase } from '../integrations/supabase/client';
-import { Loader2 } from 'lucide-react';
 
 const ToolCard: React.FC<any> = ({ icon: Icon, title, subtitle, description, replaces, isFeatured, iconColor }) => (
     <div className="relative p-6 bg-slate-800/50 border border-slate-700 rounded-xl shadow-lg hover:border-indigo-500/50 transition-all duration-300">
@@ -134,7 +130,7 @@ const ClientJetSuitePage: React.FC = () => {
 
                         {/* Subtitle */}
                         <p className="text-xl md:text-2xl text-slate-300 mb-12 max-w-3xl mx-auto leading-relaxed">
-                            JetSuite is the AI platform that helps you improve google rankings manage reputation and power on brand Content and Advertising- so customers find you and choose you first.
+                            Tools for Local Business Dominance. The complete AI platform for growth.
                         </p>
 
                         <a

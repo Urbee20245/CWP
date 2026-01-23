@@ -22,7 +22,7 @@ const ClientLayout: React.FC<ClientLayoutProps> = ({ children }) => {
     { name: 'Help & Guides', href: '/client/help', icon: HelpCircle },
   ];
   
-  const jetSuiteItem = { name: 'JetSuite DIY', href: '/client/jetsuite', icon: Sparkles };
+  const jetSuiteItem = { name: 'JetSuite', href: '/client/jetsuite', icon: Sparkles };
   
   const handleSignOut = () => {
       setIsMobileMenuOpen(false);
@@ -78,7 +78,7 @@ const ClientLayout: React.FC<ClientLayoutProps> = ({ children }) => {
             ))}
           </nav>
           
-          {/* JetSuite DIY Link (Reverted to Link style) */}
+          {/* JetSuite Link */}
           <div className="mt-4 pt-4 border-t border-slate-100">
             <Link
                 to={jetSuiteItem.href}
@@ -123,7 +123,7 @@ const ClientLayout: React.FC<ClientLayoutProps> = ({ children }) => {
                         ))}
                     </nav>
                     
-                    {/* Mobile JetSuite Link (Reverted to Link style) */}
+                    {/* Mobile JetSuite Link */}
                     <div className="mt-6 pt-4 border-t border-slate-100">
                         <Link
                             to={jetSuiteItem.href}
