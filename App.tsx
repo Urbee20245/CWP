@@ -43,7 +43,8 @@ import ClientAppointmentBooking from './src/pages/ClientAppointmentBooking';
 import ClientJetSuitePage from './src/pages/ClientJetSuitePage';
 import AdminProfile from './src/pages/AdminProfile';
 import AdminUserManagement from './src/pages/AdminUserManagement';
-import AdminInbox from './src/pages/AdminInbox'; // NEW IMPORT
+import AdminInbox from './src/pages/AdminInbox';
+import ClientHelpPage from './src/pages/ClientHelpPage'; // NEW IMPORT
 
 // Component that uses useLocation to conditionally render global elements
 const AppContent: React.FC = () => {
@@ -91,7 +92,7 @@ const AppContent: React.FC = () => {
           <Route path="dashboard" element={<AdminDashboard />} />
           <Route path="profile" element={<AdminProfile />} />
           <Route path="users" element={<AdminUserManagement />} />
-          <Route path="inbox" element={<AdminInbox />} /> {/* NEW ROUTE */}
+          <Route path="inbox" element={<AdminInbox />} />
           <Route path="clients" element={<AdminClientList />} />
           <Route path="clients/:id" element={<AdminClientDetail />} />
           <Route path="projects" element={<AdminProjectList />} />
@@ -116,6 +117,7 @@ const AppContent: React.FC = () => {
           <Route path="profile" element={<ClientProfile />} />
           <Route path="addons" element={<ClientAddons />} />
           <Route path="jetsuite" element={<ClientJetSuitePage />} />
+          <Route path="help" element={<ClientHelpPage />} />
         </Route>
         
         {/* Global 404 Fallback */}

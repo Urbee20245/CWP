@@ -3,7 +3,7 @@
 import React, { useState } from 'react';
 import { useAuth } from '../hooks/useAuth';
 import { Link } from 'react-router-dom';
-import { Briefcase, DollarSign, LogOut, User, Zap, CalendarCheck, Sparkles, Menu, X, ArrowRight } from 'lucide-react';
+import { Briefcase, DollarSign, LogOut, User, Zap, CalendarCheck, Sparkles, Menu, X, ArrowRight, HelpCircle } from 'lucide-react';
 
 interface ClientLayoutProps {
   children: React.ReactNode;
@@ -19,6 +19,7 @@ const ClientLayout: React.FC<ClientLayoutProps> = ({ children }) => {
     { name: 'Billing', href: '/client/billing', icon: DollarSign },
     { name: 'Add-ons', href: '/client/addons', icon: Zap },
     { name: 'My Profile', href: '/client/profile', icon: User }, 
+    { name: 'Help & Guides', href: '/client/help', icon: HelpCircle },
   ];
   
   const jetSuiteItem = { name: 'JetSuite DIY', href: '/client/jetsuite', icon: Sparkles };
