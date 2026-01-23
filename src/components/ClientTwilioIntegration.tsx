@@ -5,6 +5,7 @@ import { Phone, Save, Loader2, AlertTriangle, CheckCircle2, MessageSquare, Exter
 import { ClientIntegrationService } from '../services/clientIntegrationService';
 import { useAuth } from '../hooks/useAuth';
 import { format } from 'date-fns';
+import { Link } from 'react-router-dom'; // <-- ADDED IMPORT
 
 interface ClientTwilioIntegrationProps {
   clientId: string;
