@@ -94,19 +94,15 @@ const ClientHelpGuide: React.FC<ClientHelpGuideProps> = ({ filter }) => {
             ),
             keywords: 'jetsuite tools optimizer jetviz seo audit performance',
         },
-        // 5. NEW TWILIO SETUP GUIDE
+        
+        // 5. NEW TWILIO CREDENTIALS SECTION (Extracted)
         {
-            id: 'twilio-setup',
-            title: 'Twilio Phone Number & A2P (10DLC) Setup',
+            id: 'twilio-credentials',
+            title: 'Twilio: Accessing Credentials (SID & Token)',
             icon: <Phone className="w-5 h-5 text-indigo-600" />,
             content: (
                 <div className="space-y-6 text-sm text-slate-700">
-                    <div className="p-3 bg-amber-50 border border-amber-200 rounded-lg text-amber-800">
-                        <p className="font-bold">Important A2P Note:</p>
-                        <p>A2P (10DLC) registration is required for SMS texting in the United States. Voice calls alone do not require A2P verification. If you want appointment confirmations or reminders via text message, you must complete A2P registration.</p>
-                    </div>
-                    
-                    <h4 className="font-bold text-slate-900">PART 0 — Accessing Your Twilio Credentials</h4>
+                    <h4 className="font-bold text-slate-900">Video Guide: Finding Your Account SID and Auth Token</h4>
                     <div className="space-y-4">
                         <div className="aspect-video w-full rounded-lg overflow-hidden shadow-lg">
                             <iframe 
@@ -119,6 +115,7 @@ const ClientHelpGuide: React.FC<ClientHelpGuideProps> = ({ filter }) => {
                                 allowFullScreen
                             ></iframe>
                         </div>
+                        <h4 className="font-bold text-slate-900">Step-by-Step Instructions</h4>
                         <ul className="list-disc list-inside ml-4 space-y-1">
                             <li>Log in to your Twilio Console.</li>
                             <li>The **Account SID** (starts with AC...) and **Auth Token** will be displayed on the main dashboard.</li>
@@ -126,7 +123,23 @@ const ClientHelpGuide: React.FC<ClientHelpGuideProps> = ({ filter }) => {
                             <li>You will need both of these values, along with your purchased phone number, to complete the integration in your CWP profile.</li>
                         </ul>
                     </div>
-
+                </div>
+            ),
+            keywords: 'twilio credentials sid token auth authentication login',
+        },
+        
+        // 6. TWILIO A2P SETUP GUIDE (Modified to start at Part A)
+        {
+            id: 'twilio-setup',
+            title: 'Twilio: Phone Number & A2P (10DLC) Setup',
+            icon: <Phone className="w-5 h-5 text-indigo-600" />,
+            content: (
+                <div className="space-y-6 text-sm text-slate-700">
+                    <div className="p-3 bg-amber-50 border border-amber-200 rounded-lg text-amber-800">
+                        <p className="font-bold">Important A2P Note:</p>
+                        <p>A2P (10DLC) registration is required for SMS texting in the United States. Voice calls alone do not require A2P verification. If you want appointment confirmations or reminders via text message, you must complete A2P registration.</p>
+                    </div>
+                    
                     <h4 className="font-bold text-slate-900">PART A — Create Your Twilio Account</h4>
                     <ul className="list-disc list-inside ml-4 space-y-1">
                         <li>Go to <a href="https://www.twilio.com" target="_blank" rel="noopener noreferrer" className="text-indigo-600 hover:underline">twilio.com</a> and create an account.</li>
