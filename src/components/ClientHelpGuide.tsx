@@ -105,6 +105,27 @@ const ClientHelpGuide: React.FC<ClientHelpGuideProps> = ({ filter }) => {
                         <p className="font-bold">Important A2P Note:</p>
                         <p>A2P (10DLC) registration is required for SMS texting in the United States. Voice calls alone do not require A2P verification. If you want appointment confirmations or reminders via text message, you must complete A2P registration.</p>
                     </div>
+                    
+                    <h4 className="font-bold text-slate-900">PART 0 — Accessing Your Twilio Credentials</h4>
+                    <div className="space-y-4">
+                        <div className="aspect-video w-full rounded-lg overflow-hidden shadow-lg">
+                            <iframe 
+                                width="100%" 
+                                height="100%" 
+                                src="https://www.youtube.com/embed/ADDeIBbQwHk" 
+                                title="How to Access Twilio Credentials" 
+                                frameBorder="0" 
+                                allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture" 
+                                allowFullScreen
+                            ></iframe>
+                        </div>
+                        <ul className="list-disc list-inside ml-4 space-y-1">
+                            <li>Log in to your Twilio Console.</li>
+                            <li>The **Account SID** (starts with AC...) and **Auth Token** will be displayed on the main dashboard.</li>
+                            <li>Click the **View** button next to the Auth Token to reveal it.</li>
+                            <li>You will need both of these values, along with your purchased phone number, to complete the integration in your CWP profile.</li>
+                        </ul>
+                    </div>
 
                     <h4 className="font-bold text-slate-900">PART A — Create Your Twilio Account</h4>
                     <ul className="list-disc list-inside ml-4 space-y-1">
@@ -147,7 +168,7 @@ const ClientHelpGuide: React.FC<ClientHelpGuideProps> = ({ filter }) => {
                     <p>Once your Twilio number and A2P campaign are approved, please share your **Account SID** and **Auth Token** with your CWP Project Manager. We will then connect your number to your AI phone agent. The agent will answer calls, book appointments directly to your calendar, and send confirmations automatically.</p>
                 </div>
             ),
-            keywords: 'twilio setup a2p 10dlc phone number voice sms billing purchase regulatory compliance',
+            keywords: 'twilio setup a2p 10dlc phone number voice sms billing purchase regulatory compliance credentials sid auth token',
         },
     ], []);
 
