@@ -2,7 +2,7 @@
 
 import React, { useState, useEffect, useCallback } from 'react';
 import { Link } from 'react-router-dom';
-import { Zap, Eye, MapPin, Sparkles, ArrowRight, Bell, CheckCircle2, ExternalLink, MessageSquare, DollarSign, Home, Search, List, Image, Star, TrendingUp, Clock, User, FileText, Gauge } from 'lucide-react';
+import { Zap, Eye, MapPin, Sparkles, ArrowRight, Bell, CheckCircle2, ExternalLink, MessageSquare, DollarSign, Home, Search, List, Image, Star, TrendingUp, Clock, User, FileText, Gauge, Loader2 } from 'lucide-react';
 import { useAuth } from '../hooks/useAuth'; // <-- ADDED IMPORT
 import ClientLayout from '../components/ClientLayout'; // ADDED IMPORT
 
