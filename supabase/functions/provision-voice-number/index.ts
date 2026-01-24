@@ -68,7 +68,7 @@ serve(async (req) => {
         return jsonResponse({ success: true, retell_phone_id: existing.retell_phone_id, message: "Already active." });
     }
 
-    // 3. CALL RETELL API (using fetch to avoid SDK bundle issues)
+    // 3. CALL RETELL API
     console.log(`[provision-voice-number] Importing ${final_phone} into Retell...`);
     const retellResponse = await fetch('https://api.retellai.com/create-phone-number', {
         method: 'POST',

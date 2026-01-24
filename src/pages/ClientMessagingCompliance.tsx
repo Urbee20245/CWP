@@ -6,7 +6,6 @@ import { useAuth } from '../hooks/useAuth';
 import { supabase } from '../integrations/supabase/client';
 import { 
     ShieldCheck, 
-    MessageSquare, 
     Building2, 
     Globe, 
     User, 
@@ -15,7 +14,9 @@ import {
     AlertTriangle,
     Info,
     ArrowRight,
-    Lock
+    Lock,
+    Clock,
+    MessageSquare
 } from 'lucide-react';
 
 interface A2PData {
@@ -80,7 +81,7 @@ const ClientMessagingCompliance: React.FC = () => {
             if (!clientData) throw new Error("Client record not found.");
             setClientId(clientData.id);
 
-            // 2. Get existing Voice/A2P info
+            // 2. Get existing data from client_voice_integrations
             const { data: voiceData } = await supabase
                 .from('client_voice_integrations')
                 .select('a2p_registration_data, a2p_status')
@@ -95,7 +96,6 @@ const ClientMessagingCompliance: React.FC = () => {
                         ...(voiceData.a2p_registration_data as any)
                     }));
                 } else {
-                    // Pre-fill with basic client info if empty
                     setFormData(prev => ({
                         ...prev,
                         legal_name: clientData.business_name,
@@ -126,14 +126,14 @@ const ClientMessagingCompliance: React.FC = () => {
         setError(null);
 
         try {
-            // Upsert into voice integrations table
+            // Upsert using the newly constrained client_id column
             const { error: upsertError } = await supabase
                 .from('client_voice_integrations')
                 .upsert({
                     client_id: clientId,
                     a2p_registration_data: formData,
                     a2p_status: 'pending_approval',
-                    number_source: 'platform' // Defaulting to platform for intake form context
+                    number_source: 'platform' 
                 }, { onConflict: 'client_id' });
 
             if (upsertError) throw upsertError;
@@ -144,7 +144,7 @@ const ClientMessagingCompliance: React.FC = () => {
         } catch (e: any) {
             setError(e.message || "Failed to submit information.");
         } finally {
-            setIsSaving(true); // Keep spinner briefly
+            setIsSaving(true); 
             setTimeout(() => {
                 setIsSaving(false);
                 setSaveSuccess(false);
@@ -178,7 +178,6 @@ const ClientMessagingCompliance: React.FC = () => {
         <ClientLayout>
             <div className="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8 py-12">
                 
-                {/* Header Section */}
                 <div className="mb-10">
                     <h1 className="text-3xl font-bold text-slate-900 mb-4 flex items-center gap-3">
                         <ShieldCheck className="w-8 h-8 text-indigo-600" /> 
@@ -191,7 +190,6 @@ const ClientMessagingCompliance: React.FC = () => {
                     </p>
                 </div>
 
-                {/* Status Banner */}
                 <div className={`p-4 rounded-xl mb-8 flex items-center justify-between ${statusDisplay.color} border border-current opacity-90`}>
                     <div className="flex items-center gap-3">
                         <statusDisplay.icon className="w-5 h-5" />
@@ -210,7 +208,6 @@ const ClientMessagingCompliance: React.FC = () => {
                     </div>
                 )}
 
-                {/* The Form */}
                 <div className="bg-white rounded-2xl shadow-xl border border-slate-100 overflow-hidden">
                     
                     {isLocked && (
@@ -224,7 +221,6 @@ const ClientMessagingCompliance: React.FC = () => {
 
                     <form onSubmit={handleSubmit} className="p-8 space-y-10">
                         
-                        {/* 1. BUSINESS INFORMATION */}
                         <section>
                             <h3 className="text-lg font-bold text-slate-900 mb-6 flex items-center gap-2">
                                 <Building2 className="w-5 h-5 text-indigo-600" /> 1. Official Business Identity
@@ -271,7 +267,6 @@ const ClientMessagingCompliance: React.FC = () => {
                             </div>
                         </section>
 
-                        {/* 2. BUSINESS ADDRESS */}
                         <section>
                             <h3 className="text-lg font-bold text-slate-900 mb-6 flex items-center gap-2">
                                 <Globe className="w-5 h-5 text-indigo-600" /> 2. Registered Address
@@ -313,7 +308,6 @@ const ClientMessagingCompliance: React.FC = () => {
                             </div>
                         </section>
 
-                        {/* 3. MESSAGING DETAILS */}
                         <section>
                             <h3 className="text-lg font-bold text-slate-900 mb-6 flex items-center gap-2">
                                 <MessageSquare className="w-5 h-5 text-indigo-600" /> 3. Messaging Intention
@@ -342,7 +336,6 @@ const ClientMessagingCompliance: React.FC = () => {
                             </div>
                         </section>
 
-                        {/* 4. POINT OF CONTACT */}
                         <section>
                             <h3 className="text-lg font-bold text-slate-900 mb-6 flex items-center gap-2">
                                 <User className="w-5 h-5 text-indigo-600" /> 4. Primary Contact
@@ -367,14 +360,13 @@ const ClientMessagingCompliance: React.FC = () => {
                             </div>
                         </section>
 
-                        {/* 5. UX REASSURANCE & SUBMIT */}
                         <div className="pt-8 border-t border-slate-100">
                             
                             {!isLocked && (
                                 <div className="p-4 bg-indigo-50 border border-indigo-200 rounded-xl mb-6 flex items-start gap-3">
                                     <Info className="w-5 h-5 text-indigo-600 flex-shrink-0 mt-0.5" />
                                     <p className="text-sm text-indigo-800 font-medium">
-                                        Most businesses are approved within 1–3 business days. We’ll handle the technical setup and notify you as soon as your messaging is ready.
+                                        Most businesses are approved within 1–3 business days. We’ll handle the setup and notify you as soon as your messaging is ready.
                                     </p>
                                 </div>
                             )}
