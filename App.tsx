@@ -46,7 +46,8 @@ import AdminProfile from './src/pages/AdminProfile';
 import AdminUserManagement from './src/pages/AdminUserManagement';
 import AdminInbox from './src/pages/AdminInbox';
 import ClientHelpPage from './src/pages/ClientHelpPage';
-import ClientMessagingCompliance from './src/pages/ClientMessagingCompliance'; // NEW IMPORT
+import ClientMessagingCompliance from './src/pages/ClientMessagingCompliance';
+import ClientSettings from './src/pages/ClientSettings'; // NEW IMPORT
 
 const AppContent: React.FC = () => {
   const location = useLocation();
@@ -99,7 +100,8 @@ const AppContent: React.FC = () => {
 
         <Route path="/client/*" element={<ProtectedRoute allowedRoles={['client']} />}>
           <Route path="dashboard" element={<ClientDashboard />} />
-          <Route path="messaging-compliance" element={<ClientMessagingCompliance />} /> {/* NEW ROUTE */}
+          <Route path="settings" element={<ClientSettings />} /> {/* NEW ROUTE */}
+          <Route path="messaging-compliance" element={<ClientMessagingCompliance />} />
           <Route path="projects/:id" element={<ClientProjectDetail />} />
           <Route path="appointments" element={<ClientAppointmentBooking />} />
           <Route path="billing" element={<ClientBilling />} />

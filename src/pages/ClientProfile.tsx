@@ -6,7 +6,6 @@ import { useAuth } from '../hooks/useAuth';
 import { supabase } from '../integrations/supabase/client';
 import { User, Loader2, Save, AlertTriangle, CheckCircle2, Briefcase, Phone, MapPin, Lock } from 'lucide-react';
 import { Profile } from '../types/auth';
-import ClientTwilioIntegration from '../components/ClientTwilioIntegration'; // NEW IMPORT
 
 interface ClientDetails {
     businessName: string;
@@ -190,9 +189,6 @@ const ClientProfile: React.FC = () => {
         </h1>
 
         <div className="space-y-8">
-          
-          {/* Phone & Messaging Integration (NEW SECTION) */}
-          {clientId && <ClientTwilioIntegration clientId={clientId} />}
           
           {/* Profile & Business Details Form */}
           <div className="bg-white p-6 rounded-xl shadow-lg border border-slate-100">
