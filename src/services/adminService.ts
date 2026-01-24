@@ -34,6 +34,11 @@ export const AdminService = {
     return invokeEdgeFunction('send-sms', { to, body });
   },
   
+  // --- AI Voice Provisioning (NEW) ---
+  provisionVoiceNumber: async (clientId: string) => {
+    return invokeEdgeFunction('provision-voice-number', { client_id: clientId });
+  },
+  
   // --- AI Document Generation ---
   generateDocument: async (documentType: string, inputs: any) => {
     return invokeEdgeFunction('generate-document', { documentType, inputs });
