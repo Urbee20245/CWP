@@ -3,7 +3,7 @@
 import React, { useState } from 'react';
 import { useAuth } from '../hooks/useAuth';
 import { Link } from 'react-router-dom';
-import { Users, Briefcase, DollarSign, LogOut, Bot, BarChart3, Settings, FileText, Mail as MailIcon, Zap, CalendarCheck, Menu, X, User } from 'lucide-react';
+import { Users, Briefcase, DollarSign, LogOut, Bot, BarChart3, Settings, FileText, Mail as MailIcon, Zap, CalendarCheck, Menu, X, User, Phone } from 'lucide-react';
 
 interface AdminLayoutProps {
   children: React.ReactNode;
@@ -17,6 +17,7 @@ const AdminLayout: React.FC<AdminLayoutProps> = ({ children }) => {
     { name: 'Dashboard', href: '/admin/dashboard', icon: Bot },
     { name: 'Clients', href: '/admin/clients', icon: Users },
     { name: 'Projects', href: '/admin/projects', icon: Briefcase },
+    { name: 'AI Voice', href: '/admin/voice', icon: Phone }, // NEW LINK
     { name: 'Email Inbox', href: '/admin/inbox', icon: MailIcon },
     { name: 'Appointments', href: '/admin/appointments', icon: CalendarCheck },
     { name: 'Revenue', href: '/admin/billing/revenue', icon: BarChart3 },
@@ -53,7 +54,7 @@ const AdminLayout: React.FC<AdminLayoutProps> = ({ children }) => {
         {/* Sidebar (Desktop) */}
         <div className="hidden md:block w-64 bg-white border-r border-slate-200 sticky top-20 h-[calc(100vh-80px)] p-6 flex-shrink-0 flex flex-col">
           
-          {/* Logo (Hidden on desktop sidebar as it's in the main header) */}
+          {/* Logo */}
           <Link to="/admin/dashboard" className="mb-6 block">
             <img 
               src="/CWPlogolight.png" 
@@ -134,7 +135,6 @@ const AdminLayout: React.FC<AdminLayoutProps> = ({ children }) => {
                         ))}
                     </nav>
                     
-                    {/* Mobile User Management Link */}
                     <div className="mt-6 pt-4 border-t border-slate-100">
                         <Link
                             to="/admin/users"
@@ -146,7 +146,6 @@ const AdminLayout: React.FC<AdminLayoutProps> = ({ children }) => {
                         </Link>
                     </div>
                     
-                    {/* Mobile Profile Link */}
                     <div className="mt-4 pt-4 border-t border-slate-100">
                         <Link
                             to="/admin/profile"
@@ -161,7 +160,7 @@ const AdminLayout: React.FC<AdminLayoutProps> = ({ children }) => {
                     <div className="mt-4 pt-4 border-t border-slate-100">
                         <button 
                             onClick={handleSignOut} 
-                            className="flex items-center gap-3 px-3 py-2 rounded-lg text-sm font-medium text-red-500 hover:bg-red-50 hover:text-red-700 transition-colors w-full text-left"
+                            className="flex items-center gap-3 px-3 py-2 rounded-lg text-sm font-medium text-red-500 hover:bg-red-50 hover:text-red-700 transition-colors w-full text-left border border-red-100 hover:border-red-200"
                         >
                             <LogOut className="w-5 h-5" />
                             Sign Out

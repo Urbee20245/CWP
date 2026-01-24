@@ -1,129 +1,123 @@
 import { serve } from "https://deno.land/std@0.190.0/http/server.ts";
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2.45.0';
-import { Retell } from 'https://esm.sh/retell-sdk@0.1.1';
 import { handleCors, jsonResponse, errorResponse } from '../_shared/utils.ts';
 import { decryptSecret } from '../_shared/encryption.ts';
 
 const RETELL_API_KEY = Deno.env.get('RETELL_API_KEY');
-// NOTE: This should be replaced with your actual Retell Agent ID, set as a secret or environment variable.
-const RETELL_AGENT_ID = Deno.env.get('RETELL_AGENT_ID') || 'default-agent-id'; 
-
-if (!RETELL_API_KEY) {
-  console.error("[provision-voice-number] CRITICAL: RETELL_API_KEY missing.");
-}
-
-const retell = new Retell({ apiKey: RETELL_API_KEY });
+const PLATFORM_TWILIO_SID = Deno.env.get('TWILIO_ACCOUNT_SID');
+const PLATFORM_TWILIO_TOKEN = Deno.env.get('TWILIO_AUTH_TOKEN');
+const RETELL_AGENT_ID = Deno.env.get('RETELL_AGENT_ID') || 'default-agent-id';
 
 serve(async (req) => {
   const corsResponse = handleCors(req);
   if (corsResponse) return corsResponse;
 
-  // Initialize Supabase Admin client for privileged DB access (fetching encrypted secrets)
   const supabaseAdmin = createClient(
     Deno.env.get('SUPABASE_URL')!,
     Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!
   );
 
   try {
-    const { client_id } = await req.json();
+    const { client_id, source, phone_number, a2p_data } = await req.json();
 
-    if (!client_id) {
-      return errorResponse('Client ID is required.', 400);
-    }
-    
-    if (!RETELL_API_KEY) {
-        return errorResponse('Retell API is not configured.', 500);
+    if (!client_id || !source) {
+      return errorResponse('Missing required fields: client_id and source.', 400);
     }
 
-    console.log(`[provision-voice-number] Starting provisioning for client ${client_id}`);
+    console.log(`[provision-voice-number] Sourcing ${source} number for client ${client_id}`);
 
-    // 1. Fetch encrypted Twilio credentials
-    const { data: config, error: configError } = await supabaseAdmin
-        .from('client_integrations')
-        .select('account_sid_encrypted, auth_token_encrypted, phone_number')
-        .eq('client_id', client_id)
-        .eq('provider', 'twilio')
-        .maybeSingle();
+    let twilio_sid = "";
+    let twilio_token = "";
+    let final_phone = phone_number;
 
-    if (configError || !config || !config.account_sid_encrypted || !config.auth_token_encrypted || !config.phone_number) {
-        return errorResponse('Twilio credentials not found or incomplete for this client.', 404);
-    }
-    
-    // 2. Decrypt credentials
-    const twilio_account_sid = await decryptSecret(config.account_sid_encrypted);
-    const twilio_auth_token = await decryptSecret(config.auth_token_encrypted);
-    const phone_number = config.phone_number;
+    // 1. GATHER CREDENTIALS
+    if (source === 'client') {
+        const { data: config, error: configError } = await supabaseAdmin
+            .from('client_integrations')
+            .select('account_sid_encrypted, auth_token_encrypted, phone_number')
+            .eq('client_id', client_id)
+            .eq('provider', 'twilio')
+            .maybeSingle();
 
-    if (!twilio_account_sid || !twilio_auth_token || !phone_number) {
-        return errorResponse('Decryption failed for Twilio credentials.', 500);
-    }
-    
-    // 3. Check if already provisioned (Idempotency check)
-    const { data: existingProvisioning } = await supabaseAdmin
-        .from('client_voice_integrations')
-        .select('retell_phone_id')
-        .eq('client_id', client_id)
-        .maybeSingle();
+        if (configError || !config) return errorResponse('Client Twilio credentials not found.', 404);
         
-    if (existingProvisioning) {
-        console.log(`[provision-voice-number] Already provisioned with Retell ID: ${existingProvisioning.retell_phone_id}. Returning success.`);
-        return jsonResponse({ success: true, retell_phone_id: existingProvisioning.retell_phone_id, message: "Already provisioned." });
-    }
-
-    // 4. Call Retell API to Import Number
-    let retellPhoneId: string;
-    try {
-        const retellResponse = await retell.phoneNumber.create({
-            twilio_account_sid: twilio_account_sid,
-            twilio_auth_token: twilio_auth_token,
-            phone_number: phone_number,
-            agent_id: RETELL_AGENT_ID, // Use the configured agent ID
-        });
-        
-        retellPhoneId = retellResponse.phone_number_id;
-        console.log(`[provision-voice-number] Retell import successful. ID: ${retellPhoneId}`);
-
-    } catch (retellError: any) {
-        console.error('[provision-voice-number] Retell API failed:', retellError.message);
-        
-        // Store failure result
-        await supabaseAdmin
-            .from('client_voice_integrations')
-            .insert({
-                client_id: client_id,
-                voice_status: 'failed',
-                retell_phone_id: 'RETELL_FAIL_' + Date.now(), // Store a unique failure marker
-            });
-            
-        // Check for specific Twilio credential failure (Retell usually wraps this)
-        if (retellError.message.includes('Twilio')) {
-            return errorResponse('Retell failed: Invalid Twilio credentials or phone number not owned by account.', 400);
+        twilio_sid = await decryptSecret(config.account_sid_encrypted);
+        twilio_token = await decryptSecret(config.auth_token_encrypted);
+        final_phone = config.phone_number;
+    } else {
+        // Platform Mode
+        if (!PLATFORM_TWILIO_SID || !PLATFORM_TWILIO_TOKEN) {
+            return errorResponse('Platform Twilio credentials not configured in secrets.', 500);
         }
-        
-        return errorResponse(`Retell provisioning failed: ${retellError.message}`, 500);
+        twilio_sid = PLATFORM_TWILIO_SID;
+        twilio_token = PLATFORM_TWILIO_TOKEN;
     }
 
-    // 5. Store Provisioning Result (Success)
-    const { data: insertData, error: insertError } = await supabaseAdmin
+    if (!twilio_sid || !twilio_token || !final_phone) {
+        return errorResponse('Incomplete credentials for provisioning.', 400);
+    }
+
+    // 2. IDEMPOTENCY CHECK
+    const { data: existing } = await supabaseAdmin
         .from('client_voice_integrations')
-        .insert({
-            client_id: client_id,
-            retell_phone_id: retellPhoneId,
-            voice_status: 'active',
-        })
-        .select()
-        .single();
+        .select('retell_phone_id, voice_status')
+        .eq('client_id', client_id)
+        .maybeSingle();
 
-    if (insertError) {
-        console.error('[provision-voice-number] DB insert failed:', insertError);
-        // Note: Retell number is created, but DB failed to record. This requires manual cleanup/sync.
-        return errorResponse('Provisioning succeeded but failed to record result in database.', 500);
+    if (existing?.voice_status === 'active') {
+        return jsonResponse({ success: true, retell_phone_id: existing.retell_phone_id, message: "Already active." });
     }
 
-    return jsonResponse({ success: true, retell_phone_id: retellPhoneId });
+    // 3. CALL RETELL API (using fetch to avoid SDK bundle issues)
+    console.log(`[provision-voice-number] Importing ${final_phone} into Retell...`);
+    const retellResponse = await fetch('https://api.retellai.com/create-phone-number', {
+        method: 'POST',
+        headers: {
+            'Authorization': `Bearer ${RETELL_API_KEY}`,
+            'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+            twilio_account_sid: twilio_sid,
+            twilio_auth_token: twilio_token,
+            phone_number: final_phone,
+            agent_id: RETELL_AGENT_ID,
+        }),
+    });
+
+    const retellData = await retellResponse.json();
+
+    if (!retellResponse.ok) {
+        console.error('[provision-voice-number] Retell Error:', retellData);
+        
+        await supabaseAdmin.from('client_voice_integrations').upsert({
+            client_id,
+            voice_status: 'failed',
+            number_source: source,
+            phone_number: final_phone
+        }, { onConflict: 'client_id' });
+
+        return errorResponse(`Retell Error: ${retellData.error?.message || 'Failed to import number'}`, 400);
+    }
+
+    // 4. SAVE RESULT
+    const { error: dbError } = await supabaseAdmin
+        .from('client_voice_integrations')
+        .upsert({
+            client_id,
+            retell_phone_id: retellData.phone_number_id,
+            phone_number: final_phone,
+            number_source: source,
+            voice_status: 'active',
+            a2p_registration_data: a2p_data || {},
+            a2p_status: source === 'platform' ? 'pending' : 'none'
+        }, { onConflict: 'client_id' });
+
+    if (dbError) return errorResponse('Provisioned in Retell but failed to update local DB.', 500);
+
+    return jsonResponse({ success: true, retell_phone_id: retellData.phone_number_id });
 
   } catch (error: any) {
-    console.error('[provision-voice-number] Unhandled error:', error.message);
+    console.error('[provision-voice-number] Crash:', error.message);
     return errorResponse(error.message, 500);
   }
 });
