@@ -3,7 +3,7 @@
 import React, { useState } from 'react';
 import { useAuth } from '../hooks/useAuth';
 import { Link } from 'react-router-dom';
-import { Briefcase, DollarSign, LogOut, User, Zap, CalendarCheck, Sparkles, Menu, X, ArrowRight, HelpCircle } from 'lucide-react';
+import { Briefcase, DollarSign, LogOut, User, Zap, CalendarCheck, Sparkles, Menu, X, ArrowRight, HelpCircle, ShieldCheck } from 'lucide-react';
 
 interface ClientLayoutProps {
   children: React.ReactNode;
@@ -15,6 +15,7 @@ const ClientLayout: React.FC<ClientLayoutProps> = ({ children }) => {
 
   const navItems = [
     { name: 'Dashboard', href: '/client/dashboard', icon: Briefcase },
+    { name: 'Messaging Setup', href: '/client/messaging-compliance', icon: ShieldCheck }, // NEW LINK
     { name: 'Appointments', href: '/client/appointments', icon: CalendarCheck },
     { name: 'Billing', href: '/client/billing', icon: DollarSign },
     { name: 'Add-ons', href: '/client/addons', icon: Zap },

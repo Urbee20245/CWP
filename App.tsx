@@ -27,7 +27,7 @@ import AdminSettingsPage from './src/pages/AdminSettingsPage';
 import AdminDocumentGenerator from './src/pages/AdminDocumentGenerator';
 import AdminEmailGenerator from './src/pages/AdminEmailGenerator';
 import AdminTwilioSettings from './src/pages/AdminTwilioSettings';
-import AdminVoiceManagement from './src/pages/AdminVoiceManagement'; // NEW IMPORT
+import AdminVoiceManagement from './src/pages/AdminVoiceManagement';
 import NotFoundPage from './src/pages/NotFoundPage';
 import ErrorBoundary from './src/components/ErrorBoundary';
 import GlobalLoading from './src/components/GlobalLoading';
@@ -46,6 +46,7 @@ import AdminProfile from './src/pages/AdminProfile';
 import AdminUserManagement from './src/pages/AdminUserManagement';
 import AdminInbox from './src/pages/AdminInbox';
 import ClientHelpPage from './src/pages/ClientHelpPage';
+import ClientMessagingCompliance from './src/pages/ClientMessagingCompliance'; // NEW IMPORT
 
 const AppContent: React.FC = () => {
   const location = useLocation();
@@ -84,7 +85,7 @@ const AppContent: React.FC = () => {
           <Route path="clients/:id" element={<AdminClientDetail />} />
           <Route path="projects" element={<AdminProjectList />} />
           <Route path="projects/:id" element={<AdminProjectDetail />} />
-          <Route path="voice" element={<AdminVoiceManagement />} /> {/* NEW ROUTE */}
+          <Route path="voice" element={<AdminVoiceManagement />} />
           <Route path="appointments" element={<AdminAppointmentManagement />} />
           <Route path="billing/products" element={<AdminBillingProducts />} />
           <Route path="billing/revenue" element={<AdminRevenueDashboard />} />
@@ -98,6 +99,7 @@ const AppContent: React.FC = () => {
 
         <Route path="/client/*" element={<ProtectedRoute allowedRoles={['client']} />}>
           <Route path="dashboard" element={<ClientDashboard />} />
+          <Route path="messaging-compliance" element={<ClientMessagingCompliance />} /> {/* NEW ROUTE */}
           <Route path="projects/:id" element={<ClientProjectDetail />} />
           <Route path="appointments" element={<ClientAppointmentBooking />} />
           <Route path="billing" element={<ClientBilling />} />
