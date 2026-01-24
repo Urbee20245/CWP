@@ -4,7 +4,7 @@ import React, { useState, useEffect } from 'react';
 import ClientLayout from '../components/ClientLayout';
 import { useAuth } from '../hooks/useAuth';
 import { supabase } from '../integrations/supabase/client';
-import { Settings, ShieldCheck, ArrowRight, Loader2, MessageSquare, Phone, Globe, Zap, Info } from 'lucide-react';
+import { Settings, ShieldCheck, ArrowRight, Loader2, MessageSquare, Phone, Globe, Zap, Info, AlertTriangle } from 'lucide-react';
 import ClientTwilioIntegration from '../components/ClientTwilioIntegration';
 import { Link } from 'react-router-dom';
 
@@ -143,7 +143,7 @@ const ClientSettings: React.FC = () => {
 
         </div>
       </div>
-    </ClientSettings>
+    </ClientLayout>
   );
 };
 
