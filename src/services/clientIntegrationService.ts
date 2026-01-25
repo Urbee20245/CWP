@@ -38,4 +38,33 @@ export const ClientIntegrationService = {
   testTwilioConnection: async (clientId: string) => {
     return invokeEdgeFunction('test-twilio-connection', { client_id: clientId });
   },
+  
+  // --- Google Calendar Integration ---
+  
+  initGoogleCalendarAuth: async (clientId: string) => {
+    return invokeEdgeFunction('google-oauth-init', { client_id: clientId });
+  },
+  
+  getGoogleCalendarStatus: async (clientId: string) => {
+    // Use RLS to fetch status directly from the DB
+    const { data, error } = await supabase
+        .from('client_google_calendar')
+        .select('connection_status, calendar_id, updated_at')
+        .eq('client_id', clientId)
+        .maybeSingle();
+        
+    if (error) throw error;
+    return data;
+  },
+  
+  disconnectGoogleCalendar: async (clientId: string) => {
+    // Use RLS to update status directly from the DB
+    const { error } = await supabase
+        .from('client_google_calendar')
+        .update({ connection_status: 'disconnected', google_access_token: '', last_synced_at: new Date().toISOString() })
+        .eq('client_id', clientId);
+        
+    if (error) throw error;
+    return { success: true };
+  }
 };

@@ -4,8 +4,9 @@ import React, { useState, useEffect, useCallback } from 'react';
 import ClientLayout from '../components/ClientLayout';
 import { useAuth } from '../hooks/useAuth';
 import { supabase } from '../integrations/supabase/client';
-import { Settings, ShieldCheck, ArrowRight, Loader2, MessageSquare, Phone, Globe, Zap, Info, AlertTriangle, Clock, CheckCircle2 } from 'lucide-react';
+import { Settings, ShieldCheck, ArrowRight, Loader2, MessageSquare, Phone, Globe, Zap, Info, AlertTriangle, Clock, CheckCircle2, Calendar } from 'lucide-react';
 import ClientTwilioIntegration from '../components/ClientTwilioIntegration';
+import ClientCalendarIntegration from '../components/ClientCalendarIntegration'; // NEW IMPORT
 import { Link } from 'react-router-dom';
 
 interface VoiceIntegration {
@@ -70,11 +71,10 @@ const ClientSettings: React.FC = () => {
     <ClientLayout>
       <div className="max-w-5xl mx-auto px-4 sm:px-6 lg:px-8 py-12">
         <h1 className="text-3xl font-bold text-slate-900 mb-4 flex items-center gap-3">
-          <Settings className="w-7 h-7 text-indigo-600" /> AI Voice & Messaging Settings
+          <Settings className="w-7 h-7 text-indigo-600" /> Integrations & Settings
         </h1>
         <p className="text-slate-600 mb-10 max-w-2xl">
-            Choose how you would like to set up your AI call handling and text messaging services. 
-            Most customers prefer our automated setup.
+            Manage your third-party integrations and AI service configurations.
         </p>
 
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-8 items-start">
@@ -137,35 +137,22 @@ const ClientSettings: React.FC = () => {
             </div>
           </div>
 
-          {/* OPTION 2: Bring Your Own Twilio (The Advanced Path) */}
+          {/* OPTION 2: Integrations Panel */}
           <div className="space-y-6">
-              <div className="bg-white rounded-2xl shadow-lg border border-slate-200 overflow-hidden group">
-                <div className="p-8">
-                    <div className="w-12 h-12 bg-slate-50 rounded-xl flex items-center justify-center mb-6 group-hover:scale-110 transition-transform">
-                        <Globe className="w-6 h-6 text-slate-600" />
-                    </div>
-                    
-                    <h2 className="text-xl font-bold text-slate-900 mb-3">Option 2: Bring Your Own Twilio</h2>
+              <div className="bg-white rounded-2xl shadow-lg border border-slate-200 overflow-hidden group p-8">
+                
+                {/* Google Calendar Integration */}
+                {clientId && <ClientCalendarIntegration clientId={clientId} />}
+                
+                {/* Twilio Integration */}
+                <div className="border-t border-slate-100 pt-6 mt-6">
+                    <h2 className="text-xl font-bold text-slate-900 mb-3 flex items-center gap-2">
+                        <Phone className="w-5 h-5 text-slate-600" /> Twilio Credentials
+                    </h2>
                     <p className="text-sm text-slate-600 leading-relaxed mb-6">
-                        Already have a Twilio account? You can connect your existing credentials below. 
-                        You will be responsible for your own Twilio usage costs and A2P registration.
+                        Connect your existing Twilio account for client-owned voice and messaging services.
                     </p>
-
-                    <div className="p-4 bg-amber-50 border border-amber-200 rounded-xl mb-8">
-                        <div className="flex items-start gap-3">
-                            <AlertTriangle className="w-5 h-5 text-amber-600 flex-shrink-0 mt-0.5" />
-                            <p className="text-xs text-amber-800 leading-normal">
-                                <strong>Technical Warning:</strong> This path requires manual A2P (10DLC) registration within your Twilio Console to prevent message blocking.
-                            </p>
-                        </div>
-                    </div>
-                    
-                    {/* Render the Twilio Integration Component here */}
-                    {clientId && (
-                        <div className="border-t border-slate-100 pt-6">
-                            <ClientTwilioIntegration clientId={clientId} />
-                        </div>
-                    )}
+                    {clientId && <ClientTwilioIntegration clientId={clientId} />}
                 </div>
               </div>
               

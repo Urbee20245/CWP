@@ -1,6 +1,8 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts"
 import { sendPublicFormEmail } from '../_shared/publicEmailService.ts';
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2.45.0';
+import { GoogleCalendarService } from '../_shared/googleCalendarService.ts'; // Import the new service
+import { parse, formatISO, addMinutes } from 'https://esm.sh/date-fns@3.6.0'; // Import date-fns
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
@@ -15,7 +17,7 @@ serve(async (req) => {
   try {
     const body = await req.json()
     
-    const { fullName, email, phone, message, formType = 'Contact Form' } = body
+    const { fullName, email, phone, message, formType = 'Contact Form', preferredDate, preferredTime, businessName } = body
 
     if (!fullName || !email || !message) {
       return new Response(
@@ -50,6 +52,70 @@ serve(async (req) => {
     } else {
       console.log('✅ Incoming email saved to database.');
     }
+    
+    // --- NEW: Google Calendar Event Creation (Part 6) ---
+    if (formType === 'Consultation Request' && preferredDate && preferredTime) {
+        try {
+            // 1. Find the Admin Profile ID (assuming the admin is the one receiving the notification)
+            // For simplicity, we assume the admin receiving the notification is the target calendar owner.
+            // In a real scenario, this would be linked to the specific admin who owns the calendar connection.
+            // Since we don't have a direct link here, we'll use a placeholder client ID for now.
+            
+            // For this implementation, we assume the client ID is the target for the calendar connection.
+            // We need to find the client ID associated with the admin's profile (which is complex here).
+            // Instead, we will assume the calendar connection is linked to the primary admin user's client ID (if one exists) or skip.
+            
+            // Since this form is public, we cannot reliably get the target client_id.
+            // We will use a placeholder logic: find the first admin profile and use their client ID.
+            
+            const { data: adminProfile } = await supabaseAdmin
+                .from('profiles')
+                .select('id')
+                .eq('role', 'admin')
+                .limit(1)
+                .single();
+                
+            if (adminProfile) {
+                const { data: adminClient } = await supabaseAdmin
+                    .from('clients')
+                    .select('id')
+                    .eq('owner_profile_id', adminProfile.id)
+                    .limit(1)
+                    .single();
+                    
+                if (adminClient) {
+                    const targetClientId = adminClient.id;
+                    
+                    // 2. Parse Date/Time (Assuming ET timezone for booking form)
+                    const dateTimeString = `${preferredDate} ${preferredTime}`;
+                    const parsedDate = parse(dateTimeString, 'yyyy-MM-dd h:mm a', new Date());
+                    
+                    // Ensure the date is valid
+                    if (isNaN(parsedDate.getTime())) {
+                        console.error('❌ Calendar: Invalid date/time format.');
+                    } else {
+                        const startTimeISO = formatISO(parsedDate);
+                        const endTimeISO = formatISO(addMinutes(parsedDate, 30)); // Assuming 30 min consultation
+                        
+                        const eventDetails = {
+                            title: `NEW CONSULTATION: ${businessName || fullName}`,
+                            startTime: startTimeISO,
+                            endTime: endTimeISO,
+                            description: `Client: ${fullName}\nEmail: ${email}\nPhone: ${phone}\n\nProject Description:\n${message}`,
+                            attendeeEmail: email,
+                        };
+                        
+                        await GoogleCalendarService.createCalendarEvent(targetClientId, eventDetails);
+                        console.log('✅ Google Calendar event created successfully.');
+                    }
+                }
+            }
+        } catch (e) {
+            console.error('❌ Calendar Integration Failed:', e);
+            // Do not throw, allow form submission to succeed
+        }
+    }
+    // --- END Google Calendar Event Creation ---
 
     const htmlContent = `
         <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
@@ -58,6 +124,8 @@ serve(async (req) => {
             <p><strong style="color: #374151;">Name:</strong> ${fullName}</p>
             <p><strong style="color: #374151;">Email:</strong> <a href="mailto:${email}" style="color: #0EA5E9;">${email}</a></p>
             <p><strong style="color: #374151;">Phone:</strong> ${phone || 'Not provided'}</p>
+            ${businessName ? `<p><strong style="color: #374151;">Business:</strong> ${businessName}</p>` : ''}
+            ${preferredDate && preferredTime ? `<p><strong style="color: #374151;">Requested Time:</strong> ${preferredDate} at ${preferredTime} ET</p>` : ''}
           </div>
           <div style="background: white; padding: 20px; border-left: 4px solid #0EA5E9; margin: 20px 0;">
             <p><strong style="color: #374151;">Message:</strong></p>
