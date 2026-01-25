@@ -1,24 +1,25 @@
 "use client";
 
 import React, { useState, useEffect, useCallback } from 'react';
-import { Phone, Save, Loader2, AlertTriangle, CheckCircle2, MessageSquare, ExternalLink, Clock } from 'lucide-react';
+import { Phone, Save, Loader2, AlertTriangle, CheckCircle2, MessageSquare, ExternalLink, Clock, Info } from 'lucide-react';
 import { ClientIntegrationService } from '../services/clientIntegrationService';
 import { useAuth } from '../hooks/useAuth';
 import { format } from 'date-fns';
-import { Link } from 'react-router-dom'; // <-- ADDED IMPORT
+import { Link } from 'react-router-dom';
+import { supabase } from '../integrations/supabase/client'; // Import supabase to fetch A2P status
 
 interface ClientTwilioIntegrationProps {
   clientId: string;
 }
 
 const ClientTwilioIntegration: React.FC<ClientTwilioIntegrationProps> = ({ clientId }) => {
-  const { profile } = useAuth();
   const [formData, setFormData] = useState({
     accountSid: '',
     authToken: '',
     phoneNumber: '',
   });
   const [config, setConfig] = useState<{ configured: boolean, phone_number?: string, masked_sid?: string, updated_at?: string } | null>(null);
+  const [a2pStatus, setA2pStatus] = useState<'not_started' | 'pending_approval' | 'approved' | 'rejected'>('not_started');
   const [isLoading, setIsLoading] = useState(true);
   const [isSaving, setIsSaving] = useState(false);
   const [isTesting, setIsTesting] = useState(false);
@@ -27,6 +28,7 @@ const ClientTwilioIntegration: React.FC<ClientTwilioIntegrationProps> = ({ clien
   const fetchConfig = useCallback(async () => {
     setIsLoading(true);
     try {
+      // 1. Fetch Twilio Config (Encrypted details)
       const result = await ClientIntegrationService.getTwilioConfig(clientId);
       setConfig(result);
       if (result.configured) {
@@ -35,6 +37,18 @@ const ClientTwilioIntegration: React.FC<ClientTwilioIntegrationProps> = ({ clien
             phoneNumber: result.phone_number || '',
         }));
       }
+      
+      // 2. Fetch A2P Status (from client_voice_integrations)
+      const { data: voiceData } = await supabase
+        .from('client_voice_integrations')
+        .select('a2p_status, voice_status')
+        .eq('client_id', clientId)
+        .maybeSingle();
+        
+      if (voiceData) {
+          setA2pStatus(voiceData.a2p_status as any || 'not_started');
+      }
+
     } catch (e: any) {
       setStatusMessage({ type: 'error', message: `Failed to load configuration: ${e.message}` });
     } finally {
@@ -108,26 +122,22 @@ const ClientTwilioIntegration: React.FC<ClientTwilioIntegrationProps> = ({ clien
         setIsTesting(false);
     }
   };
+  
+  const isA2PPending = a2pStatus !== 'approved';
+  const isConfigured = config?.configured;
 
   if (isLoading) {
     return <div className="flex justify-center items-center h-32"><Loader2 className="w-6 h-6 animate-spin text-indigo-600" /></div>;
   }
 
   return (
-    <div className="bg-white p-6 rounded-xl shadow-lg border border-slate-100">
-      <h2 className="text-xl font-bold mb-4 flex items-center gap-2 text-slate-900 border-b border-slate-100 pb-4">
-        <Phone className="w-5 h-5 text-indigo-600" /> Phone & Messaging Integration
-      </h2>
+    <div className="space-y-4">
       
-      <p className="text-sm text-slate-600 mb-6">
-        Connect your business phone number for automated call handling, AI voice agents, and SMS notifications.
-      </p>
-
       {/* Status Display */}
-      {config?.configured && (
-        <div className="p-3 mb-4 bg-emerald-50 border border-emerald-200 rounded-lg text-sm text-emerald-800">
+      {isConfigured && (
+        <div className="p-3 bg-emerald-50 border border-emerald-200 rounded-lg text-sm text-emerald-800">
             <p className="font-bold mb-1 flex items-center gap-2">
-                <CheckCircle2 className="w-4 h-4" /> Integration Active
+                <CheckCircle2 className="w-4 h-4" /> Credentials Saved
             </p>
             <p>Phone Number: <span className="font-mono font-semibold">{config.phone_number}</span></p>
             <p>Account SID: <span className="font-mono font-semibold">***{config.masked_sid}</span> (Last 4 chars)</p>
@@ -135,8 +145,24 @@ const ClientTwilioIntegration: React.FC<ClientTwilioIntegrationProps> = ({ clien
         </div>
       )}
       
+      {/* A2P Warning/Info */}
+      {isConfigured && (
+          <div className={`p-3 rounded-lg text-sm flex items-center gap-2 ${isA2PPending ? 'bg-red-100 border-red-300 text-red-800' : 'bg-blue-100 border-blue-300 text-blue-800'}`}>
+              {isA2PPending ? <AlertTriangle className="w-4 h-4" /> : <Info className="w-4 h-4" />}
+              <div>
+                  <p className="font-bold">A2P Status: {a2pStatus.replace('_', ' ')}</p>
+                  <p className="text-xs mt-0.5">
+                      {isA2PPending 
+                          ? "AI Call Handling is disabled until A2P approval is granted. You must complete A2P registration in your Twilio Console."
+                          : "A2P is approved. You can now test the connection and enable AI Call Handling."
+                      }
+                  </p>
+              </div>
+          </div>
+      )}
+      
       {statusMessage && (
-        <div className={`p-3 mb-4 rounded-lg text-sm flex items-center gap-2 ${
+        <div className={`p-3 rounded-lg text-sm flex items-center gap-2 ${
             statusMessage.type === 'success' ? 'bg-emerald-100 border-emerald-300 text-emerald-800' :
             statusMessage.type === 'error' ? 'bg-red-100 border-red-300 text-red-800' :
             'bg-blue-100 border-blue-300 text-blue-800'
@@ -217,7 +243,7 @@ const ClientTwilioIntegration: React.FC<ClientTwilioIntegrationProps> = ({ clien
             <button
                 type="button"
                 onClick={handleTestConnection}
-                disabled={isTesting || isSaving || !config?.configured}
+                disabled={isTesting || isSaving || !isConfigured || isA2PPending}
                 className="flex-1 py-3 bg-emerald-600 text-white rounded-lg font-semibold hover:bg-emerald-700 transition-colors disabled:opacity-50 flex items-center justify-center gap-2"
             >
                 {isTesting ? (

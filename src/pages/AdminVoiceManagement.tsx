@@ -3,7 +3,7 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import AdminLayout from '../components/AdminLayout';
 import { supabase } from '../integrations/supabase/client';
-import { Bot, Phone, Zap, Search, Loader2, CheckCircle2, AlertTriangle, Info, Plus, Shield, Globe } from 'lucide-react';
+import { Bot, Phone, Zap, Search, Loader2, CheckCircle2, AlertTriangle, Info, Plus, Shield, Globe, Clock } from 'lucide-react';
 import { AdminService } from '../services/adminService';
 
 interface Client {
@@ -12,6 +12,7 @@ interface Client {
     phone: string;
     voice_status?: string;
     number_source?: string;
+    a2p_status?: string; // Added A2P status
 }
 
 const AdminVoiceManagement: React.FC = () => {
@@ -20,6 +21,7 @@ const AdminVoiceManagement: React.FC = () => {
     const [selectedClientId, setSelectedClientId] = useState<string>('');
     const [isLoading, setIsLoading] = useState(true);
     const [isProvisioning, setIsProvisioning] = useState(false);
+    const [provisioningError, setProvisioningError] = useState<string | null>(null);
     
     // Form State
     const [source, setSource] = useState<'client' | 'platform'>('client');
@@ -37,14 +39,15 @@ const AdminVoiceManagement: React.FC = () => {
             .from('clients')
             .select(`
                 id, business_name, phone,
-                client_voice_integrations (voice_status, number_source)
+                client_voice_integrations (voice_status, number_source, a2p_status)
             `)
             .order('business_name', { ascending: true });
 
         const formatted = (clientsData || []).map((c: any) => ({
             ...c,
             voice_status: c.client_voice_integrations?.[0]?.voice_status || 'inactive',
-            number_source: c.client_voice_integrations?.[0]?.number_source || 'none'
+            number_source: c.client_voice_integrations?.[0]?.number_source || 'none',
+            a2p_status: c.client_voice_integrations?.[0]?.a2p_status || 'not_started', // Extract A2P status
         }));
         
         setClients(formatted);
@@ -58,11 +61,21 @@ const AdminVoiceManagement: React.FC = () => {
     );
 
     const selectedClient = clients.find(c => c.id === selectedClientId);
+    
+    const isClientOwned = selectedClient?.number_source === 'client';
+    const isA2PPending = isClientOwned && selectedClient?.a2p_status !== 'approved';
+    const isA2PApproved = isClientOwned && selectedClient?.a2p_status === 'approved';
+    const isVoiceActive = selectedClient?.voice_status === 'active';
 
     const handleEnableVoice = async () => {
         if (!selectedClientId) return;
         setIsProvisioning(true);
+        setProvisioningError(null);
 
+        // Client-owned check: If A2P is pending, we should not proceed manually, 
+        // but the server-side trigger handles the auto-provisioning. 
+        // If the admin clicks this button, we assume they are forcing the action or re-trying.
+        
         try {
             await AdminService.provisionVoiceNumber(
                 selectedClientId, 
@@ -73,9 +86,23 @@ const AdminVoiceManagement: React.FC = () => {
             alert("AI Call Handling successfully enabled for this client!");
             fetchClients();
         } catch (e: any) {
-            alert(`Provisioning Failed: ${e.message}`);
+            if (e.message.includes('422')) {
+                setProvisioningError("Provisioning skipped: A2P approval is still pending for this client-owned number.");
+            } else {
+                setProvisioningError(`Provisioning Failed: ${e.message}`);
+            }
         } finally {
             setIsProvisioning(false);
+        }
+    };
+    
+    const getA2PStatusDisplay = (status: string) => {
+        switch (status) {
+            case 'approved': return { label: 'Approved', color: 'text-emerald-600', bg: 'bg-emerald-100', icon: CheckCircle2 };
+            case 'pending_approval':
+            case 'submitted': return { label: 'Pending Approval', color: 'text-blue-600', bg: 'bg-blue-100', icon: Clock };
+            case 'rejected': return { label: 'Needs Attention', color: 'text-red-600', bg: 'bg-red-100', icon: AlertTriangle };
+            default: return { label: 'Not Started', color: 'text-slate-600', bg: 'bg-slate-100', icon: Info };
         }
     };
 
@@ -111,7 +138,7 @@ const AdminVoiceManagement: React.FC = () => {
                                         <button 
                                             key={c.id}
                                             onClick={() => setSelectedClientId(c.id)}
-                                            className={`w-full text-left p-3 rounded-lg border transition-all ${selectedClientId === c.id ? 'border-indigo-500 bg-indigo-50 ring-1 ring-indigo-500' : 'border-slate-100 hover:bg-slate-50'}`}
+                                            className={`w-full text-left p-3 rounded-lg border transition-all ${selectedClientId === c.id ? 'border-indigo-600 bg-indigo-50 ring-1 ring-indigo-500' : 'border-slate-100 hover:bg-slate-50'}`}
                                         >
                                             <div className="flex justify-between items-start">
                                                 <p className="font-bold text-slate-900 text-sm">{c.business_name}</p>
@@ -142,10 +169,32 @@ const AdminVoiceManagement: React.FC = () => {
                                             {selectedClient.phone || 'No phone on record'}
                                         </p>
                                     </div>
-                                    <div className={`px-4 py-2 rounded-full font-bold text-xs uppercase tracking-widest ${selectedClient.voice_status === 'active' ? 'bg-emerald-100 text-emerald-700' : 'bg-slate-100 text-slate-500'}`}>
+                                    <div className={`px-4 py-2 rounded-full font-bold text-xs uppercase tracking-widest ${isVoiceActive ? 'bg-emerald-100 text-emerald-700' : 'bg-slate-100 text-slate-500'}`}>
                                         Voice Status: {selectedClient.voice_status}
                                     </div>
                                 </div>
+                                
+                                {/* A2P Status Display */}
+                                {isClientOwned && (
+                                    <div className={`p-4 mb-6 rounded-xl border flex items-center gap-3 ${getA2PStatusDisplay(selectedClient.a2p_status).bg} border-current`}>
+                                        <getA2PStatusDisplay(selectedClient.a2p_status).icon className={`w-5 h-5 ${getA2PStatusDisplay(selectedClient.a2p_status).color}`} />
+                                        <div>
+                                            <p className={`font-bold text-sm ${getA2PStatusDisplay(selectedClient.a2p_status).color}`}>
+                                                Messaging Approval: {getA2PStatusDisplay(selectedClient.a2p_status).label}
+                                            </p>
+                                            {isA2PPending && (
+                                                <p className="text-xs mt-0.5 text-blue-800">
+                                                    AI Call Handling is disabled until A2P approval is granted. Provisioning will start automatically upon approval.
+                                                </p>
+                                            )}
+                                            {isA2PApproved && !isVoiceActive && (
+                                                <p className="text-xs mt-0.5 text-emerald-800">
+                                                    A2P Approved. Click 'Enable AI Call Handling' below to finalize setup.
+                                                </p>
+                                            )}
+                                        </div>
+                                    </div>
+                                )}
 
                                 <h3 className="text-lg font-bold text-slate-900 mb-6 flex items-center gap-2">
                                     <Shield className="w-5 h-5 text-indigo-600" /> Sourcing Strategy
@@ -154,6 +203,7 @@ const AdminVoiceManagement: React.FC = () => {
                                 <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mb-10">
                                     <button 
                                         onClick={() => setSource('client')}
+                                        type="button"
                                         className={`p-6 text-left rounded-xl border-2 transition-all group ${source === 'client' ? 'border-indigo-600 bg-indigo-50/50' : 'border-slate-100 hover:border-slate-200'}`}
                                     >
                                         <div className="flex items-center gap-3 mb-3">
@@ -169,6 +219,7 @@ const AdminVoiceManagement: React.FC = () => {
 
                                     <button 
                                         onClick={() => setSource('platform')}
+                                        type="button"
                                         className={`p-6 text-left rounded-xl border-2 transition-all group ${source === 'platform' ? 'border-indigo-600 bg-indigo-50/50' : 'border-slate-100 hover:border-slate-200'}`}
                                     >
                                         <div className="flex items-center gap-3 mb-3">
@@ -229,16 +280,28 @@ const AdminVoiceManagement: React.FC = () => {
                                         </div>
                                     </div>
                                 )}
+                                
+                                {provisioningError && (
+                                    <div className="p-3 mb-4 bg-red-100 border border-red-300 text-red-800 rounded-lg text-sm flex items-center gap-2">
+                                        <AlertTriangle className="w-4 h-4" />
+                                        {provisioningError}
+                                    </div>
+                                )}
 
                                 <button 
                                     onClick={handleEnableVoice}
-                                    disabled={isProvisioning || (source === 'platform' && !platformNumber)}
+                                    disabled={isProvisioning || isVoiceActive || (source === 'platform' && !platformNumber) || isA2PPending}
                                     className="w-full py-4 bg-indigo-600 text-white rounded-xl font-bold text-lg hover:bg-indigo-700 transition-all shadow-xl shadow-indigo-200 disabled:opacity-50 flex items-center justify-center gap-3"
                                 >
                                     {isProvisioning ? (
                                         <>
                                             <Loader2 className="w-6 h-6 animate-spin" />
                                             Enabling Secure AI Calls...
+                                        </>
+                                    ) : isVoiceActive ? (
+                                        <>
+                                            <CheckCircle2 className="w-6 h-6" />
+                                            AI Call Handling Active
                                         </>
                                     ) : (
                                         <>

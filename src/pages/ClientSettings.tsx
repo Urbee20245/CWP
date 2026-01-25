@@ -1,33 +1,60 @@
 "use client";
 
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import ClientLayout from '../components/ClientLayout';
 import { useAuth } from '../hooks/useAuth';
 import { supabase } from '../integrations/supabase/client';
-import { Settings, ShieldCheck, ArrowRight, Loader2, MessageSquare, Phone, Globe, Zap, Info, AlertTriangle } from 'lucide-react';
+import { Settings, ShieldCheck, ArrowRight, Loader2, MessageSquare, Phone, Globe, Zap, Info, AlertTriangle, Clock, CheckCircle2 } from 'lucide-react';
 import ClientTwilioIntegration from '../components/ClientTwilioIntegration';
 import { Link } from 'react-router-dom';
+
+interface VoiceIntegration {
+    a2p_status: string;
+    voice_status: string;
+}
 
 const ClientSettings: React.FC = () => {
   const { profile, isLoading } = useAuth();
   const [clientId, setClientId] = useState<string | null>(null);
+  const [voiceIntegration, setVoiceIntegration] = useState<VoiceIntegration | null>(null);
   const [isClientLoading, setIsClientLoading] = useState(true);
 
-  useEffect(() => {
-    const fetchClientId = async () => {
-      if (!profile) return;
-      const { data } = await supabase
-        .from('clients')
-        .select('id')
-        .eq('owner_profile_id', profile.id)
-        .single();
-      
-      if (data) setClientId(data.id);
-      setIsClientLoading(false);
-    };
-
-    if (profile) fetchClientId();
+  const fetchClientData = useCallback(async () => {
+    if (!profile) return;
+    setIsClientLoading(true);
+    
+    const { data: clientData } = await supabase
+      .from('clients')
+      .select('id, client_voice_integrations (a2p_status, voice_status)')
+      .eq('owner_profile_id', profile.id)
+      .maybeSingle();
+    
+    if (clientData) {
+        setClientId(clientData.id);
+        const integration = (clientData.client_voice_integrations as any)?.[0];
+        setVoiceIntegration(integration || { a2p_status: 'not_started', voice_status: 'inactive' });
+    }
+    setIsClientLoading(false);
   }, [profile]);
+
+  useEffect(() => {
+    if (profile) fetchClientData();
+  }, [profile, fetchClientData]);
+  
+  const a2pStatus = voiceIntegration?.a2p_status || 'not_started';
+  const voiceStatus = voiceIntegration?.voice_status || 'inactive';
+  
+  const getA2PStatusDisplay = () => {
+    switch (a2pStatus) {
+        case 'approved': return { label: 'Approved', color: 'text-emerald-600', bg: 'bg-emerald-50', icon: CheckCircle2 };
+        case 'pending_approval':
+        case 'submitted': return { label: 'Pending Approval', color: 'text-blue-600', bg: 'bg-blue-50', icon: Clock };
+        case 'rejected': return { label: 'Needs Attention', color: 'text-red-600', bg: 'bg-red-50', icon: AlertTriangle };
+        default: return { label: 'Not Started', color: 'text-amber-600', bg: 'bg-amber-50', icon: Info };
+    }
+  };
+  
+  const a2pDisplay = getA2PStatusDisplay();
 
   if (isLoading || isClientLoading) {
     return (
@@ -70,29 +97,35 @@ const ClientSettings: React.FC = () => {
                     configure the AI logic, and ensure network compliance for you.
                 </p>
 
-                <div className="space-y-4 mb-8">
-                    <div className="flex items-start gap-3 p-4 bg-slate-50 rounded-xl border border-slate-100">
-                        <ShieldCheck className="w-5 h-5 text-emerald-600 flex-shrink-0 mt-0.5" />
+                <div className={`space-y-4 mb-8 p-4 rounded-xl border border-current ${a2pDisplay.bg}`}>
+                    <div className="flex items-start gap-3">
+                        <a2pDisplay.icon className={`w-5 h-5 ${a2pDisplay.color} flex-shrink-0 mt-0.5`} />
                         <div>
-                            <p className="text-sm font-bold text-slate-900">Messaging Verification Required</p>
-                            <p className="text-xs text-slate-500 mt-1">
-                                To activate this service, we must verify your business identity with mobile networks (A2P compliance).
-                            </p>
+                            <p className="text-sm font-bold text-slate-900">Messaging Verification: {a2pDisplay.label}</p>
+                            {a2pStatus === 'approved' && voiceStatus === 'active' && (
+                                <p className="text-xs text-emerald-700 mt-1 font-semibold">
+                                    AI Call Handling is fully active and operational.
+                                </p>
+                            )}
+                            {a2pStatus === 'approved' && voiceStatus !== 'active' && (
+                                <p className="text-xs text-emerald-700 mt-1 font-semibold">
+                                    Verification complete. AI Call Handling will activate shortly.
+                                </p>
+                            )}
+                            {a2pStatus !== 'approved' && (
+                                <p className="text-xs text-slate-500 mt-1">
+                                    You must submit your business details to start the verification process.
+                                </p>
+                            )}
                         </div>
                     </div>
-                    
-                    <ul className="space-y-2 text-xs text-slate-500 ml-1">
-                        <li className="flex items-center gap-2">• We provide the phone number</li>
-                        <li className="flex items-center gap-2">• We handle the A2P registration</li>
-                        <li className="flex items-center gap-2">• All-in-one monthly billing</li>
-                    </ul>
                 </div>
 
                 <Link 
                     to="/client/messaging-compliance"
                     className="w-full inline-flex items-center justify-center gap-2 px-6 py-4 bg-indigo-600 text-white rounded-xl font-bold hover:bg-indigo-700 transition-all shadow-lg shadow-indigo-200"
                 >
-                    Start Messaging Verification
+                    {a2pStatus === 'approved' ? 'View Verification Status' : 'Start Messaging Verification'}
                     <ArrowRight className="w-5 h-5" />
                 </Link>
             </div>
