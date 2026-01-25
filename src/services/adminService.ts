@@ -86,4 +86,20 @@ export const AdminService = {
     if (error) throw error;
     return data;
   },
+  disconnectGoogleCalendar: async (clientId: string) => {
+    const { error } = await supabase
+      .from('client_google_calendar')
+      .update({ connection_status: 'disconnected' })
+      .eq('client_id', clientId);
+    if (error) throw error;
+    return { success: true };
+  },
+  resetGoogleCalendar: async (clientId: string) => {
+    const { error } = await supabase
+      .from('client_google_calendar')
+      .delete()
+      .eq('client_id', clientId);
+    if (error) throw error;
+    return { success: true };
+  },
 };

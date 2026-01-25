@@ -3,7 +3,7 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import { useParams, Link, useNavigate } from 'react-router-dom';
 import { supabase } from '../integrations/supabase/client';
-import { Loader2, Briefcase, FileText, DollarSign, Plus, CreditCard, Zap, ExternalLink, ShieldCheck, Lock, Trash2, Send, AlertCircle, MessageSquare, Phone, CheckCircle2, Pause, Play, Clock, Download, Edit, Bell, BellOff, Users, Percent, Calendar } from 'lucide-react';
+import { Loader2, Briefcase, FileText, DollarSign, Plus, CreditCard, Zap, ExternalLink, ShieldCheck, Lock, Trash2, Send, AlertCircle, MessageSquare, Phone, CheckCircle2, Pause, Play, Clock, Download, Edit, Bell, BellOff, Users, Percent, Calendar, X } from 'lucide-react';
 import AdminLayout from '../components/AdminLayout';
 import { Profile } from '../types/auth';
 import { AdminService } from '../services/adminService'; // Use AdminService for admin functions
@@ -112,6 +112,12 @@ interface Client {
   pause_logs: PauseLog[]; // New field
   addon_requests: AddonRequest[]; // New field
   reminders: ClientReminder[]; // NEW FIELD
+  client_google_calendar: {
+    id: string;
+    connection_status: 'connected' | 'disconnected';
+    calendar_id: string;
+    updated_at: string;
+  }[] | null;
 }
 
 interface BillingProduct {
@@ -170,12 +176,13 @@ const AdminClientDetail: React.FC = () => {
     if (!id) return;
     setFetchError(null);
 
-    // 1. Fetch Main Client Data (including profile)
+    // 1. Fetch Main Client Data (including profile and calendar)
     const { data: clientData, error: clientError } = await supabase
       .from('clients')
       .select(`
           id, business_name, phone, address, status, notes, owner_profile_id, stripe_customer_id, billing_email, service_status, cancellation_reason, cancellation_effective_date,
-          profiles (id, full_name, email, role)
+          profiles (id, full_name, email, role),
+          client_google_calendar (*)
       `)
       .eq('id', id)
       .single();
@@ -190,7 +197,7 @@ const AdminClientDetail: React.FC = () => {
     
     const clientRecord = clientData as unknown as Client;
 
-    // 2. Fetch related data separately (Decoupled to prevent schema cache crash)
+    // 2. Fetch related data separately
     const [
         { data: projectsData },
         { data: invoicesData },
@@ -198,8 +205,8 @@ const AdminClientDetail: React.FC = () => {
         { data: depositsData },
         { data: pauseLogsData },
         { data: addonRequestsData },
-        { data: discountsData }, // Fetch Discounts
-        { data: remindersData }, // NEW: Fetch Reminders
+        { data: discountsData },
+        { data: remindersData },
     ] = await Promise.all([
         supabase.from('projects').select('id, title, status, progress_percent').eq('client_id', id).order('created_at', { ascending: false }),
         supabase.from('invoices').select('id, amount_due, status, hosted_invoice_url, pdf_url, created_at, last_reminder_sent_at, disable_reminders, stripe_invoice_id').eq('client_id', id).order('created_at', { ascending: false }),
@@ -207,8 +214,8 @@ const AdminClientDetail: React.FC = () => {
         supabase.from('deposits').select('id, amount_cents, status, stripe_invoice_id, applied_to_invoice_id, created_at').eq('client_id', id).order('created_at', { ascending: false }),
         supabase.from('service_pause_logs').select('id, action, internal_note, client_acknowledged, created_at').eq('client_id', id).order('created_at', { ascending: false }),
         supabase.from('client_addon_requests').select('id, addon_key, addon_name, status, notes, requested_at').eq('client_id', id).order('requested_at', { ascending: false }),
-        supabase.from('invoice_discounts').select('*'), // Fetch all discounts
-        supabase.from('client_reminders').select('*, profiles(full_name)').eq('client_id', id).order('reminder_date', { ascending: true }), // NEW: Fetch Reminders
+        supabase.from('invoice_discounts').select('*'),
+        supabase.from('client_reminders').select('*, profiles(full_name)').eq('client_id', id).order('reminder_date', { ascending: true }),
     ]);
     
     const allDiscounts = ensureArray(discountsData) as InvoiceDiscount[];
@@ -226,7 +233,8 @@ const AdminClientDetail: React.FC = () => {
         deposits: ensureArray(depositsData) as DepositSummary[],
         pause_logs: ensureArray(pauseLogsData) as PauseLog[],
         addon_requests: ensureArray(addonRequestsData) as AddonRequest[],
-        reminders: ensureArray(remindersData) as ClientReminder[], // NEW
+        reminders: ensureArray(remindersData) as ClientReminder[],
+        client_google_calendar: ensureArray(clientData.client_google_calendar),
     };
     
     setClient(mergedClient);
@@ -269,15 +277,12 @@ const AdminClientDetail: React.FC = () => {
     }
 
     try {
-        // 1. Update client status and timestamps
         const { error: updateError } = await supabase
             .from('clients')
             .update({ 
                 service_status: newStatus,
-                // Only update timestamps if pausing/resuming
                 service_paused_at: action === 'paused' ? new Date().toISOString() : null,
                 service_resumed_at: action === 'resumed' ? new Date().toISOString() : null,
-                // Clear cancellation details if resuming
                 cancellation_reason: action === 'resumed' ? null : client.cancellation_reason,
                 cancellation_effective_date: action === 'resumed' ? null : client.cancellation_effective_date,
             })
@@ -285,7 +290,6 @@ const AdminClientDetail: React.FC = () => {
             
         if (updateError) throw updateError;
 
-        // 2. Log the action
         const { error: logError } = await supabase
             .from('service_pause_logs')
             .insert({
@@ -296,10 +300,6 @@ const AdminClientDetail: React.FC = () => {
             
         if (logError) console.error('Error logging service action:', logError);
         
-        // 3. Send notification (Mocked server-side call)
-        // NOTE: In a real app, this would be an Edge Function call to send the email securely.
-        // await AdminService.sendServiceStatusNotification(client.profiles.email, client.business_name, action);
-
         alert(`Client service status updated to ${newStatus}! Notification sent.`);
         setServiceActionNote('');
         fetchClientData();
@@ -415,8 +415,6 @@ const AdminClientDetail: React.FC = () => {
               
           if (error) throw error;
           
-          // Optional: Send notification to client about approval/decline
-          
           alert(`Request status updated to ${newStatus}.`);
           fetchClientData();
       } catch (e: any) {
@@ -426,7 +424,6 @@ const AdminClientDetail: React.FC = () => {
       }
   };
   
-  // --- Billing Handlers ---
   const handleCreateCustomer = async () => {
     if (!client) return;
     setIsProcessing(true);
@@ -454,7 +451,6 @@ const AdminClientDetail: React.FC = () => {
     
     let setupFeePriceId: string | undefined = undefined;
     
-    // Check if this subscription is bundled with a setup fee product
     if (selectedProduct.bundled_with_product_id) {
         const setupProduct = products.find(p => p.id === selectedProduct.bundled_with_product_id);
         if (setupProduct && setupProduct.billing_type === 'one_time') {
@@ -470,7 +466,7 @@ const AdminClientDetail: React.FC = () => {
         const result = await AdminService.createSubscription(
             client.id, 
             selectedSubscriptionPriceId, 
-            setupFeePriceId // Pass the setup fee price ID
+            setupFeePriceId
         );
         
         if (result.requires_action && result.hosted_invoice_url) {
@@ -511,9 +507,8 @@ const AdminClientDetail: React.FC = () => {
     setIsProcessing(true);
     
     try {
-        // Determine if we should link the deposit to a project (for auto-application later)
         const projectId = applyDepositToFuture && client.projects.length > 0 
-            ? client.projects[0].id // Use the first project ID as a default link
+            ? client.projects[0].id
             : undefined;
             
         const result = await AdminService.createDepositInvoice(
@@ -552,14 +547,12 @@ const AdminClientDetail: React.FC = () => {
   const handleSendEmailClick = () => {
       if (!client) return;
       const recipientEmail = client.billing_email || client.profiles?.email;
-      const recipientName = client.profiles?.full_name || client.business_name;
       
       if (!recipientEmail) {
           alert("Cannot send email: Client email address is missing.");
           return;
       }
       
-      // Navigate to the new dedicated drafting page
       navigate(`/admin/email-draft?clientId=${client.id}&clientEmail=${recipientEmail}&clientName=${client.business_name}&clientFullName=${client.profiles?.full_name}`);
   };
   
@@ -580,8 +573,8 @@ const AdminClientDetail: React.FC = () => {
           await AdminService.applyInvoiceDiscount(
               invoiceId,
               discountType,
-              discountType === 'percentage' ? discountValue : Math.round(discountValue * 100), // Convert fixed amount to cents
-              user!.id // Applied by current admin user
+              discountType === 'percentage' ? discountValue : Math.round(discountValue * 100),
+              user!.id
           );
           
           alert(`Discount applied successfully! The invoice will be updated on the next sync or manual action.`);
@@ -594,12 +587,11 @@ const AdminClientDetail: React.FC = () => {
       }
   };
   
-  // --- Reminder Handlers (NEW) ---
   const handleCreateReminder = async (e: React.FormEvent) => {
       e.preventDefault();
       if (!client || !newReminderNote || !newReminderDate || !user) return;
       
-      setIsProcessing(true); // Use global processing state
+      setIsProcessing(true);
       setSaveError(null);
       
       try {
@@ -613,11 +605,11 @@ const AdminClientDetail: React.FC = () => {
           alert('Reminder set successfully!');
           setNewReminderNote('');
           setNewReminderDate('');
-          await fetchClientData(); // Await the fetch
+          await fetchClientData();
       } catch (e: any) {
           setSaveError(e.message || 'Failed to create reminder.');
       } finally {
-          setIsProcessing(false); // Reset global processing state
+          setIsProcessing(false);
       }
   };
   
@@ -634,6 +626,38 @@ const AdminClientDetail: React.FC = () => {
       } finally {
           setIsProcessing(false);
       }
+  };
+
+  const handleDisconnectCalendar = async () => {
+    if (!client || !client.client_google_calendar) return;
+    if (!window.confirm("Are you sure you want to disconnect this client's Google Calendar? They will need to re-authenticate to enable it again.")) return;
+
+    setIsProcessing(true);
+    try {
+        await AdminService.disconnectGoogleCalendar(client.id);
+        alert('Google Calendar has been disconnected.');
+        fetchClientData();
+    } catch (e: any) {
+        alert(`Failed to disconnect: ${e.message}`);
+    } finally {
+        setIsProcessing(false);
+    }
+  };
+
+  const handleResetCalendar = async () => {
+    if (!client || !client.client_google_calendar) return;
+    if (!window.confirm("Are you sure you want to completely reset this client's Google Calendar integration? This will delete their stored credentials.")) return;
+
+    setIsProcessing(true);
+    try {
+        await AdminService.resetGoogleCalendar(client.id);
+        alert('Google Calendar integration has been reset.');
+        fetchClientData();
+    } catch (e: any) {
+        alert(`Failed to reset: ${e.message}`);
+    } finally {
+        setIsProcessing(false);
+    }
   };
   
   const getStatusColor = (status: string) => {
@@ -652,9 +676,9 @@ const AdminClientDetail: React.FC = () => {
       case 'applied': return 'bg-purple-100 text-purple-800';
       case 'onboarding': return 'bg-blue-100 text-blue-800';
       case 'resumed': return 'bg-emerald-100 text-emerald-800';
-      case 'requested': return 'bg-amber-100 text-amber-800'; // New
-      case 'approved': return 'bg-emerald-100 text-emerald-800'; // New
-      case 'declined': return 'bg-red-100 text-red-800'; // New
+      case 'requested': return 'bg-amber-100 text-amber-800';
+      case 'approved': return 'bg-emerald-100 text-emerald-800';
+      case 'declined': return 'bg-red-100 text-red-800';
       default: return 'bg-slate-100 text-slate-800';
     }
   };
@@ -679,13 +703,12 @@ const AdminClientDetail: React.FC = () => {
   const subscriptionProducts = products.filter(p => p.billing_type === 'subscription');
   const oneTimeProducts = products.filter(p => p.billing_type === 'one_time');
   
-  // Safely calculate derived state
   const unappliedDeposits = client?.deposits?.filter(d => d.status === 'paid' || d.status === 'applied') || [];
   const totalUnappliedCredit = unappliedDeposits.reduce((sum, d) => sum + d.amount_cents, 0) / 100;
   
   const openInvoices = client?.invoices?.filter(inv => inv.status === 'open' || inv.status === 'past_due') || [];
   const currentSubscription = client?.subscriptions?.find(sub => sub.status === 'active' || sub.status === 'trialing');
-
+  const calendarStatus = client?.client_google_calendar?.[0] && client.client_google_calendar[0].connection_status === 'connected' ? client.client_google_calendar[0] : null;
 
   if (isLoading) {
     return (
@@ -703,7 +726,7 @@ const AdminClientDetail: React.FC = () => {
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-12 text-center">
           <AlertTriangle className="w-16 h-16 text-red-500 mx-auto mb-6" />
           <h1 className="text-3xl font-bold text-red-500">Unable to load client details.</h1>
-          <p className="text-slate-500 mt-4">Error: {fetchError || 'Client not found or data is corrupted.'}</p>
+          <p className="text-slate-500 mt-4">{fetchError || 'Client not found or data is corrupted.'}</p>
           <button 
             onClick={() => fetchClientData()}
             className="mt-6 px-6 py-3 bg-indigo-600 text-white rounded-lg font-semibold hover:bg-indigo-700 transition-colors flex items-center justify-center gap-2 mx-auto"
@@ -743,7 +766,6 @@ const AdminClientDetail: React.FC = () => {
         
         <p className="text-slate-500 mb-8">Contact: {client.profiles?.full_name || 'N/A'} ({client.profiles?.email || 'N/A'})</p>
         
-        {/* Quick Actions Bar */}
         <div className="flex gap-4 mb-8">
             <button 
                 onClick={() => setIsSmsDialogOpen(true)}
@@ -760,8 +782,6 @@ const AdminClientDetail: React.FC = () => {
             </button>
         </div>
 
-
-        {/* Tabs Navigation */}
         <div className="border-b border-slate-200 mb-8">
           <nav className="-mb-px flex space-x-8">
             <button
@@ -807,13 +827,10 @@ const AdminClientDetail: React.FC = () => {
           </nav>
         </div>
 
-        {/* Tab Content */}
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
           
-          {/* Left Column: Service Control, Notes & Reminders */}
           <div className="lg:col-span-1 space-y-8">
             
-            {/* Service Control */}
             <div className="bg-white p-6 rounded-xl shadow-lg border border-slate-100">
                 <h2 className="text-xl font-bold mb-4 flex items-center gap-2 text-slate-900 border-b border-slate-100 pb-4">
                     <ShieldCheck className="w-5 h-5 text-indigo-600" /> Service Control
@@ -895,7 +912,50 @@ const AdminClientDetail: React.FC = () => {
                 </div>
             </div>
             
-            {/* Notes Tab Content (Moved here for better layout) */}
+            <div className="bg-white p-6 rounded-xl shadow-lg border border-slate-100">
+                <h2 className="text-xl font-bold mb-4 flex items-center gap-2 text-slate-900 border-b border-slate-100 pb-4">
+                    <Calendar className="w-5 h-5 text-purple-600" /> Google Calendar
+                </h2>
+                {calendarStatus ? (
+                    <div className="space-y-3">
+                        <div className="flex items-center gap-2 text-emerald-600 font-semibold">
+                            <CheckCircle2 className="w-5 h-5" />
+                            <span>Connected</span>
+                        </div>
+                        <p className="text-sm text-slate-600">Calendar ID: <span className="font-mono text-xs bg-slate-100 p-1 rounded">{calendarStatus.calendar_id}</span></p>
+                        <p className="text-xs text-slate-500">Last updated: {format(new Date(calendarStatus.updated_at), 'MMM dd, yyyy')}</p>
+                        <div className="flex gap-2 pt-2 border-t border-slate-100">
+                            <button
+                                onClick={handleDisconnectCalendar}
+                                disabled={isProcessing}
+                                className="flex-1 mt-2 py-2 bg-amber-500 text-white rounded-lg text-sm font-semibold hover:bg-amber-600 transition-colors disabled:opacity-50 flex items-center justify-center gap-2"
+                            >
+                                {isProcessing ? <Loader2 className="w-4 h-4 animate-spin" /> : <X className="w-4 h-4" />}
+                                Disconnect
+                            </button>
+                            <button
+                                onClick={handleResetCalendar}
+                                disabled={isProcessing}
+                                className="flex-1 mt-2 py-2 bg-red-500 text-white rounded-lg text-sm font-semibold hover:bg-red-600 transition-colors disabled:opacity-50 flex items-center justify-center gap-2"
+                            >
+                                {isProcessing ? <Loader2 className="w-4 h-4 animate-spin" /> : <Trash2 className="w-4 h-4" />}
+                                Reset
+                            </button>
+                        </div>
+                    </div>
+                ) : (
+                    <div className="space-y-3">
+                        <div className="flex items-center gap-2 text-red-600 font-semibold">
+                            <AlertTriangle className="w-5 h-5" />
+                            <span>Not Connected</span>
+                        </div>
+                        <p className="text-sm text-slate-500">
+                            Client has not connected their Google Calendar. Automated appointment booking is disabled.
+                        </p>
+                    </div>
+                )}
+            </div>
+
             <div className="bg-white p-6 rounded-xl shadow-lg border border-slate-100">
                 <h2 className="text-xl font-bold mb-4 flex items-center gap-2 text-slate-900 border-b border-slate-100 pb-4">
                     <FileText className="w-5 h-5 text-slate-500" /> Internal Notes
@@ -916,17 +976,14 @@ const AdminClientDetail: React.FC = () => {
             </div>
           </div>
           
-          {/* Right Column: Tab Content */}
           <div className="lg:col-span-2 space-y-8">
             
-            {/* Reminders Tab Content (NEW) */}
             {activeTab === 'reminders' && (
                 <div className="bg-white p-6 rounded-xl shadow-lg border border-slate-100">
                     <h2 className="text-xl font-bold mb-4 flex items-center gap-2 text-slate-900 border-b border-slate-100 pb-4">
                         <Bell className="w-5 h-5 text-red-600" /> Client Reminders ({client.reminders?.filter(r => !r.is_completed).length || 0} Pending)
                     </h2>
                     
-                    {/* Reminder Creation Form */}
                     <form onSubmit={handleCreateReminder} className="space-y-3 mb-6 p-4 bg-slate-50 rounded-lg border border-slate-200">
                         <h3 className="font-bold text-sm text-slate-900">Set New Reminder</h3>
                         <textarea
@@ -964,7 +1021,6 @@ const AdminClientDetail: React.FC = () => {
                         )}
                     </form>
                     
-                    {/* Reminder List */}
                     <div className="space-y-3">
                         {client.reminders && client.reminders.length > 0 ? (
                             client.reminders.map(reminder => (
@@ -993,7 +1049,6 @@ const AdminClientDetail: React.FC = () => {
                 </div>
             )}
 
-            {/* Add-on Requests Tab Content */}
             {activeTab === 'addons' && (
                 <div className="bg-white p-6 rounded-xl shadow-lg border border-slate-100">
                     <h2 className="text-xl font-bold mb-4 flex items-center gap-2 text-slate-900 border-b border-slate-100 pb-4">
@@ -1043,7 +1098,6 @@ const AdminClientDetail: React.FC = () => {
                 </div>
             )}
 
-            {/* Projects Tab Content */}
             {activeTab === 'projects' && (
               <div className="space-y-8">
                 <div className="bg-white p-6 rounded-xl shadow-lg border border-slate-100">
@@ -1089,13 +1143,10 @@ const AdminClientDetail: React.FC = () => {
               </div>
             )}
 
-            {/* Billing Tab Content */}
             {activeTab === 'billing' && (
               <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
                 
-                {/* Column 1 (1/3 width) */}
                 <div className="lg:col-span-1 space-y-8">
-                    {/* Stripe Customer Status */}
                     <div className="bg-white p-6 rounded-xl shadow-lg border border-slate-100">
                       <h2 className="text-xl font-bold mb-4 flex items-center gap-2 text-slate-900">
                         <CreditCard className="w-5 h-5 text-indigo-600" /> Stripe Customer
@@ -1128,7 +1179,6 @@ const AdminClientDetail: React.FC = () => {
                       )}
                     </div>
 
-                    {/* Subscriptions (Maintenance Only) */}
                     <div className="bg-white p-6 rounded-xl shadow-lg border border-slate-100">
                       <h2 className="text-xl font-bold mb-4 flex items-center gap-2 text-slate-900 border-b border-slate-100 pb-4">
                         <Zap className="w-5 h-5 text-amber-600" /> Maintenance Subscriptions
@@ -1171,7 +1221,6 @@ const AdminClientDetail: React.FC = () => {
                       </button>
                     </div>
                     
-                    {/* Deposit Collection */}
                     <div className="bg-white p-6 rounded-xl shadow-lg border border-slate-100">
                         <h2 className="text-xl font-bold mb-4 flex items-center gap-2 text-slate-900 border-b border-slate-100 pb-4">
                             <DollarSign className="w-5 h-5 text-blue-600" /> Collect Deposit
@@ -1229,10 +1278,8 @@ const AdminClientDetail: React.FC = () => {
                     </div>
                 </div>
 
-                {/* Column 2 (2/3 width) */}
                 <div className="lg:col-span-2 space-y-8">
                     
-                    {/* Unapplied Credit Summary */}
                     {totalUnappliedCredit > 0 && (
                         <div className="bg-emerald-50 p-4 rounded-xl border border-emerald-200">
                             <h3 className="text-lg font-bold text-emerald-800 flex items-center gap-2">
@@ -1247,7 +1294,6 @@ const AdminClientDetail: React.FC = () => {
                         </div>
                     )}
                     
-                    {/* Create Invoice Form (Using new component) */}
                     {client && (
                         <CreateInvoiceForm
                             clientId={client.id}
@@ -1258,7 +1304,6 @@ const AdminClientDetail: React.FC = () => {
                         />
                     )}
                     
-                    {/* Apply Discount Form */}
                     <div className="bg-white p-6 rounded-xl shadow-lg border border-slate-100">
                         <h2 className="text-xl font-bold mb-4 flex items-center gap-2 text-slate-900 border-b border-slate-100 pb-4">
                             <Percent className="w-5 h-5 text-purple-600" /> Apply Discount to Invoice
@@ -1267,7 +1312,7 @@ const AdminClientDetail: React.FC = () => {
                             
                             {discountError && (
                                 <div className="p-3 mb-4 bg-red-100 border border-red-300 text-red-800 rounded-lg text-sm flex items-center gap-2">
-                                    <AlertCircle className="w-4 h-4" />
+                                    <AlertTriangle className="w-4 h-4" />
                                     {discountError}
                                 </div>
                             )}
@@ -1334,7 +1379,6 @@ const AdminClientDetail: React.FC = () => {
                         </form>
                     </div>
                     
-                    {/* Deposit History */}
                     <div className="bg-white p-6 rounded-xl shadow-lg border border-slate-100">
                       <h2 className="text-xl font-bold mb-4 flex items-center gap-2 text-slate-900 border-b border-slate-100 pb-4">
                         <CreditCard className="w-5 h-5 text-blue-600" /> Deposit History ({client.deposits?.length || 0})
@@ -1384,7 +1428,6 @@ const AdminClientDetail: React.FC = () => {
                       </div>
                     </div>
 
-                    {/* Invoice List */}
                     <div className="bg-white p-6 rounded-xl shadow-lg border border-slate-100">
                       <h2 className="text-xl font-bold mb-4 flex items-center gap-2 text-slate-900 border-b border-slate-100 pb-4">
                         <FileText className="w-5 h-5 text-purple-600" /> Invoice History ({client.invoices?.length || 0})
@@ -1420,7 +1463,6 @@ const AdminClientDetail: React.FC = () => {
                                   </div>
                               </div>
                               <div className="flex items-center gap-2 mt-2 md:mt-0 flex-shrink-0">
-                                  {/* Reminder Toggle */}
                                   <button 
                                       onClick={() => handleToggleReminders(invoice)}
                                       disabled={isProcessing || invoice.status === 'paid'}
@@ -1430,7 +1472,6 @@ const AdminClientDetail: React.FC = () => {
                                       {invoice.disable_reminders ? <BellOff className="w-4 h-4" /> : <Bell className="w-4 h-4" />}
                                   </button>
                                   
-                                  {/* Resend Link */}
                                   {(invoice.status === 'open' || invoice.status === 'past_due') && (
                                       <button 
                                           onClick={() => handleResendInvoice(invoice)}
@@ -1441,7 +1482,6 @@ const AdminClientDetail: React.FC = () => {
                                       </button>
                                   )}
                                   
-                                  {/* Mark Resolved */}
                                   {(invoice.status === 'open' || invoice.status === 'past_due') && (
                                       <button 
                                           onClick={() => handleMarkInvoiceResolved(invoice.id)}
@@ -1453,7 +1493,6 @@ const AdminClientDetail: React.FC = () => {
                                       </button>
                                   )}
                                   
-                                  {/* View/Download */}
                                   {invoice.pdf_url && invoice.status === 'paid' ? (
                                       <a 
                                         href={invoice.pdf_url} 
@@ -1488,7 +1527,6 @@ const AdminClientDetail: React.FC = () => {
         </div>
       </div>
       
-      {/* Add Project Dialog */}
       {client && (
         <AddProjectDialog
           isOpen={isProjectDialogOpen}
@@ -1499,7 +1537,6 @@ const AdminClientDetail: React.FC = () => {
         />
       )}
       
-      {/* Send SMS Dialog */}
       {client && (
         <SendSmsDialog
           isOpen={isSmsDialogOpen}
@@ -1509,7 +1546,6 @@ const AdminClientDetail: React.FC = () => {
         />
       )}
       
-      {/* Edit Client Dialog */}
       {client && (
         <EditClientDialog
           isOpen={isEditDialogOpen}
