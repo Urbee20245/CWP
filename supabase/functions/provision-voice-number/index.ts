@@ -29,8 +29,23 @@ serve(async (req) => {
     let twilio_sid = "";
     let twilio_token = "";
     let final_phone = phone_number;
+    let a2p_status = 'not_started'; // Default status
 
-    // 1. GATHER CREDENTIALS
+    // 1. GATHER CREDENTIALS AND A2P STATUS
+    const { data: voiceConfig, error: voiceConfigError } = await supabaseAdmin
+        .from('client_voice_integrations')
+        .select('retell_phone_id, voice_status, a2p_registration_data, a2p_status')
+        .eq('client_id', client_id)
+        .maybeSingle();
+        
+    if (voiceConfigError) {
+        console.error('[provision-voice-number] Error fetching voice config:', voiceConfigError);
+    }
+    
+    if (voiceConfig) {
+        a2p_status = voiceConfig.a2p_status || 'not_started';
+    }
+
     if (source === 'client') {
         const { data: config, error: configError } = await supabaseAdmin
             .from('client_integrations')
@@ -56,19 +71,28 @@ serve(async (req) => {
     if (!twilio_sid || !twilio_token || !final_phone) {
         return errorResponse('Incomplete credentials for provisioning.', 400);
     }
-
-    // 2. IDEMPOTENCY CHECK
-    const { data: existing } = await supabaseAdmin
-        .from('client_voice_integrations')
-        .select('retell_phone_id, voice_status')
-        .eq('client_id', client_id)
-        .maybeSingle();
-
-    if (existing?.voice_status === 'active') {
-        return jsonResponse({ success: true, retell_phone_id: existing.retell_phone_id, message: "Already active." });
+    
+    // 2. A2P STATUS CHECK (STRICT REQUIREMENT)
+    if (source === 'client') {
+        console.log(`[provision-voice-number] Client-owned number detected. A2P Status: ${a2p_status}`);
+        if (a2p_status !== 'approved') {
+            console.warn('[provision-voice-number] Provisioning skipped: A2P status is not approved.');
+            return jsonResponse({
+                status: "pending_a2p",
+                message: "A2P approval is required before activating AI calls for client-owned numbers.",
+            }, 422); // 422 Unprocessable Entity
+        }
+    } else {
+        console.log('[provision-voice-number] Platform-owned number detected. Skipping A2P check.');
     }
 
-    // 3. CALL RETELL API
+    // 3. IDEMPOTENCY CHECK
+    if (voiceConfig?.voice_status === 'active') {
+        console.log('[provision-voice-number] Already active. Skipping Retell call.');
+        return jsonResponse({ success: true, retell_phone_id: voiceConfig.retell_phone_id, message: "Already active." });
+    }
+
+    // 4. CALL RETELL API
     console.log(`[provision-voice-number] Importing ${final_phone} into Retell...`);
     const retellResponse = await fetch('https://api.retellai.com/create-phone-number', {
         method: 'POST',
@@ -89,6 +113,7 @@ serve(async (req) => {
     if (!retellResponse.ok) {
         console.error('[provision-voice-number] Retell Error:', retellData);
         
+        // Update DB status to failed
         await supabaseAdmin.from('client_voice_integrations').upsert({
             client_id,
             voice_status: 'failed',
@@ -99,7 +124,7 @@ serve(async (req) => {
         return errorResponse(`Retell Error: ${retellData.error?.message || 'Failed to import number'}`, 400);
     }
 
-    // 4. SAVE RESULT
+    // 5. SAVE RESULT
     const { error: dbError } = await supabaseAdmin
         .from('client_voice_integrations')
         .upsert({
@@ -108,12 +133,13 @@ serve(async (req) => {
             phone_number: final_phone,
             number_source: source,
             voice_status: 'active',
-            a2p_registration_data: a2p_data || {},
-            a2p_status: source === 'platform' ? 'pending' : 'none'
+            a2p_registration_data: a2p_data || voiceConfig?.a2p_registration_data || {},
+            a2p_status: source === 'platform' ? 'pending' : a2p_status // Keep existing A2P status if client-owned
         }, { onConflict: 'client_id' });
 
     if (dbError) return errorResponse('Provisioned in Retell but failed to update local DB.', 500);
 
+    console.log(`[provision-voice-number] Successful provisioning. Retell ID: ${retellData.phone_number_id}`);
     return jsonResponse({ success: true, retell_phone_id: retellData.phone_number_id });
 
   } catch (error: any) {
