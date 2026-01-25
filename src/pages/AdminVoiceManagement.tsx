@@ -106,6 +106,9 @@ const AdminVoiceManagement: React.FC = () => {
         }
     };
 
+    // Define the display object here
+    const a2pDisplay = selectedClient ? getA2PStatusDisplay(selectedClient.a2p_status || 'not_started') : null;
+
     return (
         <AdminLayout>
             <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-12">
@@ -175,12 +178,12 @@ const AdminVoiceManagement: React.FC = () => {
                                 </div>
                                 
                                 {/* A2P Status Display */}
-                                {isClientOwned && (
-                                    <div className={`p-4 mb-6 rounded-xl border flex items-center gap-3 ${getA2PStatusDisplay(selectedClient.a2p_status).bg} border-current`}>
-                                        <getA2PStatusDisplay(selectedClient.a2p_status).icon className={`w-5 h-5 ${getA2PStatusDisplay(selectedClient.a2p_status).color}`} />
+                                {isClientOwned && a2pDisplay && (
+                                    <div className={`p-4 mb-6 rounded-xl border flex items-center gap-3 ${a2pDisplay.bg} border-current`}>
+                                        <a2pDisplay.icon className={`w-5 h-5 ${a2pDisplay.color}`} />
                                         <div>
-                                            <p className={`font-bold text-sm ${getA2PStatusDisplay(selectedClient.a2p_status).color}`}>
-                                                Messaging Approval: {getA2PStatusDisplay(selectedClient.a2p_status).label}
+                                            <p className={`font-bold text-sm ${a2pDisplay.color}`}>
+                                                Messaging Approval: {a2pDisplay.label}
                                             </p>
                                             {isA2PPending && (
                                                 <p className="text-xs mt-0.5 text-blue-800">
@@ -290,7 +293,7 @@ const AdminVoiceManagement: React.FC = () => {
 
                                 <button 
                                     onClick={handleEnableVoice}
-                                    disabled={isProvisioning || isVoiceActive || (source === 'platform' && !platformNumber) || isA2PPending}
+                                    disabled={isProvisioning || isVoiceActive || (source === 'platform' && !platformNumber) || (source === 'client' && isA2PPending)}
                                     className="w-full py-4 bg-indigo-600 text-white rounded-xl font-bold text-lg hover:bg-indigo-700 transition-all shadow-xl shadow-indigo-200 disabled:opacity-50 flex items-center justify-center gap-3"
                                 >
                                     {isProvisioning ? (
