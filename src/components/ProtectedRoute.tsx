@@ -1,9 +1,9 @@
 "use client";
 
 import React from 'react';
-import { Navigate, Outlet, useLocation } from 'react-router-dom';
+import { Navigate, Outlet, useLocation, useNavigate } from 'react-router-dom';
 import { useAuth } from '../hooks/useAuth';
-import { Loader2, ShieldOff } from 'lucide-react';
+import { Loader2, ShieldOff, AlertTriangle } from 'lucide-react';
 
 interface ProtectedRouteProps {
   allowedRoles: Array<'admin' | 'client'>;
@@ -12,6 +12,7 @@ interface ProtectedRouteProps {
 const ProtectedRoute: React.FC<ProtectedRouteProps> = ({ allowedRoles }) => {
   const { user, profile, isLoading, isAdmin, isClient } = useAuth();
   const location = useLocation();
+  const navigate = useNavigate();
 
   // STEP 1: Show simple loading UI while session is resolving (Step 3 & 5)
   if (isLoading) {
@@ -55,8 +56,13 @@ const ProtectedRoute: React.FC<ProtectedRouteProps> = ({ allowedRoles }) => {
     <div className="min-h-[80vh] flex flex-col items-center justify-center pt-20 text-center p-6">
         <AlertTriangle className="w-16 h-16 text-amber-500 mb-4" />
         <h1 className="text-3xl font-bold text-slate-900 mb-2">Profile Setup Required</h1>
-        <p className="text-slate-600">Please contact support to finalize your account setup.</p>
-        <button onClick={() => <Navigate to="/login" replace />} className="mt-4 text-indigo-600">Go to Login</button>
+        <p className="text-slate-600 mb-4">Please contact support to finalize your account setup.</p>
+        <button 
+          onClick={() => navigate('/login')} 
+          className="mt-4 px-6 py-3 bg-indigo-600 text-white rounded-lg font-semibold hover:bg-indigo-700 transition-colors"
+        >
+          Go to Login
+        </button>
     </div>
   );
 };
