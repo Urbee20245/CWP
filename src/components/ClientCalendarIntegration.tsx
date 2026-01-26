@@ -1,7 +1,7 @@
 "use client";
 
 import React, { useState, useEffect, useCallback } from 'react';
-import { Calendar, Loader2, CheckCircle2, AlertTriangle, ExternalLink, Link, X } from 'lucide-react';
+import { Calendar, Loader2, CheckCircle2, AlertTriangle, ExternalLink, X } from 'lucide-react';
 import { ClientIntegrationService } from '../services/clientIntegrationService';
 import { format } from 'date-fns';
 
