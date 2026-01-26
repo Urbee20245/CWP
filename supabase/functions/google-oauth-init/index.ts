@@ -2,7 +2,7 @@ import { serve } from "https://deno.land/std@0.190.0/http/server.ts";
 import { handleCors, jsonResponse, errorResponse } from '../_shared/utils.ts';
 
 const GOOGLE_CLIENT_ID = Deno.env.get('GOOGLE_CLIENT_ID');
-const GOOGLE_REDIRECT_URI = Deno.env.get('GOOGLE_REDIRECT_URI') || 'https://yourdomain.com/api/google/callback';
+const GOOGLE_REDIRECT_URI = Deno.env.get('GOOGLE_REDIRECT_URI');
 
 serve(async (req) => {
   const corsResponse = handleCors(req);
@@ -10,6 +10,9 @@ serve(async (req) => {
 
   if (!GOOGLE_CLIENT_ID) {
     return errorResponse('GOOGLE_CLIENT_ID is not configured.', 500);
+  }
+  if (!GOOGLE_REDIRECT_URI) {
+    return errorResponse('GOOGLE_REDIRECT_URI is not configured.', 500);
   }
 
   try {

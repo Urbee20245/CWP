@@ -5,8 +5,8 @@ import { errorResponse } from '../_shared/utils.ts';
 
 const GOOGLE_CLIENT_ID = Deno.env.get('GOOGLE_CLIENT_ID');
 const GOOGLE_CLIENT_SECRET = Deno.env.get('GOOGLE_CLIENT_SECRET');
-const GOOGLE_REDIRECT_URI = Deno.env.get('GOOGLE_REDIRECT_URI') || 'https://yourdomain.com/api/google/callback';
-const CLIENT_REDIRECT_URL = Deno.env.get('CLIENT_REDIRECT_URL') || 'https://yourdomain.com/client/settings';
+const GOOGLE_REDIRECT_URI = Deno.env.get('GOOGLE_REDIRECT_URI');
+const CLIENT_REDIRECT_URL = Deno.env.get('CLIENT_REDIRECT_URL');
 
 serve(async (req) => {
   // CORS is not strictly needed for a redirect handler, but we include it for safety
@@ -30,8 +30,8 @@ serve(async (req) => {
       return new Response('OAuth failed: Missing authorization code or client state.', { status: 400 });
     }
     
-    if (!GOOGLE_CLIENT_ID || !GOOGLE_CLIENT_SECRET) {
-        console.error('[google-oauth-callback] Missing Google secrets.');
+    if (!GOOGLE_CLIENT_ID || !GOOGLE_CLIENT_SECRET || !GOOGLE_REDIRECT_URI || !CLIENT_REDIRECT_URL) {
+        console.error('[google-oauth-callback] Missing Google or Redirect secrets.');
         return new Response('Server configuration error.', { status: 500 });
     }
 
