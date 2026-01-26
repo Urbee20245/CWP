@@ -1,5 +1,5 @@
 import React, { useState, useMemo } from 'react';
-import { MessageSquare, FileText, CalendarCheck, Zap, ArrowRight, CheckCircle2, Bot, Phone, ChevronDown, ChevronUp, DollarSign, ExternalLink } from 'lucide-react';
+import { MessageSquare, FileText, CalendarCheck, Zap, ArrowRight, CheckCircle2, Bot, Phone, ChevronDown, ChevronUp, DollarSign, ExternalLink, Calendar } from 'lucide-react';
 import { Link } from 'react-router-dom';
 
 interface HelpItem {
@@ -79,7 +79,43 @@ const ClientHelpGuide: React.FC<ClientHelpGuideProps> = ({ filter }) => {
             ),
             keywords: 'appointments booking calendar call video phone luna ai voice agent',
         },
-        // 4. JetSuite Section
+        // 4. NEW Google Calendar Guide
+        {
+            id: 'google-calendar',
+            title: 'Google Calendar: Automated Appointment Booking',
+            icon: <Calendar className="w-5 h-5 text-blue-600" />,
+            content: (
+                <div className="space-y-6 text-sm text-slate-700">
+                    <h4 className="font-bold text-slate-900">What does this integration do?</h4>
+                    <p>Connecting your Google Calendar allows our system to automatically create events in your calendar when a new consultation is requested through your website's contact form. This eliminates manual entry and ensures you never miss a new lead.</p>
+
+                    <h4 className="font-bold text-slate-900">How to Connect Your Calendar</h4>
+                    <ol className="list-decimal list-inside ml-4 space-y-2">
+                        <li>Navigate to the <Link to="/client/settings" className="text-blue-600 hover:underline font-semibold">Settings</Link> page from the sidebar.</li>
+                        <li>Find the "Google Calendar Integration" section.</li>
+                        <li>Click the **"Connect Google Calendar"** button.</li>
+                    </ol>
+
+                    <h4 className="font-bold text-slate-900">The Authentication Process</h4>
+                    <ol className="list-decimal list-inside ml-4 space-y-2">
+                        <li>You will be redirected to a secure Google sign-in page.</li>
+                        <li>Choose the Google account associated with your business calendar.</li>
+                        <li>Grant the requested permissions. We only ask for permission to create and manage events. We cannot see your other events or personal data.</li>
+                        <li>After granting permission, you will be automatically redirected back to your CWP Settings page.</li>
+                    </ol>
+
+                    <h4 className="font-bold text-slate-900">After Connecting</h4>
+                    <p>Once connected, you will see a "Connected" status in your Settings. New appointments from your website form will now appear on your calendar automatically.</p>
+                    
+                    <div className="p-3 bg-amber-50 border border-amber-200 rounded-lg text-amber-800">
+                        <p className="font-bold">Troubleshooting:</p>
+                        <p>If the connection fails or you encounter an error, please contact your project manager for assistance.</p>
+                    </div>
+                </div>
+            ),
+            keywords: 'google calendar integration connect sync appointments booking automation oauth',
+        },
+        // 5. JetSuite Section
         {
             id: 'jetsuite',
             title: 'JetSuite Tools',
@@ -95,7 +131,7 @@ const ClientHelpGuide: React.FC<ClientHelpGuideProps> = ({ filter }) => {
             keywords: 'jetsuite tools optimizer jetviz seo audit performance',
         },
         
-        // 5. NEW TWILIO CREDENTIALS SECTION (Extracted)
+        // 6. TWILIO CREDENTIALS SECTION (Extracted)
         {
             id: 'twilio-credentials',
             title: 'Twilio: Accessing Credentials (SID & Token)',
@@ -128,7 +164,7 @@ const ClientHelpGuide: React.FC<ClientHelpGuideProps> = ({ filter }) => {
             keywords: 'twilio credentials sid token auth authentication login',
         },
         
-        // 6. TWILIO A2P SETUP GUIDE (Modified to start at Part A)
+        // 7. TWILIO A2P SETUP GUIDE (Modified to start at Part A)
         {
             id: 'twilio-setup',
             title: 'Twilio: Phone Number & A2P (10DLC) Setup',
