@@ -17,8 +17,7 @@ const AdminLayout: React.FC<AdminLayoutProps> = ({ children }) => {
     { name: 'Dashboard', href: '/admin/dashboard', icon: Bot },
     { name: 'Clients', href: '/admin/clients', icon: Users },
     { name: 'Projects', href: '/admin/projects', icon: Briefcase },
-    { name: 'AI Voice', href: '/admin/voice', icon: Phone }, // NEW LINK
-    { name: 'Email Inbox', href: '/admin/inbox', icon: MailIcon },
+    { name: 'AI Voice', href: '/admin/voice', icon: Phone },
     { name: 'Appointments', href: '/admin/appointments', icon: CalendarCheck },
     { name: 'Revenue', href: '/admin/billing/revenue', icon: BarChart3 },
     { name: 'Billing Products', href: '/admin/billing/products', icon: DollarSign }, 

@@ -5,6 +5,9 @@ import AdminLayout from '../components/AdminLayout';
 import { Settings, MessageSquare, Shield, ExternalLink, CheckCircle2, AlertTriangle, Mail, DollarSign, Zap, Users } from 'lucide-react';
 import { Link } from 'react-router-dom';
 
+const SUPABASE_PROJECT_ID = "nvgumhlewbqynrhlkqhx";
+const SUPABASE_SECRETS_URL = `https://supabase.com/dashboard/project/${SUPABASE_PROJECT_ID}/functions/secrets`;
+
 const AdminSettingsPage: React.FC = () => {
   
   return (
@@ -50,7 +53,24 @@ const AdminSettingsPage: React.FC = () => {
             </Link>
           </div>
           
-          {/* Integration Card: Resend Email */}
+          {/* NEW: Email Inbox Card */}
+          <div className="lg:col-span-1 bg-white p-6 rounded-xl shadow-lg border border-slate-100">
+            <h2 className="text-xl font-bold text-slate-900 mb-4 flex items-center gap-2 border-b border-slate-100 pb-4">
+              <Mail className="w-5 h-5 text-indigo-600" /> Email Inbox
+            </h2>
+            <p className="text-slate-600 mb-4 text-sm">
+              View all incoming client messages and sent email logs in one place.
+            </p>
+            <Link 
+              to="/admin/inbox" 
+              className="inline-flex items-center gap-2 px-4 py-2 bg-indigo-600 text-white rounded-lg text-sm font-semibold hover:bg-indigo-700 transition-colors"
+            >
+              View Inbox
+              <ExternalLink className="w-4 h-4" />
+            </Link>
+          </div>
+          
+          {/* Integration Card: Resend Email (Now lg:col-span-2) */}
           <div className="lg:col-span-2 bg-white p-6 rounded-xl shadow-lg border border-slate-100">
             <h2 className="text-xl font-bold text-slate-900 mb-4 flex items-center gap-2 border-b border-slate-100 pb-4">
               <Mail className="w-5 h-5 text-emerald-600" /> Email (Resend) Configuration
