@@ -11,7 +11,7 @@ import {
     User, 
     CheckCircle2, 
     Loader2, 
-    AlertTriangle,
+    AlertTriangle, // <-- AlertTriangle is imported here
     Info,
     ArrowRight,
     Lock,
