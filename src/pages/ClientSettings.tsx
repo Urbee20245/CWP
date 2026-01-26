@@ -139,25 +139,24 @@ const ClientSettings: React.FC = () => {
 
           {/* OPTION 2: Integrations Panel */}
           <div className="space-y-6">
+              {/* Google Calendar Integration Card */}
               <div className="bg-white rounded-2xl shadow-lg border border-slate-200 overflow-hidden group p-8">
-                
-                {/* Google Calendar Integration */}
                 {clientId && <ClientCalendarIntegration clientId={clientId} />}
-                
-                {/* Twilio Integration */}
-                <div className="border-t border-slate-100 pt-6 mt-6">
-                    <h2 className="text-xl font-bold text-slate-900 mb-3 flex items-center gap-2">
-                        <Phone className="w-5 h-5 text-slate-600" /> Twilio Credentials
-                    </h2>
-                    <p className="text-sm text-slate-600 leading-relaxed mb-6">
-                        Connect your existing Twilio account for client-owned voice and messaging services.
-                    </p>
-                    {clientId && <ClientTwilioIntegration clientId={clientId} />}
-                </div>
+              </div>
+
+              {/* Twilio Integration Card */}
+              <div className="bg-white rounded-2xl shadow-lg border border-slate-200 overflow-hidden group p-8">
+                <h2 className="text-xl font-bold text-slate-900 mb-3 flex items-center gap-2">
+                    <Phone className="w-5 h-5 text-slate-600" /> Twilio Credentials
+                </h2>
+                <p className="text-sm text-slate-600 leading-relaxed mb-6">
+                    Connect your existing Twilio account for client-owned voice and messaging services.
+                </p>
+                {clientId && <ClientTwilioIntegration clientId={clientId} />}
               </div>
               
               <div className="p-6 bg-slate-50 border border-dashed border-slate-300 rounded-2xl text-center">
-                  <p className="text-sm text-slate-500 font-medium">Additional integration options (Email, CRM, Calendars) coming soon.</p>
+                  <p className="text-sm text-slate-500 font-medium">Additional integration options (Email, CRM) coming soon.</p>
               </div>
           </div>
 
