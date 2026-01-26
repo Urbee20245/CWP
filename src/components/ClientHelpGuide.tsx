@@ -1,5 +1,5 @@
 import React, { useState, useMemo } from 'react';
-import { MessageSquare, FileText, CalendarCheck, Zap, ArrowRight, CheckCircle2, Bot, Phone, ChevronDown, ChevronUp, DollarSign, ExternalLink, Calendar } from 'lucide-react';
+import { MessageSquare, FileText, CalendarCheck, Zap, ArrowRight, CheckCircle2, Bot, Phone, ChevronDown, ChevronUp, DollarSign, ExternalLink, Calendar, AlertTriangle } from 'lucide-react';
 import { Link } from 'react-router-dom';
 
 interface HelpItem {
@@ -171,9 +171,12 @@ const ClientHelpGuide: React.FC<ClientHelpGuideProps> = ({ filter }) => {
             icon: <Phone className="w-5 h-5 text-indigo-600" />,
             content: (
                 <div className="space-y-6 text-sm text-slate-700">
-                    <div className="p-3 bg-amber-50 border border-amber-200 rounded-lg text-amber-800">
-                        <p className="font-bold">Important A2P Note:</p>
-                        <p>A2P (10DLC) registration is required for SMS texting in the United States. Voice calls alone do not require A2P verification. If you want appointment confirmations or reminders via text message, you must complete A2P registration.</p>
+                    <div className="p-3 bg-amber-50 border border-amber-200 rounded-lg text-amber-800 flex items-start gap-3">
+                        <AlertTriangle className="w-5 h-5 flex-shrink-0 mt-0.5" />
+                        <div>
+                            <p className="font-bold">Important A2P Note:</p>
+                            <p>A2P (10DLC) registration is required for SMS texting in the United States. Voice calls alone do not require A2P verification. If you want appointment confirmations or reminders via text message, you must complete A2P registration.</p>
+                        </div>
                     </div>
                     
                     <h4 className="font-bold text-slate-900">PART A — Create Your Twilio Account</h4>
