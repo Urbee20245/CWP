@@ -1,5 +1,5 @@
 import React, { useState, useRef } from 'react';
-import { Mail, Phone, ArrowRight, Clock, Calendar, MapPin, CheckCircle2, AlertCircle, Loader2 } from 'lucide-react';
+import { Mail, Phone, ArrowRight, Clock, Calendar, MapPin, CheckCircle2, AlertCircle, Loader2, AlertTriangle } from 'lucide-react';
 import { NavigationLink } from '../types';
 import { Link } from 'react-router-dom';
 import ReCAPTCHA from 'react-google-recaptcha';
@@ -86,7 +86,7 @@ const Contact: React.FC = () => {
                             
                             {formError && (
                                 <div className="p-3 bg-red-100 border border-red-300 text-red-800 rounded-lg text-sm flex items-center gap-2">
-                                    <AlertCircle className="w-4 h-4" />
+                                    <AlertTriangle className="w-4 h-4" />
                                     {formError}
                                 </div>
                             )}
