@@ -13,15 +13,39 @@ serve(async (req) => {
     { global: { headers: { Authorization: req.headers.get('Authorization')! } } }
   );
 
+  // Initialize Supabase Admin client for privileged queries
+  const supabaseAdmin = createClient(
+    Deno.env.get('SUPABASE_URL')!,
+    Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!
+  );
+
   try {
     const { client_id } = await req.json();
 
     if (!client_id) {
       return errorResponse('Client ID is required.', 400);
     }
-    
-    // Use RLS to fetch the client's integration config
-    const { data: config, error } = await supabase
+
+    // Verify user identity and ownership
+    const { data: { user } } = await supabase.auth.getUser();
+    if (!user) {
+      return errorResponse('Unauthorized: User not authenticated.', 401);
+    }
+
+    // Verify the user owns this client
+    const { error: clientError } = await supabase
+        .from('clients')
+        .select('id')
+        .eq('id', client_id)
+        .eq('owner_profile_id', user.id)
+        .single();
+
+    if (clientError) {
+        return errorResponse('Client record not found or unauthorized.', 403);
+    }
+
+    // Use admin client to fetch the config (bypassing RLS)
+    const { data: config, error } = await supabaseAdmin
         .from('client_integrations')
         .select('account_sid_encrypted, phone_number, updated_at')
         .eq('client_id', client_id)
