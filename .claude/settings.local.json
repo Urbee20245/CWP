@@ -4,7 +4,13 @@
       "Bash($env:SUPABASE_ACCESS_TOKEN=\"sbp_a1da0df0a5828d411c9a9011361cae47d9da52d5\")",
       "Bash(npx supabase link:*)",
       "Bash(export SUPABASE_ACCESS_TOKEN=\"sbp_a1da0df0a5828d411c9a9011361cae47d9da52d5\")",
-      "Bash(npx supabase functions deploy:*)"
+      "Bash(npx supabase functions deploy:*)",
+      "Bash(npm run build:*)",
+      "Bash(npx supabase functions logs:*)",
+      "Bash(netstat:*)",
+      "Bash(findstr:*)",
+      "Bash(git add:*)",
+      "Bash(git commit:*)"
     ]
   }
 }
