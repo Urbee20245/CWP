@@ -6,11 +6,15 @@ serve(async (req) => {
   const corsResponse = handleCors(req);
   if (corsResponse) return corsResponse;
 
+  // Get authorization header
+  const authHeader = req.headers.get('Authorization');
+  console.log('[get-twilio-config] Auth header present:', !!authHeader);
+
   // Initialize Supabase client with RLS checks (public client)
   const supabase = createClient(
     Deno.env.get('SUPABASE_URL')!,
     Deno.env.get('SUPABASE_ANON_KEY')!,
-    { global: { headers: { Authorization: req.headers.get('Authorization')! } } }
+    { global: { headers: { Authorization: authHeader || '' } } }
   );
 
   // Initialize Supabase Admin client for privileged queries
@@ -27,8 +31,12 @@ serve(async (req) => {
     }
 
     // Verify user identity and ownership
-    const { data: { user } } = await supabase.auth.getUser();
-    if (!user) {
+    const { data: { user }, error: authError } = await supabase.auth.getUser();
+
+    console.log('[get-twilio-config] User auth result:', { user: !!user, error: authError });
+
+    if (!user || authError) {
+      console.error('[get-twilio-config] Auth failed:', authError);
       return errorResponse('Unauthorized: User not authenticated.', 401);
     }
 

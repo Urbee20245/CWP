@@ -7,11 +7,15 @@ serve(async (req) => {
   const corsResponse = handleCors(req);
   if (corsResponse) return corsResponse;
 
+  // Get authorization header
+  const authHeader = req.headers.get('Authorization');
+  console.log('[save-twilio-credentials] Auth header present:', !!authHeader);
+
   // Initialize Supabase client with RLS checks (public client)
   const supabase = createClient(
     Deno.env.get('SUPABASE_URL')!,
     Deno.env.get('SUPABASE_ANON_KEY')!,
-    { global: { headers: { Authorization: req.headers.get('Authorization')! } } }
+    { global: { headers: { Authorization: authHeader || '' } } }
   );
   
   // Initialize Supabase Admin client for privileged updates
