@@ -94,15 +94,37 @@ const AdminVoiceManagement: React.FC = () => {
         setIsSavingAgentId(true);
 
         try {
-            // Upsert the retell_agent_id into client_voice_integrations
-            const { error } = await supabase
+            // Check if a record already exists
+            const { data: existing } = await supabase
                 .from('client_voice_integrations')
-                .upsert({
-                    client_id: selectedClientId,
-                    retell_agent_id: retellAgentId.trim(),
-                }, { onConflict: 'client_id' });
+                .select('*')
+                .eq('client_id', selectedClientId)
+                .single();
 
-            if (error) throw error;
+            if (existing) {
+                // Update existing record
+                const { error } = await supabase
+                    .from('client_voice_integrations')
+                    .update({
+                        retell_agent_id: retellAgentId.trim(),
+                    })
+                    .eq('client_id', selectedClientId);
+
+                if (error) throw error;
+            } else {
+                // Insert new record with required fields
+                const { error } = await supabase
+                    .from('client_voice_integrations')
+                    .insert({
+                        client_id: selectedClientId,
+                        retell_agent_id: retellAgentId.trim(),
+                        number_source: 'none',
+                        voice_status: 'inactive',
+                        a2p_status: 'not_started',
+                    });
+
+                if (error) throw error;
+            }
 
             fetchClients(); // Refresh to show updated agent ID
         } catch (e: any) {
