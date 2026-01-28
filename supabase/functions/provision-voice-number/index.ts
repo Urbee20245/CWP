@@ -6,7 +6,6 @@ import { decryptSecret } from '../_shared/encryption.ts';
 const RETELL_API_KEY = Deno.env.get('RETELL_API_KEY');
 const PLATFORM_TWILIO_SID = Deno.env.get('TWILIO_ACCOUNT_SID');
 const PLATFORM_TWILIO_TOKEN = Deno.env.get('TWILIO_AUTH_TOKEN');
-const RETELL_AGENT_ID = Deno.env.get('RETELL_AGENT_ID');
 
 serve(async (req) => {
   const corsResponse = handleCors(req);
@@ -18,7 +17,7 @@ serve(async (req) => {
   );
 
   try {
-    const { client_id, source, phone_number, a2p_data } = await req.json();
+    const { client_id, source, phone_number, a2p_data, retell_agent_id } = await req.json();
 
     if (!client_id || !source) {
       return errorResponse('Missing required fields: client_id and source.', 400);
@@ -30,12 +29,13 @@ serve(async (req) => {
       return errorResponse('Retell API Key is not configured. Please add RETELL_API_KEY to Supabase secrets.', 500);
     }
 
-    if (!RETELL_AGENT_ID) {
-      console.error('[provision-voice-number] RETELL_AGENT_ID is not configured in Supabase secrets.');
-      return errorResponse('Retell Agent ID is not configured. Please add RETELL_AGENT_ID to Supabase secrets.', 500);
+    // Check per-client Retell Agent ID
+    if (!retell_agent_id) {
+      console.error('[provision-voice-number] No Retell Agent ID provided for this client.');
+      return errorResponse('Please enter the Retell Agent ID for this client before enabling AI call handling.', 400);
     }
 
-    console.log(`[provision-voice-number] Sourcing ${source} number for client ${client_id}`);
+    console.log(`[provision-voice-number] Sourcing ${source} number for client ${client_id} with agent ${retell_agent_id}`);
 
     let twilio_sid = "";
     let twilio_token = "";
@@ -111,7 +111,7 @@ serve(async (req) => {
     }
 
     // 4. CALL RETELL API
-    console.log(`[provision-voice-number] Importing ${final_phone} into Retell...`);
+    console.log(`[provision-voice-number] Importing ${final_phone} into Retell with agent ${retell_agent_id}...`);
     const retellResponse = await fetch('https://api.retellai.com/create-phone-number', {
         method: 'POST',
         headers: {
@@ -122,7 +122,7 @@ serve(async (req) => {
             twilio_account_sid: twilio_sid,
             twilio_auth_token: twilio_token,
             phone_number: final_phone,
-            agent_id: RETELL_AGENT_ID,
+            agent_id: retell_agent_id, // Per-client agent ID
         }),
     });
 

@@ -26,12 +26,13 @@ export const AdminService = {
   sendSms: async (to: string, body: string) => invokeEdgeFunction('send-sms', { to, body }),
   
   // Updated AI Voice Provisioning
-  provisionVoiceNumber: async (clientId: string, source: 'client' | 'platform', phoneNumber?: string, a2pData?: any) => {
-    return invokeEdgeFunction('provision-voice-number', { 
-        client_id: clientId, 
-        source, 
-        phone_number: phoneNumber, 
-        a2p_data: a2pData 
+  provisionVoiceNumber: async (clientId: string, source: 'client' | 'platform', phoneNumber?: string, a2pData?: any, retellAgentId?: string) => {
+    return invokeEdgeFunction('provision-voice-number', {
+        client_id: clientId,
+        source,
+        phone_number: phoneNumber,
+        a2p_data: a2pData,
+        retell_agent_id: retellAgentId
     });
   },
   

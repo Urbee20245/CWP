@@ -143,23 +143,17 @@ const AdminSettingsPage: React.FC = () => {
             </h2>
 
             <p className="text-slate-600 mb-6">
-              Retell AI powers the AI call handling feature. You must configure the following secrets in Supabase to enable voice AI.
+              Retell AI powers the AI call handling feature. Each client gets their own custom Retell agent for personalized call handling.
             </p>
 
             <div className="p-4 bg-indigo-50 border border-indigo-200 rounded-xl mb-6">
               <h3 className="font-bold text-indigo-800 mb-3 flex items-center gap-2">
-                <AlertTriangle className="w-5 h-5" /> Required Secrets
+                <AlertTriangle className="w-5 h-5" /> Required Supabase Secret
               </h3>
-              <ul className="space-y-3 text-sm text-indigo-700">
-                <li className="flex items-start gap-2">
-                  <code className="font-mono text-xs bg-indigo-200 px-2 py-1 rounded">RETELL_API_KEY</code>
-                  <span className="text-slate-600">— Your Retell AI API key from the <a href="https://dashboard.retellai.com" target="_blank" rel="noopener noreferrer" className="text-indigo-600 underline">Retell Dashboard</a></span>
-                </li>
-                <li className="flex items-start gap-2">
-                  <code className="font-mono text-xs bg-indigo-200 px-2 py-1 rounded">RETELL_AGENT_ID</code>
-                  <span className="text-slate-600">— The Agent ID from Retell AI that will handle incoming calls</span>
-                </li>
-              </ul>
+              <div className="flex items-start gap-2 text-sm">
+                <code className="font-mono text-xs bg-indigo-200 px-2 py-1 rounded">RETELL_API_KEY</code>
+                <span className="text-slate-600">— Your Retell AI API key from the <a href="https://dashboard.retellai.com" target="_blank" rel="noopener noreferrer" className="text-indigo-600 underline">Retell Dashboard</a></span>
+              </div>
             </div>
 
             <div className="p-4 bg-slate-50 border border-slate-200 rounded-xl mb-6">
@@ -167,8 +161,9 @@ const AdminSettingsPage: React.FC = () => {
               <ol className="space-y-2 text-sm text-slate-600 list-decimal ml-4">
                 <li>Client enters their Twilio credentials (Account SID, Auth Token, Phone Number) in their Settings page</li>
                 <li>You see the "Twilio" badge on the AI Call Management page when credentials are ready</li>
-                <li>Click "Enable AI Call Handling" to import the phone number into Retell AI</li>
-                <li>Retell AI takes over call handling for that number using your configured Agent</li>
+                <li>Create a custom Retell Agent for this client in <a href="https://dashboard.retellai.com" target="_blank" rel="noopener noreferrer" className="text-indigo-600 underline">Retell Dashboard</a></li>
+                <li>Enter the client's Retell Agent ID on the AI Call Management page</li>
+                <li>Click "Enable AI Call Handling" to import the phone number into Retell AI with their custom agent</li>
               </ol>
             </div>
 

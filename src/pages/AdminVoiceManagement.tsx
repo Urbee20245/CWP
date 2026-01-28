@@ -15,6 +15,7 @@ interface Client {
     a2p_status?: string;
     twilio_configured?: boolean;
     twilio_phone?: string;
+    retell_agent_id?: string;
 }
 
 const AdminVoiceManagement: React.FC = () => {
@@ -28,6 +29,8 @@ const AdminVoiceManagement: React.FC = () => {
     // Form State
     const [source, setSource] = useState<'client' | 'platform'>('client');
     const [platformNumber, setPlatformNumber] = useState('');
+    const [retellAgentId, setRetellAgentId] = useState('');
+    const [isSavingAgentId, setIsSavingAgentId] = useState(false);
     const [a2pData, setA2pData] = useState({
         legal_name: '',
         website: '',
@@ -41,7 +44,7 @@ const AdminVoiceManagement: React.FC = () => {
             .from('clients')
             .select(`
                 id, business_name, phone,
-                client_voice_integrations (voice_status, number_source, a2p_status),
+                client_voice_integrations (voice_status, number_source, a2p_status, retell_agent_id),
                 client_integrations!client_integrations_client_id_fkey (provider, phone_number)
             `)
             .order('business_name', { ascending: true });
@@ -55,6 +58,7 @@ const AdminVoiceManagement: React.FC = () => {
                 voice_status: c.client_voice_integrations?.[0]?.voice_status || 'inactive',
                 number_source: c.client_voice_integrations?.[0]?.number_source || 'none',
                 a2p_status: c.client_voice_integrations?.[0]?.a2p_status || 'not_started',
+                retell_agent_id: c.client_voice_integrations?.[0]?.retell_agent_id || '',
                 twilio_configured: !!twilioIntegration,
                 twilio_phone: twilioIntegration?.phone_number || null,
             };
@@ -65,6 +69,14 @@ const AdminVoiceManagement: React.FC = () => {
     }, []);
 
     useEffect(() => { fetchClients(); }, [fetchClients]);
+
+    // Set retellAgentId when client is selected
+    useEffect(() => {
+        if (selectedClientId) {
+            const client = clients.find(c => c.id === selectedClientId);
+            setRetellAgentId(client?.retell_agent_id || '');
+        }
+    }, [selectedClientId, clients]);
 
     const filteredClients = clients.filter(c => 
         c.business_name.toLowerCase().includes(searchQuery.toLowerCase())
@@ -77,21 +89,48 @@ const AdminVoiceManagement: React.FC = () => {
     const isA2PApproved = isClientOwned && selectedClient?.a2p_status === 'approved';
     const isVoiceActive = selectedClient?.voice_status === 'active';
 
+    const handleSaveAgentId = async () => {
+        if (!selectedClientId || !retellAgentId.trim()) return;
+        setIsSavingAgentId(true);
+
+        try {
+            // Upsert the retell_agent_id into client_voice_integrations
+            const { error } = await supabase
+                .from('client_voice_integrations')
+                .upsert({
+                    client_id: selectedClientId,
+                    retell_agent_id: retellAgentId.trim(),
+                }, { onConflict: 'client_id' });
+
+            if (error) throw error;
+
+            fetchClients(); // Refresh to show updated agent ID
+        } catch (e: any) {
+            setProvisioningError(`Failed to save Agent ID: ${e.message}`);
+        } finally {
+            setIsSavingAgentId(false);
+        }
+    };
+
     const handleEnableVoice = async () => {
         if (!selectedClientId) return;
+
+        // Require Retell Agent ID
+        if (!retellAgentId.trim()) {
+            setProvisioningError("Please enter the Retell Agent ID for this client first.");
+            return;
+        }
+
         setIsProvisioning(true);
         setProvisioningError(null);
 
-        // Client-owned check: If A2P is pending, we should not proceed manually, 
-        // but the server-side trigger handles the auto-provisioning. 
-        // If the admin clicks this button, we assume they are forcing the action or re-trying.
-        
         try {
             await AdminService.provisionVoiceNumber(
-                selectedClientId, 
-                source, 
+                selectedClientId,
+                source,
                 source === 'platform' ? platformNumber : undefined,
-                source === 'platform' ? a2pData : undefined
+                source === 'platform' ? a2pData : undefined,
+                retellAgentId.trim() // Pass the per-client agent ID
             );
             alert("AI Call Handling successfully enabled for this client!");
             fetchClients();
@@ -238,6 +277,38 @@ const AdminVoiceManagement: React.FC = () => {
                                         </div>
                                     </div>
                                 )}
+
+                                {/* Retell Agent ID Input */}
+                                <div className="bg-indigo-50 p-6 rounded-xl border border-indigo-200 mb-6">
+                                    <h4 className="font-bold text-indigo-800 text-sm flex items-center gap-2 mb-3">
+                                        <Bot className="w-4 h-4" /> Retell AI Agent Configuration
+                                    </h4>
+                                    <p className="text-xs text-indigo-700 mb-4">
+                                        Enter the Retell Agent ID you created for this client. Each client needs their own custom agent in Retell AI.
+                                    </p>
+                                    <div className="flex gap-3">
+                                        <input
+                                            type="text"
+                                            placeholder="agent_xxxxxxxxxxxxxxxx"
+                                            className="flex-1 p-3 border border-indigo-300 rounded-lg text-sm font-mono bg-white"
+                                            value={retellAgentId}
+                                            onChange={(e) => setRetellAgentId(e.target.value)}
+                                        />
+                                        <button
+                                            onClick={handleSaveAgentId}
+                                            disabled={isSavingAgentId || !retellAgentId.trim()}
+                                            className="px-4 py-2 bg-indigo-600 text-white rounded-lg text-sm font-semibold hover:bg-indigo-700 disabled:opacity-50 flex items-center gap-2"
+                                        >
+                                            {isSavingAgentId ? <Loader2 className="w-4 h-4 animate-spin" /> : <CheckCircle2 className="w-4 h-4" />}
+                                            Save
+                                        </button>
+                                    </div>
+                                    {selectedClient?.retell_agent_id && (
+                                        <p className="text-xs text-emerald-600 mt-2 flex items-center gap-1">
+                                            <CheckCircle2 className="w-3 h-3" /> Agent ID saved: <span className="font-mono">{selectedClient.retell_agent_id}</span>
+                                        </p>
+                                    )}
+                                </div>
 
                                 <h3 className="text-lg font-bold text-slate-900 mb-6 flex items-center gap-2">
                                     <Shield className="w-5 h-5 text-indigo-600" /> Sourcing Strategy
