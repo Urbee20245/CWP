@@ -1,33 +1,21 @@
 import { supabase } from '../integrations/supabase/client';
 
 const invokeEdgeFunction = async (functionName: string, payload: any) => {
-  // Get the current session to pass auth headers
-  const { data: { session } } = await supabase.auth.getSession();
-
-  if (!session) {
-    console.error('No active session found');
-    throw new Error('You must be logged in to perform this action');
-  }
-
+  // The Supabase SDK automatically injects the Authorization header from the active session.
+  // We do not need to manually fetch the session or set headers here.
   const { data, error } = await supabase.functions.invoke(functionName, {
-    body: JSON.stringify(payload),
-    headers: {
-      Authorization: `Bearer ${session.access_token}`,
-    },
+    body: payload,
   });
 
   if (error) {
-    console.error(`Error invoking ${functionName}:`, error);
+    console.error(`[clientIntegrationService] Error invoking ${functionName}:`, error);
     throw new Error(error.message || `Failed to call ${functionName}`);
   }
 
-  if (data.error) {
-    console.error(`Edge function ${functionName} returned error:`, data.error);
+  if (data?.error) {
+    console.error(`[clientIntegrationService] Edge function ${functionName} returned error:`, data.error);
     throw new Error(data.error);
   }
-
-  // Log successful responses for debugging
-  console.log(`Edge function ${functionName} response:`, data);
 
   return data;
 };
@@ -60,7 +48,7 @@ export const ClientIntegrationService = {
   },
   
   getGoogleCalendarStatus: async (clientId: string) => {
-    // Use RLS to fetch status directly from the DB
+    // This uses a direct query which respects RLS
     const { data, error } = await supabase
         .from('client_google_calendar')
         .select('connection_status, calendar_id, updated_at')
@@ -72,10 +60,13 @@ export const ClientIntegrationService = {
   },
   
   disconnectGoogleCalendar: async (clientId: string) => {
-    // Use RLS to update status directly from the DB
     const { error } = await supabase
         .from('client_google_calendar')
-        .update({ connection_status: 'disconnected', google_access_token: '', last_synced_at: new Date().toISOString() })
+        .update({ 
+            connection_status: 'disconnected', 
+            google_access_token: '', 
+            last_synced_at: new Date().toISOString() 
+        })
         .eq('client_id', clientId);
         
     if (error) throw error;
