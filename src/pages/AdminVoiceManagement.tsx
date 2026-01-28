@@ -114,31 +114,60 @@ const AdminVoiceManagement: React.FC = () => {
     const isVoiceActive = selectedClient?.voice_status === 'active';
 
     const handleSaveAgentId = async () => {
-        if (!selectedClientId || !retellAgentId.trim()) return;
+        if (!selectedClientId || !retellAgentId.trim()) {
+            console.error('[handleSaveAgentId] Missing required fields:', { selectedClientId, retellAgentId });
+            return;
+        }
+        
+        console.log('[handleSaveAgentId] Starting save:', { 
+            selectedClientId, 
+            retellAgentId: retellAgentId.trim(),
+            clientName: selectedClient?.business_name 
+        });
+        
         setIsSavingAgentId(true);
         setSaveSuccess(false);
+        setProvisioningError(null); // Clear previous errors
 
         try {
-            const { data: existing } = await supabase
+            // Check if record exists
+            const { data: existing, error: fetchError } = await supabase
                 .from('client_voice_integrations')
                 .select('*')
                 .eq('client_id', selectedClientId)
                 .maybeSingle();
 
+            if (fetchError) {
+                console.error('[handleSaveAgentId] Error fetching existing record:', fetchError);
+                throw new Error(`Database read error: ${fetchError.message}`);
+            }
+
+            console.log('[handleSaveAgentId] Existing record:', existing);
+
             if (existing) {
-                const { error } = await supabase
+                // UPDATE existing record
+                console.log('[handleSaveAgentId] Updating existing record...');
+                const { data: updated, error: updateError } = await supabase
                     .from('client_voice_integrations')
                     .update({
                         retell_agent_id: retellAgentId.trim(),
+                        updated_at: new Date().toISOString(),
                     })
-                    .eq('client_id', selectedClientId);
+                    .eq('client_id', selectedClientId)
+                    .select();
 
-                if (error) throw error;
-            } else {
-                // Determine source based on Twilio configuration
-                const currentSource = selectedClient?.twilio_configured ? 'client' : 'platform';
+                if (updateError) {
+                    console.error('[handleSaveAgentId] Update error:', updateError);
+                    throw new Error(`Failed to update: ${updateError.message}`);
+                }
                 
-                const { error } = await supabase
+                console.log('[handleSaveAgentId] Update successful:', updated);
+            } else {
+                // INSERT new record
+                const currentSource = selectedClient?.twilio_configured ? 'client' : 'platform';
+                console.log('[handleSaveAgentId] Inserting new record with source:', currentSource);
+                
+                const { data: inserted, error: insertError } = await supabase
                     .from('client_voice_integrations')
                     .insert({
                         client_id: selectedClientId,
@@ -146,15 +175,32 @@ const AdminVoiceManagement: React.FC = () => {
                         number_source: currentSource,
                         voice_status: 'inactive',
                         a2p_status: 'not_started',
-                    });
+                    })
+                    .select();
 
-                if (error) throw error;
+                if (insertError) {
+                    console.error('[handleSaveAgentId] Insert error:', insertError);
+                    throw new Error(`Failed to insert: ${insertError.message}`);
+                }
+                
+                console.log('[handleSaveAgentId] Insert successful:', inserted);
             }
 
             setSaveSuccess(true);
-            await fetchClients(); // Refresh data
+            console.log('[handleSaveAgentId] Save completed successfully, refreshing clients...');
+            
+            // Refresh the client list
+            await fetchClients();
+            
+            // Keep success message for 3 seconds
+            setTimeout(() => setSaveSuccess(false), 3000);
+            
         } catch (e: any) {
+            console.error('[handleSaveAgentId] Caught error:', e);
             setProvisioningError(`Failed to save Agent ID: ${e.message}`);
+            
+            // Show error for 10 seconds
+            setTimeout(() => setProvisioningError(null), 10000);
         } finally {
             setIsSavingAgentId(false);
         }
@@ -349,6 +395,20 @@ const AdminVoiceManagement: React.FC = () => {
                                         <p className="text-xs text-emerald-600 mt-2 flex items-center gap-1">
                                             <CheckCircle2 className="w-3 h-3" /> Agent ID saved: <span className="font-mono">{selectedClient.retell_agent_id}</span>
                                         </p>
+                                    )}
+                                    
+                                    {/* Error display for Agent ID save failures */}
+                                    {provisioningError && provisioningError.includes('Agent ID') && (
+                                        <div className="mt-3 p-3 bg-red-100 border border-red-300 text-red-800 rounded-lg text-xs flex items-start gap-2">
+                                            <AlertTriangle className="w-4 h-4 mt-0.5 flex-shrink-0" />
+                                            <div>
+                                                <p className="font-bold">Save Failed</p>
+                                                <p className="mt-1">{provisioningError}</p>
+                                                <p className="mt-2 text-[10px]">
+                                                    Check browser console (F12) for details. This is likely a database permission issue.
+                                                </p>
+                                            </div>
+                                        </div>
                                     )}
                                 </div>
 
