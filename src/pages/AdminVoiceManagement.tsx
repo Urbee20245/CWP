@@ -40,7 +40,7 @@ const AdminVoiceManagement: React.FC = () => {
 
     const fetchClients = useCallback(async () => {
         setIsLoading(true);
-        const { data: clientsData } = await supabase
+        const { data: clientsData, error: fetchError } = await supabase
             .from('clients')
             .select(`
                 id, business_name, phone,
@@ -49,9 +49,21 @@ const AdminVoiceManagement: React.FC = () => {
             `)
             .order('business_name', { ascending: true });
 
+        if (fetchError) {
+            console.error('[AdminVoiceManagement] Error fetching clients:', fetchError);
+        }
+
+        console.log('[AdminVoiceManagement] Raw client data:', clientsData);
+
         const formatted = (clientsData || []).map((c: any) => {
             // Find the Twilio integration from client_integrations
             const twilioIntegration = c.client_integrations?.find((i: any) => i.provider === 'twilio');
+
+            console.log(`[AdminVoiceManagement] Client: ${c.business_name}`, {
+                integrations: c.client_integrations,
+                twilioIntegration,
+                twilioConfigured: !!twilioIntegration
+            });
 
             return {
                 ...c,
@@ -273,6 +285,18 @@ const AdminVoiceManagement: React.FC = () => {
                                                 <p className="text-xs mt-0.5 text-amber-600">
                                                     Client has not entered their Twilio credentials yet. They must complete setup in their Client Settings page before you can import to Retell AI.
                                                 </p>
+                                                <details className="mt-2">
+                                                    <summary className="text-xs cursor-pointer text-amber-700 font-semibold">Debug Info (Click to expand)</summary>
+                                                    <pre className="mt-2 text-[10px] bg-white p-2 rounded border border-amber-300 overflow-auto">
+                                                        {JSON.stringify({
+                                                            client_id: selectedClient.id,
+                                                            business_name: selectedClient.business_name,
+                                                            twilio_configured: selectedClient.twilio_configured,
+                                                            twilio_phone: selectedClient.twilio_phone,
+                                                            client_integrations: selectedClient.client_integrations,
+                                                        }, null, 2)}
+                                                    </pre>
+                                                </details>
                                             </div>
                                         </>
                                     )}
