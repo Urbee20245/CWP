@@ -1,19 +1,33 @@
 import { supabase } from '../integrations/supabase/client';
 
 const invokeEdgeFunction = async (functionName: string, payload: any) => {
+  // Get the current session to pass auth headers
+  const { data: { session } } = await supabase.auth.getSession();
+
+  if (!session) {
+    console.error('No active session found');
+    throw new Error('You must be logged in to perform this action');
+  }
+
   const { data, error } = await supabase.functions.invoke(functionName, {
     body: JSON.stringify(payload),
+    headers: {
+      Authorization: `Bearer ${session.access_token}`,
+    },
   });
 
   if (error) {
     console.error(`Error invoking ${functionName}:`, error);
     throw new Error(error.message || `Failed to call ${functionName}`);
   }
-  
+
   if (data.error) {
     console.error(`Edge function ${functionName} returned error:`, data.error);
     throw new Error(data.error);
   }
+
+  // Log successful responses for debugging
+  console.log(`Edge function ${functionName} response:`, data);
 
   return data;
 };
