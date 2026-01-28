@@ -1,3 +1,6 @@
+Adminvoicemanagement · TSX
+Copy
+
 "use client";
 
 import React, { useState, useEffect, useCallback } from 'react';
@@ -44,9 +47,21 @@ const AdminVoiceManagement: React.FC = () => {
         const { data: clientsData, error: fetchError } = await supabase
             .from('clients')
             .select(`
-                id, business_name, phone,
-                client_voice_integrations (voice_status, number_source, a2p_status, retell_agent_id),
-                client_integrations (provider, phone_number)
+                id, 
+                business_name, 
+                phone,
+                client_voice_integrations (
+                    voice_status, 
+                    number_source, 
+                    a2p_status, 
+                    retell_agent_id
+                ),
+                client_integrations (
+                    provider, 
+                    phone_number, 
+                    account_sid_encrypted, 
+                    auth_token_encrypted
+                )
             `)
             .order('business_name', { ascending: true });
 
@@ -56,15 +71,22 @@ const AdminVoiceManagement: React.FC = () => {
 
         const formatted = (clientsData || []).map((c: any) => {
             const twilioIntegration = c.client_integrations?.find((i: any) => i.provider === 'twilio');
+            
+            // ✅ FIX: Check that encrypted credentials actually exist, not just the record
+            const hasTwilioCredentials = !!(
+                twilioIntegration?.account_sid_encrypted && 
+                twilioIntegration?.auth_token_encrypted && 
+                twilioIntegration?.phone_number
+            );
 
             return {
                 ...c,
                 voice_status: c.client_voice_integrations?.[0]?.voice_status || 'inactive',
                 // Use 'client' as fallback if Twilio is configured, otherwise 'platform'
-                number_source: c.client_voice_integrations?.[0]?.number_source || (twilioIntegration ? 'client' : 'platform'),
+                number_source: c.client_voice_integrations?.[0]?.number_source || (hasTwilioCredentials ? 'client' : 'platform'),
                 a2p_status: c.client_voice_integrations?.[0]?.a2p_status || 'not_started',
                 retell_agent_id: c.client_voice_integrations?.[0]?.retell_agent_id || '',
-                twilio_configured: !!twilioIntegration,
+                twilio_configured: hasTwilioCredentials, // ✅ FIX: Now accurately reflects credential presence
                 twilio_phone: twilioIntegration?.phone_number || null,
             };
         });
