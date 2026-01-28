@@ -12,7 +12,9 @@ interface Client {
     phone: string;
     voice_status?: string;
     number_source?: string;
-    a2p_status?: string; // Added A2P status
+    a2p_status?: string;
+    twilio_configured?: boolean;
+    twilio_phone?: string;
 }
 
 const AdminVoiceManagement: React.FC = () => {
@@ -39,17 +41,25 @@ const AdminVoiceManagement: React.FC = () => {
             .from('clients')
             .select(`
                 id, business_name, phone,
-                client_voice_integrations (voice_status, number_source, a2p_status)
+                client_voice_integrations (voice_status, number_source, a2p_status),
+                client_integrations!client_integrations_client_id_fkey (provider, phone_number)
             `)
             .order('business_name', { ascending: true });
 
-        const formatted = (clientsData || []).map((c: any) => ({
-            ...c,
-            voice_status: c.client_voice_integrations?.[0]?.voice_status || 'inactive',
-            number_source: c.client_voice_integrations?.[0]?.number_source || 'none',
-            a2p_status: c.client_voice_integrations?.[0]?.a2p_status || 'not_started', // Extract A2P status
-        }));
-        
+        const formatted = (clientsData || []).map((c: any) => {
+            // Find the Twilio integration from client_integrations
+            const twilioIntegration = c.client_integrations?.find((i: any) => i.provider === 'twilio');
+
+            return {
+                ...c,
+                voice_status: c.client_voice_integrations?.[0]?.voice_status || 'inactive',
+                number_source: c.client_voice_integrations?.[0]?.number_source || 'none',
+                a2p_status: c.client_voice_integrations?.[0]?.a2p_status || 'not_started',
+                twilio_configured: !!twilioIntegration,
+                twilio_phone: twilioIntegration?.phone_number || null,
+            };
+        });
+
         setClients(formatted);
         setIsLoading(false);
     }, []);
@@ -138,13 +148,18 @@ const AdminVoiceManagement: React.FC = () => {
                                     <div className="flex justify-center p-8"><Loader2 className="animate-spin text-indigo-600" /></div>
                                 ) : (
                                     filteredClients.map(c => (
-                                        <button 
+                                        <button
                                             key={c.id}
                                             onClick={() => setSelectedClientId(c.id)}
                                             className={`w-full text-left p-3 rounded-lg border transition-all ${selectedClientId === c.id ? 'border-indigo-600 bg-indigo-50 ring-1 ring-indigo-500' : 'border-slate-100 hover:bg-slate-50'}`}
                                         >
                                             <div className="flex justify-between items-start">
-                                                <p className="font-bold text-slate-900 text-sm">{c.business_name}</p>
+                                                <div className="flex items-center gap-2">
+                                                    <p className="font-bold text-slate-900 text-sm">{c.business_name}</p>
+                                                    {c.twilio_configured && (
+                                                        <span className="px-1.5 py-0.5 bg-purple-100 text-purple-700 text-[9px] font-bold rounded uppercase">Twilio</span>
+                                                    )}
+                                                </div>
                                                 {c.voice_status === 'active' && <Zap className="w-3 h-3 text-emerald-500 fill-emerald-500" />}
                                             </div>
                                             <div className="flex justify-between mt-1">
@@ -177,6 +192,31 @@ const AdminVoiceManagement: React.FC = () => {
                                     </div>
                                 </div>
                                 
+                                {/* Twilio Readiness Status */}
+                                <div className={`p-4 mb-6 rounded-xl border flex items-center gap-3 ${selectedClient.twilio_configured ? 'bg-purple-50 border-purple-200' : 'bg-amber-50 border-amber-200'}`}>
+                                    {selectedClient.twilio_configured ? (
+                                        <>
+                                            <CheckCircle2 className="w-5 h-5 text-purple-600" />
+                                            <div>
+                                                <p className="font-bold text-sm text-purple-700">Twilio Credentials Ready</p>
+                                                <p className="text-xs mt-0.5 text-purple-600">
+                                                    Phone: <span className="font-mono font-semibold">{selectedClient.twilio_phone}</span> — Ready for Retell AI import
+                                                </p>
+                                            </div>
+                                        </>
+                                    ) : (
+                                        <>
+                                            <AlertTriangle className="w-5 h-5 text-amber-600" />
+                                            <div>
+                                                <p className="font-bold text-sm text-amber-700">Twilio Credentials Not Configured</p>
+                                                <p className="text-xs mt-0.5 text-amber-600">
+                                                    Client has not entered their Twilio credentials yet. They must complete setup in their Client Settings page before you can import to Retell AI.
+                                                </p>
+                                            </div>
+                                        </>
+                                    )}
+                                </div>
+
                                 {/* A2P Status Display */}
                                 {isClientOwned && a2pDisplay && (
                                     <div className={`p-4 mb-6 rounded-xl border flex items-center gap-3 ${a2pDisplay.bg} border-current`}>
@@ -291,9 +331,9 @@ const AdminVoiceManagement: React.FC = () => {
                                     </div>
                                 )}
 
-                                <button 
+                                <button
                                     onClick={handleEnableVoice}
-                                    disabled={isProvisioning || isVoiceActive || (source === 'platform' && !platformNumber) || (source === 'client' && isA2PPending)}
+                                    disabled={isProvisioning || isVoiceActive || (source === 'platform' && !platformNumber) || (source === 'client' && (isA2PPending || !selectedClient?.twilio_configured))}
                                     className="w-full py-4 bg-indigo-600 text-white rounded-xl font-bold text-lg hover:bg-indigo-700 transition-all shadow-xl shadow-indigo-200 disabled:opacity-50 flex items-center justify-center gap-3"
                                 >
                                     {isProvisioning ? (
