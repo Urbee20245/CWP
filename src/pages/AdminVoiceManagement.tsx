@@ -31,6 +31,7 @@ const AdminVoiceManagement: React.FC = () => {
     const [platformNumber, setPlatformNumber] = useState('');
     const [retellAgentId, setRetellAgentId] = useState('');
     const [isSavingAgentId, setIsSavingAgentId] = useState(false);
+    const [saveSuccess, setSaveSuccess] = useState(false); // Feedback state
     const [a2pData, setA2pData] = useState({
         legal_name: '',
         website: '',
@@ -45,7 +46,7 @@ const AdminVoiceManagement: React.FC = () => {
             .select(`
                 id, business_name, phone,
                 client_voice_integrations (voice_status, number_source, a2p_status, retell_agent_id),
-                client_integrations!client_integrations_client_id_fkey (provider, phone_number)
+                client_integrations (provider, phone_number)
             `)
             .order('business_name', { ascending: true });
 
@@ -59,7 +60,8 @@ const AdminVoiceManagement: React.FC = () => {
             return {
                 ...c,
                 voice_status: c.client_voice_integrations?.[0]?.voice_status || 'inactive',
-                number_source: c.client_voice_integrations?.[0]?.number_source || 'none',
+                // Use 'client' as fallback if Twilio is configured, otherwise 'platform'
+                number_source: c.client_voice_integrations?.[0]?.number_source || (twilioIntegration ? 'client' : 'platform'),
                 a2p_status: c.client_voice_integrations?.[0]?.a2p_status || 'not_started',
                 retell_agent_id: c.client_voice_integrations?.[0]?.retell_agent_id || '',
                 twilio_configured: !!twilioIntegration,
@@ -77,6 +79,7 @@ const AdminVoiceManagement: React.FC = () => {
         if (selectedClientId) {
             const client = clients.find(c => c.id === selectedClientId);
             setRetellAgentId(client?.retell_agent_id || '');
+            setSaveSuccess(false);
         }
     }, [selectedClientId, clients]);
 
@@ -94,6 +97,7 @@ const AdminVoiceManagement: React.FC = () => {
     const handleSaveAgentId = async () => {
         if (!selectedClientId || !retellAgentId.trim()) return;
         setIsSavingAgentId(true);
+        setSaveSuccess(false);
 
         try {
             const { data: existing } = await supabase
@@ -112,14 +116,15 @@ const AdminVoiceManagement: React.FC = () => {
 
                 if (error) throw error;
             } else {
-                // Use 'platform' as a valid default to satisfy DB constraints
-                // until the client updates their preferences from the portal.
+                // Determine source based on Twilio configuration
+                const currentSource = selectedClient?.twilio_configured ? 'client' : 'platform';
+                
                 const { error } = await supabase
                     .from('client_voice_integrations')
                     .insert({
                         client_id: selectedClientId,
                         retell_agent_id: retellAgentId.trim(),
-                        number_source: 'platform',
+                        number_source: currentSource,
                         voice_status: 'inactive',
                         a2p_status: 'not_started',
                     });
@@ -127,7 +132,8 @@ const AdminVoiceManagement: React.FC = () => {
                 if (error) throw error;
             }
 
-            fetchClients();
+            setSaveSuccess(true);
+            await fetchClients(); // Refresh data
         } catch (e: any) {
             setProvisioningError(`Failed to save Agent ID: ${e.message}`);
         } finally {
@@ -250,6 +256,7 @@ const AdminVoiceManagement: React.FC = () => {
                                     </div>
                                 </div>
                                 
+                                {/* RESTORED: Twilio configuration indicator */}
                                 <div className={`p-4 mb-6 rounded-xl border flex items-center gap-3 ${selectedClient.twilio_configured ? 'bg-purple-50 border-purple-200' : 'bg-amber-50 border-amber-200'}`}>
                                     {selectedClient.twilio_configured ? (
                                         <>
@@ -313,10 +320,10 @@ const AdminVoiceManagement: React.FC = () => {
                                         <button
                                             onClick={handleSaveAgentId}
                                             disabled={isSavingAgentId || !retellAgentId.trim()}
-                                            className="px-4 py-2 bg-indigo-600 text-white rounded-lg text-sm font-semibold hover:bg-indigo-700 disabled:opacity-50 flex items-center justify-center gap-2"
+                                            className={`px-4 py-2 rounded-lg text-sm font-semibold transition-colors disabled:opacity-50 flex items-center justify-center gap-2 ${saveSuccess ? 'bg-emerald-600 text-white' : 'bg-indigo-600 text-white hover:bg-indigo-700'}`}
                                         >
-                                            {isSavingAgentId ? <Loader2 className="w-4 h-4 animate-spin" /> : <CheckCircle2 className="w-4 h-4" />}
-                                            Save
+                                            {isSavingAgentId ? <Loader2 className="w-4 h-4 animate-spin" /> : saveSuccess ? <CheckCircle2 className="w-4 h-4" /> : <Plus className="w-4 h-4" />}
+                                            {saveSuccess ? 'Saved!' : 'Save'}
                                         </button>
                                     </div>
                                     {selectedClient?.retell_agent_id && (
