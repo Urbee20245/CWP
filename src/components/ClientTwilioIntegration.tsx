@@ -6,7 +6,8 @@ import { ClientIntegrationService } from '../services/clientIntegrationService';
 import { useAuth } from '../hooks/useAuth';
 import { format } from 'date-fns';
 import { Link } from 'react-router-dom';
-import { supabase } from '../integrations/supabase/client'; // Import supabase to fetch A2P status
+import { supabase } from '../integrations/supabase/client';
+import confetti from 'canvas-confetti';
 
 interface ClientTwilioIntegrationProps {
   clientId: string;
@@ -86,17 +87,20 @@ const ClientTwilioIntegration: React.FC<ClientTwilioIntegrationProps> = ({ clien
 
     try {
       await ClientIntegrationService.saveTwilioCredentials(clientId, accountSid, authToken, phoneNumber);
-      
+
+      // Trigger confetti celebration!
+      triggerConfetti();
+
       setStatusMessage({ type: 'success', message: 'Credentials saved and secured successfully! Running connection test...' });
-      
+
       // Clear sensitive fields after successful save
       setFormData(prev => ({ ...prev, accountSid: '', authToken: '' }));
-      
+
       // Immediately run test connection
       await handleTestConnection();
-      
+
       fetchConfig(); // Refresh masked config
-      
+
     } catch (e: any) {
       setStatusMessage({ type: 'error', message: `Save failed: ${e.message}` });
     } finally {
@@ -125,6 +129,37 @@ const ClientTwilioIntegration: React.FC<ClientTwilioIntegrationProps> = ({ clien
   
   const isA2PPending = a2pStatus !== 'approved';
   const isConfigured = config?.configured;
+
+  // Confetti celebration function
+  const triggerConfetti = () => {
+    const duration = 3000;
+    const animationEnd = Date.now() + duration;
+    const defaults = { startVelocity: 30, spread: 360, ticks: 60, zIndex: 9999 };
+
+    const randomInRange = (min: number, max: number) =>
+      Math.random() * (max - min) + min;
+
+    const interval = setInterval(() => {
+      const timeLeft = animationEnd - Date.now();
+
+      if (timeLeft <= 0) {
+        return clearInterval(interval);
+      }
+
+      const particleCount = 50 * (timeLeft / duration);
+
+      confetti({
+        ...defaults,
+        particleCount,
+        origin: { x: randomInRange(0.1, 0.3), y: Math.random() - 0.2 },
+      });
+      confetti({
+        ...defaults,
+        particleCount,
+        origin: { x: randomInRange(0.7, 0.9), y: Math.random() - 0.2 },
+      });
+    }, 250);
+  };
 
   if (isLoading) {
     return <div className="flex justify-center items-center h-32"><Loader2 className="w-6 h-6 animate-spin text-indigo-600" /></div>;

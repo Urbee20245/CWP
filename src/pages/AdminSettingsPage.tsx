@@ -2,7 +2,7 @@
 
 import React from 'react';
 import AdminLayout from '../components/AdminLayout';
-import { Settings, MessageSquare, Shield, ExternalLink, CheckCircle2, AlertTriangle, Mail, DollarSign, Zap, Users } from 'lucide-react';
+import { Settings, MessageSquare, Shield, ExternalLink, CheckCircle2, AlertTriangle, Mail, DollarSign, Zap, Users, Bot } from 'lucide-react';
 import { Link } from 'react-router-dom';
 
 const SUPABASE_PROJECT_ID = "nvgumhlewbqynrhlkqhx";
@@ -133,6 +133,76 @@ const AdminSettingsPage: React.FC = () => {
                 <p className="text-xs text-slate-400 mt-4">
                     These secrets are required for all Stripe API calls and webhooks.
                 </p>
+            </div>
+          </div>
+
+          {/* Retell AI Configuration */}
+          <div className="lg:col-span-2 bg-white p-6 rounded-xl shadow-lg border border-slate-100">
+            <h2 className="text-xl font-bold text-slate-900 mb-4 flex items-center gap-2 border-b border-slate-100 pb-4">
+              <Bot className="w-5 h-5 text-indigo-600" /> Retell AI Configuration
+            </h2>
+
+            <p className="text-slate-600 mb-6">
+              Retell AI powers the AI call handling feature. You must configure the following secrets in Supabase to enable voice AI.
+            </p>
+
+            <div className="p-4 bg-indigo-50 border border-indigo-200 rounded-xl mb-6">
+              <h3 className="font-bold text-indigo-800 mb-3 flex items-center gap-2">
+                <AlertTriangle className="w-5 h-5" /> Required Secrets
+              </h3>
+              <ul className="space-y-3 text-sm text-indigo-700">
+                <li className="flex items-start gap-2">
+                  <code className="font-mono text-xs bg-indigo-200 px-2 py-1 rounded">RETELL_API_KEY</code>
+                  <span className="text-slate-600">— Your Retell AI API key from the <a href="https://dashboard.retellai.com" target="_blank" rel="noopener noreferrer" className="text-indigo-600 underline">Retell Dashboard</a></span>
+                </li>
+                <li className="flex items-start gap-2">
+                  <code className="font-mono text-xs bg-indigo-200 px-2 py-1 rounded">RETELL_AGENT_ID</code>
+                  <span className="text-slate-600">— The Agent ID from Retell AI that will handle incoming calls</span>
+                </li>
+              </ul>
+            </div>
+
+            <div className="p-4 bg-slate-50 border border-slate-200 rounded-xl mb-6">
+              <h3 className="font-bold text-slate-700 mb-3">How It Works</h3>
+              <ol className="space-y-2 text-sm text-slate-600 list-decimal ml-4">
+                <li>Client enters their Twilio credentials (Account SID, Auth Token, Phone Number) in their Settings page</li>
+                <li>You see the "Twilio" badge on the AI Call Management page when credentials are ready</li>
+                <li>Click "Enable AI Call Handling" to import the phone number into Retell AI</li>
+                <li>Retell AI takes over call handling for that number using your configured Agent</li>
+              </ol>
+            </div>
+
+            <div className="flex gap-4">
+              <a
+                href={`https://supabase.com/dashboard/project/nvgumhlewbqynrhlkqhx/functions/secrets`}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="inline-flex items-center gap-2 px-4 py-2 bg-indigo-600 text-white rounded-lg text-sm font-semibold hover:bg-indigo-700 transition-colors"
+              >
+                Go to Supabase Secrets
+                <ExternalLink className="w-4 h-4" />
+              </a>
+              <Link
+                to="/admin/voice"
+                className="inline-flex items-center gap-2 px-4 py-2 bg-slate-100 text-slate-700 rounded-lg text-sm font-semibold hover:bg-slate-200 transition-colors"
+              >
+                Go to AI Call Management
+                <ExternalLink className="w-4 h-4" />
+              </Link>
+            </div>
+          </div>
+
+          {/* Encryption Key */}
+          <div className="lg:col-span-1 bg-white p-6 rounded-xl shadow-lg border border-slate-100">
+            <h2 className="text-xl font-bold text-slate-900 mb-4 flex items-center gap-2 border-b border-slate-100 pb-4">
+              <Shield className="w-5 h-5 text-red-600" /> Encryption Key
+            </h2>
+            <p className="text-slate-600 mb-4 text-sm">
+              Client Twilio credentials are encrypted at rest. Ensure this secret is set:
+            </p>
+            <div className="p-3 bg-red-50 border border-red-200 rounded-lg">
+              <code className="font-mono text-xs text-red-700">SMTP_ENCRYPTION_KEY</code>
+              <p className="text-xs text-red-600 mt-2">Used to encrypt/decrypt sensitive client data. Must be 32+ characters.</p>
             </div>
           </div>
         </div>

@@ -6,7 +6,7 @@ import { decryptSecret } from '../_shared/encryption.ts';
 const RETELL_API_KEY = Deno.env.get('RETELL_API_KEY');
 const PLATFORM_TWILIO_SID = Deno.env.get('TWILIO_ACCOUNT_SID');
 const PLATFORM_TWILIO_TOKEN = Deno.env.get('TWILIO_AUTH_TOKEN');
-const RETELL_AGENT_ID = Deno.env.get('RETELL_AGENT_ID') || 'default-agent-id';
+const RETELL_AGENT_ID = Deno.env.get('RETELL_AGENT_ID');
 
 serve(async (req) => {
   const corsResponse = handleCors(req);
@@ -22,6 +22,17 @@ serve(async (req) => {
 
     if (!client_id || !source) {
       return errorResponse('Missing required fields: client_id and source.', 400);
+    }
+
+    // CRITICAL: Check Retell API Key first
+    if (!RETELL_API_KEY) {
+      console.error('[provision-voice-number] RETELL_API_KEY is not configured in Supabase secrets.');
+      return errorResponse('Retell API Key is not configured. Please add RETELL_API_KEY to Supabase secrets.', 500);
+    }
+
+    if (!RETELL_AGENT_ID) {
+      console.error('[provision-voice-number] RETELL_AGENT_ID is not configured in Supabase secrets.');
+      return errorResponse('Retell Agent ID is not configured. Please add RETELL_AGENT_ID to Supabase secrets.', 500);
     }
 
     console.log(`[provision-voice-number] Sourcing ${source} number for client ${client_id}`);
@@ -54,7 +65,14 @@ serve(async (req) => {
             .eq('provider', 'twilio')
             .maybeSingle();
 
-        if (configError || !config) return errorResponse('Client Twilio credentials not found.', 404);
+        if (configError) {
+            console.error('[provision-voice-number] Error fetching client credentials:', configError);
+            return errorResponse('Error fetching client Twilio credentials from database.', 500);
+        }
+
+        if (!config) {
+            return errorResponse('Client has not configured their Twilio credentials yet. Please ask the client to enter their Twilio Account SID, Auth Token, and Phone Number in their Settings page.', 404);
+        }
         
         twilio_sid = await decryptSecret(config.account_sid_encrypted);
         twilio_token = await decryptSecret(config.auth_token_encrypted);
@@ -112,7 +130,7 @@ serve(async (req) => {
 
     if (!retellResponse.ok) {
         console.error('[provision-voice-number] Retell Error:', retellData);
-        
+
         // Update DB status to failed
         await supabaseAdmin.from('client_voice_integrations').upsert({
             client_id,
@@ -121,7 +139,21 @@ serve(async (req) => {
             phone_number: final_phone
         }, { onConflict: 'client_id' });
 
-        return errorResponse(`Retell Error: ${retellData.error?.message || 'Failed to import number'}`, 400);
+        // Provide more specific error messages based on Retell response
+        let errorMessage = 'Failed to import number to Retell AI.';
+        if (retellData.error?.message) {
+            errorMessage = `Retell Error: ${retellData.error.message}`;
+        } else if (retellData.message) {
+            errorMessage = `Retell Error: ${retellData.message}`;
+        } else if (retellData.detail) {
+            errorMessage = `Retell Error: ${retellData.detail}`;
+        } else if (retellResponse.status === 401) {
+            errorMessage = 'Retell API authentication failed. Please verify RETELL_API_KEY is correct.';
+        } else if (retellResponse.status === 400) {
+            errorMessage = 'Invalid request to Retell. Please verify the Twilio credentials and phone number are correct.';
+        }
+
+        return errorResponse(errorMessage, 400);
     }
 
     // 5. SAVE RESULT
