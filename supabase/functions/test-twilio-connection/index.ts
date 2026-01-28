@@ -8,11 +8,20 @@ serve(async (req) => {
   const corsResponse = handleCors(req);
   if (corsResponse) return corsResponse;
 
+  // Get authorization header
+  const authHeader = req.headers.get('Authorization');
+  console.log('[test-twilio-connection] Auth header present:', !!authHeader);
+
+  if (!authHeader) {
+    console.error('[test-twilio-connection] Missing Authorization header');
+    return errorResponse('Unauthorized: Missing authorization token.', 401);
+  }
+
   // Initialize Supabase client with RLS checks (public client)
   const supabase = createClient(
     Deno.env.get('SUPABASE_URL')!,
     Deno.env.get('SUPABASE_ANON_KEY')!,
-    { global: { headers: { Authorization: req.headers.get('Authorization')! } } }
+    { global: { headers: { Authorization: authHeader } } }
   );
   
   // Initialize Supabase Admin client for privileged decryption
