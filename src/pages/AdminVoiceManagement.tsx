@@ -53,17 +53,8 @@ const AdminVoiceManagement: React.FC = () => {
             console.error('[AdminVoiceManagement] Error fetching clients:', fetchError);
         }
 
-        console.log('[AdminVoiceManagement] Raw client data:', clientsData);
-
         const formatted = (clientsData || []).map((c: any) => {
-            // Find the Twilio integration from client_integrations
             const twilioIntegration = c.client_integrations?.find((i: any) => i.provider === 'twilio');
-
-            console.log(`[AdminVoiceManagement] Client: ${c.business_name}`, {
-                integrations: c.client_integrations,
-                twilioIntegration,
-                twilioConfigured: !!twilioIntegration
-            });
 
             return {
                 ...c,
@@ -82,7 +73,6 @@ const AdminVoiceManagement: React.FC = () => {
 
     useEffect(() => { fetchClients(); }, [fetchClients]);
 
-    // Set retellAgentId when client is selected
     useEffect(() => {
         if (selectedClientId) {
             const client = clients.find(c => c.id === selectedClientId);
@@ -106,15 +96,13 @@ const AdminVoiceManagement: React.FC = () => {
         setIsSavingAgentId(true);
 
         try {
-            // Check if a record already exists
             const { data: existing } = await supabase
                 .from('client_voice_integrations')
                 .select('*')
                 .eq('client_id', selectedClientId)
-                .single();
+                .maybeSingle();
 
             if (existing) {
-                // Update existing record
                 const { error } = await supabase
                     .from('client_voice_integrations')
                     .update({
@@ -124,13 +112,14 @@ const AdminVoiceManagement: React.FC = () => {
 
                 if (error) throw error;
             } else {
-                // Insert new record with required fields
+                // Use 'platform' as a valid default to satisfy DB constraints
+                // until the client updates their preferences from the portal.
                 const { error } = await supabase
                     .from('client_voice_integrations')
                     .insert({
                         client_id: selectedClientId,
                         retell_agent_id: retellAgentId.trim(),
-                        number_source: 'none',
+                        number_source: 'platform',
                         voice_status: 'inactive',
                         a2p_status: 'not_started',
                     });
@@ -138,7 +127,7 @@ const AdminVoiceManagement: React.FC = () => {
                 if (error) throw error;
             }
 
-            fetchClients(); // Refresh to show updated agent ID
+            fetchClients();
         } catch (e: any) {
             setProvisioningError(`Failed to save Agent ID: ${e.message}`);
         } finally {
@@ -149,7 +138,6 @@ const AdminVoiceManagement: React.FC = () => {
     const handleEnableVoice = async () => {
         if (!selectedClientId) return;
 
-        // Require Retell Agent ID
         if (!retellAgentId.trim()) {
             setProvisioningError("Please enter the Retell Agent ID for this client first.");
             return;
@@ -164,7 +152,7 @@ const AdminVoiceManagement: React.FC = () => {
                 source,
                 source === 'platform' ? platformNumber : undefined,
                 source === 'platform' ? a2pData : undefined,
-                retellAgentId.trim() // Pass the per-client agent ID
+                retellAgentId.trim()
             );
             alert("AI Call Handling successfully enabled for this client!");
             fetchClients();
@@ -189,7 +177,6 @@ const AdminVoiceManagement: React.FC = () => {
         }
     };
 
-    // Define the display object here
     const a2pDisplay = selectedClient ? getA2PStatusDisplay(selectedClient.a2p_status || 'not_started') : null;
 
     return (
@@ -201,7 +188,6 @@ const AdminVoiceManagement: React.FC = () => {
 
                 <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
                     
-                    {/* Client Selector */}
                     <div className="lg:col-span-1 space-y-6">
                         <div className="bg-white p-6 rounded-xl shadow-lg border border-slate-100 h-[600px] flex flex-col">
                             <h2 className="text-xl font-bold mb-4">Select Client</h2>
@@ -248,7 +234,6 @@ const AdminVoiceManagement: React.FC = () => {
                         </div>
                     </div>
 
-                    {/* Sourcing Panel */}
                     <div className="lg:col-span-2 space-y-6">
                         {selectedClient ? (
                             <div className="bg-white p-8 rounded-xl shadow-lg border border-slate-100 animate-fade-in">
@@ -265,7 +250,6 @@ const AdminVoiceManagement: React.FC = () => {
                                     </div>
                                 </div>
                                 
-                                {/* Twilio Readiness Status */}
                                 <div className={`p-4 mb-6 rounded-xl border flex items-center gap-3 ${selectedClient.twilio_configured ? 'bg-purple-50 border-purple-200' : 'bg-amber-50 border-amber-200'}`}>
                                     {selectedClient.twilio_configured ? (
                                         <>
@@ -285,24 +269,11 @@ const AdminVoiceManagement: React.FC = () => {
                                                 <p className="text-xs mt-0.5 text-amber-600">
                                                     Client has not entered their Twilio credentials yet. They must complete setup in their Client Settings page before you can import to Retell AI.
                                                 </p>
-                                                <details className="mt-2">
-                                                    <summary className="text-xs cursor-pointer text-amber-700 font-semibold">Debug Info (Click to expand)</summary>
-                                                    <pre className="mt-2 text-[10px] bg-white p-2 rounded border border-amber-300 overflow-auto">
-                                                        {JSON.stringify({
-                                                            client_id: selectedClient.id,
-                                                            business_name: selectedClient.business_name,
-                                                            twilio_configured: selectedClient.twilio_configured,
-                                                            twilio_phone: selectedClient.twilio_phone,
-                                                            client_integrations: selectedClient.client_integrations,
-                                                        }, null, 2)}
-                                                    </pre>
-                                                </details>
                                             </div>
                                         </>
                                     )}
                                 </div>
 
-                                {/* A2P Status Display */}
                                 {isClientOwned && a2pDisplay && (
                                     <div className={`p-4 mb-6 rounded-xl border flex items-center gap-3 ${a2pDisplay.bg} border-current`}>
                                         <a2pDisplay.icon className={`w-5 h-5 ${a2pDisplay.color}`} />
@@ -324,7 +295,6 @@ const AdminVoiceManagement: React.FC = () => {
                                     </div>
                                 )}
 
-                                {/* Retell Agent ID Input */}
                                 <div className="bg-indigo-50 p-6 rounded-xl border border-indigo-200 mb-6">
                                     <h4 className="font-bold text-indigo-800 text-sm flex items-center gap-2 mb-3">
                                         <Bot className="w-4 h-4" /> Retell AI Agent Configuration
@@ -343,7 +313,7 @@ const AdminVoiceManagement: React.FC = () => {
                                         <button
                                             onClick={handleSaveAgentId}
                                             disabled={isSavingAgentId || !retellAgentId.trim()}
-                                            className="px-4 py-2 bg-indigo-600 text-white rounded-lg text-sm font-semibold hover:bg-indigo-700 disabled:opacity-50 flex items-center gap-2"
+                                            className="px-4 py-2 bg-indigo-600 text-white rounded-lg text-sm font-semibold hover:bg-indigo-700 disabled:opacity-50 flex items-center justify-center gap-2"
                                         >
                                             {isSavingAgentId ? <Loader2 className="w-4 h-4 animate-spin" /> : <CheckCircle2 className="w-4 h-4" />}
                                             Save
@@ -354,11 +324,6 @@ const AdminVoiceManagement: React.FC = () => {
                                             <CheckCircle2 className="w-3 h-3" /> Agent ID saved: <span className="font-mono">{selectedClient.retell_agent_id}</span>
                                         </p>
                                     )}
-                                    <div className="mt-3 p-3 bg-blue-50 border border-blue-200 rounded-lg">
-                                        <p className="text-xs text-blue-800">
-                                            <strong>Note:</strong> Clicking "Enable AI Call Handling" below will automatically import the client's phone number from their Twilio account into Retell using this Agent ID.
-                                        </p>
-                                    </div>
                                 </div>
 
                                 <h3 className="text-lg font-bold text-slate-900 mb-6 flex items-center gap-2">
@@ -422,24 +387,6 @@ const AdminVoiceManagement: React.FC = () => {
                                                     className="w-full p-2 border border-slate-300 rounded text-sm"
                                                     value={a2pData.legal_name}
                                                     onChange={(e) => setA2pData({...a2pData, legal_name: e.target.value})}
-                                                />
-                                            </div>
-                                            <div className="col-span-2">
-                                                <label className="block text-[10px] font-bold text-slate-500 uppercase mb-1">Website URL</label>
-                                                <input 
-                                                    type="text" 
-                                                    className="w-full p-2 border border-slate-300 rounded text-sm"
-                                                    value={a2pData.website}
-                                                    onChange={(e) => setA2pData({...a2pData, website: e.target.value})}
-                                                />
-                                            </div>
-                                            <div className="col-span-2">
-                                                <label className="block text-[10px] font-bold text-slate-500 uppercase mb-1">Use Case Description</label>
-                                                <textarea 
-                                                    rows={2}
-                                                    className="w-full p-2 border border-slate-300 rounded text-sm resize-none"
-                                                    value={a2pData.use_case}
-                                                    onChange={(e) => setA2pData({...a2pData, use_case: e.target.value})}
                                                 />
                                             </div>
                                         </div>
