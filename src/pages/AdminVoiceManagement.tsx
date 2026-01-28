@@ -330,6 +330,11 @@ const AdminVoiceManagement: React.FC = () => {
                                             <CheckCircle2 className="w-3 h-3" /> Agent ID saved: <span className="font-mono">{selectedClient.retell_agent_id}</span>
                                         </p>
                                     )}
+                                    <div className="mt-3 p-3 bg-blue-50 border border-blue-200 rounded-lg">
+                                        <p className="text-xs text-blue-800">
+                                            <strong>Note:</strong> Clicking "Enable AI Call Handling" below will automatically import the client's phone number from their Twilio account into Retell using this Agent ID.
+                                        </p>
+                                    </div>
                                 </div>
 
                                 <h3 className="text-lg font-bold text-slate-900 mb-6 flex items-center gap-2">
