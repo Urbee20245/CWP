@@ -38,20 +38,26 @@ const ClientTwilioIntegration: React.FC<ClientTwilioIntegrationProps> = ({ clien
             phoneNumber: result.phone_number || '',
         }));
       }
-      
+
       // 2. Fetch A2P Status (from client_voice_integrations)
       const { data: voiceData } = await supabase
         .from('client_voice_integrations')
         .select('a2p_status, voice_status')
         .eq('client_id', clientId)
         .maybeSingle();
-        
+
       if (voiceData) {
           setA2pStatus(voiceData.a2p_status as any || 'not_started');
       }
 
     } catch (e: any) {
-      setStatusMessage({ type: 'error', message: `Failed to load configuration: ${e.message}` });
+      console.error('Error fetching config:', e);
+      // Don't show error message if it's just that no config exists yet
+      if (!e.message?.includes('not authenticated')) {
+        setStatusMessage({ type: 'error', message: `Failed to load configuration: ${e.message}` });
+      }
+      // Set config to not configured if there's an error
+      setConfig({ configured: false });
     } finally {
       setIsLoading(false);
     }
