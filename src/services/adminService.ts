@@ -36,6 +36,15 @@ export const AdminService = {
     });
   },
   
+  // NEW METHOD: Securely save Retell Agent ID
+  saveRetellAgentId: async (clientId: string, retellAgentId: string, numberSource: 'client' | 'platform') => {
+    return invokeEdgeFunction('save-retell-agent-id', {
+        client_id: clientId,
+        retell_agent_id: retellAgentId,
+        number_source: numberSource,
+    });
+  },
+  
   generateDocument: async (documentType: string, inputs: any) => invokeEdgeFunction('generate-document', { documentType, inputs }),
   generateAdminContent: async (context: any) => invokeEdgeFunction('generate-admin-content', context),
   generateEmail: async (emailType: string, inputs: any) => invokeEdgeFunction('generate-email-content', { emailType, inputs }),

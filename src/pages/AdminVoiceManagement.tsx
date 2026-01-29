@@ -69,7 +69,7 @@ const AdminVoiceManagement: React.FC = () => {
         const formatted = (clientsData || []).map((c: any) => {
             const twilioIntegration = c.client_integrations?.find((i: any) => i.provider === 'twilio');
             
-            // ✅ FIX: Check that encrypted credentials actually exist, not just the record
+            // Check that encrypted credentials actually exist
             const hasTwilioCredentials = !!(
                 twilioIntegration?.account_sid_encrypted && 
                 twilioIntegration?.auth_token_encrypted && 
@@ -83,7 +83,7 @@ const AdminVoiceManagement: React.FC = () => {
                 number_source: c.client_voice_integrations?.[0]?.number_source || (hasTwilioCredentials ? 'client' : 'platform'),
                 a2p_status: c.client_voice_integrations?.[0]?.a2p_status || 'not_started',
                 retell_agent_id: c.client_voice_integrations?.[0]?.retell_agent_id || '',
-                twilio_configured: hasTwilioCredentials, // ✅ FIX: Now accurately reflects credential presence
+                twilio_configured: hasTwilioCredentials,
                 twilio_phone: twilioIntegration?.phone_number || null,
             };
         });
@@ -100,14 +100,12 @@ const AdminVoiceManagement: React.FC = () => {
             const newAgentId = client?.retell_agent_id || '';
             
             // Only update if the value actually changed
-            // This prevents clearing the field when refetching after save
             if (newAgentId !== retellAgentId) {
-                console.log('[useEffect] Updating retellAgentId:', { old: retellAgentId, new: newAgentId });
                 setRetellAgentId(newAgentId);
             }
             setSaveSuccess(false);
         }
-    }, [selectedClientId, clients]); // Note: Don't include retellAgentId in deps
+    }, [selectedClientId, clients]);
 
     const filteredClients = clients.filter(c => 
         c.business_name.toLowerCase().includes(searchQuery.toLowerCase())
@@ -122,82 +120,25 @@ const AdminVoiceManagement: React.FC = () => {
 
     const handleSaveAgentId = async () => {
         if (!selectedClientId || !retellAgentId.trim()) {
-            // This is the client-side validation check that was incorrectly triggering the error message.
             setProvisioningError("Please enter the Retell Agent ID for this client first.");
             return;
         }
         
-        console.log('[handleSaveAgentId] Starting save:', { 
-            selectedClientId, 
-            retellAgentId: retellAgentId.trim(),
-            clientName: selectedClient?.business_name 
-        });
-        
         setIsSavingAgentId(true);
         setSaveSuccess(false);
-        setProvisioningError(null); // Clear previous errors
+        setProvisioningError(null);
 
         try {
-            // 1. Fetch existing record to determine if we need INSERT or UPDATE
-            const { data: existing, error: fetchError } = await supabase
-                .from('client_voice_integrations')
-                .select('id')
-                .eq('client_id', selectedClientId)
-                .maybeSingle();
-
-            if (fetchError) {
-                console.error('[handleSaveAgentId] Error fetching existing record:', fetchError);
-                throw new Error(`Database read error: ${fetchError.message}`);
-            }
-
-            const payload = {
-                client_id: selectedClientId,
-                retell_agent_id: retellAgentId.trim(),
-                number_source: source,
-                updated_at: new Date().toISOString(),
-            };
-            
-            let dbOperation;
-
-            if (existing) {
-                // UPDATE existing record
-                dbOperation = supabase
-                    .from('client_voice_integrations')
-                    .update(payload)
-                    .eq('client_id', selectedClientId)
-                    .select();
-            } else {
-                // INSERT new record
-                dbOperation = supabase
-                    .from('client_voice_integrations')
-                    .insert({
-                        ...payload,
-                        voice_status: 'inactive',
-                        a2p_status: 'not_started',
-                    })
-                    .select();
-            }
-            
-            const { error: dbError } = await dbOperation;
-
-            if (dbError) {
-                console.error('[handleSaveAgentId] DB operation error:', dbError);
-                throw new Error(`Database operation failed: ${dbError.message}`);
-            }
-
-            // Optimistically update the client in state
-            setClients(prevClients => 
-                prevClients.map(c => 
-                    c.id === selectedClientId 
-                        ? { ...c, retell_agent_id: retellAgentId.trim(), number_source: source }
-                        : c
-                )
+            // 1. Call the new Admin Service method (uses Service Role Key via Edge Function)
+            await AdminService.saveRetellAgentId(
+                selectedClientId,
+                retellAgentId.trim(),
+                source
             );
 
             setSaveSuccess(true);
-            console.log('[handleSaveAgentId] Save completed successfully, refreshing clients in 500ms...');
             
-            // Wait a moment before refreshing to ensure database has propagated
+            // 2. Refresh data from DB to ensure consistency
             setTimeout(async () => {
                 await fetchClients();
             }, 500);
@@ -238,7 +179,7 @@ const AdminVoiceManagement: React.FC = () => {
             alert("AI Call Handling successfully enabled for this client!");
             fetchClients();
         } catch (e: any) {
-            // FIX: Display the specific error message returned by the Edge Function
+            // Display the specific error message returned by the Edge Function
             setProvisioningError(e.message || `Provisioning Failed: An unknown error occurred.`);
         } finally {
             setIsProvisioning(false);
@@ -328,7 +269,7 @@ const AdminVoiceManagement: React.FC = () => {
                                     </div>
                                 </div>
                                 
-                                {/* RESTORED: Twilio configuration indicator */}
+                                {/* Twilio configuration indicator */}
                                 <div className={`p-4 mb-6 rounded-xl border flex items-center gap-3 ${selectedClient.twilio_configured ? 'bg-purple-50 border-purple-200' : 'bg-amber-50 border-amber-200'}`}>
                                     {selectedClient.twilio_configured ? (
                                         <>
