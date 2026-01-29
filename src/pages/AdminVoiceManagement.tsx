@@ -44,29 +44,39 @@ const AdminVoiceManagement: React.FC = () => {
 
     const fetchClients = useCallback(async () => {
         setIsLoading(true);
-        const { data: clientsData, error: fetchError } = await supabase
-            .from('clients')
-            .select(`
-                id, 
-                business_name, 
-                phone,
-                client_voice_integrations (
-                    voice_status, 
-                    number_source, 
-                    a2p_status, 
-                    retell_agent_id
-                ),
-                client_integrations (
-                    provider, 
-                    phone_number, 
-                    account_sid_encrypted, 
-                    auth_token_encrypted
-                )
-            `)
-            .order('business_name', { ascending: true });
 
-        if (fetchError) {
-            console.error('[AdminVoiceManagement] Error fetching clients:', fetchError);
+        let clientsData: any[] = [];
+        try {
+            // Use edge function with service role key to bypass RLS
+            clientsData = await AdminService.getVoiceClients();
+        } catch (err) {
+            console.error('[AdminVoiceManagement] Error fetching clients via edge function:', err);
+            // Fallback to direct query if edge function is not deployed yet
+            const { data, error: fetchError } = await supabase
+                .from('clients')
+                .select(`
+                    id,
+                    business_name,
+                    phone,
+                    client_voice_integrations (
+                        voice_status,
+                        number_source,
+                        a2p_status,
+                        retell_agent_id
+                    ),
+                    client_integrations (
+                        provider,
+                        phone_number,
+                        account_sid_encrypted,
+                        auth_token_encrypted
+                    )
+                `)
+                .order('business_name', { ascending: true });
+
+            if (fetchError) {
+                console.error('[AdminVoiceManagement] Fallback fetch error:', fetchError);
+            }
+            clientsData = data || [];
         }
 
         const formatted = (clientsData || []).map((c: any) => {
@@ -127,59 +137,44 @@ const AdminVoiceManagement: React.FC = () => {
 
     const handleSaveAgentId = async () => {
         console.log('[handleSaveAgentId] Called with:', { selectedClientId, retellAgentId, source });
-        
+
         if (!selectedClientId) {
             setProvisioningError("No client selected. Please select a client first.");
             return;
         }
-        
-        // CRITICAL FIX: Use the state value directly for validation
+
         const agentIdToSave = retellAgentId.trim();
-        if (!agentIdToSave) { 
+        if (!agentIdToSave) {
             setProvisioningError("Please enter the Retell Agent ID for this client first.");
             return;
         }
-        
+
         setIsSavingAgentId(true);
         setSaveSuccess(false);
         setProvisioningError(null);
 
         try {
-            console.log('[handleSaveAgentId] Saving directly to database...');
-            
-            // BYPASS THE EDGE FUNCTION - Write directly to database
-            const { error: upsertError } = await supabase
-                .from('client_voice_integrations')
-                .upsert({
-                    client_id: selectedClientId,
-                    retell_agent_id: agentIdToSave,
-                    number_source: source,
-                    voice_status: 'inactive',
-                    a2p_status: 'not_started',
-                }, { onConflict: 'client_id' });
+            console.log('[handleSaveAgentId] Saving via edge function...');
 
-            if (upsertError) {
-                console.error('[handleSaveAgentId] Database error:', upsertError);
-                throw new Error(`Database error: ${upsertError.message}`);
-            }
+            // Use the edge function (service role key) to bypass RLS
+            await AdminService.saveRetellAgentId(selectedClientId, agentIdToSave, source);
 
             console.log('[handleSaveAgentId] Save successful!');
             setSaveSuccess(true);
-            
-            // 2. Update the ref immediately so the useEffect doesn't fight the input state
-            lastLoadedAgentIdRef.current = agentIdToSave; 
-            
-            // 3. Refresh data from DB to ensure consistency
-            await fetchClients(); 
-            
+
+            // Update the ref immediately so the useEffect doesn't fight the input state
+            lastLoadedAgentIdRef.current = agentIdToSave;
+
+            // Refresh data from DB to ensure consistency
+            await fetchClients();
+
             // Keep success message for 3 seconds
             setTimeout(() => setSaveSuccess(false), 3000);
-            
+
         } catch (e: any) {
             console.error('[handleSaveAgentId] Caught error:', e);
-            // Provide a clearer error message that includes the raw message from the Edge Function
-            setProvisioningError(`Save Failed: ${e.message}. Please check the browser console (F12) for the full error details.`);
-            
+            setProvisioningError(`Save Failed: ${e.message}`);
+
             // Show error for 10 seconds
             setTimeout(() => setProvisioningError(null), 10000);
         } finally {
