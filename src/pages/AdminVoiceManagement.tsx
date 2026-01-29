@@ -148,7 +148,8 @@ const AdminVoiceManagement: React.FC = () => {
             
         } catch (e: any) {
             console.error('[handleSaveAgentId] Caught error:', e);
-            setProvisioningError(`Failed to save Agent ID: ${e.message}`);
+            // Provide a clearer error message that includes the raw message from the Edge Function
+            setProvisioningError(`Save Failed: ${e.message}. Please check the browser console (F12) for the full error details.`);
             
             // Show error for 10 seconds
             setTimeout(() => setProvisioningError(null), 10000);
@@ -345,7 +346,7 @@ const AdminVoiceManagement: React.FC = () => {
                                     )}
                                     
                                     {/* Error display for Agent ID save failures */}
-                                    {provisioningError && provisioningError.includes('Agent ID') && (
+                                    {provisioningError && (
                                         <div className="mt-3 p-3 bg-red-100 border border-red-300 text-red-800 rounded-lg text-xs flex items-start gap-2">
                                             <AlertTriangle className="w-4 h-4 mt-0.5 flex-shrink-0" />
                                             <div>
