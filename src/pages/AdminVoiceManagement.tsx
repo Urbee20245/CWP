@@ -145,13 +145,23 @@ const AdminVoiceManagement: React.FC = () => {
         setProvisioningError(null);
 
         try {
-            console.log('[handleSaveAgentId] Calling AdminService.saveRetellAgentId...');
-            // 1. Call the new Admin Service method
-            await AdminService.saveRetellAgentId(
-                selectedClientId,
-                agentIdToSave, // Use the validated, trimmed value
-                source
-            );
+            console.log('[handleSaveAgentId] Saving directly to database...');
+            
+            // BYPASS THE EDGE FUNCTION - Write directly to database
+            const { error: upsertError } = await supabase
+                .from('client_voice_integrations')
+                .upsert({
+                    client_id: selectedClientId,
+                    retell_agent_id: agentIdToSave,
+                    number_source: source,
+                    voice_status: 'inactive',
+                    a2p_status: 'not_started',
+                }, { onConflict: 'client_id' });
+
+            if (upsertError) {
+                console.error('[handleSaveAgentId] Database error:', upsertError);
+                throw new Error(`Database error: ${upsertError.message}`);
+            }
 
             console.log('[handleSaveAgentId] Save successful!');
             setSaveSuccess(true);
