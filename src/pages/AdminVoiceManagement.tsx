@@ -97,10 +97,17 @@ const AdminVoiceManagement: React.FC = () => {
     useEffect(() => {
         if (selectedClientId) {
             const client = clients.find(c => c.id === selectedClientId);
-            setRetellAgentId(client?.retell_agent_id || '');
+            const newAgentId = client?.retell_agent_id || '';
+            
+            // Only update if the value actually changed
+            // This prevents clearing the field when refetching after save
+            if (newAgentId !== retellAgentId) {
+                console.log('[useEffect] Updating retellAgentId:', { old: retellAgentId, new: newAgentId });
+                setRetellAgentId(newAgentId);
+            }
             setSaveSuccess(false);
         }
-    }, [selectedClientId, clients]);
+    }, [selectedClientId, clients]); // Note: Don't include retellAgentId in deps
 
     const filteredClients = clients.filter(c => 
         c.business_name.toLowerCase().includes(searchQuery.toLowerCase())
@@ -144,6 +151,8 @@ const AdminVoiceManagement: React.FC = () => {
 
             console.log('[handleSaveAgentId] Existing record:', existing);
 
+            let savedData;
+            
             if (existing) {
                 // UPDATE existing record
                 console.log('[handleSaveAgentId] Updating existing record...');
@@ -161,6 +170,7 @@ const AdminVoiceManagement: React.FC = () => {
                     throw new Error(`Failed to update: ${updateError.message}`);
                 }
                 
+                savedData = updated?.[0];
                 console.log('[handleSaveAgentId] Update successful:', updated);
             } else {
                 // INSERT new record
@@ -183,14 +193,26 @@ const AdminVoiceManagement: React.FC = () => {
                     throw new Error(`Failed to insert: ${insertError.message}`);
                 }
                 
+                savedData = inserted?.[0];
                 console.log('[handleSaveAgentId] Insert successful:', inserted);
             }
 
+            // Optimistically update the client in state
+            setClients(prevClients => 
+                prevClients.map(c => 
+                    c.id === selectedClientId 
+                        ? { ...c, retell_agent_id: retellAgentId.trim() }
+                        : c
+                )
+            );
+
             setSaveSuccess(true);
-            console.log('[handleSaveAgentId] Save completed successfully, refreshing clients...');
+            console.log('[handleSaveAgentId] Save completed successfully, refreshing clients in 500ms...');
             
-            // Refresh the client list
-            await fetchClients();
+            // Wait a moment before refreshing to ensure database has propagated
+            setTimeout(async () => {
+                await fetchClients();
+            }, 500);
             
             // Keep success message for 3 seconds
             setTimeout(() => setSaveSuccess(false), 3000);
