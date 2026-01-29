@@ -25,6 +25,7 @@ const AdminVoiceManagement: React.FC = () => {
     const [isLoading, setIsLoading] = useState(true);
     const [isProvisioning, setIsProvisioning] = useState(false);
     const [provisioningError, setProvisioningError] = useState<string | null>(null);
+    const [saveError, setSaveError] = useState<string | null>(null);
     
     // Form State
     const [source, setSource] = useState<'client' | 'platform'>('client');
@@ -111,6 +112,7 @@ const AdminVoiceManagement: React.FC = () => {
                 lastLoadedAgentIdRef.current = newAgentId;
             }
             setSaveSuccess(false);
+            setSaveError(null);
         }
     }, [selectedClientId, clients]);
 
@@ -129,20 +131,20 @@ const AdminVoiceManagement: React.FC = () => {
         console.log('[handleSaveAgentId] Called with:', { selectedClientId, retellAgentId, source });
         
         if (!selectedClientId) {
-            setProvisioningError("No client selected. Please select a client first.");
+            setSaveError("No client selected. Please select a client first.");
             return;
         }
         
         // CRITICAL FIX: Use the state value directly for validation
         const agentIdToSave = retellAgentId.trim();
-        if (!agentIdToSave) { 
-            setProvisioningError("Please enter the Retell Agent ID for this client first.");
+        if (!agentIdToSave) {
+            setSaveError("Please enter the Retell Agent ID for this client first.");
             return;
         }
-        
+
         setIsSavingAgentId(true);
         setSaveSuccess(false);
-        setProvisioningError(null);
+        setSaveError(null);
 
         try {
             console.log('[handleSaveAgentId] Saving directly to database...');
@@ -178,10 +180,10 @@ const AdminVoiceManagement: React.FC = () => {
         } catch (e: any) {
             console.error('[handleSaveAgentId] Caught error:', e);
             // Provide a clearer error message that includes the raw message from the Edge Function
-            setProvisioningError(`Save Failed: ${e.message}. Please check the browser console (F12) for the full error details.`);
-            
+            setSaveError(e.message || 'An unknown error occurred while saving.');
+
             // Show error for 10 seconds
-            setTimeout(() => setProvisioningError(null), 10000);
+            setTimeout(() => setSaveError(null), 10000);
         } finally {
             setIsSavingAgentId(false);
         }
@@ -191,7 +193,7 @@ const AdminVoiceManagement: React.FC = () => {
         if (!selectedClientId) return;
 
         if (!retellAgentId.trim()) {
-            setProvisioningError("Please enter the Retell Agent ID for this client first.");
+            setSaveError("Please enter and save a Retell Agent ID before enabling AI call handling.");
             return;
         }
 
@@ -374,17 +376,11 @@ const AdminVoiceManagement: React.FC = () => {
                                         </p>
                                     )}
                                     
-                                    {/* Error display for Agent ID save failures */}
-                                    {provisioningError && (
+                                    {/* Error display for Agent ID issues */}
+                                    {saveError && (
                                         <div className="mt-3 p-3 bg-red-100 border border-red-300 text-red-800 rounded-lg text-xs flex items-start gap-2">
                                             <AlertTriangle className="w-4 h-4 mt-0.5 flex-shrink-0" />
-                                            <div>
-                                                <p className="font-bold">Save Failed</p>
-                                                <p className="mt-1">{provisioningError}</p>
-                                                <p className="mt-2 text-[10px]">
-                                                    Check browser console (F12) for details. This is likely a database permission issue.
-                                                </p>
-                                            </div>
+                                            <p>{saveError}</p>
                                         </div>
                                     )}
                                 </div>
