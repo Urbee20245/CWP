@@ -119,7 +119,14 @@ const AdminVoiceManagement: React.FC = () => {
     const isVoiceActive = selectedClient?.voice_status === 'active';
 
     const handleSaveAgentId = async () => {
-        if (!selectedClientId || !retellAgentId.trim()) {
+        console.log('[handleSaveAgentId] Called with:', { selectedClientId, retellAgentId, source });
+        
+        if (!selectedClientId) {
+            setProvisioningError("No client selected. Please select a client first.");
+            return;
+        }
+        
+        if (!retellAgentId || !retellAgentId.trim()) {
             setProvisioningError("Please enter the Retell Agent ID for this client first.");
             return;
         }
@@ -129,6 +136,7 @@ const AdminVoiceManagement: React.FC = () => {
         setProvisioningError(null);
 
         try {
+            console.log('[handleSaveAgentId] Calling AdminService.saveRetellAgentId...');
             // 1. Call the new Admin Service method (uses Service Role Key via Edge Function)
             await AdminService.saveRetellAgentId(
                 selectedClientId,
@@ -136,6 +144,7 @@ const AdminVoiceManagement: React.FC = () => {
                 source
             );
 
+            console.log('[handleSaveAgentId] Save successful!');
             setSaveSuccess(true);
             
             // 2. Refresh data from DB to ensure consistency
