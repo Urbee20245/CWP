@@ -21,23 +21,22 @@ serve(async (req) => {
     
     console.log(`[save-retell-agent-id] Saving agent ID ${retell_agent_id} for client ${client_id}`);
 
-    // Use upsert on client_id (assuming client_id is unique for this integration)
-    // We set voice_status and a2p_status to initial values on save, as provisioning is the next step.
+    // Use upsert on the unique client_id column in client_voice_integrations
     const payload = {
         client_id: client_id,
         retell_agent_id: retell_agent_id,
         number_source: number_source,
-        voice_status: 'inactive', // Always reset to inactive on agent ID change/save
-        a2p_status: 'not_started', // Reset A2P status if agent ID changes (optional, but safer)
+        voice_status: 'inactive', // Reset status on agent ID change
+        a2p_status: 'not_started', // Reset A2P status (will be updated by client form or provisioning)
     };
 
-    // Use upsert on the unique client_id column
     const { error: upsertError } = await supabaseAdmin
         .from('client_voice_integrations')
         .upsert(payload, { onConflict: 'client_id' });
 
     if (upsertError) {
         console.error('[save-retell-agent-id] DB upsert failed:', upsertError);
+        // Return the specific DB error message
         return errorResponse(`Database update failed: ${upsertError.message}`, 500);
     }
 
