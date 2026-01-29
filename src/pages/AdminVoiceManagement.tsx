@@ -122,7 +122,8 @@ const AdminVoiceManagement: React.FC = () => {
 
     const handleSaveAgentId = async () => {
         if (!selectedClientId || !retellAgentId.trim()) {
-            console.error('[handleSaveAgentId] Missing required fields:', { selectedClientId, retellAgentId });
+            // This is the client-side validation check that was incorrectly triggering the error message.
+            setProvisioningError("Please enter the Retell Agent ID for this client first.");
             return;
         }
         
@@ -137,10 +138,10 @@ const AdminVoiceManagement: React.FC = () => {
         setProvisioningError(null); // Clear previous errors
 
         try {
-            // Check if record exists
+            // 1. Fetch existing record to determine if we need INSERT or UPDATE
             const { data: existing, error: fetchError } = await supabase
                 .from('client_voice_integrations')
-                .select('*')
+                .select('id')
                 .eq('client_id', selectedClientId)
                 .maybeSingle();
 
@@ -149,60 +150,46 @@ const AdminVoiceManagement: React.FC = () => {
                 throw new Error(`Database read error: ${fetchError.message}`);
             }
 
-            console.log('[handleSaveAgentId] Existing record:', existing);
-
-            let savedData;
+            const payload = {
+                client_id: selectedClientId,
+                retell_agent_id: retellAgentId.trim(),
+                number_source: source,
+                updated_at: new Date().toISOString(),
+            };
             
+            let dbOperation;
+
             if (existing) {
                 // UPDATE existing record
-                console.log('[handleSaveAgentId] Updating existing record with source:', source);
-                const { data: updated, error: updateError } = await supabase
+                dbOperation = supabase
                     .from('client_voice_integrations')
-                    .update({
-                        retell_agent_id: retellAgentId.trim(),
-                        number_source: source, // Update the source based on UI selection
-                        updated_at: new Date().toISOString(),
-                    })
+                    .update(payload)
                     .eq('client_id', selectedClientId)
                     .select();
-
-                if (updateError) {
-                    console.error('[handleSaveAgentId] Update error:', updateError);
-                    throw new Error(`Failed to update: ${updateError.message}`);
-                }
-                
-                savedData = updated?.[0];
-                console.log('[handleSaveAgentId] Update successful:', updated);
             } else {
                 // INSERT new record
-                // Use the source selected in the UI (Option A or Option B)
-                console.log('[handleSaveAgentId] Inserting new record with source:', source);
-                
-                const { data: inserted, error: insertError } = await supabase
+                dbOperation = supabase
                     .from('client_voice_integrations')
                     .insert({
-                        client_id: selectedClientId,
-                        retell_agent_id: retellAgentId.trim(),
-                        number_source: source, // Use the UI-selected source
+                        ...payload,
                         voice_status: 'inactive',
                         a2p_status: 'not_started',
                     })
                     .select();
+            }
+            
+            const { error: dbError } = await dbOperation;
 
-                if (insertError) {
-                    console.error('[handleSaveAgentId] Insert error:', insertError);
-                    throw new Error(`Failed to insert: ${insertError.message}`);
-                }
-                
-                savedData = inserted?.[0];
-                console.log('[handleSaveAgentId] Insert successful:', inserted);
+            if (dbError) {
+                console.error('[handleSaveAgentId] DB operation error:', dbError);
+                throw new Error(`Database operation failed: ${dbError.message}`);
             }
 
             // Optimistically update the client in state
             setClients(prevClients => 
                 prevClients.map(c => 
                     c.id === selectedClientId 
-                        ? { ...c, retell_agent_id: retellAgentId.trim() }
+                        ? { ...c, retell_agent_id: retellAgentId.trim(), number_source: source }
                         : c
                 )
             );
