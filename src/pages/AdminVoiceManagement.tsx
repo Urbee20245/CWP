@@ -155,11 +155,12 @@ const AdminVoiceManagement: React.FC = () => {
             
             if (existing) {
                 // UPDATE existing record
-                console.log('[handleSaveAgentId] Updating existing record...');
+                console.log('[handleSaveAgentId] Updating existing record with source:', source);
                 const { data: updated, error: updateError } = await supabase
                     .from('client_voice_integrations')
                     .update({
                         retell_agent_id: retellAgentId.trim(),
+                        number_source: source, // Update the source based on UI selection
                         updated_at: new Date().toISOString(),
                     })
                     .eq('client_id', selectedClientId)
@@ -174,15 +175,15 @@ const AdminVoiceManagement: React.FC = () => {
                 console.log('[handleSaveAgentId] Update successful:', updated);
             } else {
                 // INSERT new record
-                const currentSource = selectedClient?.twilio_configured ? 'client' : 'platform';
-                console.log('[handleSaveAgentId] Inserting new record with source:', currentSource);
+                // Use the source selected in the UI (Option A or Option B)
+                console.log('[handleSaveAgentId] Inserting new record with source:', source);
                 
                 const { data: inserted, error: insertError } = await supabase
                     .from('client_voice_integrations')
                     .insert({
                         client_id: selectedClientId,
                         retell_agent_id: retellAgentId.trim(),
-                        number_source: currentSource,
+                        number_source: source, // Use the UI-selected source
                         voice_status: 'inactive',
                         a2p_status: 'not_started',
                     })
@@ -510,7 +511,7 @@ const AdminVoiceManagement: React.FC = () => {
 
                                 <button
                                     onClick={handleEnableVoice}
-                                    disabled={isProvisioning || isVoiceActive || (source === 'platform' && !platformNumber) || (source === 'client' && (isA2PPending || !selectedClient?.twilio_configured))}
+                                    disabled={isProvisioning || isVoiceActive || (source === 'platform' && !platformNumber) || (source === 'client' && !selectedClient?.twilio_configured)}
                                     className="w-full py-4 bg-indigo-600 text-white rounded-xl font-bold text-lg hover:bg-indigo-700 transition-all shadow-xl shadow-indigo-200 disabled:opacity-50 flex items-center justify-center gap-3"
                                 >
                                     {isProvisioning ? (
