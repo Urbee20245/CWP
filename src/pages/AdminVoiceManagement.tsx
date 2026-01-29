@@ -251,11 +251,8 @@ const AdminVoiceManagement: React.FC = () => {
             alert("AI Call Handling successfully enabled for this client!");
             fetchClients();
         } catch (e: any) {
-            if (e.message.includes('422')) {
-                setProvisioningError("Provisioning skipped: A2P approval is still pending for this client-owned number.");
-            } else {
-                setProvisioningError(`Provisioning Failed: ${e.message}`);
-            }
+            // FIX: Display the specific error message returned by the Edge Function
+            setProvisioningError(e.message || `Provisioning Failed: An unknown error occurred.`);
         } finally {
             setIsProvisioning(false);
         }
@@ -410,8 +407,7 @@ const AdminVoiceManagement: React.FC = () => {
                                             disabled={isSavingAgentId || !retellAgentId.trim()}
                                             className={`px-4 py-2 rounded-lg text-sm font-semibold transition-colors disabled:opacity-50 flex items-center justify-center gap-2 ${saveSuccess ? 'bg-emerald-600 text-white' : 'bg-indigo-600 text-white hover:bg-indigo-700'}`}
                                         >
-                                            {isSavingAgentId ? <Loader2 className="w-4 h-4 animate-spin" /> : saveSuccess ? <CheckCircle2 className="w-4 h-4" /> : <Plus className="w-4 h-4" />}
-                                            {saveSuccess ? 'Saved!' : 'Save'}
+                                            {isSavingAgentId ? <Loader2 className="w-4 h-4 animate-spin" /> : saveSuccess ? <CheckCircle2 className="w-4 h-4" /> : 'Save'}
                                         </button>
                                     </div>
                                     {selectedClient?.retell_agent_id && (

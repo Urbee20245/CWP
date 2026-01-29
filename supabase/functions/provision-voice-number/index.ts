@@ -95,10 +95,7 @@ serve(async (req) => {
         console.log(`[provision-voice-number] Client-owned number detected. A2P Status: ${a2p_status}`);
         if (a2p_status !== 'approved') {
             console.warn('[provision-voice-number] Provisioning skipped: A2P status is not approved.');
-            return jsonResponse({
-                status: "pending_a2p",
-                message: "A2P approval is required before activating AI calls for client-owned numbers.",
-            }, 422); // 422 Unprocessable Entity
+            return errorResponse("A2P approval is required before activating AI calls for client-owned numbers.", 422);
         }
     } else {
         console.log('[provision-voice-number] Platform-owned number detected. Skipping A2P check.');
