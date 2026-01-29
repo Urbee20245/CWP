@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, useRef } from 'react';
 import AdminLayout from '../components/AdminLayout';
 import { supabase } from '../integrations/supabase/client';
 import { Bot, Phone, Zap, Search, Loader2, CheckCircle2, AlertTriangle, Info, Plus, Shield, Globe, Clock } from 'lucide-react';
@@ -38,6 +38,9 @@ const AdminVoiceManagement: React.FC = () => {
         use_case: '',
         sample_sms: 'Hi, this is [Name] confirming your appointment for tomorrow at [Time].'
     });
+
+    // Ref to track the last loaded DB value to prevent fighting user input
+    const lastLoadedAgentIdRef = useRef('');
 
     const fetchClients = useCallback(async () => {
         setIsLoading(true);
@@ -94,14 +97,18 @@ const AdminVoiceManagement: React.FC = () => {
 
     useEffect(() => { fetchClients(); }, [fetchClients]);
 
+    // Effect to load the existing agent ID when a client is selected or the client list updates (after a save)
     useEffect(() => {
         if (selectedClientId) {
             const client = clients.find(c => c.id === selectedClientId);
             const newAgentId = client?.retell_agent_id || '';
             
-            // Only update if the value actually changed
-            if (newAgentId !== retellAgentId) {
+            // Only update the input state if the newly fetched ID differs from the last ID we loaded from the DB.
+            // This ensures the input reflects the DB value when switching clients or after a successful save,
+            // but prevents resetting the user's input while they are actively typing a new value.
+            if (newAgentId !== lastLoadedAgentIdRef.current) {
                 setRetellAgentId(newAgentId);
+                lastLoadedAgentIdRef.current = newAgentId;
             }
             setSaveSuccess(false);
         }
@@ -126,7 +133,9 @@ const AdminVoiceManagement: React.FC = () => {
             return;
         }
         
-        if (!retellAgentId || !retellAgentId.trim()) {
+        // CRITICAL FIX: Use the state value directly for validation
+        const agentIdToSave = retellAgentId.trim();
+        if (!agentIdToSave) { 
             setProvisioningError("Please enter the Retell Agent ID for this client first.");
             return;
         }
@@ -137,20 +146,21 @@ const AdminVoiceManagement: React.FC = () => {
 
         try {
             console.log('[handleSaveAgentId] Calling AdminService.saveRetellAgentId...');
-            // 1. Call the new Admin Service method (uses Service Role Key via Edge Function)
+            // 1. Call the new Admin Service method
             await AdminService.saveRetellAgentId(
                 selectedClientId,
-                retellAgentId.trim(),
+                agentIdToSave, // Use the validated, trimmed value
                 source
             );
 
             console.log('[handleSaveAgentId] Save successful!');
             setSaveSuccess(true);
             
-            // 2. Refresh data from DB to ensure consistency
-            setTimeout(async () => {
-                await fetchClients();
-            }, 500);
+            // 2. Update the ref immediately so the useEffect doesn't fight the input state
+            lastLoadedAgentIdRef.current = agentIdToSave; 
+            
+            // 3. Refresh data from DB to ensure consistency
+            await fetchClients(); 
             
             // Keep success message for 3 seconds
             setTimeout(() => setSaveSuccess(false), 3000);
@@ -200,7 +210,7 @@ const AdminVoiceManagement: React.FC = () => {
         switch (status) {
             case 'approved': return { label: 'Approved', color: 'text-emerald-600', bg: 'bg-emerald-100', icon: CheckCircle2 };
             case 'pending_approval':
-            case 'submitted': return { label: 'Pending Approval', color: 'text-blue-600', bg: 'bg-blue-100', icon: Clock };
+            case 'submitted': return { label: 'Under Review', color: 'text-blue-600', bg: 'bg-blue-100', icon: Clock };
             case 'rejected': return { label: 'Needs Attention', color: 'text-red-600', bg: 'bg-red-100', icon: AlertTriangle };
             default: return { label: 'Not Started', color: 'text-slate-600', bg: 'bg-slate-100', icon: Info };
         }
@@ -297,7 +307,7 @@ const AdminVoiceManagement: React.FC = () => {
                                             <div>
                                                 <p className="font-bold text-sm text-amber-700">Twilio Credentials Not Configured</p>
                                                 <p className="text-xs mt-0.5 text-amber-600">
-                                                    Client has not entered their Twilio credentials yet. They must complete setup in their Client Settings page before you can import to Retell AI.
+                                                    Client has not entered their Twilio credentials yet. Please ask the client to enter their Twilio Account SID, Auth Token, and Phone Number in their Settings page.
                                                 </p>
                                             </div>
                                         </>
