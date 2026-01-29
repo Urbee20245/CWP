@@ -36,7 +36,13 @@ export const AdminService = {
     });
   },
   
-  // NEW METHOD: Securely save Retell Agent ID
+  // Fetch clients with voice integration data (bypasses RLS via service role)
+  getVoiceClients: async () => {
+    const result = await invokeEdgeFunction('get-voice-clients', {});
+    return result.clients;
+  },
+
+  // Securely save Retell Agent ID
   saveRetellAgentId: async (clientId: string, retellAgentId: string, numberSource: 'client' | 'platform') => {
     return invokeEdgeFunction('save-retell-agent-id', {
         client_id: clientId,
