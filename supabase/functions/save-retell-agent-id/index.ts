@@ -43,28 +43,22 @@ serve(async (req) => {
 
     console.log(`[save-retell-agent-id] Saving agent ID ${retell_agent_id} for client ${client_id}`);
 
-    // Check if record already exists — preserve a2p_status and registration data
+    // Check if record already exists — fetch all NOT NULL columns to ensure upsert succeeds
     const { data: existing } = await supabaseAdmin
         .from('client_voice_integrations')
-        .select('a2p_status, a2p_registration_data, voice_status')
+        .select('a2p_status, a2p_registration_data, voice_status, number_source')
         .eq('client_id', client_id)
         .maybeSingle();
 
     const payload: any = {
         client_id,
         retell_agent_id,
+        // Ensure NOT NULL columns are always present, defaulting to existing values or initial defaults
+        voice_status: existing?.voice_status || 'inactive',
+        a2p_status: existing?.a2p_status || 'not_started',
+        number_source: number_source || existing?.number_source || 'platform', 
     };
 
-    // Only set number_source if provided
-    if (number_source) {
-        payload.number_source = number_source;
-    }
-
-    // For new records, set defaults. For existing records, preserve a2p_status.
-    if (!existing) {
-        payload.voice_status = 'inactive';
-        payload.a2p_status = 'not_started';
-    }
     // If voice was previously failed, reset to inactive so they can retry
     if (existing?.voice_status === 'failed') {
         payload.voice_status = 'inactive';
