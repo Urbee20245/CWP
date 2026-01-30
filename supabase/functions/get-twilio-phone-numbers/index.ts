@@ -73,7 +73,7 @@ serve(async (req) => {
     // Get stored credentials
     const { data: config, error: configError } = await supabaseAdmin
       .from('client_integrations')
-      .select('account_sid_encrypted, auth_token_encrypted, phone_number, connection_method')
+      .select('account_sid_encrypted, auth_token_encrypted, phone_number')
       .eq('client_id', client_id)
       .eq('provider', 'twilio')
       .maybeSingle();
@@ -82,6 +82,8 @@ serve(async (req) => {
       return errRes('Twilio not configured for this client.', 404);
     }
 
+    const connectionMethod = (config as any).connection_method || 'manual';
+
     // Decrypt the account SID to use for Twilio API call
     const accountSid = await decryptSecret(supabaseAdmin, config.account_sid_encrypted);
 
@@ -89,7 +91,7 @@ serve(async (req) => {
     let apiSid: string;
     let apiToken: string;
 
-    if (config.connection_method === 'twilio_connect') {
+    if (connectionMethod === 'twilio_connect') {
       // For Connect accounts, use platform credentials to access the connected account
       if (!PLATFORM_TWILIO_SID || !PLATFORM_TWILIO_TOKEN) {
         return errRes('Platform Twilio credentials not configured.', 500);

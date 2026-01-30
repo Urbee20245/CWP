@@ -55,26 +55,29 @@ serve(async (req) => {
 
     const { data: config, error: configError } = await supabaseAdmin
         .from('client_integrations')
-        .select('account_sid_encrypted, phone_number, updated_at, connection_method')
+        .select('account_sid_encrypted, phone_number, updated_at')
         .eq('client_id', client_id)
         .eq('provider', 'twilio')
         .maybeSingle();
 
     if (configError) throw configError;
-    
+
     if (!config) {
         return new Response(JSON.stringify({ configured: false }), { status: 200, headers: corsHeaders });
     }
-    
+
     const encryptedSid = config.account_sid_encrypted;
     const maskedSid = encryptedSid.substring(encryptedSid.length - 4);
+
+    // connection_method may not exist if migration hasn't been run yet
+    const connectionMethod = (config as any).connection_method || 'manual';
 
     return new Response(JSON.stringify({
         configured: true,
         phone_number: config.phone_number,
         masked_sid: maskedSid,
         updated_at: config.updated_at,
-        connection_method: config.connection_method || 'manual',
+        connection_method: connectionMethod,
     }), { status: 200, headers: corsHeaders });
 
   } catch (error: any) {
