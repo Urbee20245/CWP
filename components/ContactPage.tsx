@@ -1,5 +1,6 @@
 import React, { useState, useRef } from 'react';
 import { Link } from 'react-router-dom';
+import { useSEO } from '../src/hooks/useSEO';
 import { 
   CheckCircle2, 
   Phone, 
@@ -43,6 +44,11 @@ interface FormErrors {
 }
 
 const ContactPage: React.FC = () => {
+  useSEO({
+    title: 'Contact Us | Custom Websites Plus',
+    description: 'Get in touch with Custom Websites Plus for web design, AI solutions, and SEO services in Atlanta. Request a free consultation today.',
+    canonical: 'https://customwebsitesplus.com/contact',
+  });
   const [formData, setFormData] = useState<FormData>({
     fullName: '',
     businessName: '',

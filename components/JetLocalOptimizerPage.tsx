@@ -1,4 +1,5 @@
 import React, { useState } from 'react';
+import { useSEO } from '../src/hooks/useSEO';
 import { 
   Activity, 
   Gauge, 
@@ -22,6 +23,11 @@ import { getCurrentBrand } from '../src/tools/jet-local-optimizer/config/brands'
 import type { AnalysisResult } from '../src/tools/jet-local-optimizer/types';
 
 const JetLocalOptimizerPage: React.FC = () => {
+  useSEO({
+    title: 'Jet Local Optimizer - Free SEO Audit | Custom Websites Plus',
+    description: 'Run a free 60-second website health check. Analyze Core Web Vitals, mobile responsiveness, SEO structure, and local search relevance.',
+    canonical: 'https://customwebsitesplus.com/jet-local-optimizer',
+  });
   const [url, setUrl] = useState('');
   const [isScanning, setIsScanning] = useState(false);
   const [result, setResult] = useState<AnalysisResult | null>(null);

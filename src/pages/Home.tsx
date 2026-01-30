@@ -8,8 +8,16 @@ import TrustAuthority from '@/components/TrustAuthority';
 import Stats from '@/components/Stats';
 import Process from '@/components/ProcessPage';
 import Contact from '@/components/Contact';
+import { useSEO } from '../hooks/useSEO';
 
-const Home: React.FC = () => (
+const Home: React.FC = () => {
+  useSEO({
+    title: 'Custom Websites Plus | Atlanta Web Design & AI Solutions',
+    description: 'Custom Websites Plus offers professional web design, AI integration, SEO optimization, and digital solutions for businesses in Atlanta and beyond.',
+    canonical: 'https://customwebsitesplus.com/',
+  });
+
+  return (
   <main>
     <Hero />
     <ProblemSolution />
@@ -22,6 +30,7 @@ const Home: React.FC = () => (
     <Process />
     <Contact />
   </main>
-);
+  );
+};
 
 export default Home;

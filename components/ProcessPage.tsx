@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
 import { Link } from 'react-router-dom';
+import { useSEO } from '../src/hooks/useSEO';
 import { 
   Search, 
   FileText, 
@@ -26,6 +27,11 @@ import {
 } from 'lucide-react';
 
 const ProcessPage: React.FC = () => {
+  useSEO({
+    title: 'Our Process | Custom Websites Plus',
+    description: 'Learn about our step-by-step web design and development process. From discovery to launch, see how Custom Websites Plus builds your online presence.',
+    canonical: 'https://customwebsitesplus.com/process',
+  });
   const [openFaq, setOpenFaq] = useState<number | null>(null);
 
   const stats = [
