@@ -1,4 +1,4 @@
-import { serve } from "https://deno.land/std@0.190.0/http/server.ts";
+import { serve } from "https://deno.land/std@0.200.0/http/server.ts";
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2.45.0';
 
 const corsHeaders = {
@@ -21,9 +21,9 @@ serve(async (req) => {
     const { data: clientsData, error: fetchError } = await supabaseAdmin
       .from('clients')
       .select(`
-        id,
-        business_name,
-        phone,
+        id, 
+        business_name, 
+        phone, 
         client_voice_integrations (
           voice_status,
           number_source,
