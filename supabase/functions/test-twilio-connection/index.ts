@@ -1,8 +1,44 @@
-import { serve } from "https://deno.land/std@0.190.0/http/server.ts";
+import { serve } from "https://deno.land/std@0.200.0/http/server.ts";
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2.45.0';
 import twilio from 'https://esm.sh/twilio@5.2.0?target=deno';
-import { handleCors, jsonResponse, errorResponse } from '../_shared/utils.ts';
-import { decryptSecret } from '../_shared/encryption.ts';
+
+const corsHeaders = {
+  'Access-Control-Allow-Origin': '*',
+  'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
+  'Content-Type': 'application/json',
+};
+
+function handleCors(req: Request) {
+  if (req.method === 'OPTIONS') {
+    return new Response(null, { headers: corsHeaders });
+  }
+}
+
+function jsonResponse(body: any, status: number = 200) {
+  return new Response(JSON.stringify(body), {
+    status,
+    headers: corsHeaders,
+  });
+}
+
+function errorResponse(message: string, status: number = 500) {
+  console.error(`[test-twilio-connection] Error: ${message}`);
+  return jsonResponse({ error: message }, status);
+}
+
+// --- Inlined Encryption ---
+const ENCRYPTION_KEY = Deno.env.get('SMTP_ENCRYPTION_KEY');
+
+async function decryptSecret(supabaseAdmin: any, ciphertext: string): Promise<string> {
+    if (!ENCRYPTION_KEY) throw new Error("Encryption key is missing.");
+    const { data, error } = await supabaseAdmin.rpc('decrypt_secret', {
+        ciphertext,
+        key: ENCRYPTION_KEY,
+    });
+    if (error) throw new Error('Decryption failed.');
+    return data as string;
+}
+// --- End Inlined Encryption ---
 
 serve(async (req) => {
   const corsResponse = handleCors(req);
@@ -67,8 +103,8 @@ serve(async (req) => {
     }
     
     // 3. Decrypt credentials
-    const accountSid = await decryptSecret(config.account_sid_encrypted);
-    const authToken = await decryptSecret(config.auth_token_encrypted);
+    const accountSid = await decryptSecret(supabaseAdmin, config.account_sid_encrypted);
+    const authToken = await decryptSecret(supabaseAdmin, config.auth_token_encrypted);
     const phoneNumber = config.phone_number;
 
     if (!accountSid || !authToken || !phoneNumber) {

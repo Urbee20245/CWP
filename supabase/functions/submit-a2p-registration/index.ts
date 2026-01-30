@@ -1,6 +1,29 @@
-import { serve } from "https://deno.land/std@0.190.0/http/server.ts";
+import { serve } from "https://deno.land/std@0.200.0/http/server.ts";
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2.45.0';
-import { handleCors, jsonResponse, errorResponse } from '../_shared/utils.ts';
+
+const corsHeaders = {
+  'Access-Control-Allow-Origin': '*',
+  'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
+  'Content-Type': 'application/json',
+};
+
+function handleCors(req: Request) {
+  if (req.method === 'OPTIONS') {
+    return new Response(null, { headers: corsHeaders });
+  }
+}
+
+function jsonResponse(body: any, status: number = 200) {
+  return new Response(JSON.stringify(body), {
+    status,
+    headers: corsHeaders,
+  });
+}
+
+function errorResponse(message: string, status: number = 500) {
+  console.error(`[submit-a2p-registration] Error: ${message}`);
+  return jsonResponse({ error: message }, status);
+}
 
 serve(async (req) => {
   const corsResponse = handleCors(req);

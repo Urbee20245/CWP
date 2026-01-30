@@ -1,7 +1,43 @@
-import { serve } from "https://deno.land/std@0.190.0/http/server.ts";
+import { serve } from "https://deno.land/std@0.200.0/http/server.ts";
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2.45.0';
-import { handleCors, jsonResponse, errorResponse } from '../_shared/utils.ts';
-import { decryptSecret } from '../_shared/encryption.ts';
+
+const corsHeaders = {
+  'Access-Control-Allow-Origin': '*',
+  'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
+  'Content-Type': 'application/json',
+};
+
+function handleCors(req: Request) {
+  if (req.method === 'OPTIONS') {
+    return new Response(null, { headers: corsHeaders });
+  }
+}
+
+function jsonResponse(body: any, status: number = 200) {
+  return new Response(JSON.stringify(body), {
+    status,
+    headers: corsHeaders,
+  });
+}
+
+function errorResponse(message: string, status: number = 500) {
+  console.error(`[provision-voice-number] Error: ${message}`);
+  return jsonResponse({ error: message }, status);
+}
+
+// --- Inlined Encryption ---
+const ENCRYPTION_KEY = Deno.env.get('SMTP_ENCRYPTION_KEY');
+
+async function decryptSecret(supabaseAdmin: any, ciphertext: string): Promise<string> {
+    if (!ENCRYPTION_KEY) throw new Error("Encryption key is missing.");
+    const { data, error } = await supabaseAdmin.rpc('decrypt_secret', {
+        ciphertext,
+        key: ENCRYPTION_KEY,
+    });
+    if (error) throw new Error('Decryption failed.');
+    return data as string;
+}
+// --- End Inlined Encryption ---
 
 const RETELL_API_KEY = Deno.env.get('RETELL_API_KEY');
 const PLATFORM_TWILIO_SID = Deno.env.get('TWILIO_ACCOUNT_SID');
@@ -74,8 +110,8 @@ serve(async (req) => {
             return errorResponse('Client has not configured their Twilio credentials yet. Please ask the client to enter their Twilio Account SID, Auth Token, and Phone Number in their Settings page.', 404);
         }
         
-        twilio_sid = await decryptSecret(config.account_sid_encrypted);
-        twilio_token = await decryptSecret(config.auth_token_encrypted);
+        twilio_sid = await decryptSecret(supabaseAdmin, config.account_sid_encrypted);
+        twilio_token = await decryptSecret(supabaseAdmin, config.auth_token_encrypted);
         final_phone = config.phone_number;
     } else {
         // Platform Mode
@@ -165,7 +201,7 @@ serve(async (req) => {
             number_source: source,
             voice_status: 'active',
             a2p_registration_data: a2p_data || voiceConfig?.a2p_registration_data || {},
-            a2p_status: source === 'platform' ? 'pending' : a2p_status // Keep existing A2P status if client-owned
+            a2p_status: source === 'platform' ? a2p_status : a2p_status // Keep existing A2P status
         }, { onConflict: 'client_id' });
 
     if (dbError) return errorResponse('Provisioned in Retell but failed to update local DB.', 500);

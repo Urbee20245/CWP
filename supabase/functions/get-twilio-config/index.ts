@@ -1,4 +1,4 @@
-import { serve } from "https://deno.land/std@0.190.0/http/server.ts";
+import { serve } from "https://deno.land/std@0.200.0/http/server.ts";
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2.45.0';
 
 const corsHeaders = {
@@ -7,14 +7,31 @@ const corsHeaders = {
   'Content-Type': 'application/json',
 };
 
-serve(async (req) => {
+function handleCors(req: Request) {
   if (req.method === 'OPTIONS') {
     return new Response(null, { headers: corsHeaders });
   }
+}
+
+function jsonResponse(body: any, status: number = 200) {
+  return new Response(JSON.stringify(body), {
+    status,
+    headers: corsHeaders,
+  });
+}
+
+function errorResponse(message: string, status: number = 500) {
+  console.error(`[get-twilio-config] Error: ${message}`);
+  return jsonResponse({ error: message }, status);
+}
+
+serve(async (req) => {
+  const corsResponse = handleCors(req);
+  if (corsResponse) return corsResponse;
 
   const authHeader = req.headers.get('Authorization');
   if (!authHeader) {
-    return new Response(JSON.stringify({ error: 'Unauthorized: Missing token' }), { status: 401, headers: corsHeaders });
+    return errorResponse('Unauthorized: Missing token', 401);
   }
 
   // Use the user's token to verify identity
@@ -33,13 +50,13 @@ serve(async (req) => {
   try {
     const { client_id } = await req.json();
     if (!client_id) {
-        return new Response(JSON.stringify({ error: 'Client ID is required' }), { status: 400, headers: corsHeaders });
+        return errorResponse('Client ID is required', 400);
     }
 
     const { data: { user }, error: authError } = await supabaseClient.auth.getUser();
     if (authError || !user) {
       console.error("[get-twilio-config] Auth error:", authError);
-      return new Response(JSON.stringify({ error: 'Unauthorized: Invalid token' }), { status: 401, headers: corsHeaders });
+      return errorResponse('Unauthorized: Invalid token', 401);
     }
 
     // Verify ownership via RLS-enabled query
@@ -47,10 +64,11 @@ serve(async (req) => {
         .from('clients')
         .select('id')
         .eq('id', client_id)
+        .eq('owner_profile_id', user.id)
         .single();
 
     if (clientError || !client) {
-        return new Response(JSON.stringify({ error: 'Forbidden: Access denied' }), { status: 403, headers: corsHeaders });
+        return errorResponse('Forbidden: Access denied', 403);
     }
 
     const { data: config, error: configError } = await supabaseAdmin
@@ -63,21 +81,21 @@ serve(async (req) => {
     if (configError) throw configError;
     
     if (!config) {
-        return new Response(JSON.stringify({ configured: false }), { status: 200, headers: corsHeaders });
+        return jsonResponse({ configured: false });
     }
     
     const encryptedSid = config.account_sid_encrypted;
     const maskedSid = encryptedSid.substring(encryptedSid.length - 4);
 
-    return new Response(JSON.stringify({ 
+    return jsonResponse({ 
         configured: true,
         phone_number: config.phone_number,
         masked_sid: maskedSid,
         updated_at: config.updated_at,
-    }), { status: 200, headers: corsHeaders });
+    });
 
   } catch (error: any) {
     console.error('[get-twilio-config] Crash:', error.message);
-    return new Response(JSON.stringify({ error: error.message }), { status: 500, headers: corsHeaders });
+    return errorResponse(error.message, 500);
   }
 });
