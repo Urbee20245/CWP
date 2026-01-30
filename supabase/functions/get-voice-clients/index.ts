@@ -23,7 +23,9 @@ serve(async (req) => {
           voice_status,
           number_source,
           a2p_status,
-          retell_agent_id
+          retell_agent_id,
+          phone_number,
+          retell_phone_id
         ),
         client_integrations (
           provider,

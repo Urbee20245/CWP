@@ -6,7 +6,6 @@ serve(async (req) => {
   const corsResponse = handleCors(req);
   if (corsResponse) return corsResponse;
 
-  // Initialize Supabase client with service role key for admin operations
   const supabaseAdmin = createClient(
     Deno.env.get('SUPABASE_URL')!,
     Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!
@@ -15,20 +14,38 @@ serve(async (req) => {
   try {
     const { client_id, retell_agent_id, number_source } = await req.json();
 
-    if (!client_id || !retell_agent_id || !number_source) {
-      return errorResponse('Missing required fields: client_id, retell_agent_id, or number_source.', 400);
+    if (!client_id || !retell_agent_id) {
+      return errorResponse('Missing required fields: client_id or retell_agent_id.', 400);
     }
-    
+
     console.log(`[save-retell-agent-id] Saving agent ID ${retell_agent_id} for client ${client_id}`);
 
-    // Use upsert on the unique client_id column in client_voice_integrations
-    const payload = {
-        client_id: client_id,
-        retell_agent_id: retell_agent_id,
-        number_source: number_source,
-        voice_status: 'inactive', // Reset status on agent ID change
-        a2p_status: 'not_started', // Reset A2P status (will be updated by client form or provisioning)
+    // Check if a record already exists — preserve a2p_status and registration data
+    const { data: existing } = await supabaseAdmin
+        .from('client_voice_integrations')
+        .select('a2p_status, a2p_registration_data, voice_status')
+        .eq('client_id', client_id)
+        .maybeSingle();
+
+    const payload: any = {
+        client_id,
+        retell_agent_id,
     };
+
+    // Only set number_source if provided
+    if (number_source) {
+        payload.number_source = number_source;
+    }
+
+    // For new records, set defaults. For existing records, preserve a2p_status.
+    if (!existing) {
+        payload.voice_status = 'inactive';
+        payload.a2p_status = 'not_started';
+    }
+    // If voice was previously failed, reset to inactive so they can retry
+    if (existing?.voice_status === 'failed') {
+        payload.voice_status = 'inactive';
+    }
 
     const { error: upsertError } = await supabaseAdmin
         .from('client_voice_integrations')
@@ -36,7 +53,6 @@ serve(async (req) => {
 
     if (upsertError) {
         console.error('[save-retell-agent-id] DB upsert failed:', upsertError);
-        // Return the specific DB error message
         return errorResponse(`Database update failed: ${upsertError.message}`, 500);
     }
 

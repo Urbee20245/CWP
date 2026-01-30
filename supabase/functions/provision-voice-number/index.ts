@@ -90,15 +90,17 @@ serve(async (req) => {
         return errorResponse('Incomplete credentials for provisioning.', 400);
     }
     
-    // 2. A2P STATUS CHECK (STRICT REQUIREMENT)
-    if (source === 'client') {
-        console.log(`[provision-voice-number] Client-owned number detected. A2P Status: ${a2p_status}`);
+    // 2. A2P STATUS CHECK
+    // For platform-owned numbers: admin must approve A2P before enabling
+    // For client-owned numbers: client manages A2P in their own Twilio console, so we skip this check
+    if (source === 'platform') {
+        console.log(`[provision-voice-number] Platform-owned number. A2P Status: ${a2p_status}`);
         if (a2p_status !== 'approved') {
-            console.warn('[provision-voice-number] Provisioning skipped: A2P status is not approved.');
-            return errorResponse("A2P approval is required before activating AI calls for client-owned numbers.", 422);
+            console.warn('[provision-voice-number] Provisioning skipped: A2P status is not approved for platform number.');
+            return errorResponse("A2P compliance must be approved before activating AI calls for platform-managed numbers.", 422);
         }
     } else {
-        console.log('[provision-voice-number] Platform-owned number detected. Skipping A2P check.');
+        console.log('[provision-voice-number] Client-owned number detected. A2P managed by client in Twilio.');
     }
 
     // 3. IDEMPOTENCY CHECK

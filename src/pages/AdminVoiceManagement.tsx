@@ -2,20 +2,23 @@
 
 import React, { useState, useEffect, useCallback, useRef } from 'react';
 import AdminLayout from '../components/AdminLayout';
-import { supabase } from '../integrations/supabase/client';
-import { Bot, Phone, Zap, Search, Loader2, CheckCircle2, AlertTriangle, Info, Plus, Shield, Globe, Clock } from 'lucide-react';
 import { AdminService } from '../services/adminService';
+import {
+    Bot, Phone, Zap, Search, Loader2, CheckCircle2, AlertTriangle,
+    Info, Shield, Globe, Clock, Plus, Power, PowerOff, RefreshCw
+} from 'lucide-react';
 
 interface Client {
     id: string;
     business_name: string;
     phone: string;
-    voice_status?: string;
-    number_source?: string;
-    a2p_status?: string;
-    twilio_configured?: boolean;
-    twilio_phone?: string;
-    retell_agent_id?: string;
+    voice_status: string;
+    number_source: string;
+    a2p_status: string;
+    twilio_configured: boolean;
+    twilio_phone: string | null;
+    retell_agent_id: string;
+    phone_number: string | null;
 }
 
 const AdminVoiceManagement: React.FC = () => {
@@ -24,204 +27,261 @@ const AdminVoiceManagement: React.FC = () => {
     const [selectedClientId, setSelectedClientId] = useState<string>('');
     const [isLoading, setIsLoading] = useState(true);
     const [isProvisioning, setIsProvisioning] = useState(false);
-    const [provisioningError, setProvisioningError] = useState<string | null>(null);
-    
+    const [isDisabling, setIsDisabling] = useState(false);
+    const [feedbackMessage, setFeedbackMessage] = useState<{ type: 'success' | 'error' | 'info', text: string } | null>(null);
+
     // Form State
-    const [source, setSource] = useState<'client' | 'platform'>('client');
-    const [platformNumber, setPlatformNumber] = useState('');
     const [retellAgentId, setRetellAgentId] = useState('');
     const [isSavingAgentId, setIsSavingAgentId] = useState(false);
-    const [saveSuccess, setSaveSuccess] = useState(false); // Feedback state
-    const [a2pData, setA2pData] = useState({
-        legal_name: '',
-        website: '',
-        use_case: '',
-        sample_sms: 'Hi, this is [Name] confirming your appointment for tomorrow at [Time].'
-    });
+    const [saveSuccess, setSaveSuccess] = useState(false);
+    const [isUpdatingA2P, setIsUpdatingA2P] = useState(false);
 
-    // Ref to track the last loaded DB value to prevent fighting user input
+    // Platform number input (for done-for-you flow)
+    const [platformNumber, setPlatformNumber] = useState('');
+
+    // Ref to track last loaded DB value to prevent resetting user input
     const lastLoadedAgentIdRef = useRef('');
+
+    const showFeedback = (type: 'success' | 'error' | 'info', text: string, durationMs = 8000) => {
+        setFeedbackMessage({ type, text });
+        setTimeout(() => setFeedbackMessage(null), durationMs);
+    };
 
     const fetchClients = useCallback(async () => {
         setIsLoading(true);
-
-        let clientsData: any[] = [];
         try {
-            // Use edge function with service role key to bypass RLS
-            clientsData = await AdminService.getVoiceClients();
-        } catch (err) {
-            console.error('[AdminVoiceManagement] Error fetching clients via edge function:', err);
-            // Fallback to direct query if edge function is not deployed yet
-            const { data, error: fetchError } = await supabase
-                .from('clients')
-                .select(`
-                    id,
-                    business_name,
-                    phone,
-                    client_voice_integrations (
-                        voice_status,
-                        number_source,
-                        a2p_status,
-                        retell_agent_id
-                    ),
-                    client_integrations (
-                        provider,
-                        phone_number,
-                        account_sid_encrypted,
-                        auth_token_encrypted
-                    )
-                `)
-                .order('business_name', { ascending: true });
+            const clientsData = await AdminService.getVoiceClients();
 
-            if (fetchError) {
-                console.error('[AdminVoiceManagement] Fallback fetch error:', fetchError);
-            }
-            clientsData = data || [];
+            const formatted = (clientsData || []).map((c: any) => {
+                const twilioIntegration = c.client_integrations?.find((i: any) => i.provider === 'twilio');
+                const hasTwilioCredentials = !!(
+                    twilioIntegration?.account_sid_encrypted &&
+                    twilioIntegration?.auth_token_encrypted &&
+                    twilioIntegration?.phone_number
+                );
+                const voiceData = c.client_voice_integrations?.[0];
+
+                return {
+                    id: c.id,
+                    business_name: c.business_name,
+                    phone: c.phone,
+                    voice_status: voiceData?.voice_status || 'inactive',
+                    number_source: voiceData?.number_source || (hasTwilioCredentials ? 'client' : 'platform'),
+                    a2p_status: voiceData?.a2p_status || 'not_started',
+                    retell_agent_id: voiceData?.retell_agent_id || '',
+                    twilio_configured: hasTwilioCredentials,
+                    twilio_phone: twilioIntegration?.phone_number || null,
+                    phone_number: voiceData?.phone_number || twilioIntegration?.phone_number || null,
+                };
+            });
+
+            setClients(formatted);
+        } catch (err: any) {
+            console.error('[AdminVoiceManagement] Error fetching clients:', err);
+            showFeedback('error', `Failed to load clients: ${err.message}`);
+        } finally {
+            setIsLoading(false);
         }
-
-        const formatted = (clientsData || []).map((c: any) => {
-            const twilioIntegration = c.client_integrations?.find((i: any) => i.provider === 'twilio');
-            
-            // Check that encrypted credentials actually exist
-            const hasTwilioCredentials = !!(
-                twilioIntegration?.account_sid_encrypted && 
-                twilioIntegration?.auth_token_encrypted && 
-                twilioIntegration?.phone_number
-            );
-
-            return {
-                ...c,
-                voice_status: c.client_voice_integrations?.[0]?.voice_status || 'inactive',
-                // Use 'client' as fallback if Twilio is configured, otherwise 'platform'
-                number_source: c.client_voice_integrations?.[0]?.number_source || (hasTwilioCredentials ? 'client' : 'platform'),
-                a2p_status: c.client_voice_integrations?.[0]?.a2p_status || 'not_started',
-                retell_agent_id: c.client_voice_integrations?.[0]?.retell_agent_id || '',
-                twilio_configured: hasTwilioCredentials,
-                twilio_phone: twilioIntegration?.phone_number || null,
-            };
-        });
-
-        setClients(formatted);
-        setIsLoading(false);
     }, []);
 
     useEffect(() => { fetchClients(); }, [fetchClients]);
 
-    // Effect to load the existing agent ID when a client is selected or the client list updates (after a save)
+    // Load agent ID when selecting a client
     useEffect(() => {
         if (selectedClientId) {
             const client = clients.find(c => c.id === selectedClientId);
             const newAgentId = client?.retell_agent_id || '';
-            
-            // Only update the input state if the newly fetched ID differs from the last ID we loaded from the DB.
-            // This ensures the input reflects the DB value when switching clients or after a successful save,
-            // but prevents resetting the user's input while they are actively typing a new value.
             if (newAgentId !== lastLoadedAgentIdRef.current) {
                 setRetellAgentId(newAgentId);
                 lastLoadedAgentIdRef.current = newAgentId;
             }
+            // Load platform number if exists
+            if (client?.phone_number && client.number_source === 'platform') {
+                setPlatformNumber(client.phone_number);
+            } else {
+                setPlatformNumber('');
+            }
             setSaveSuccess(false);
+            setFeedbackMessage(null);
         }
     }, [selectedClientId, clients]);
 
-    const filteredClients = clients.filter(c => 
+    const filteredClients = clients.filter(c =>
         c.business_name.toLowerCase().includes(searchQuery.toLowerCase())
     );
 
     const selectedClient = clients.find(c => c.id === selectedClientId);
-    
-    const isClientOwned = selectedClient?.number_source === 'client';
-    const isA2PPending = isClientOwned && selectedClient?.a2p_status !== 'approved';
-    const isA2PApproved = isClientOwned && selectedClient?.a2p_status === 'approved';
+
+    // Derived state for the selected client
+    const isClientOwned = selectedClient?.twilio_configured === true;
+    const isPlatformOwned = !isClientOwned;
+    const effectiveSource = isClientOwned ? 'client' : 'platform';
     const isVoiceActive = selectedClient?.voice_status === 'active';
+    const isVoiceFailed = selectedClient?.voice_status === 'failed';
+    const hasAgentId = !!(selectedClient?.retell_agent_id);
+
+    // For platform-owned: A2P must be approved before enabling
+    const isPlatformA2PReady = isPlatformOwned && selectedClient?.a2p_status === 'approved';
+    // For client-owned: they manage A2P in Twilio console, so we skip the platform A2P check
+    const isClientReady = isClientOwned && selectedClient?.twilio_configured;
+
+    // Can we enable voice?
+    const canEnable = hasAgentId && !isVoiceActive && (
+        (isClientOwned && isClientReady) ||
+        (isPlatformOwned && isPlatformA2PReady && !!platformNumber.trim())
+    );
+
+    // --- Handlers ---
 
     const handleSaveAgentId = async () => {
-        console.log('[handleSaveAgentId] Called with:', { selectedClientId, retellAgentId, source });
-
-        if (!selectedClientId) {
-            setProvisioningError("No client selected. Please select a client first.");
-            return;
-        }
-
+        if (!selectedClientId) return;
         const agentIdToSave = retellAgentId.trim();
         if (!agentIdToSave) {
-            setProvisioningError("Please enter the Retell Agent ID for this client first.");
+            showFeedback('error', 'Please enter the Retell Agent ID.');
             return;
         }
 
         setIsSavingAgentId(true);
         setSaveSuccess(false);
-        setProvisioningError(null);
+        setFeedbackMessage(null);
 
         try {
-            console.log('[handleSaveAgentId] Saving via edge function...');
-
-            // Use the edge function (service role key) to bypass RLS
-            await AdminService.saveRetellAgentId(selectedClientId, agentIdToSave, source);
-
-            console.log('[handleSaveAgentId] Save successful!');
+            await AdminService.saveRetellAgentId(selectedClientId, agentIdToSave, effectiveSource);
             setSaveSuccess(true);
-
-            // Update the ref immediately so the useEffect doesn't fight the input state
             lastLoadedAgentIdRef.current = agentIdToSave;
-
-            // Refresh data from DB to ensure consistency
             await fetchClients();
-
-            // Keep success message for 3 seconds
-            setTimeout(() => setSaveSuccess(false), 3000);
-
+            showFeedback('success', 'Retell Agent ID saved successfully.', 3000);
         } catch (e: any) {
-            console.error('[handleSaveAgentId] Caught error:', e);
-            setProvisioningError(`Save Failed: ${e.message}`);
-
-            // Show error for 10 seconds
-            setTimeout(() => setProvisioningError(null), 10000);
+            showFeedback('error', `Save Failed: ${e.message}`);
         } finally {
             setIsSavingAgentId(false);
         }
     };
 
     const handleEnableVoice = async () => {
-        if (!selectedClientId) return;
-
-        if (!retellAgentId.trim()) {
-            setProvisioningError("Please enter the Retell Agent ID for this client first.");
-            return;
-        }
+        if (!selectedClientId || !canEnable) return;
 
         setIsProvisioning(true);
-        setProvisioningError(null);
+        setFeedbackMessage(null);
 
         try {
             await AdminService.provisionVoiceNumber(
                 selectedClientId,
-                source,
-                source === 'platform' ? platformNumber : undefined,
-                source === 'platform' ? a2pData : undefined,
+                effectiveSource,
+                effectiveSource === 'platform' ? platformNumber.trim() : undefined,
+                undefined,
                 retellAgentId.trim()
             );
-            alert("AI Call Handling successfully enabled for this client!");
-            fetchClients();
+            showFeedback('success', 'AI Call Handling successfully enabled!');
+            await fetchClients();
         } catch (e: any) {
-            // Display the specific error message returned by the Edge Function
-            setProvisioningError(e.message || `Provisioning Failed: An unknown error occurred.`);
+            showFeedback('error', e.message || 'Provisioning failed.');
         } finally {
             setIsProvisioning(false);
         }
     };
-    
-    const getA2PStatusDisplay = (status: string) => {
-        switch (status) {
-            case 'approved': return { label: 'Approved', color: 'text-emerald-600', bg: 'bg-emerald-100', icon: CheckCircle2 };
-            case 'pending_approval':
-            case 'submitted': return { label: 'Under Review', color: 'text-blue-600', bg: 'bg-blue-100', icon: Clock };
-            case 'rejected': return { label: 'Needs Attention', color: 'text-red-600', bg: 'bg-red-100', icon: AlertTriangle };
-            default: return { label: 'Not Started', color: 'text-slate-600', bg: 'bg-slate-100', icon: Info };
+
+    const handleDisableVoice = async () => {
+        if (!selectedClientId || !isVoiceActive) return;
+        if (!confirm('Are you sure you want to disable AI Call Handling for this client? This will remove the phone number from Retell AI.')) return;
+
+        setIsDisabling(true);
+        setFeedbackMessage(null);
+
+        try {
+            await AdminService.disableVoice(selectedClientId);
+            showFeedback('success', 'AI Call Handling disabled.');
+            await fetchClients();
+        } catch (e: any) {
+            showFeedback('error', `Disable failed: ${e.message}`);
+        } finally {
+            setIsDisabling(false);
         }
     };
 
-    const a2pDisplay = selectedClient ? getA2PStatusDisplay(selectedClient.a2p_status || 'not_started') : null;
+    const handleUpdateA2PStatus = async (newStatus: string) => {
+        if (!selectedClientId) return;
+        setIsUpdatingA2P(true);
+
+        try {
+            await AdminService.updateA2PStatus(selectedClientId, newStatus);
+            showFeedback('success', `A2P status updated to "${newStatus}".`, 3000);
+            await fetchClients();
+        } catch (e: any) {
+            showFeedback('error', `Failed to update A2P status: ${e.message}`);
+        } finally {
+            setIsUpdatingA2P(false);
+        }
+    };
+
+    // --- UI Helpers ---
+
+    const getA2PStatusDisplay = (status: string) => {
+        switch (status) {
+            case 'approved': return { label: 'Approved', color: 'text-emerald-600', bg: 'bg-emerald-100', border: 'border-emerald-200', icon: CheckCircle2 };
+            case 'pending_approval': return { label: 'Under Review', color: 'text-blue-600', bg: 'bg-blue-100', border: 'border-blue-200', icon: Clock };
+            case 'rejected': return { label: 'Rejected', color: 'text-red-600', bg: 'bg-red-100', border: 'border-red-200', icon: AlertTriangle };
+            default: return { label: 'Not Started', color: 'text-slate-600', bg: 'bg-slate-100', border: 'border-slate-200', icon: Info };
+        }
+    };
+
+    const getVoiceStatusBadge = (status: string) => {
+        switch (status) {
+            case 'active': return 'bg-emerald-100 text-emerald-700';
+            case 'failed': return 'bg-red-100 text-red-700';
+            default: return 'bg-slate-100 text-slate-500';
+        }
+    };
+
+    // --- Steps indicator ---
+    const getSteps = () => {
+        if (!selectedClient) return [];
+        const steps = [];
+
+        if (isClientOwned) {
+            // Option 2: Client-Owned Twilio
+            steps.push({
+                label: 'Twilio Credentials',
+                done: selectedClient.twilio_configured,
+                description: selectedClient.twilio_configured
+                    ? `Phone: ${selectedClient.twilio_phone}`
+                    : 'Client needs to enter Twilio credentials in their Settings page',
+            });
+        } else {
+            // Option 1: Platform Done-for-You
+            steps.push({
+                label: 'A2P Compliance',
+                done: selectedClient.a2p_status === 'approved',
+                description: selectedClient.a2p_status === 'approved'
+                    ? 'Business verified'
+                    : selectedClient.a2p_status === 'pending_approval'
+                        ? 'Client submitted — awaiting your review'
+                        : 'Client has not submitted compliance form yet',
+            });
+        }
+
+        steps.push({
+            label: 'Retell Agent ID',
+            done: hasAgentId,
+            description: hasAgentId
+                ? `Agent: ${selectedClient.retell_agent_id}`
+                : 'Create an agent in Retell AI, then enter the ID here',
+        });
+
+        steps.push({
+            label: 'AI Calls Active',
+            done: isVoiceActive,
+            description: isVoiceActive
+                ? 'AI Call Handling is live'
+                : isVoiceFailed
+                    ? 'Last activation attempt failed — review and retry'
+                    : 'Ready to enable once previous steps are complete',
+        });
+
+        return steps;
+    };
+
+    const steps = selectedClient ? getSteps() : [];
 
     return (
         <AdminLayout>
@@ -231,15 +291,21 @@ const AdminVoiceManagement: React.FC = () => {
                 </h1>
 
                 <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
-                    
+
+                    {/* Client List */}
                     <div className="lg:col-span-1 space-y-6">
-                        <div className="bg-white p-6 rounded-xl shadow-lg border border-slate-100 h-[600px] flex flex-col">
-                            <h2 className="text-xl font-bold mb-4">Select Client</h2>
+                        <div className="bg-white p-6 rounded-xl shadow-lg border border-slate-100 h-[650px] flex flex-col">
+                            <div className="flex items-center justify-between mb-4">
+                                <h2 className="text-xl font-bold">Select Client</h2>
+                                <button onClick={() => fetchClients()} className="p-2 hover:bg-slate-100 rounded-lg transition-colors" title="Refresh">
+                                    <RefreshCw className={`w-4 h-4 text-slate-400 ${isLoading ? 'animate-spin' : ''}`} />
+                                </button>
+                            </div>
                             <div className="relative mb-4">
                                 <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
-                                <input 
-                                    type="text" 
-                                    placeholder="Search businesses..." 
+                                <input
+                                    type="text"
+                                    placeholder="Search businesses..."
                                     className="w-full pl-10 pr-4 py-2 border border-slate-200 rounded-lg text-sm"
                                     value={searchQuery}
                                     onChange={(e) => setSearchQuery(e.target.value)}
@@ -249,6 +315,8 @@ const AdminVoiceManagement: React.FC = () => {
                             <div className="flex-1 overflow-y-auto space-y-2 pr-2">
                                 {isLoading ? (
                                     <div className="flex justify-center p-8"><Loader2 className="animate-spin text-indigo-600" /></div>
+                                ) : filteredClients.length === 0 ? (
+                                    <p className="text-sm text-slate-400 text-center py-8">No clients found.</p>
                                 ) : (
                                     filteredClients.map(c => (
                                         <button
@@ -257,17 +325,19 @@ const AdminVoiceManagement: React.FC = () => {
                                             className={`w-full text-left p-3 rounded-lg border transition-all ${selectedClientId === c.id ? 'border-indigo-600 bg-indigo-50 ring-1 ring-indigo-500' : 'border-slate-100 hover:bg-slate-50'}`}
                                         >
                                             <div className="flex justify-between items-start">
-                                                <div className="flex items-center gap-2">
-                                                    <p className="font-bold text-slate-900 text-sm">{c.business_name}</p>
+                                                <div className="flex items-center gap-2 min-w-0">
+                                                    <p className="font-bold text-slate-900 text-sm truncate">{c.business_name}</p>
                                                     {c.twilio_configured && (
-                                                        <span className="px-1.5 py-0.5 bg-purple-100 text-purple-700 text-[9px] font-bold rounded uppercase">Twilio</span>
+                                                        <span className="px-1.5 py-0.5 bg-purple-100 text-purple-700 text-[9px] font-bold rounded uppercase flex-shrink-0">Twilio</span>
                                                     )}
                                                 </div>
-                                                {c.voice_status === 'active' && <Zap className="w-3 h-3 text-emerald-500 fill-emerald-500" />}
+                                                {c.voice_status === 'active' && <Zap className="w-3 h-3 text-emerald-500 fill-emerald-500 flex-shrink-0" />}
                                             </div>
                                             <div className="flex justify-between mt-1">
-                                                <span className="text-[10px] text-slate-500 uppercase tracking-widest">{c.number_source} number</span>
-                                                <span className={`text-[10px] font-bold uppercase ${c.voice_status === 'active' ? 'text-emerald-600' : 'text-slate-400'}`}>
+                                                <span className="text-[10px] text-slate-500 uppercase tracking-widest">
+                                                    {c.twilio_configured ? 'client number' : 'platform number'}
+                                                </span>
+                                                <span className={`text-[10px] font-bold uppercase ${c.voice_status === 'active' ? 'text-emerald-600' : c.voice_status === 'failed' ? 'text-red-500' : 'text-slate-400'}`}>
                                                     {c.voice_status}
                                                 </span>
                                             </div>
@@ -278,68 +348,121 @@ const AdminVoiceManagement: React.FC = () => {
                         </div>
                     </div>
 
+                    {/* Management Panel */}
                     <div className="lg:col-span-2 space-y-6">
                         {selectedClient ? (
                             <div className="bg-white p-8 rounded-xl shadow-lg border border-slate-100 animate-fade-in">
-                                <div className="flex justify-between items-start border-b border-slate-100 pb-6 mb-8">
+
+                                {/* Header */}
+                                <div className="flex justify-between items-start border-b border-slate-100 pb-6 mb-6">
                                     <div>
                                         <h2 className="text-2xl font-bold text-slate-900">{selectedClient.business_name}</h2>
                                         <p className="text-slate-500 mt-1 flex items-center gap-2">
-                                            <Phone className="w-4 h-4" /> 
+                                            <Phone className="w-4 h-4" />
                                             {selectedClient.phone || 'No phone on record'}
                                         </p>
                                     </div>
-                                    <div className={`px-4 py-2 rounded-full font-bold text-xs uppercase tracking-widest ${isVoiceActive ? 'bg-emerald-100 text-emerald-700' : 'bg-slate-100 text-slate-500'}`}>
-                                        Voice Status: {selectedClient.voice_status}
+                                    <div className={`px-4 py-2 rounded-full font-bold text-xs uppercase tracking-widest ${getVoiceStatusBadge(selectedClient.voice_status)}`}>
+                                        {selectedClient.voice_status}
                                     </div>
                                 </div>
-                                
-                                {/* Twilio configuration indicator */}
-                                <div className={`p-4 mb-6 rounded-xl border flex items-center gap-3 ${selectedClient.twilio_configured ? 'bg-purple-50 border-purple-200' : 'bg-amber-50 border-amber-200'}`}>
-                                    {selectedClient.twilio_configured ? (
+
+                                {/* Sourcing Mode Indicator */}
+                                <div className={`p-4 mb-6 rounded-xl border flex items-center gap-3 ${isClientOwned ? 'bg-purple-50 border-purple-200' : 'bg-blue-50 border-blue-200'}`}>
+                                    {isClientOwned ? (
                                         <>
-                                            <CheckCircle2 className="w-5 h-5 text-purple-600" />
+                                            <Plus className="w-5 h-5 text-purple-600" />
                                             <div>
-                                                <p className="font-bold text-sm text-purple-700">Twilio Credentials Ready</p>
+                                                <p className="font-bold text-sm text-purple-700">Option 2: Client-Owned Twilio Number</p>
                                                 <p className="text-xs mt-0.5 text-purple-600">
-                                                    Phone: <span className="font-mono font-semibold">{selectedClient.twilio_phone}</span> — Ready for Retell AI import
+                                                    Client has configured Twilio credentials. Phone: <span className="font-mono font-semibold">{selectedClient.twilio_phone}</span>
                                                 </p>
                                             </div>
                                         </>
                                     ) : (
                                         <>
-                                            <AlertTriangle className="w-5 h-5 text-amber-600" />
+                                            <Globe className="w-5 h-5 text-blue-600" />
                                             <div>
-                                                <p className="font-bold text-sm text-amber-700">Twilio Credentials Not Configured</p>
-                                                <p className="text-xs mt-0.5 text-amber-600">
-                                                    Client has not entered their Twilio credentials yet. Please ask the client to enter their Twilio Account SID, Auth Token, and Phone Number in their Settings page.
+                                                <p className="font-bold text-sm text-blue-700">Option 1: Done-For-You (Platform-Managed)</p>
+                                                <p className="text-xs mt-0.5 text-blue-600">
+                                                    We handle everything. Number purchased through Retell AI on your platform Twilio account.
                                                 </p>
                                             </div>
                                         </>
                                     )}
                                 </div>
 
-                                {isClientOwned && a2pDisplay && (
-                                    <div className={`p-4 mb-6 rounded-xl border flex items-center gap-3 ${a2pDisplay.bg} border-current`}>
-                                        <a2pDisplay.icon className={`w-5 h-5 ${a2pDisplay.color}`} />
-                                        <div>
-                                            <p className={`font-bold text-sm ${a2pDisplay.color}`}>
-                                                Messaging Approval: {a2pDisplay.label}
-                                            </p>
-                                            {isA2PPending && (
-                                                <p className="text-xs mt-0.5 text-blue-800">
-                                                    AI Call Handling is disabled until A2P approval is granted. Provisioning will start automatically upon approval.
-                                                </p>
-                                            )}
-                                            {isA2PApproved && !isVoiceActive && (
-                                                <p className="text-xs mt-0.5 text-emerald-800">
-                                                    A2P Approved. Click 'Enable AI Call Handling' below to finalize setup.
-                                                </p>
-                                            )}
-                                        </div>
+                                {/* Progress Steps */}
+                                <div className="mb-6">
+                                    <h3 className="text-sm font-bold text-slate-700 mb-3 uppercase tracking-wider">Setup Progress</h3>
+                                    <div className="space-y-3">
+                                        {steps.map((step, i) => (
+                                            <div key={i} className={`flex items-start gap-3 p-3 rounded-lg border ${step.done ? 'bg-emerald-50 border-emerald-200' : 'bg-slate-50 border-slate-200'}`}>
+                                                <div className={`w-6 h-6 rounded-full flex items-center justify-center flex-shrink-0 mt-0.5 ${step.done ? 'bg-emerald-500 text-white' : 'bg-slate-300 text-white'}`}>
+                                                    {step.done ? <CheckCircle2 className="w-4 h-4" /> : <span className="text-xs font-bold">{i + 1}</span>}
+                                                </div>
+                                                <div>
+                                                    <p className={`text-sm font-bold ${step.done ? 'text-emerald-700' : 'text-slate-700'}`}>{step.label}</p>
+                                                    <p className={`text-xs mt-0.5 ${step.done ? 'text-emerald-600' : 'text-slate-500'}`}>{step.description}</p>
+                                                </div>
+                                            </div>
+                                        ))}
+                                    </div>
+                                </div>
+
+                                {/* A2P Admin Controls (Platform-Owned only) */}
+                                {isPlatformOwned && (
+                                    <div className="mb-6">
+                                        {(() => {
+                                            const a2pDisplay = getA2PStatusDisplay(selectedClient.a2p_status);
+                                            return (
+                                                <div className={`p-4 rounded-xl border ${a2pDisplay.bg} ${a2pDisplay.border}`}>
+                                                    <div className="flex items-center justify-between">
+                                                        <div className="flex items-center gap-3">
+                                                            <a2pDisplay.icon className={`w-5 h-5 ${a2pDisplay.color}`} />
+                                                            <div>
+                                                                <p className={`font-bold text-sm ${a2pDisplay.color}`}>A2P Compliance: {a2pDisplay.label}</p>
+                                                                {selectedClient.a2p_status === 'pending_approval' && (
+                                                                    <p className="text-xs mt-0.5 text-blue-700">Client has submitted their business details. Review and approve or reject below.</p>
+                                                                )}
+                                                                {selectedClient.a2p_status === 'not_started' && (
+                                                                    <p className="text-xs mt-0.5 text-slate-500">Client needs to complete the Messaging Compliance form in their Settings.</p>
+                                                                )}
+                                                            </div>
+                                                        </div>
+
+                                                        {/* Admin A2P action buttons */}
+                                                        {selectedClient.a2p_status !== 'approved' && (
+                                                            <div className="flex gap-2">
+                                                                <button
+                                                                    onClick={() => handleUpdateA2PStatus('approved')}
+                                                                    disabled={isUpdatingA2P}
+                                                                    className="px-3 py-1.5 bg-emerald-600 text-white text-xs font-bold rounded-lg hover:bg-emerald-700 transition-colors disabled:opacity-50"
+                                                                >
+                                                                    {isUpdatingA2P ? <Loader2 className="w-3 h-3 animate-spin" /> : 'Approve'}
+                                                                </button>
+                                                                {selectedClient.a2p_status === 'pending_approval' && (
+                                                                    <button
+                                                                        onClick={() => handleUpdateA2PStatus('rejected')}
+                                                                        disabled={isUpdatingA2P}
+                                                                        className="px-3 py-1.5 bg-red-600 text-white text-xs font-bold rounded-lg hover:bg-red-700 transition-colors disabled:opacity-50"
+                                                                    >
+                                                                        Reject
+                                                                    </button>
+                                                                )}
+                                                            </div>
+                                                        )}
+                                                        {selectedClient.a2p_status === 'approved' && (
+                                                            <span className="text-xs font-bold text-emerald-600 bg-emerald-200 px-2 py-1 rounded">Verified</span>
+                                                        )}
+                                                    </div>
+                                                </div>
+                                            );
+                                        })()}
                                     </div>
                                 )}
 
+                                {/* Retell Agent ID */}
                                 <div className="bg-indigo-50 p-6 rounded-xl border border-indigo-200 mb-6">
                                     <h4 className="font-bold text-indigo-800 text-sm flex items-center gap-2 mb-3">
                                         <Bot className="w-4 h-4" /> Retell AI Agent Configuration
@@ -365,130 +488,112 @@ const AdminVoiceManagement: React.FC = () => {
                                     </div>
                                     {selectedClient?.retell_agent_id && (
                                         <p className="text-xs text-emerald-600 mt-2 flex items-center gap-1">
-                                            <CheckCircle2 className="w-3 h-3" /> Agent ID saved: <span className="font-mono">{selectedClient.retell_agent_id}</span>
+                                            <CheckCircle2 className="w-3 h-3" /> Saved: <span className="font-mono">{selectedClient.retell_agent_id}</span>
                                         </p>
-                                    )}
-                                    
-                                    {/* Error display for Agent ID save failures */}
-                                    {provisioningError && (
-                                        <div className="mt-3 p-3 bg-red-100 border border-red-300 text-red-800 rounded-lg text-xs flex items-start gap-2">
-                                            <AlertTriangle className="w-4 h-4 mt-0.5 flex-shrink-0" />
-                                            <div>
-                                                <p className="font-bold">Save Failed</p>
-                                                <p className="mt-1">{provisioningError}</p>
-                                                <p className="mt-2 text-[10px]">
-                                                    Check browser console (F12) for details. This is likely a database permission issue.
-                                                </p>
-                                            </div>
-                                        </div>
                                     )}
                                 </div>
 
-                                <h3 className="text-lg font-bold text-slate-900 mb-6 flex items-center gap-2">
-                                    <Shield className="w-5 h-5 text-indigo-600" /> Sourcing Strategy
-                                </h3>
-
-                                <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mb-10">
-                                    <button 
-                                        onClick={() => setSource('client')}
-                                        type="button"
-                                        className={`p-6 text-left rounded-xl border-2 transition-all group ${source === 'client' ? 'border-indigo-600 bg-indigo-50/50' : 'border-slate-100 hover:border-slate-200'}`}
-                                    >
-                                        <div className="flex items-center gap-3 mb-3">
-                                            <div className={`w-10 h-10 rounded-lg flex items-center justify-center ${source === 'client' ? 'bg-indigo-600 text-white' : 'bg-slate-100 text-slate-500'}`}>
-                                                <Plus className="w-5 h-5" />
-                                            </div>
-                                            <span className="font-bold text-slate-900">Option A: Client-Owned</span>
-                                        </div>
-                                        <p className="text-xs text-slate-500 leading-relaxed">
-                                            Use Twilio credentials provided by the client. Fully white-labeled. The client pays Twilio directly.
-                                        </p>
-                                    </button>
-
-                                    <button 
-                                        onClick={() => setSource('platform')}
-                                        type="button"
-                                        className={`p-6 text-left rounded-xl border-2 transition-all group ${source === 'platform' ? 'border-indigo-600 bg-indigo-50/50' : 'border-slate-100 hover:border-slate-200'}`}
-                                    >
-                                        <div className="flex items-center gap-3 mb-3">
-                                            <div className={`w-10 h-10 rounded-lg flex items-center justify-center ${source === 'platform' ? 'bg-indigo-600 text-white' : 'bg-slate-100 text-slate-500'}`}>
-                                                <Globe className="w-5 h-5" />
-                                            </div>
-                                            <span className="font-bold text-slate-900">Option B: Platform-Owned</span>
-                                        </div>
-                                        <p className="text-xs text-slate-500 leading-relaxed">
-                                            "Done-For-You." We assign a number from our platform pool. We handle billing and A2P compliance.
-                                        </p>
-                                    </button>
-                                </div>
-
-                                {source === 'platform' && (
-                                    <div className="bg-slate-50 p-6 rounded-xl border border-slate-200 mb-10 space-y-4">
-                                        <h4 className="font-bold text-slate-700 text-sm flex items-center gap-2">
-                                            <Info className="w-4 h-4" /> A2P Registration Details
+                                {/* Platform Number Input (Done-for-you only) */}
+                                {isPlatformOwned && (
+                                    <div className="bg-slate-50 p-6 rounded-xl border border-slate-200 mb-6">
+                                        <h4 className="font-bold text-slate-700 text-sm flex items-center gap-2 mb-3">
+                                            <Phone className="w-4 h-4" /> Platform Phone Number
                                         </h4>
-                                        <div className="grid grid-cols-2 gap-4">
-                                            <div>
-                                                <label className="block text-[10px] font-bold text-slate-500 uppercase mb-1">Assigned Number (E.164)</label>
-                                                <input 
-                                                    type="text" 
-                                                    placeholder="+1..." 
-                                                    className="w-full p-2 border border-slate-300 rounded text-sm font-mono"
-                                                    value={platformNumber}
-                                                    onChange={(e) => setPlatformNumber(e.target.value)}
-                                                />
-                                            </div>
-                                            <div>
-                                                <label className="block text-[10px] font-bold text-slate-500 uppercase mb-1">Legal Business Name</label>
-                                                <input 
-                                                    type="text" 
-                                                    className="w-full p-2 border border-slate-300 rounded text-sm"
-                                                    value={a2pData.legal_name}
-                                                    onChange={(e) => setA2pData({...a2pData, legal_name: e.target.value})}
-                                                />
-                                            </div>
-                                        </div>
-                                    </div>
-                                )}
-                                
-                                {provisioningError && (
-                                    <div className="p-3 mb-4 bg-red-100 border border-red-300 text-red-800 rounded-lg text-sm flex items-center gap-2">
-                                        <AlertTriangle className="w-4 h-4" />
-                                        {provisioningError}
+                                        <p className="text-xs text-slate-500 mb-3">
+                                            Enter the phone number you purchased/will use from your platform Twilio account for this client.
+                                        </p>
+                                        <input
+                                            type="text"
+                                            placeholder="+14045551234"
+                                            className="w-full p-3 border border-slate-300 rounded-lg text-sm font-mono bg-white"
+                                            value={platformNumber}
+                                            onChange={(e) => setPlatformNumber(e.target.value)}
+                                        />
                                     </div>
                                 )}
 
-                                <button
-                                    onClick={handleEnableVoice}
-                                    disabled={isProvisioning || isVoiceActive || (source === 'platform' && !platformNumber) || (source === 'client' && !selectedClient?.twilio_configured)}
-                                    className="w-full py-4 bg-indigo-600 text-white rounded-xl font-bold text-lg hover:bg-indigo-700 transition-all shadow-xl shadow-indigo-200 disabled:opacity-50 flex items-center justify-center gap-3"
-                                >
-                                    {isProvisioning ? (
-                                        <>
-                                            <Loader2 className="w-6 h-6 animate-spin" />
-                                            Enabling Secure AI Calls...
-                                        </>
-                                    ) : isVoiceActive ? (
-                                        <>
-                                            <CheckCircle2 className="w-6 h-6" />
-                                            AI Call Handling Active
-                                        </>
+                                {/* Feedback Message */}
+                                {feedbackMessage && (
+                                    <div className={`p-3 mb-4 rounded-lg text-sm flex items-center gap-2 ${
+                                        feedbackMessage.type === 'success' ? 'bg-emerald-100 border border-emerald-300 text-emerald-800' :
+                                        feedbackMessage.type === 'error' ? 'bg-red-100 border border-red-300 text-red-800' :
+                                        'bg-blue-100 border border-blue-300 text-blue-800'
+                                    }`}>
+                                        {feedbackMessage.type === 'error' ? <AlertTriangle className="w-4 h-4 flex-shrink-0" /> : <CheckCircle2 className="w-4 h-4 flex-shrink-0" />}
+                                        <span>{feedbackMessage.text}</span>
+                                    </div>
+                                )}
+
+                                {/* Action Buttons */}
+                                <div className="space-y-3">
+                                    {!isVoiceActive ? (
+                                        <button
+                                            onClick={handleEnableVoice}
+                                            disabled={isProvisioning || !canEnable}
+                                            className="w-full py-4 bg-indigo-600 text-white rounded-xl font-bold text-lg hover:bg-indigo-700 transition-all shadow-xl shadow-indigo-200 disabled:opacity-50 disabled:shadow-none flex items-center justify-center gap-3"
+                                        >
+                                            {isProvisioning ? (
+                                                <>
+                                                    <Loader2 className="w-6 h-6 animate-spin" />
+                                                    Enabling AI Calls...
+                                                </>
+                                            ) : (
+                                                <>
+                                                    <Power className="w-6 h-6" />
+                                                    Enable AI Call Handling
+                                                </>
+                                            )}
+                                        </button>
                                     ) : (
-                                        <>
-                                            <Zap className="w-6 h-6 fill-current" />
-                                            Enable AI Call Handling
-                                        </>
+                                        <div className="space-y-3">
+                                            <div className="w-full py-4 bg-emerald-600 text-white rounded-xl font-bold text-lg flex items-center justify-center gap-3">
+                                                <CheckCircle2 className="w-6 h-6" />
+                                                AI Call Handling Active
+                                            </div>
+                                            <button
+                                                onClick={handleDisableVoice}
+                                                disabled={isDisabling}
+                                                className="w-full py-3 bg-red-50 text-red-600 border border-red-200 rounded-xl font-semibold text-sm hover:bg-red-100 transition-all flex items-center justify-center gap-2"
+                                            >
+                                                {isDisabling ? (
+                                                    <>
+                                                        <Loader2 className="w-4 h-4 animate-spin" />
+                                                        Disabling...
+                                                    </>
+                                                ) : (
+                                                    <>
+                                                        <PowerOff className="w-4 h-4" />
+                                                        Disable AI Call Handling
+                                                    </>
+                                                )}
+                                            </button>
+                                        </div>
                                     )}
-                                </button>
-                                <p className="text-center text-[10px] text-slate-400 mt-4 uppercase tracking-[0.2em]">
-                                    White-Label: Custom Websites Plus Automation
+
+                                    {/* Help text for why Enable is disabled */}
+                                    {!isVoiceActive && !canEnable && hasAgentId && (
+                                        <p className="text-xs text-slate-500 text-center">
+                                            {isClientOwned && !selectedClient?.twilio_configured && 'Client needs to configure Twilio credentials first.'}
+                                            {isPlatformOwned && !isPlatformA2PReady && 'A2P compliance must be approved before enabling.'}
+                                            {isPlatformOwned && isPlatformA2PReady && !platformNumber.trim() && 'Enter the platform phone number above.'}
+                                        </p>
+                                    )}
+                                    {!isVoiceActive && !hasAgentId && (
+                                        <p className="text-xs text-slate-500 text-center">
+                                            Save a Retell Agent ID first to enable AI Call Handling.
+                                        </p>
+                                    )}
+                                </div>
+
+                                <p className="text-center text-[10px] text-slate-400 mt-6 uppercase tracking-[0.2em]">
+                                    Custom Websites Plus — AI Voice Automation
                                 </p>
                             </div>
                         ) : (
                             <div className="bg-white p-20 rounded-xl shadow-lg border border-slate-100 flex flex-col items-center text-center">
                                 <Bot className="w-16 h-16 text-slate-200 mb-4" />
-                                <h3 className="text-xl font-bold text-slate-900 mb-2">Ready to Provision</h3>
-                                <p className="text-slate-500 max-w-sm">Select a client from the list to manage their AI call handling configuration.</p>
+                                <h3 className="text-xl font-bold text-slate-900 mb-2">Ready to Manage</h3>
+                                <p className="text-slate-500 max-w-sm">Select a client from the list to configure their AI call handling.</p>
                             </div>
                         )}
                     </div>

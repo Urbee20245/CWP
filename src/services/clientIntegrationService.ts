@@ -40,7 +40,16 @@ export const ClientIntegrationService = {
   testTwilioConnection: async (clientId: string) => {
     return invokeEdgeFunction('test-twilio-connection', { client_id: clientId });
   },
-  
+
+  // --- A2P Registration ---
+
+  submitA2PRegistration: async (clientId: string, a2pRegistrationData: any) => {
+    return invokeEdgeFunction('submit-a2p-registration', {
+        client_id: clientId,
+        a2p_registration_data: a2pRegistrationData,
+    });
+  },
+
   // --- Google Calendar Integration ---
   
   initGoogleCalendarAuth: async (clientId: string) => {

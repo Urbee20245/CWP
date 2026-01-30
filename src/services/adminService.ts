@@ -50,7 +50,22 @@ export const AdminService = {
         number_source: numberSource,
     });
   },
-  
+
+  // Update A2P compliance status (admin only)
+  updateA2PStatus: async (clientId: string, a2pStatus: string) => {
+    return invokeEdgeFunction('update-a2p-status', {
+        client_id: clientId,
+        a2p_status: a2pStatus,
+    });
+  },
+
+  // Disable AI voice for a client
+  disableVoice: async (clientId: string) => {
+    return invokeEdgeFunction('disable-voice', {
+        client_id: clientId,
+    });
+  },
+
   generateDocument: async (documentType: string, inputs: any) => invokeEdgeFunction('generate-document', { documentType, inputs }),
   generateAdminContent: async (context: any) => invokeEdgeFunction('generate-admin-content', context),
   generateEmail: async (emailType: string, inputs: any) => invokeEdgeFunction('generate-email-content', { emailType, inputs }),

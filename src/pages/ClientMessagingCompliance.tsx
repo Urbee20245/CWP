@@ -4,14 +4,15 @@ import React, { useState, useEffect, useCallback } from 'react';
 import ClientLayout from '../components/ClientLayout';
 import { useAuth } from '../hooks/useAuth';
 import { supabase } from '../integrations/supabase/client';
-import { 
-    ShieldCheck, 
-    Building2, 
-    Globe, 
-    User, 
-    CheckCircle2, 
-    Loader2, 
-    AlertTriangle, // <-- AlertTriangle is imported here
+import { ClientIntegrationService } from '../services/clientIntegrationService';
+import {
+    ShieldCheck,
+    Building2,
+    Globe,
+    User,
+    CheckCircle2,
+    Loader2,
+    AlertTriangle,
     Info,
     ArrowRight,
     Lock,
@@ -60,7 +61,7 @@ const ClientMessagingCompliance: React.FC = () => {
         contact_name: '',
         contact_email: profile?.email || '',
     });
-    
+
     const [isLoading, setIsLoading] = useState(true);
     const [isSaving, setIsSaving] = useState(false);
     const [saveSuccess, setSaveSuccess] = useState(false);
@@ -71,7 +72,6 @@ const ClientMessagingCompliance: React.FC = () => {
         setIsLoading(true);
 
         try {
-            // 1. Get Client ID
             const { data: clientData } = await supabase
                 .from('clients')
                 .select('id, business_name, billing_email')
@@ -81,7 +81,6 @@ const ClientMessagingCompliance: React.FC = () => {
             if (!clientData) throw new Error("Client record not found.");
             setClientId(clientData.id);
 
-            // 2. Get existing data from client_voice_integrations
             const { data: voiceData } = await supabase
                 .from('client_voice_integrations')
                 .select('a2p_registration_data, a2p_status')
@@ -102,6 +101,13 @@ const ClientMessagingCompliance: React.FC = () => {
                         contact_email: clientData.billing_email || prev.contact_email
                     }));
                 }
+            } else {
+                // No voice integration record yet — pre-fill from client data
+                setFormData(prev => ({
+                    ...prev,
+                    legal_name: clientData.business_name,
+                    contact_email: clientData.billing_email || prev.contact_email
+                }));
             }
         } catch (e: any) {
             console.error("Error loading compliance data:", e);
@@ -124,19 +130,11 @@ const ClientMessagingCompliance: React.FC = () => {
         if (!clientId) return;
         setIsSaving(true);
         setError(null);
+        setSaveSuccess(false);
 
         try {
-            // Upsert using the newly constrained client_id column
-            const { error: upsertError } = await supabase
-                .from('client_voice_integrations')
-                .upsert({
-                    client_id: clientId,
-                    a2p_registration_data: formData,
-                    a2p_status: 'pending_approval',
-                    number_source: 'platform' 
-                }, { onConflict: 'client_id' });
-
-            if (upsertError) throw upsertError;
+            // Use edge function to bypass RLS
+            await ClientIntegrationService.submitA2PRegistration(clientId, formData);
 
             setSaveSuccess(true);
             setStatus('pending_approval');
@@ -144,11 +142,10 @@ const ClientMessagingCompliance: React.FC = () => {
         } catch (e: any) {
             setError(e.message || "Failed to submit information.");
         } finally {
-            setIsSaving(true); 
-            setTimeout(() => {
-                setIsSaving(false);
-                setSaveSuccess(false);
-            }, 3000);
+            setIsSaving(false);
+            if (saveSuccess) {
+                setTimeout(() => setSaveSuccess(false), 5000);
+            }
         }
     };
 
@@ -177,15 +174,15 @@ const ClientMessagingCompliance: React.FC = () => {
     return (
         <ClientLayout>
             <div className="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8 py-12">
-                
+
                 <div className="mb-10">
                     <h1 className="text-3xl font-bold text-slate-900 mb-4 flex items-center gap-3">
-                        <ShieldCheck className="w-8 h-8 text-indigo-600" /> 
+                        <ShieldCheck className="w-8 h-8 text-indigo-600" />
                         Messaging Setup & Security
                     </h1>
                     <p className="text-slate-600 leading-relaxed max-w-2xl">
-                        To enable secure text messaging and automated appointment reminders for your business, 
-                        we are required by mobile networks to verify your business identity. This ensures your 
+                        To enable secure text messaging and automated appointment reminders for your business,
+                        we are required by mobile networks to verify your business identity. This ensures your
                         messages are delivered reliably to your customers.
                     </p>
                 </div>
@@ -197,6 +194,7 @@ const ClientMessagingCompliance: React.FC = () => {
                             <p className="font-bold text-sm">Status: {statusDisplay.label}</p>
                             {status === 'pending_approval' && <p className="text-xs mt-0.5">We are currently verifying your business information with the networks.</p>}
                             {status === 'approved' && <p className="text-xs mt-0.5">Your messaging account is fully verified and active.</p>}
+                            {status === 'rejected' && <p className="text-xs mt-0.5">There was an issue with your submission. Please review and resubmit your information.</p>}
                         </div>
                     </div>
                 </div>
@@ -209,7 +207,7 @@ const ClientMessagingCompliance: React.FC = () => {
                 )}
 
                 <div className="bg-white rounded-2xl shadow-xl border border-slate-100 overflow-hidden">
-                    
+
                     {isLocked && (
                         <div className="bg-slate-50 p-4 border-b border-slate-200 flex items-center gap-3">
                             <Lock className="w-4 h-4 text-slate-400" />
@@ -220,7 +218,7 @@ const ClientMessagingCompliance: React.FC = () => {
                     )}
 
                     <form onSubmit={handleSubmit} className="p-8 space-y-10">
-                        
+
                         <section>
                             <h3 className="text-lg font-bold text-slate-900 mb-6 flex items-center gap-2">
                                 <Building2 className="w-5 h-5 text-indigo-600" /> 1. Official Business Identity
@@ -228,7 +226,7 @@ const ClientMessagingCompliance: React.FC = () => {
                             <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                                 <div className="md:col-span-2">
                                     <label className="block text-sm font-bold text-slate-700 mb-2">Legal Business Name *</label>
-                                    <input 
+                                    <input
                                         type="text" name="legal_name" value={formData.legal_name} onChange={handleChange} required
                                         placeholder="Exactly as it appears on tax documents"
                                         className="w-full px-4 py-3 border border-slate-300 rounded-xl focus:border-indigo-500 outline-none transition-all text-sm disabled:bg-slate-50 disabled:text-slate-500"
@@ -237,7 +235,7 @@ const ClientMessagingCompliance: React.FC = () => {
                                 </div>
                                 <div>
                                     <label className="block text-sm font-bold text-slate-700 mb-2">Business Type *</label>
-                                    <select 
+                                    <select
                                         name="business_type" value={formData.business_type} onChange={handleChange} required
                                         className="w-full px-4 py-3 border border-slate-300 rounded-xl focus:border-indigo-500 outline-none transition-all text-sm disabled:bg-slate-50 disabled:text-slate-500"
                                         disabled={isLocked}
@@ -248,7 +246,7 @@ const ClientMessagingCompliance: React.FC = () => {
                                 </div>
                                 <div>
                                     <label className="block text-sm font-bold text-slate-700 mb-2">Tax ID (EIN) *</label>
-                                    <input 
+                                    <input
                                         type="text" name="ein" value={formData.ein} onChange={handleChange} required
                                         placeholder="9-digit EIN (XX-XXXXXXX)"
                                         className="w-full px-4 py-3 border border-slate-300 rounded-xl focus:border-indigo-500 outline-none transition-all text-sm disabled:bg-slate-50 disabled:text-slate-500"
@@ -257,7 +255,7 @@ const ClientMessagingCompliance: React.FC = () => {
                                 </div>
                                 <div className="md:col-span-2">
                                     <label className="block text-sm font-bold text-slate-700 mb-2">Business Website URL *</label>
-                                    <input 
+                                    <input
                                         type="url" name="website" value={formData.website} onChange={handleChange} required
                                         placeholder="https://yourbusiness.com"
                                         className="w-full px-4 py-3 border border-slate-300 rounded-xl focus:border-indigo-500 outline-none transition-all text-sm disabled:bg-slate-50 disabled:text-slate-500"
@@ -274,7 +272,7 @@ const ClientMessagingCompliance: React.FC = () => {
                             <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
                                 <div className="md:col-span-3">
                                     <label className="block text-sm font-bold text-slate-700 mb-2">Street Address *</label>
-                                    <input 
+                                    <input
                                         type="text" name="address_street" value={formData.address_street} onChange={handleChange} required
                                         placeholder="123 Business Lane"
                                         className="w-full px-4 py-3 border border-slate-300 rounded-xl focus:border-indigo-500 outline-none transition-all text-sm disabled:bg-slate-50 disabled:text-slate-500"
@@ -283,7 +281,7 @@ const ClientMessagingCompliance: React.FC = () => {
                                 </div>
                                 <div>
                                     <label className="block text-sm font-bold text-slate-700 mb-2">City *</label>
-                                    <input 
+                                    <input
                                         type="text" name="address_city" value={formData.address_city} onChange={handleChange} required
                                         className="w-full px-4 py-3 border border-slate-300 rounded-xl focus:border-indigo-500 outline-none transition-all text-sm disabled:bg-slate-50 disabled:text-slate-500"
                                         disabled={isLocked}
@@ -291,7 +289,7 @@ const ClientMessagingCompliance: React.FC = () => {
                                 </div>
                                 <div>
                                     <label className="block text-sm font-bold text-slate-700 mb-2">State *</label>
-                                    <input 
+                                    <input
                                         type="text" name="address_state" value={formData.address_state} onChange={handleChange} required
                                         className="w-full px-4 py-3 border border-slate-300 rounded-xl focus:border-indigo-500 outline-none transition-all text-sm disabled:bg-slate-50 disabled:text-slate-500"
                                         disabled={isLocked}
@@ -299,7 +297,7 @@ const ClientMessagingCompliance: React.FC = () => {
                                 </div>
                                 <div>
                                     <label className="block text-sm font-bold text-slate-700 mb-2">Zip Code *</label>
-                                    <input 
+                                    <input
                                         type="text" name="address_zip" value={formData.address_zip} onChange={handleChange} required
                                         className="w-full px-4 py-3 border border-slate-300 rounded-xl focus:border-indigo-500 outline-none transition-all text-sm disabled:bg-slate-50 disabled:text-slate-500"
                                         disabled={isLocked}
@@ -315,7 +313,7 @@ const ClientMessagingCompliance: React.FC = () => {
                             <div className="space-y-6">
                                 <div>
                                     <label className="block text-sm font-bold text-slate-700 mb-2">How will you use messaging? *</label>
-                                    <textarea 
+                                    <textarea
                                         name="use_case" value={formData.use_case} onChange={handleChange} required
                                         placeholder="e.g., We use text messages to confirm upcoming appointments and answer general customer questions about our services."
                                         rows={3}
@@ -325,7 +323,7 @@ const ClientMessagingCompliance: React.FC = () => {
                                 </div>
                                 <div>
                                     <label className="block text-sm font-bold text-slate-700 mb-2">Provide a sample message *</label>
-                                    <textarea 
+                                    <textarea
                                         name="sample_message" value={formData.sample_message} onChange={handleChange} required
                                         placeholder="e.g., Hi [Name], this is Custom Websites Plus. We are confirming your consultation for tomorrow at 2 PM. Reply STOP to opt out."
                                         rows={2}
@@ -343,7 +341,7 @@ const ClientMessagingCompliance: React.FC = () => {
                             <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                                 <div>
                                     <label className="block text-sm font-bold text-slate-700 mb-2">Contact Name *</label>
-                                    <input 
+                                    <input
                                         type="text" name="contact_name" value={formData.contact_name} onChange={handleChange} required
                                         className="w-full px-4 py-3 border border-slate-300 rounded-xl focus:border-indigo-500 outline-none transition-all text-sm disabled:bg-slate-50 disabled:text-slate-500"
                                         disabled={isLocked}
@@ -351,7 +349,7 @@ const ClientMessagingCompliance: React.FC = () => {
                                 </div>
                                 <div>
                                     <label className="block text-sm font-bold text-slate-700 mb-2">Contact Email *</label>
-                                    <input 
+                                    <input
                                         type="email" name="contact_email" value={formData.contact_email} onChange={handleChange} required
                                         className="w-full px-4 py-3 border border-slate-300 rounded-xl focus:border-indigo-500 outline-none transition-all text-sm disabled:bg-slate-50 disabled:text-slate-500"
                                         disabled={isLocked}
@@ -361,12 +359,12 @@ const ClientMessagingCompliance: React.FC = () => {
                         </section>
 
                         <div className="pt-8 border-t border-slate-100">
-                            
+
                             {!isLocked && (
                                 <div className="p-4 bg-indigo-50 border border-indigo-200 rounded-xl mb-6 flex items-start gap-3">
                                     <Info className="w-5 h-5 text-indigo-600 flex-shrink-0 mt-0.5" />
                                     <p className="text-sm text-indigo-800 font-medium">
-                                        Most businesses are approved within 1–3 business days. We’ll handle the setup and notify you as soon as your messaging is ready.
+                                        Most businesses are approved within 1-3 business days. We'll handle the setup and notify you as soon as your messaging is ready.
                                     </p>
                                 </div>
                             )}
@@ -382,8 +380,8 @@ const ClientMessagingCompliance: React.FC = () => {
                                 type="submit"
                                 disabled={isSaving || isLocked}
                                 className={`w-full py-4 rounded-xl font-bold text-lg transition-all flex items-center justify-center gap-2 ${
-                                    isLocked 
-                                        ? 'bg-emerald-600 text-white cursor-default' 
+                                    isLocked
+                                        ? 'bg-emerald-600 text-white cursor-default'
                                         : 'bg-gradient-to-r from-indigo-600 to-purple-600 text-white hover:shadow-xl hover:shadow-indigo-200 hover:scale-[1.01]'
                                 } disabled:opacity-50`}
                             >
