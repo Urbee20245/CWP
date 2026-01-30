@@ -82,7 +82,7 @@ const AdminVoiceManagement: React.FC = () => {
         } catch (edgeFnErr: any) {
             console.warn('[AdminVoiceManagement] Edge function failed, trying direct query:', edgeFnErr.message);
             try {
-                // Fallback: direct Supabase query (works if RLS policies allow it)
+                // Fallback #1: direct query with nested relations
                 const { data: fallbackData, error: fallbackError } = await supabase
                     .from('clients')
                     .select(`
@@ -108,9 +108,35 @@ const AdminVoiceManagement: React.FC = () => {
 
                 if (fallbackError) throw fallbackError;
                 setClients(formatClients(fallbackData || []));
-            } catch (fallbackErr: any) {
-                console.error('[AdminVoiceManagement] Both fetch methods failed:', fallbackErr);
-                showFeedback('error', `Failed to load clients: ${edgeFnErr.message}`);
+            } catch (fallback1Err: any) {
+                console.warn('[AdminVoiceManagement] Nested query failed, trying simple query:', fallback1Err.message);
+                try {
+                    // Fallback #2: just get clients without nested relations
+                    const { data: simpleData, error: simpleError } = await supabase
+                        .from('clients')
+                        .select('id, business_name, phone')
+                        .order('business_name', { ascending: true });
+
+                    if (simpleError) throw simpleError;
+
+                    const simpleClients = (simpleData || []).map((c: any) => ({
+                        id: c.id,
+                        business_name: c.business_name,
+                        phone: c.phone,
+                        voice_status: 'inactive',
+                        number_source: 'platform',
+                        a2p_status: 'not_started',
+                        retell_agent_id: '',
+                        twilio_configured: false,
+                        twilio_phone: null,
+                        phone_number: null,
+                    }));
+                    setClients(simpleClients);
+                    showFeedback('info', 'Loaded clients without voice data. Run the SQL migration and deploy edge functions to enable full functionality.');
+                } catch (fallback2Err: any) {
+                    console.error('[AdminVoiceManagement] All fetch methods failed:', fallback2Err);
+                    showFeedback('error', `Failed to load clients. Edge function error: ${edgeFnErr.message}`);
+                }
             }
         } finally {
             setIsLoading(false);
