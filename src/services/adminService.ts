@@ -3,20 +3,23 @@ import { marked } from 'marked';
 
 const invokeEdgeFunction = async (functionName: string, payload: any) => {
   const { data, error } = await supabase.functions.invoke(functionName, {
-    body: JSON.stringify(payload),
+    body: payload,
   });
 
   if (error) {
-    console.error(`Error invoking ${functionName}:`, error);
+    console.error(`[adminService] Error invoking ${functionName}:`, error);
     throw new Error(error.message || `Failed to call ${functionName}`);
   }
-  
-  if (data.error) {
-    console.error(`Edge function ${functionName} returned error:`, data.error);
-    throw new Error(data.error);
+
+  // Handle case where SDK returns a string instead of parsed JSON
+  const parsed = typeof data === 'string' ? JSON.parse(data) : data;
+
+  if (parsed?.error) {
+    console.error(`[adminService] Edge function ${functionName} returned error:`, parsed.error);
+    throw new Error(parsed.error);
   }
 
-  return data;
+  return parsed;
 };
 
 export const AdminService = {
