@@ -1,4 +1,4 @@
-import { serve } from "https://deno.land/std@0.200.0/http/server.ts";
+import { serve } from "https://deno.land/std@0.190.0/http/server.ts";
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2.45.0';
 
 const corsHeaders = {
@@ -7,31 +7,23 @@ const corsHeaders = {
   'Content-Type': 'application/json',
 };
 
-function handleCors(req: Request) {
-  if (req.method === 'OPTIONS') {
-    return new Response(null, { headers: corsHeaders });
-  }
+function jsonRes(body: any, status = 200) {
+  return new Response(JSON.stringify(body), { status, headers: corsHeaders });
 }
 
-function jsonResponse(body: any, status: number = 200) {
-  return new Response(JSON.stringify(body), {
-    status,
-    headers: corsHeaders,
-  });
-}
-
-function errorResponse(message: string, status: number = 500) {
+function errRes(message: string, status = 500) {
   console.error(`[submit-a2p-registration] Error: ${message}`);
-  return jsonResponse({ error: message }, status);
+  return jsonRes({ error: message }, status);
 }
 
 serve(async (req) => {
-  const corsResponse = handleCors(req);
-  if (corsResponse) return corsResponse;
+  if (req.method === 'OPTIONS') {
+    return new Response(null, { headers: corsHeaders });
+  }
 
   const authHeader = req.headers.get('Authorization');
   if (!authHeader) {
-    return errorResponse('Unauthorized: Missing authorization token.', 401);
+    return errRes('Unauthorized: Missing authorization token.', 401);
   }
 
   const supabase = createClient(
@@ -49,13 +41,13 @@ serve(async (req) => {
     const { client_id, a2p_registration_data } = await req.json();
 
     if (!client_id || !a2p_registration_data) {
-      return errorResponse('Missing required fields: client_id or a2p_registration_data.', 400);
+      return errRes('Missing required fields: client_id or a2p_registration_data.', 400);
     }
 
     // Verify the user owns this client
     const { data: { user } } = await supabase.auth.getUser();
     if (!user) {
-      return errorResponse('Unauthorized: User not authenticated.', 401);
+      return errRes('Unauthorized: User not authenticated.', 401);
     }
 
     const { error: clientError } = await supabase
@@ -66,7 +58,7 @@ serve(async (req) => {
         .single();
 
     if (clientError) {
-        return errorResponse('Client record not found or unauthorized.', 403);
+        return errRes('Client record not found or unauthorized.', 403);
     }
 
     console.log(`[submit-a2p-registration] Submitting A2P data for client ${client_id}`);
@@ -80,7 +72,7 @@ serve(async (req) => {
 
     // Block resubmission if already approved
     if (existing?.a2p_status === 'approved') {
-        return errorResponse('A2P registration is already approved. No changes allowed.', 400);
+        return errRes('A2P registration is already approved. No changes allowed.', 400);
     }
 
     const { error: upsertError } = await supabaseAdmin
@@ -94,14 +86,14 @@ serve(async (req) => {
 
     if (upsertError) {
         console.error('[submit-a2p-registration] DB upsert failed:', upsertError);
-        return errorResponse(`Failed to save registration data: ${upsertError.message}`, 500);
+        return errRes(`Failed to save registration data: ${upsertError.message}`, 500);
     }
 
     console.log('[submit-a2p-registration] A2P registration submitted successfully.');
-    return jsonResponse({ success: true });
+    return jsonRes({ success: true });
 
   } catch (error: any) {
     console.error('[submit-a2p-registration] Unhandled error:', error.message);
-    return errorResponse(error.message, 500);
+    return errRes(error.message, 500);
   }
 });

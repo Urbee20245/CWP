@@ -36,7 +36,8 @@ serve(async (req) => {
           provider,
           phone_number,
           account_sid_encrypted,
-          auth_token_encrypted
+          auth_token_encrypted,
+          connection_method
         )
       `)
       .order('business_name', { ascending: true });

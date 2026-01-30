@@ -48,6 +48,7 @@ import AdminInbox from './src/pages/AdminInbox';
 import ClientHelpPage from './src/pages/ClientHelpPage';
 import ClientMessagingCompliance from './src/pages/ClientMessagingCompliance';
 import ClientSettings from './src/pages/ClientSettings'; // NEW IMPORT
+import TwilioConnectCallback from './src/pages/TwilioConnectCallback';
 
 const AppContent: React.FC = () => {
   const location = useLocation();
@@ -100,7 +101,8 @@ const AppContent: React.FC = () => {
 
         <Route path="/client/*" element={<ProtectedRoute allowedRoles={['client']} />}>
           <Route path="dashboard" element={<ClientDashboard />} />
-          <Route path="settings" element={<ClientSettings />} /> {/* NEW ROUTE */}
+          <Route path="settings" element={<ClientSettings />} />
+          <Route path="twilio-callback" element={<TwilioConnectCallback />} />
           <Route path="messaging-compliance" element={<ClientMessagingCompliance />} />
           <Route path="projects/:id" element={<ClientProjectDetail />} />
           <Route path="appointments" element={<ClientAppointmentBooking />} />

@@ -1,4 +1,4 @@
-import { serve } from "https://deno.land/std@0.200.0/http/server.ts";
+import { serve } from "https://deno.land/std@0.190.0/http/server.ts";
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2.45.0';
 
 const corsHeaders = {
@@ -7,45 +7,34 @@ const corsHeaders = {
   'Content-Type': 'application/json',
 };
 
-function handleCors(req: Request) {
+function jsonRes(body: any, status = 200) {
+  return new Response(JSON.stringify(body), { status, headers: corsHeaders });
+}
+
+function errRes(message: string, status = 500) {
+  console.error(`[save-twilio-credentials] Error: ${message}`);
+  return jsonRes({ error: message }, status);
+}
+
+async function encryptSecret(supabaseAdmin: any, plaintext: string): Promise<string> {
+  const key = Deno.env.get('SMTP_ENCRYPTION_KEY');
+  if (!key) throw new Error('SMTP_ENCRYPTION_KEY is not configured.');
+  const { data, error } = await supabaseAdmin.rpc('encrypt_secret', { plaintext, key });
+  if (error) {
+    console.error('[save-twilio-credentials] Encryption failed:', error);
+    throw new Error('Encryption failed.');
+  }
+  return data as string;
+}
+
+serve(async (req) => {
   if (req.method === 'OPTIONS') {
     return new Response(null, { headers: corsHeaders });
   }
-}
-
-function jsonResponse(body: any, status: number = 200) {
-  return new Response(JSON.stringify(body), {
-    status,
-    headers: corsHeaders,
-  });
-}
-
-function errorResponse(message: string, status: number = 500) {
-  console.error(`[save-twilio-credentials] Error: ${message}`);
-  return jsonResponse({ error: message }, status);
-}
-
-// --- Inlined Encryption ---
-const ENCRYPTION_KEY = Deno.env.get('SMTP_ENCRYPTION_KEY');
-
-async function encryptSecret(supabaseAdmin: any, plaintext: string): Promise<string> {
-    if (!ENCRYPTION_KEY) throw new Error("Encryption key is missing.");
-    const { data, error } = await supabaseAdmin.rpc('encrypt_secret', {
-        plaintext,
-        key: ENCRYPTION_KEY,
-    });
-    if (error) throw new Error('Encryption failed.');
-    return data as string;
-}
-// --- End Inlined Encryption ---
-
-serve(async (req) => {
-  const corsResponse = handleCors(req);
-  if (corsResponse) return corsResponse;
 
   const authHeader = req.headers.get('Authorization');
   if (!authHeader) {
-    return errorResponse('Unauthorized: Missing token', 401);
+    return errRes('Unauthorized', 401);
   }
 
   const supabaseClient = createClient(
@@ -60,44 +49,82 @@ serve(async (req) => {
   );
 
   try {
-    const { client_id, account_sid, auth_token, phone_number } = await req.json();
+    const body = await req.json();
+    const { client_id, account_sid, auth_token, phone_number, update_phone_only } = body;
 
+    if (!client_id) {
+      return errRes('client_id is required.', 400);
+    }
+
+    // Verify user identity and ownership
     const { data: { user }, error: authError } = await supabaseClient.auth.getUser();
     if (authError || !user) {
-      return errorResponse('Unauthorized: Invalid token', 401);
+      return errRes('Unauthorized', 401);
     }
 
-    // Verify ownership via RLS-enabled query
-    const { error: clientError } = await supabaseClient
-        .from('clients')
-        .select('id')
-        .eq('id', client_id)
-        .eq('owner_profile_id', user.id)
-        .single();
-        
-    if (clientError) {
-        return errorResponse('Forbidden: Client record not found or unauthorized.', 403);
+    const { data: client, error: clientError } = await supabaseClient
+      .from('clients')
+      .select('id')
+      .eq('id', client_id)
+      .single();
+
+    if (clientError || !client) {
+      return errRes('Forbidden', 403);
     }
+
+    // Phone-only update (used by phone number selector after Connect)
+    if (update_phone_only) {
+      if (!phone_number) {
+        return errRes('phone_number is required for phone-only update.', 400);
+      }
+
+      console.log(`[save-twilio-credentials] Updating phone number only for client ${client_id}: ${phone_number}`);
+
+      const { error: updateError } = await supabaseAdmin
+        .from('client_integrations')
+        .update({ phone_number })
+        .eq('client_id', client_id)
+        .eq('provider', 'twilio');
+
+      if (updateError) {
+        console.error('[save-twilio-credentials] Phone update failed:', updateError);
+        return errRes(`Failed to update phone number: ${updateError.message}`, 500);
+      }
+
+      return jsonRes({ success: true });
+    }
+
+    // Full credential save (manual entry)
+    if (!account_sid || !auth_token || !phone_number) {
+      return errRes('account_sid, auth_token, and phone_number are all required.', 400);
+    }
+
+    console.log(`[save-twilio-credentials] Encrypting credentials for client ${client_id}...`);
 
     const accountSidEncrypted = await encryptSecret(supabaseAdmin, account_sid);
     const authTokenEncrypted = await encryptSecret(supabaseAdmin, auth_token);
 
     const { error: upsertError } = await supabaseAdmin
-        .from('client_integrations')
-        .upsert({
-            client_id,
-            provider: 'twilio',
-            account_sid_encrypted: accountSidEncrypted,
-            auth_token_encrypted: authTokenEncrypted,
-            phone_number,
-        }, { onConflict: 'client_id,provider' });
+      .from('client_integrations')
+      .upsert({
+        client_id,
+        provider: 'twilio',
+        account_sid_encrypted: accountSidEncrypted,
+        auth_token_encrypted: authTokenEncrypted,
+        phone_number,
+        connection_method: 'manual',
+      }, { onConflict: 'client_id,provider' });
 
-    if (upsertError) throw upsertError;
+    if (upsertError) {
+      console.error('[save-twilio-credentials] Upsert failed:', upsertError);
+      return errRes(`Failed to save credentials: ${upsertError.message}`, 500);
+    }
 
-    return jsonResponse({ success: true });
+    console.log('[save-twilio-credentials] Credentials saved successfully.');
+    return jsonRes({ success: true });
 
   } catch (error: any) {
-    console.error('[save-twilio-credentials] Error:', error.message);
-    return errorResponse(error.message, 500);
+    console.error('[save-twilio-credentials] Crash:', error.message);
+    return errRes(error.message, 500);
   }
 });

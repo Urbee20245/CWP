@@ -20,6 +20,7 @@ interface Client {
     twilio_phone: string | null;
     retell_agent_id: string;
     phone_number: string | null;
+    connection_method: string;
 }
 
 const AdminVoiceManagement: React.FC = () => {
@@ -71,6 +72,7 @@ const AdminVoiceManagement: React.FC = () => {
                 twilio_configured: hasTwilioCredentials,
                 twilio_phone: twilioIntegration?.phone_number || null,
                 phone_number: voiceData?.phone_number || twilioIntegration?.phone_number || null,
+                connection_method: twilioIntegration?.connection_method || 'none',
             };
         });
     };
@@ -103,6 +105,7 @@ const AdminVoiceManagement: React.FC = () => {
                     twilio_configured: false,
                     twilio_phone: null,
                     phone_number: null,
+                    connection_method: 'none',
                 })));
                 showFeedback('info', 'Edge function unavailable — loaded clients without voice data. Please redeploy get-voice-clients edge function.');
             } catch (fallbackErr: any) {
@@ -358,7 +361,9 @@ const AdminVoiceManagement: React.FC = () => {
                                                 <div className="flex items-center gap-2 min-w-0">
                                                     <p className="font-bold text-slate-900 text-sm truncate">{c.business_name}</p>
                                                     {c.twilio_configured && (
-                                                        <span className="px-1.5 py-0.5 bg-purple-100 text-purple-700 text-[9px] font-bold rounded uppercase flex-shrink-0">Twilio</span>
+                                                        <span className={`px-1.5 py-0.5 text-[9px] font-bold rounded uppercase flex-shrink-0 ${c.connection_method === 'twilio_connect' ? 'bg-emerald-100 text-emerald-700' : 'bg-purple-100 text-purple-700'}`}>
+                                                            {c.connection_method === 'twilio_connect' ? 'Connected' : 'Twilio'}
+                                                        </span>
                                                     )}
                                                 </div>
                                                 {c.voice_status === 'active' && <Zap className="w-3 h-3 text-emerald-500 fill-emerald-500 flex-shrink-0" />}
@@ -403,9 +408,16 @@ const AdminVoiceManagement: React.FC = () => {
                                         <>
                                             <Plus className="w-5 h-5 text-purple-600" />
                                             <div>
-                                                <p className="font-bold text-sm text-purple-700">Option 2: Client-Owned Twilio Number</p>
+                                                <p className="font-bold text-sm text-purple-700">
+                                                    {selectedClient.connection_method === 'twilio_connect'
+                                                        ? 'Client Twilio (Connected via OAuth)'
+                                                        : 'Client-Owned Twilio Number'}
+                                                </p>
                                                 <p className="text-xs mt-0.5 text-purple-600">
-                                                    Client has configured Twilio credentials. Phone: <span className="font-mono font-semibold">{selectedClient.twilio_phone}</span>
+                                                    {selectedClient.connection_method === 'twilio_connect'
+                                                        ? `Twilio Connect authorized. Phone: `
+                                                        : `Client entered credentials. Phone: `}
+                                                    <span className="font-mono font-semibold">{selectedClient.twilio_phone}</span>
                                                 </p>
                                             </div>
                                         </>

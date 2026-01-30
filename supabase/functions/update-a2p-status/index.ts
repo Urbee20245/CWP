@@ -1,4 +1,4 @@
-import { serve } from "https://deno.land/std@0.200.0/http/server.ts";
+import { serve } from "https://deno.land/std@0.190.0/http/server.ts";
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2.45.0';
 
 const corsHeaders = {
@@ -7,27 +7,19 @@ const corsHeaders = {
   'Content-Type': 'application/json',
 };
 
-function handleCors(req: Request) {
-  if (req.method === 'OPTIONS') {
-    return new Response(null, { headers: corsHeaders });
-  }
+function jsonRes(body: any, status = 200) {
+  return new Response(JSON.stringify(body), { status, headers: corsHeaders });
 }
 
-function jsonResponse(body: any, status: number = 200) {
-  return new Response(JSON.stringify(body), {
-    status,
-    headers: corsHeaders,
-  });
-}
-
-function errorResponse(message: string, status: number = 500) {
+function errRes(message: string, status = 500) {
   console.error(`[update-a2p-status] Error: ${message}`);
-  return jsonResponse({ error: message }, status);
+  return jsonRes({ error: message }, status);
 }
 
 serve(async (req) => {
-  const corsResponse = handleCors(req);
-  if (corsResponse) return corsResponse;
+  if (req.method === 'OPTIONS') {
+    return new Response(null, { headers: corsHeaders });
+  }
 
   const supabaseAdmin = createClient(
     Deno.env.get('SUPABASE_URL')!,
@@ -38,12 +30,12 @@ serve(async (req) => {
     const { client_id, a2p_status } = await req.json();
 
     if (!client_id || !a2p_status) {
-      return errorResponse('Missing required fields: client_id or a2p_status.', 400);
+      return errRes('Missing required fields: client_id or a2p_status.', 400);
     }
 
     const validStatuses = ['not_started', 'pending_approval', 'approved', 'rejected'];
     if (!validStatuses.includes(a2p_status)) {
-      return errorResponse(`Invalid a2p_status. Must be one of: ${validStatuses.join(', ')}`, 400);
+      return errRes(`Invalid a2p_status. Must be one of: ${validStatuses.join(', ')}`, 400);
     }
 
     console.log(`[update-a2p-status] Updating A2P status to '${a2p_status}' for client ${client_id}`);
@@ -55,14 +47,14 @@ serve(async (req) => {
 
     if (updateError) {
         console.error('[update-a2p-status] DB update failed:', updateError);
-        return errorResponse(`Database update failed: ${updateError.message}`, 500);
+        return errRes(`Database update failed: ${updateError.message}`, 500);
     }
 
     console.log('[update-a2p-status] A2P status updated successfully.');
-    return jsonResponse({ success: true });
+    return jsonRes({ success: true });
 
   } catch (error: any) {
     console.error('[update-a2p-status] Unhandled error:', error.message);
-    return errorResponse(error.message, 500);
+    return errRes(error.message, 500);
   }
 });

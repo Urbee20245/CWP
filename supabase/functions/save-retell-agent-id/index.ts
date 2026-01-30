@@ -1,4 +1,4 @@
-import { serve } from "https://deno.land/std@0.200.0/http/server.ts";
+import { serve } from "https://deno.land/std@0.190.0/http/server.ts";
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2.45.0';
 
 const corsHeaders = {
@@ -7,59 +7,46 @@ const corsHeaders = {
   'Content-Type': 'application/json',
 };
 
-function handleCors(req: Request) {
+serve(async (req) => {
   if (req.method === 'OPTIONS') {
     return new Response(null, { headers: corsHeaders });
   }
-}
-
-function jsonResponse(body: any, status: number = 200) {
-  return new Response(JSON.stringify(body), {
-    status,
-    headers: corsHeaders,
-  });
-}
-
-function errorResponse(message: string, status: number = 500) {
-  console.error(`[save-retell-agent-id] Error: ${message}`);
-  return jsonResponse({ error: message }, status);
-}
-
-serve(async (req) => {
-  const corsResponse = handleCors(req);
-  if (corsResponse) return corsResponse;
-
-  const supabaseAdmin = createClient(
-    Deno.env.get('SUPABASE_URL')!,
-    Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!
-  );
 
   try {
+    const supabaseAdmin = createClient(
+      Deno.env.get('SUPABASE_URL')!,
+      Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!
+    );
+
     const { client_id, retell_agent_id, number_source } = await req.json();
 
     if (!client_id || !retell_agent_id) {
-      return errorResponse('Missing required fields: client_id or retell_agent_id.', 400);
+      return new Response(JSON.stringify({ error: 'Missing required fields: client_id or retell_agent_id.' }), {
+        status: 400, headers: corsHeaders,
+      });
     }
 
     console.log(`[save-retell-agent-id] Saving agent ID ${retell_agent_id} for client ${client_id}`);
 
-    // Check if record already exists — fetch all NOT NULL columns to ensure upsert succeeds
     const { data: existing } = await supabaseAdmin
         .from('client_voice_integrations')
-        .select('a2p_status, a2p_registration_data, voice_status, number_source')
+        .select('a2p_status, a2p_registration_data, voice_status')
         .eq('client_id', client_id)
         .maybeSingle();
 
     const payload: any = {
         client_id,
         retell_agent_id,
-        // Ensure NOT NULL columns are always present, defaulting to existing values or initial defaults
-        voice_status: existing?.voice_status || 'inactive',
-        a2p_status: existing?.a2p_status || 'not_started',
-        number_source: number_source || existing?.number_source || 'platform', 
     };
 
-    // If voice was previously failed, reset to inactive so they can retry
+    if (number_source) {
+        payload.number_source = number_source;
+    }
+
+    if (!existing) {
+        payload.voice_status = 'inactive';
+        payload.a2p_status = 'not_started';
+    }
     if (existing?.voice_status === 'failed') {
         payload.voice_status = 'inactive';
     }
@@ -70,14 +57,20 @@ serve(async (req) => {
 
     if (upsertError) {
         console.error('[save-retell-agent-id] DB upsert failed:', upsertError);
-        return errorResponse(`Database update failed: ${upsertError.message}`, 500);
+        return new Response(JSON.stringify({ error: `Database update failed: ${upsertError.message}` }), {
+          status: 500, headers: corsHeaders,
+        });
     }
 
     console.log('[save-retell-agent-id] Agent ID saved successfully.');
-    return jsonResponse({ success: true });
+    return new Response(JSON.stringify({ success: true }), {
+      status: 200, headers: corsHeaders,
+    });
 
   } catch (error: any) {
     console.error('[save-retell-agent-id] Unhandled error:', error.message);
-    return errorResponse(error.message, 500);
+    return new Response(JSON.stringify({ error: error.message }), {
+      status: 500, headers: corsHeaders,
+    });
   }
 });
