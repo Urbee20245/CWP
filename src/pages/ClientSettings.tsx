@@ -147,10 +147,10 @@ const ClientSettings: React.FC = () => {
               {/* Twilio Integration Card */}
               <div className="bg-white rounded-2xl shadow-lg border border-slate-200 overflow-hidden group p-8">
                 <h2 className="text-xl font-bold text-slate-900 mb-3 flex items-center gap-2">
-                    <Phone className="w-5 h-5 text-slate-600" /> Twilio Credentials
+                    <Phone className="w-5 h-5 text-slate-600" /> Twilio Integration
                 </h2>
                 <p className="text-sm text-slate-600 leading-relaxed mb-6">
-                    Connect your existing Twilio account for client-owned voice and messaging services.
+                    Connect your Twilio account to enable AI-powered voice calls. One-click setup via Twilio Connect or enter credentials manually.
                 </p>
                 {clientId && <ClientTwilioIntegration clientId={clientId} />}
               </div>

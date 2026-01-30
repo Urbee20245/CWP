@@ -55,7 +55,7 @@ serve(async (req) => {
 
     const { data: config, error: configError } = await supabaseAdmin
         .from('client_integrations')
-        .select('account_sid_encrypted, phone_number, updated_at')
+        .select('account_sid_encrypted, phone_number, updated_at, connection_method')
         .eq('client_id', client_id)
         .eq('provider', 'twilio')
         .maybeSingle();
@@ -69,11 +69,12 @@ serve(async (req) => {
     const encryptedSid = config.account_sid_encrypted;
     const maskedSid = encryptedSid.substring(encryptedSid.length - 4);
 
-    return new Response(JSON.stringify({ 
+    return new Response(JSON.stringify({
         configured: true,
         phone_number: config.phone_number,
         masked_sid: maskedSid,
         updated_at: config.updated_at,
+        connection_method: config.connection_method || 'manual',
     }), { status: 200, headers: corsHeaders });
 
   } catch (error: any) {

@@ -1,44 +1,74 @@
 import { supabase } from '../integrations/supabase/client';
 
 const invokeEdgeFunction = async (functionName: string, payload: any) => {
-  // The Supabase SDK automatically injects the Authorization header from the active session.
-  // We do not need to manually fetch the session or set headers here.
   const { data, error } = await supabase.functions.invoke(functionName, {
     body: payload,
   });
 
+  // Parse data regardless of error — on non-2xx, the SDK sets error but
+  // the response body (with our real error message) is still in data.
+  let parsed: any = null;
+  try {
+    parsed = typeof data === 'string' ? JSON.parse(data) : data;
+  } catch {
+    // data wasn't valid JSON — ignore
+  }
+
   if (error) {
-    console.error(`[clientIntegrationService] Error invoking ${functionName}:`, error);
-    throw new Error(error.message || `Failed to call ${functionName}`);
+    const bodyError = parsed?.error;
+    const message = bodyError || error.message || `Failed to call ${functionName}`;
+    console.error(`[clientIntegrationService] Error invoking ${functionName}:`, message);
+    throw new Error(message);
   }
 
-  if (data?.error) {
-    console.error(`[clientIntegrationService] Edge function ${functionName} returned error:`, data.error);
-    throw new Error(data.error);
+  if (parsed?.error) {
+    console.error(`[clientIntegrationService] Edge function ${functionName} returned error:`, parsed.error);
+    throw new Error(parsed.error);
   }
 
-  return data;
+  return parsed;
 };
 
 export const ClientIntegrationService = {
-  
+
   // --- Twilio Integration ---
-  
+
   getTwilioConfig: async (clientId: string) => {
     return invokeEdgeFunction('get-twilio-config', { client_id: clientId });
   },
-  
+
   saveTwilioCredentials: async (clientId: string, accountSid: string, authToken: string, phoneNumber: string) => {
-    return invokeEdgeFunction('save-twilio-credentials', { 
-        client_id: clientId, 
-        account_sid: accountSid, 
-        auth_token: authToken, 
-        phone_number: phoneNumber 
+    return invokeEdgeFunction('save-twilio-credentials', {
+        client_id: clientId,
+        account_sid: accountSid,
+        auth_token: authToken,
+        phone_number: phoneNumber
     });
   },
-  
+
   testTwilioConnection: async (clientId: string) => {
     return invokeEdgeFunction('test-twilio-connection', { client_id: clientId });
+  },
+
+  // --- Twilio Connect ---
+
+  completeTwilioConnect: async (clientId: string, twilioAccountSid: string) => {
+    return invokeEdgeFunction('twilio-connect-complete', {
+      client_id: clientId,
+      twilio_account_sid: twilioAccountSid,
+    });
+  },
+
+  getTwilioPhoneNumbers: async (clientId: string) => {
+    return invokeEdgeFunction('get-twilio-phone-numbers', { client_id: clientId });
+  },
+
+  selectTwilioPhoneNumber: async (clientId: string, phoneNumber: string) => {
+    return invokeEdgeFunction('save-twilio-credentials', {
+      client_id: clientId,
+      phone_number: phoneNumber,
+      update_phone_only: true,
+    });
   },
 
   // --- A2P Registration ---
@@ -51,33 +81,32 @@ export const ClientIntegrationService = {
   },
 
   // --- Google Calendar Integration ---
-  
+
   initGoogleCalendarAuth: async (clientId: string) => {
     return invokeEdgeFunction('google-oauth-init', { client_id: clientId });
   },
-  
+
   getGoogleCalendarStatus: async (clientId: string) => {
-    // This uses a direct query which respects RLS
     const { data, error } = await supabase
         .from('client_google_calendar')
         .select('connection_status, calendar_id, updated_at')
         .eq('client_id', clientId)
         .maybeSingle();
-        
+
     if (error) throw error;
     return data;
   },
-  
+
   disconnectGoogleCalendar: async (clientId: string) => {
     const { error } = await supabase
         .from('client_google_calendar')
-        .update({ 
-            connection_status: 'disconnected', 
-            google_access_token: '', 
-            last_synced_at: new Date().toISOString() 
+        .update({
+            connection_status: 'disconnected',
+            google_access_token: '',
+            last_synced_at: new Date().toISOString()
         })
         .eq('client_id', clientId);
-        
+
     if (error) throw error;
     return { success: true };
   }
