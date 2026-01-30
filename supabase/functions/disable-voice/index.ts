@@ -1,12 +1,27 @@
 import { serve } from "https://deno.land/std@0.190.0/http/server.ts";
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2.45.0';
-import { handleCors, jsonResponse, errorResponse } from '../_shared/utils.ts';
+
+const corsHeaders = {
+  'Access-Control-Allow-Origin': '*',
+  'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
+  'Content-Type': 'application/json',
+};
+
+function jsonRes(body: any, status = 200) {
+  return new Response(JSON.stringify(body), { status, headers: corsHeaders });
+}
+
+function errRes(message: string, status = 500) {
+  console.error(`[disable-voice] Error: ${message}`);
+  return jsonRes({ error: message }, status);
+}
 
 const RETELL_API_KEY = Deno.env.get('RETELL_API_KEY');
 
 serve(async (req) => {
-  const corsResponse = handleCors(req);
-  if (corsResponse) return corsResponse;
+  if (req.method === 'OPTIONS') {
+    return new Response(null, { headers: corsHeaders });
+  }
 
   const supabaseAdmin = createClient(
     Deno.env.get('SUPABASE_URL')!,
@@ -17,7 +32,7 @@ serve(async (req) => {
     const { client_id } = await req.json();
 
     if (!client_id) {
-      return errorResponse('Missing required field: client_id.', 400);
+      return errRes('Missing required field: client_id.', 400);
     }
 
     console.log(`[disable-voice] Disabling voice for client ${client_id}`);
@@ -31,11 +46,11 @@ serve(async (req) => {
 
     if (fetchError) {
         console.error('[disable-voice] Error fetching voice config:', fetchError);
-        return errorResponse('Failed to fetch voice configuration.', 500);
+        return errRes('Failed to fetch voice configuration.', 500);
     }
 
     if (!voiceConfig || voiceConfig.voice_status !== 'active') {
-        return errorResponse('Voice is not currently active for this client.', 400);
+        return errRes('Voice is not currently active for this client.', 400);
     }
 
     // Attempt to delete the phone number from Retell if we have the ID
@@ -72,14 +87,14 @@ serve(async (req) => {
 
     if (updateError) {
         console.error('[disable-voice] DB update failed:', updateError);
-        return errorResponse(`Database update failed: ${updateError.message}`, 500);
+        return errRes(`Database update failed: ${updateError.message}`, 500);
     }
 
     console.log('[disable-voice] Voice disabled successfully.');
-    return jsonResponse({ success: true });
+    return jsonRes({ success: true });
 
   } catch (error: any) {
     console.error('[disable-voice] Unhandled error:', error.message);
-    return errorResponse(error.message, 500);
+    return errRes(error.message, 500);
   }
 });

@@ -6,13 +6,22 @@ const invokeEdgeFunction = async (functionName: string, payload: any) => {
     body: payload,
   });
 
-  if (error) {
-    console.error(`[adminService] Error invoking ${functionName}:`, error);
-    throw new Error(error.message || `Failed to call ${functionName}`);
+  // Parse data regardless of error — on non-2xx, the SDK sets error but
+  // the response body (with our real error message) is still in data.
+  let parsed: any = null;
+  try {
+    parsed = typeof data === 'string' ? JSON.parse(data) : data;
+  } catch {
+    // data wasn't valid JSON — ignore
   }
 
-  // Handle case where SDK returns a string instead of parsed JSON
-  const parsed = typeof data === 'string' ? JSON.parse(data) : data;
+  if (error) {
+    // Surface the actual error message from the edge function body if available
+    const bodyError = parsed?.error;
+    const message = bodyError || error.message || `Failed to call ${functionName}`;
+    console.error(`[adminService] Error invoking ${functionName}:`, message);
+    throw new Error(message);
+  }
 
   if (parsed?.error) {
     console.error(`[adminService] Edge function ${functionName} returned error:`, parsed.error);
