@@ -3,7 +3,6 @@
 import React, { useState, useEffect, useCallback, useRef } from 'react';
 import AdminLayout from '../components/AdminLayout';
 import { AdminService } from '../services/adminService';
-import { supabase } from '../integrations/supabase/client';
 import {
     Bot, Phone, Zap, Search, Loader2, CheckCircle2, AlertTriangle,
     Info, Shield, Globe, Clock, Plus, Power, PowerOff, RefreshCw
@@ -48,70 +47,38 @@ const AdminVoiceManagement: React.FC = () => {
         setTimeout(() => setFeedbackMessage(null), durationMs);
     };
 
-    const formatClients = (rawClients: any[]) => {
-        return rawClients.map((c: any) => {
-            const twilioIntegration = c.client_integrations?.find((i: any) => i.provider === 'twilio');
-            const hasTwilioCredentials = !!(
-                twilioIntegration?.account_sid_encrypted &&
-                twilioIntegration?.auth_token_encrypted &&
-                twilioIntegration?.phone_number
-            );
-            const voiceData = c.client_voice_integrations?.[0];
-
-            return {
-                id: c.id,
-                business_name: c.business_name,
-                phone: c.phone,
-                voice_status: voiceData?.voice_status || 'inactive',
-                number_source: voiceData?.number_source || (hasTwilioCredentials ? 'client' : 'platform'),
-                a2p_status: voiceData?.a2p_status || 'not_started',
-                retell_agent_id: voiceData?.retell_agent_id || '',
-                twilio_configured: hasTwilioCredentials,
-                twilio_phone: twilioIntegration?.phone_number || null,
-                phone_number: voiceData?.phone_number || twilioIntegration?.phone_number || null,
-            };
-        });
-    };
-
     const fetchClients = useCallback(async () => {
         setIsLoading(true);
         try {
-            // Try edge function first (uses service role to bypass RLS)
             const clientsData = await AdminService.getVoiceClients();
-            setClients(formatClients(clientsData || []));
-        } catch (edgeFnErr: any) {
-            console.warn('[AdminVoiceManagement] Edge function failed, trying direct query:', edgeFnErr.message);
-            try {
-                // Fallback: direct Supabase query (works if RLS policies allow it)
-                const { data: fallbackData, error: fallbackError } = await supabase
-                    .from('clients')
-                    .select(`
-                        id,
-                        business_name,
-                        phone,
-                        client_voice_integrations (
-                            voice_status,
-                            number_source,
-                            a2p_status,
-                            retell_agent_id,
-                            phone_number,
-                            retell_phone_id
-                        ),
-                        client_integrations (
-                            provider,
-                            phone_number,
-                            account_sid_encrypted,
-                            auth_token_encrypted
-                        )
-                    `)
-                    .order('business_name', { ascending: true });
 
-                if (fallbackError) throw fallbackError;
-                setClients(formatClients(fallbackData || []));
-            } catch (fallbackErr: any) {
-                console.error('[AdminVoiceManagement] Both fetch methods failed:', fallbackErr);
-                showFeedback('error', `Failed to load clients: ${edgeFnErr.message}`);
-            }
+            const formatted = (clientsData || []).map((c: any) => {
+                const twilioIntegration = c.client_integrations?.find((i: any) => i.provider === 'twilio');
+                const hasTwilioCredentials = !!(
+                    twilioIntegration?.account_sid_encrypted &&
+                    twilioIntegration?.auth_token_encrypted &&
+                    twilioIntegration?.phone_number
+                );
+                const voiceData = c.client_voice_integrations?.[0];
+
+                return {
+                    id: c.id,
+                    business_name: c.business_name,
+                    phone: c.phone,
+                    voice_status: voiceData?.voice_status || 'inactive',
+                    number_source: voiceData?.number_source || (hasTwilioCredentials ? 'client' : 'platform'),
+                    a2p_status: voiceData?.a2p_status || 'not_started',
+                    retell_agent_id: voiceData?.retell_agent_id || '',
+                    twilio_configured: hasTwilioCredentials,
+                    twilio_phone: twilioIntegration?.phone_number || null,
+                    phone_number: voiceData?.phone_number || twilioIntegration?.phone_number || null,
+                };
+            });
+
+            setClients(formatted);
+        } catch (err: any) {
+            console.error('[AdminVoiceManagement] Error fetching clients:', err);
+            showFeedback('error', `Failed to load clients: ${err.message}`);
         } finally {
             setIsLoading(false);
         }
