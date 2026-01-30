@@ -9,9 +9,10 @@ import { Link } from 'react-router-dom';
 import confetti from 'canvas-confetti';
 
 // The Connect App SID is a public identifier — safe to use client-side.
-// The admin sets this in Supabase secrets as TWILIO_CONNECT_APP_SID.
-// We also check for a VITE_ prefixed version for frontend use.
-const TWILIO_CONNECT_APP_SID = (import.meta as any).env?.VITE_TWILIO_CONNECT_APP_SID || '';
+// Set VITE_TWILIO_CONNECT_APP_SID in .env to override.
+const TWILIO_CONNECT_APP_SID =
+  (import.meta as any).env?.VITE_TWILIO_CONNECT_APP_SID ||
+  'CN0d5776b4e75eb586dd45a1c8bf57ca2e';
 
 interface ClientTwilioIntegrationProps {
   clientId: string;

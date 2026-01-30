@@ -104,16 +104,18 @@ serve(async (req) => {
     const accountSidEncrypted = await encryptSecret(supabaseAdmin, account_sid);
     const authTokenEncrypted = await encryptSecret(supabaseAdmin, auth_token);
 
+    const upsertPayload: any = {
+      client_id,
+      provider: 'twilio',
+      account_sid_encrypted: accountSidEncrypted,
+      auth_token_encrypted: authTokenEncrypted,
+      phone_number,
+    };
+
+    // Try to include connection_method (column may not exist if migration hasn't run)
     const { error: upsertError } = await supabaseAdmin
       .from('client_integrations')
-      .upsert({
-        client_id,
-        provider: 'twilio',
-        account_sid_encrypted: accountSidEncrypted,
-        auth_token_encrypted: authTokenEncrypted,
-        phone_number,
-        connection_method: 'manual',
-      }, { onConflict: 'client_id,provider' });
+      .upsert(upsertPayload, { onConflict: 'client_id,provider' });
 
     if (upsertError) {
       console.error('[save-twilio-credentials] Upsert failed:', upsertError);

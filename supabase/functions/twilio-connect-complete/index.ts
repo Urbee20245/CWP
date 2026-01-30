@@ -153,16 +153,30 @@ serve(async (req) => {
     // Pick the first phone number as default if available
     const defaultPhone = phoneNumbers.length > 0 ? phoneNumbers[0].phone_number : null;
 
-    const { error: upsertError } = await supabaseAdmin
+    const upsertPayload: any = {
+      client_id,
+      provider: 'twilio',
+      account_sid_encrypted: encryptedSid,
+      auth_token_encrypted: encryptedToken,
+      phone_number: defaultPhone,
+    };
+
+    // First try with connection_method (requires migration 20260131)
+    let upsertError: any = null;
+    const { error: err1 } = await supabaseAdmin
       .from('client_integrations')
-      .upsert({
-        client_id,
-        provider: 'twilio',
-        account_sid_encrypted: encryptedSid,
-        auth_token_encrypted: encryptedToken,
-        phone_number: defaultPhone,
-        connection_method: 'twilio_connect',
-      }, { onConflict: 'client_id,provider' });
+      .upsert({ ...upsertPayload, connection_method: 'twilio_connect' }, { onConflict: 'client_id,provider' });
+
+    if (err1 && err1.message?.includes('connection_method')) {
+      // Column doesn't exist yet — retry without it
+      console.warn('[twilio-connect-complete] connection_method column missing, retrying without it');
+      const { error: err2 } = await supabaseAdmin
+        .from('client_integrations')
+        .upsert(upsertPayload, { onConflict: 'client_id,provider' });
+      upsertError = err2;
+    } else {
+      upsertError = err1;
+    }
 
     if (upsertError) {
       console.error('[twilio-connect-complete] DB upsert failed:', upsertError);

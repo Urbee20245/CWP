@@ -76,7 +76,7 @@ serve(async (req) => {
     // Fetch encrypted credentials
     const { data: config, error: configError } = await supabaseAdmin
       .from('client_integrations')
-      .select('account_sid_encrypted, auth_token_encrypted, phone_number, connection_method')
+      .select('account_sid_encrypted, auth_token_encrypted, phone_number')
       .eq('client_id', client_id)
       .eq('provider', 'twilio')
       .maybeSingle();
@@ -84,6 +84,8 @@ serve(async (req) => {
     if (configError || !config) {
       return jsonRes({ success: false, message: 'Configuration not found. Please save credentials first.' });
     }
+
+    const connectionMethod = (config as any).connection_method || 'manual';
 
     // Decrypt the account SID
     const accountSid = await decryptSecret(supabaseAdmin, config.account_sid_encrypted);
@@ -97,7 +99,7 @@ serve(async (req) => {
     let testSid: string;
     let testToken: string;
 
-    if (config.connection_method === 'twilio_connect') {
+    if (connectionMethod === 'twilio_connect') {
       // For Connect accounts, use platform credentials to access connected account
       if (!PLATFORM_TWILIO_SID || !PLATFORM_TWILIO_TOKEN) {
         return jsonRes({ success: false, message: 'Platform Twilio credentials not configured for Connect test.' });
