@@ -186,17 +186,14 @@ const ClientTwilioIntegration: React.FC<ClientTwilioIntegrationProps> = ({ clien
         </div>
       )}
       
-      {/* A2P Warning/Info */}
+      {/* Info about next steps */}
       {isConfigured && (
-          <div className={`p-3 rounded-lg text-sm flex items-center gap-2 ${isA2PPending ? 'bg-red-100 border-red-300 text-red-800' : 'bg-blue-100 border-blue-300 text-blue-800'}`}>
-              {isA2PPending ? <AlertTriangle className="w-4 h-4" /> : <Info className="w-4 h-4" />}
+          <div className="p-3 rounded-lg text-sm flex items-center gap-2 bg-blue-100 border-blue-300 text-blue-800">
+              <Info className="w-4 h-4" />
               <div>
-                  <p className="font-bold">A2P Status: {a2pStatus.replace('_', ' ')}</p>
+                  <p className="font-bold">Credentials Configured</p>
                   <p className="text-xs mt-0.5">
-                      {isA2PPending 
-                          ? "AI Call Handling is disabled until A2P approval is granted. You must complete A2P registration in your Twilio Console."
-                          : "A2P is approved. You can now test the connection and enable AI Call Handling."
-                      }
+                      Your Twilio credentials are saved. You can test the connection below. Our team will handle the rest from here.
                   </p>
               </div>
           </div>
@@ -284,7 +281,7 @@ const ClientTwilioIntegration: React.FC<ClientTwilioIntegrationProps> = ({ clien
             <button
                 type="button"
                 onClick={handleTestConnection}
-                disabled={isTesting || isSaving || !isConfigured || isA2PPending}
+                disabled={isTesting || isSaving || !isConfigured}
                 className="flex-1 py-3 bg-emerald-600 text-white rounded-lg font-semibold hover:bg-emerald-700 transition-colors disabled:opacity-50 flex items-center justify-center gap-2"
             >
                 {isTesting ? (
