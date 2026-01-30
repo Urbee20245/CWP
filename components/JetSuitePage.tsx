@@ -1,8 +1,14 @@
 import React, { useState } from 'react';
 import { Link } from 'react-router-dom';
+import { useSEO } from '../src/hooks/useSEO';
 import { Zap, Eye, MapPin, Sparkles, ArrowRight, Bell, CheckCircle2 } from 'lucide-react';
 
 const JetSuitePage: React.FC = () => {
+  useSEO({
+    title: 'JetSuite AI Tools | Custom Websites Plus',
+    description: 'Explore JetSuite — AI-powered tools for local SEO audits, website visualization, and business optimization by Custom Websites Plus.',
+    canonical: 'https://customwebsitesplus.com/jetsuite',
+  });
   const [showWaitlist, setShowWaitlist] = useState(false);
 
   const tools = [

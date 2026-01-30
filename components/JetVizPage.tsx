@@ -1,4 +1,5 @@
 import React, { useState, useRef, useEffect } from 'react';
+import { useSEO } from '../src/hooks/useSEO';
 import { 
   ArrowLeftRight, 
   Eye, 
@@ -20,6 +21,11 @@ import { Link, useSearchParams } from 'react-router-dom';
 import { AnalyzerService } from '../src/tools/jet-local-optimizer/services/analyzer';
 
 const JetVizPage: React.FC = () => {
+  useSEO({
+    title: 'JetViz - Website Visual Comparison | Custom Websites Plus',
+    description: 'Compare your current website with a modern redesign side-by-side. See the difference JetViz visual analysis can make for your business.',
+    canonical: 'https://customwebsitesplus.com/jetviz',
+  });
   const [searchParams] = useSearchParams();
   const urlParam = searchParams.get('url') || '';
   const [url, setUrl] = useState(urlParam);

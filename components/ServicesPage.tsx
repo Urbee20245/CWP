@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
 import { Link } from 'react-router-dom';
+import { useSEO } from '../src/hooks/useSEO';
 import { 
   ArrowRight, 
   CheckCircle2, 
@@ -27,6 +28,11 @@ import {
 } from 'lucide-react';
 
 const ServicesPage: React.FC = () => {
+  useSEO({
+    title: 'Our Services | Custom Websites Plus',
+    description: 'Web design, AI integration, SEO optimization, and digital solutions. Explore our full range of services for businesses in Atlanta and beyond.',
+    canonical: 'https://customwebsitesplus.com/services',
+  });
   const [expandedFaq, setExpandedFaq] = useState<number | null>(null);
 
   const features = [

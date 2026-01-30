@@ -3,8 +3,15 @@
 import React from 'react';
 import { Shield, Bot, Mail, Phone, ArrowLeft } from 'lucide-react';
 import { Link } from 'react-router-dom';
+import { useSEO } from '../hooks/useSEO';
 
 const PrivacyPolicy: React.FC = () => {
+  useSEO({
+    title: 'Privacy Policy | Custom Websites Plus',
+    description: 'Learn how Custom Websites Plus collects, uses, and protects your personal data. Covers AI interaction data, contact information, and security measures.',
+    canonical: 'https://customwebsitesplus.com/privacy-policy',
+  });
+
   return (
     <div className="min-h-screen bg-slate-50 pt-32 pb-20">
       <div className="max-w-4xl mx-auto px-6">

@@ -3,8 +3,15 @@
 import React from 'react';
 import { FileText, Bot, Mail, Phone, ArrowLeft } from 'lucide-react';
 import { Link } from 'react-router-dom';
+import { useSEO } from '../hooks/useSEO';
 
 const TermsAndConditions: React.FC = () => {
+  useSEO({
+    title: 'Terms and Conditions | Custom Websites Plus',
+    description: 'Read the terms and conditions for using Custom Websites Plus services, including AI tools, website design, and digital solutions.',
+    canonical: 'https://customwebsitesplus.com/terms-and-conditions',
+  });
+
   return (
     <div className="min-h-screen bg-slate-50 pt-32 pb-20">
       <div className="max-w-4xl mx-auto px-6">
