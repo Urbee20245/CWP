@@ -1,6 +1,43 @@
+export const config = {
+    auth: false,
+};
+
 import { serve } from "https://deno.land/std@0.190.0/http/server.ts";
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2.45.0';
-import { handleCors, jsonResponse, errorResponse } from '../_shared/utils.ts';
+import { createHmac } from "https://deno.land/std@0.224.0/crypto/mod.ts";
+import { handleCors, jsonResponse, errorResponse, corsHeaders } from '../_shared/utils.ts';
+
+function timingSafeEqualString(a: string, b: string): boolean {
+    const enc = new TextEncoder();
+    const aBytes = enc.encode(a);
+    const bBytes = enc.encode(b);
+
+    const maxLen = Math.max(aBytes.length, bBytes.length);
+    let diff = aBytes.length ^ bBytes.length;
+
+    for (let i = 0; i < maxLen; i++) {
+        const av = i < aBytes.length ? aBytes[i] : 0;
+        const bv = i < bBytes.length ? bBytes[i] : 0;
+        diff |= av ^ bv;
+    }
+
+    return diff === 0;
+}
+
+function verifyRetellSignature(
+    body: string,
+    signature: string | null,
+    secret: string,
+): boolean {
+    if (!signature) return false;
+
+    const received = signature.trim().toLowerCase();
+    if (!received) return false;
+
+    const expected = createHmac("sha256", secret).update(body).digest("hex").toLowerCase();
+
+    return timingSafeEqualString(expected, received);
+}
 
 /**
  * Retell AI Webhook Receiver
@@ -24,7 +61,19 @@ serve(async (req) => {
     );
 
     try {
-        const body = await req.json();
+        const rawBody = await req.text();
+        const signature = req.headers.get('x-retell-signature');
+        const secret = Deno.env.get('RETELL_WEBHOOK_SECRET');
+
+        if (!secret) {
+            return new Response('Server misconfigured', { status: 500, headers: corsHeaders });
+        }
+
+        if (!verifyRetellSignature(rawBody, signature, secret)) {
+            return new Response('Invalid signature', { status: 401, headers: corsHeaders });
+        }
+
+        const body = JSON.parse(rawBody);
         const eventType = body.event || body.event_type || 'unknown';
         const callId = body.call_id || body.call?.call_id || null;
 
