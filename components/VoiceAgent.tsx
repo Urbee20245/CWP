@@ -41,14 +41,12 @@ const VoiceAgent: React.FC = () => {
   
   // --- TIME CONTEXT GENERATOR ---
   const getTimeContext = () => {
-    // Hardcode the current date/time based on the user's provided context (1/11/2026 1:52 PM EST)
-    // This bypasses the incorrect system clock in the execution environment.
-    const fixedDate = new Date('2026-01-11T13:52:00-05:00'); 
-    
-    const utcTime = fixedDate.toUTCString();
-    const estTime = fixedDate.toLocaleTimeString('en-US', { timeZone: 'America/New_York', hour: '2-digit', minute: '2-digit', timeZoneName: 'short' });
-    const localDate = fixedDate.toLocaleDateString('en-US', { year: 'numeric', month: 'long', day: 'numeric' });
-    
+    const now = new Date();
+
+    const utcTime = now.toUTCString();
+    const estTime = now.toLocaleTimeString('en-US', { timeZone: 'America/New_York', hour: '2-digit', minute: '2-digit', timeZoneName: 'short' });
+    const localDate = now.toLocaleDateString('en-US', { year: 'numeric', month: 'long', day: 'numeric' });
+
     return `CURRENT CONTEXT: The current date is ${localDate}. The current time is ${estTime}. The UTC time is ${utcTime}. Use this information for any time-sensitive responses.`;
   };
   

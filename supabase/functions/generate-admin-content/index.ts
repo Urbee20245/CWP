@@ -1,39 +1,42 @@
-import { serve } from "https://deno.land/std@0.190.0/http/server.ts";
-
-const corsHeaders = {
-  'Access-Control-Allow-Origin': '*',
-  'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
-  'Content-Type': 'application/json',
+export const config = {
+  auth: false,
 };
 
+import { serve } from "https://deno.land/std@0.190.0/http/server.ts";
+import { GoogleGenAI } from 'https://esm.sh/@google/genai@1.34.0';
+import { handleCors, jsonResponse, errorResponse } from '../_shared/utils.ts';
+
+const GEMINI_API_KEY = Deno.env.get('GEMINI_API_KEY');
+
+if (!GEMINI_API_KEY) {
+  throw new Error('GEMINI_API_KEY is not set.');
+}
+
+const ai = new GoogleGenAI({ apiKey: GEMINI_API_KEY });
+
 serve(async (req) => {
-  if (req.method === 'OPTIONS') {
-    return new Response(null, { headers: corsHeaders });
-  }
+  const corsResponse = handleCors(req);
+  if (corsResponse) return corsResponse;
 
   try {
-    const GEMINI_API_KEY = Deno.env.get('GEMINI_API_KEY');
-    
-    if (!GEMINI_API_KEY) {
-      console.error('[generate-admin-content] GEMINI_API_KEY missing');
-      return new Response(
-        JSON.stringify({ error: 'AI service unavailable' }),
-        { status: 500, headers: corsHeaders }
-      );
-    }
-
     const { entity_type, entity_name, entity_category, pricing_type, key_features, tone, additional_notes } = await req.json();
 
     if (!entity_type || !entity_name) {
-      return new Response(
-        JSON.stringify({ error: 'Missing required fields' }),
-        { status: 400, headers: corsHeaders }
-      );
+      return errorResponse('Missing required fields', 400);
     }
-    
+
     console.log(`[generate-admin-content] Generating for ${entity_type}: ${entity_name}`);
 
-    const prompt = `You are a professional content writer. Generate a description for a ${entity_type} named "${entity_name}".
+    const systemInstruction = `You are a professional content writer. Generate descriptions for products and services.
+
+RULES:
+- Output ONLY the description text
+- No markdown formatting
+- No preamble or postamble
+- Focus on value and features
+- No legal guarantees or specific pricing promises`;
+
+    const prompt = `Generate a description for a ${entity_type} named "${entity_name}".
 
 Context:
 - Category: ${entity_category || 'N/A'}
@@ -42,54 +45,29 @@ Context:
 - Tone: ${tone}
 - Additional Instructions: ${additional_notes || 'Be concise'}
 
-RULES:
-- Output ONLY the description text
-- No markdown formatting
-- No preamble or postamble
-- Maintain the ${tone} tone
-- Focus on value and features
-- No legal guarantees or specific pricing promises
-
 Generate the description now:`;
 
-    const response = await fetch(
-      `https://generativelanguage.googleapis.com/v1beta/models/gemini-pro:generateContent?key=${GEMINI_API_KEY}`,
-      {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          contents: [{ parts: [{ text: prompt }] }],
-          generationConfig: {
-            temperature: 0.7,
-            maxOutputTokens: 500,
-          },
-        }),
-      }
-    );
+    const response = await ai.models.generateContent({
+      model: 'gemini-2.5-flash',
+      contents: [{ role: 'user', parts: [{ text: prompt }] }],
+      config: {
+        systemInstruction: systemInstruction,
+        temperature: 0.7,
+        maxOutputTokens: 500,
+      },
+    });
 
-    if (!response.ok) {
-      const errorText = await response.text();
-      console.error('[generate-admin-content] API error:', errorText);
-      return new Response(
-        JSON.stringify({ error: 'AI generation failed' }),
-        { status: 500, headers: corsHeaders }
-      );
+    const generatedContent = response.text?.trim();
+
+    if (!generatedContent) {
+      return errorResponse('AI returned empty content', 500);
     }
 
-    const data = await response.json();
-    const generatedContent = data.candidates[0].content.parts[0].text.trim();
-
     console.log('[generate-admin-content] Success');
-    return new Response(
-      JSON.stringify({ success: true, content: generatedContent }),
-      { status: 200, headers: corsHeaders }
-    );
+    return jsonResponse({ success: true, content: generatedContent });
 
   } catch (error: any) {
-    console.error('[generate-admin-content] Error:', error);
-    return new Response(
-      JSON.stringify({ error: error.message || 'Generation failed' }),
-      { status: 500, headers: corsHeaders }
-    );
+    console.error('[generate-admin-content] Error:', error.message);
+    return errorResponse(error.message || 'Generation failed', 500);
   }
 });
