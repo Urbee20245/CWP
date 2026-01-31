@@ -1,1007 +1,867 @@
 "use client";
 
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useCallback, useEffect, useState } from 'react';
 import AdminLayout from '../components/AdminLayout';
 import { AdminService } from '../services/adminService';
 import { supabase } from '../integrations/supabase/client';
 import {
-    Bot, Calendar, Phone, Globe, Clock, Save,
-    Loader2, CheckCircle2, AlertTriangle, Info, Copy,
-    Shield, Zap, MessageSquare, RefreshCw, ChevronDown, ChevronUp, Wand2
+  AlertTriangle,
+  Bot,
+  Calendar,
+  CheckCircle2,
+  ChevronDown,
+  ChevronUp,
+  Clock,
+  Copy,
+  Globe,
+  Info,
+  Loader2,
+  MessageSquare,
+  Phone,
+  RefreshCw,
+  Save,
+  Shield,
+  Wand2,
+  Zap,
 } from 'lucide-react';
 
 interface Client {
-    id: string;
-    business_name: string;
+  id: string;
+  business_name: string;
 }
 
 interface AgentSettings {
-    id?: string;
-    client_id: string;
-    retell_agent_id?: string;
-    agent_name: string;
-    system_prompt: string;
-    greeting_message: string;
-    can_check_availability: boolean;
-    can_book_meetings: boolean;
-    can_transfer_calls: boolean;
-    can_send_sms: boolean;
-    default_meeting_duration: number;
-    booking_buffer_minutes: number;
-    max_advance_booking_days: number;
-    allowed_meeting_types: string[];
-    business_hours: Record<string, { start: string; end: string }>;
-    timezone: string;
-    is_active: boolean;
-    updated_at?: string;
+  id?: string;
+  client_id: string;
+  retell_agent_id?: string;
+  agent_name: string;
+  system_prompt: string;
+  greeting_message: string;
+  can_check_availability: boolean;
+  can_book_meetings: boolean;
+  can_transfer_calls: boolean;
+  can_send_sms: boolean;
+  default_meeting_duration: number;
+  booking_buffer_minutes: number;
+  max_advance_booking_days: number;
+  allowed_meeting_types: string[];
+  business_hours: Record<string, { start: string; end: string }>;
+  timezone: string;
+  is_active: boolean;
 }
 
 interface WebhookEvent {
-    id: string;
-    event_type: string;
-    event_source: string;
-    external_id: string | null;
-    status: string;
-    error_message: string | null;
-    duration_ms: number | null;
-    created_at: string;
+  id: string;
+  event_type: string;
+  event_source: string;
+  external_id: string | null;
+  status: string;
+  error_message: string | null;
+  duration_ms: number | null;
+  created_at: string;
 }
 
 interface IntegrationStatus {
-    google_calendar: { connected: boolean; calendar_id?: string; last_synced?: string };
-    retell: { configured: boolean; agent_id?: string; voice_status?: string; phone_number?: string };
+  google_calendar: { connected: boolean; calendar_id?: string; last_synced?: string };
+  retell: { configured: boolean; agent_id?: string; voice_status?: string; phone_number?: string };
 }
-
-type RetellLiveAgentStatus = {
-    checked_at: string;
-    ok: boolean;
-    agent_id?: string;
-    agent_name?: string;
-    is_published?: boolean;
-    raw?: any;
-    error?: string;
-};
 
 const SUPABASE_FUNCTIONS_BASE = 'https://nvgumhlewbqynrhlkqhx.supabase.co/functions/v1';
 
 const DEFAULT_SETTINGS: Omit<AgentSettings, 'client_id'> = {
-    agent_name: 'AI Assistant',
-    system_prompt: '',
-    greeting_message: '',
-    can_check_availability: true,
-    can_book_meetings: true,
-    can_transfer_calls: false,
-    can_send_sms: false,
-    default_meeting_duration: 30,
-    booking_buffer_minutes: 15,
-    max_advance_booking_days: 30,
-    allowed_meeting_types: ['phone', 'video'],
-    business_hours: {
-        "1": { start: "09:00", end: "17:00" },
-        "2": { start: "09:00", end: "17:00" },
-        "3": { start: "09:00", end: "17:00" },
-        "4": { start: "09:00", end: "17:00" },
-        "5": { start: "09:00", end: "17:00" },
-    },
-    timezone: 'America/New_York',
-    is_active: true,
+  agent_name: 'AI Assistant',
+  system_prompt: '',
+  greeting_message: '',
+  can_check_availability: true,
+  can_book_meetings: true,
+  can_transfer_calls: false,
+  can_send_sms: false,
+  default_meeting_duration: 30,
+  booking_buffer_minutes: 15,
+  max_advance_booking_days: 30,
+  allowed_meeting_types: ['phone', 'video'],
+  business_hours: {
+    '1': { start: '09:00', end: '17:00' },
+    '2': { start: '09:00', end: '17:00' },
+    '3': { start: '09:00', end: '17:00' },
+    '4': { start: '09:00', end: '17:00' },
+    '5': { start: '09:00', end: '17:00' },
+  },
+  timezone: 'America/New_York',
+  is_active: true,
 };
 
 const DAY_NAMES: Record<string, string> = {
-    "0": "Sunday", "1": "Monday", "2": "Tuesday", "3": "Wednesday",
-    "4": "Thursday", "5": "Friday", "6": "Saturday",
+  '0': 'Sunday',
+  '1': 'Monday',
+  '2': 'Tuesday',
+  '3': 'Wednesday',
+  '4': 'Thursday',
+  '5': 'Friday',
+  '6': 'Saturday',
 };
 
 const TIMEZONE_OPTIONS = [
-    'America/New_York', 'America/Chicago', 'America/Denver', 'America/Los_Angeles',
-    'America/Phoenix', 'America/Anchorage', 'Pacific/Honolulu',
+  'America/New_York',
+  'America/Chicago',
+  'America/Denver',
+  'America/Los_Angeles',
+  'America/Phoenix',
+  'America/Anchorage',
+  'Pacific/Honolulu',
 ];
 
-const draftKey = (clientId: string) => `agent-settings-draft:${clientId}`;
-const verifiedKey = (agentId: string) => `retell-verified:${agentId}`;
-
-const safeParseDraft = (raw: string | null): any | null => {
-    if (!raw) return null;
-    try {
-        return JSON.parse(raw);
-    } catch {
-        return null;
-    }
-};
-
-const parseDateMs = (value?: string | null) => {
-    if (!value) return 0;
-    const ms = Date.parse(value);
-    return Number.isFinite(ms) ? ms : 0;
-};
-
 const AdminAgentSettings: React.FC = () => {
-    const [clients, setClients] = useState<Client[]>([]);
-    const [selectedClientId, setSelectedClientId] = useState<string>('');
-    const [settings, setSettings] = useState<AgentSettings | null>(null);
-    const [webhookUrls, setWebhookUrls] = useState<Record<string, string> | null>(null);
-    const [webhookEvents, setWebhookEvents] = useState<WebhookEvent[]>([]);
-    const [integrations, setIntegrations] = useState<IntegrationStatus | null>(null);
+  const [clients, setClients] = useState<Client[]>([]);
+  const [selectedClientId, setSelectedClientId] = useState<string>('');
+  const [settings, setSettings] = useState<AgentSettings | null>(null);
+  const [webhookUrls, setWebhookUrls] = useState<Record<string, string> | null>(null);
+  const [webhookEvents, setWebhookEvents] = useState<WebhookEvent[]>([]);
+  const [integrations, setIntegrations] = useState<IntegrationStatus | null>(null);
 
-    const [isLoading, setIsLoading] = useState(true);
-    const [isSaving, setIsSaving] = useState(false);
-    const [feedback, setFeedback] = useState<{ type: 'success' | 'error' | 'info'; text: string } | null>(null);
+  const [isLoading, setIsLoading] = useState(true);
+  const [isSaving, setIsSaving] = useState(false);
+  const [feedback, setFeedback] = useState<{ type: 'success' | 'error' | 'info'; text: string } | null>(null);
 
-    const [showWebhooks, setShowWebhooks] = useState(false);
-    const [showEvents, setShowEvents] = useState(false);
-    const [showBusinessHours, setShowBusinessHours] = useState(false);
+  const [showWebhooks, setShowWebhooks] = useState(false);
+  const [showEvents, setShowEvents] = useState(false);
+  const [showBusinessHours, setShowBusinessHours] = useState(false);
 
-    // Prompt assistant
-    const [websiteUrl, setWebsiteUrl] = useState('');
-    const [isGeneratingPrompt, setIsGeneratingPrompt] = useState(false);
+  // Prompt assistant
+  const [websiteUrl, setWebsiteUrl] = useState('');
+  const [isGeneratingPrompt, setIsGeneratingPrompt] = useState(false);
 
-    // Retell live status check (verifies RETELL_API_KEY + agent publish state)
-    const [retellLiveStatus, setRetellLiveStatus] = useState<RetellLiveAgentStatus | null>(null);
-    const [isCheckingRetell, setIsCheckingRetell] = useState(false);
+  const showFeedback = (type: 'success' | 'error' | 'info', text: string) => {
+    setFeedback({ type, text });
+    setTimeout(() => setFeedback(null), 6000);
+  };
 
-    const showFeedback = (type: 'success' | 'error' | 'info', text: string) => {
-        setFeedback({ type, text });
-        setTimeout(() => setFeedback(null), 6000);
+  useEffect(() => {
+    const fetchClients = async () => {
+      try {
+        const { data, error } = await supabase
+          .from('clients')
+          .select('id, business_name')
+          .order('business_name', { ascending: true });
+        if (error) throw error;
+        setClients(data || []);
+      } catch (err: any) {
+        console.error('[AdminAgentSettings] Failed to fetch clients:', err.message);
+        showFeedback('error', `Failed to fetch clients: ${err.message}`);
+      } finally {
+        setIsLoading(false);
+      }
     };
 
-    const readCachedVerification = (agentId: string): RetellLiveAgentStatus | null => {
-        const raw = safeParseDraft(localStorage.getItem(verifiedKey(agentId)));
-        if (!raw || typeof raw !== 'object') return null;
-        if (raw.agent_id !== agentId) return null;
-        return raw as RetellLiveAgentStatus;
-    };
+    fetchClients();
+  }, []);
 
-    const writeCachedVerification = (status: RetellLiveAgentStatus) => {
-        if (!status?.agent_id) return;
-        try {
-            localStorage.setItem(verifiedKey(status.agent_id), JSON.stringify(status));
-        } catch {
-            // ignore
-        }
-    };
+  const buildWebhookUrls = () => ({
+    retell_webhook: `${SUPABASE_FUNCTIONS_BASE}/retell-webhook`,
+    check_availability: `${SUPABASE_FUNCTIONS_BASE}/check-availability`,
+    book_meeting: `${SUPABASE_FUNCTIONS_BASE}/book-meeting`,
+  });
 
-    // Fetch clients list
-    useEffect(() => {
-        const fetchClients = async () => {
-            try {
-                const { data, error } = await supabase
-                    .from('clients')
-                    .select('id, business_name')
-                    .order('business_name', { ascending: true });
-                if (error) throw error;
-                setClients(data || []);
-            } catch (err: any) {
-                console.error('Failed to fetch clients:', err.message);
-            } finally {
-                setIsLoading(false);
+  const fetchSettings = useCallback(async (clientId: string) => {
+    if (!clientId) return;
+
+    setIsLoading(true);
+    try {
+      const [{ data: settingsRow, error: settingsErr }, { data: recentEvents, error: eventsErr }, { data: calendarRow }, { data: voiceRow }] = await Promise.all([
+        supabase.from('ai_agent_settings').select('*').eq('client_id', clientId).maybeSingle(),
+        supabase
+          .from('webhook_events')
+          .select('id, event_type, event_source, external_id, status, error_message, duration_ms, created_at')
+          .eq('client_id', clientId)
+          .order('created_at', { ascending: false })
+          .limit(20),
+        supabase
+          .from('client_google_calendar')
+          .select('connection_status, calendar_id, last_synced_at')
+          .eq('client_id', clientId)
+          .maybeSingle(),
+        supabase
+          .from('client_voice_integrations')
+          .select('retell_agent_id, voice_status, phone_number')
+          .eq('client_id', clientId)
+          .maybeSingle(),
+      ]);
+
+      if (settingsErr) throw settingsErr;
+      if (eventsErr) console.warn('[AdminAgentSettings] webhook events fetch failed:', eventsErr.message);
+
+      const merged = settingsRow
+        ? { ...DEFAULT_SETTINGS, ...settingsRow, client_id: clientId }
+        : { ...DEFAULT_SETTINGS, client_id: clientId };
+
+      setSettings(merged);
+      setWebhookUrls(buildWebhookUrls());
+      setWebhookEvents(recentEvents || []);
+
+      setIntegrations({
+        google_calendar: calendarRow
+          ? {
+              connected: calendarRow.connection_status === 'connected',
+              calendar_id: calendarRow.calendar_id,
+              last_synced: calendarRow.last_synced_at,
             }
-        };
-        fetchClients();
-    }, []);
-
-    // Clear retell verification when switching clients (avoids showing a previous client's verified badge)
-    useEffect(() => {
-        setRetellLiveStatus(null);
-    }, [selectedClientId]);
-
-    const buildWebhookUrls = () => ({
-        retell_webhook: `${SUPABASE_FUNCTIONS_BASE}/retell-webhook`,
-        check_availability: `${SUPABASE_FUNCTIONS_BASE}/check-availability`,
-        book_meeting: `${SUPABASE_FUNCTIONS_BASE}/book-meeting`,
-    });
-
-    // Fetch agent settings when client changes (direct queries; avoids edge function dependency)
-    const fetchSettings = useCallback(async (clientId: string) => {
-        if (!clientId) return;
-        setIsLoading(true);
-
-        try {
-            const [{ data: settingsRow, error: settingsErr }, { data: recentEvents, error: eventsErr }, { data: calendarRow }, { data: voiceRow }] = await Promise.all([
-                supabase
-                    .from('ai_agent_settings')
-                    .select('*')
-                    .eq('client_id', clientId)
-                    .maybeSingle(),
-                supabase
-                    .from('webhook_events')
-                    .select('id, event_type, event_source, external_id, status, error_message, duration_ms, created_at')
-                    .eq('client_id', clientId)
-                    .order('created_at', { ascending: false })
-                    .limit(20),
-                supabase
-                    .from('client_google_calendar')
-                    .select('connection_status, calendar_id, last_synced_at')
-                    .eq('client_id', clientId)
-                    .maybeSingle(),
-                supabase
-                    .from('client_voice_integrations')
-                    .select('retell_agent_id, voice_status, phone_number')
-                    .eq('client_id', clientId)
-                    .maybeSingle(),
-            ]);
-
-            if (settingsErr) throw settingsErr;
-            if (eventsErr) console.warn('[AdminAgentSettings] webhook events fetch failed:', eventsErr.message);
-
-            const merged = settingsRow
-                ? { ...DEFAULT_SETTINGS, ...settingsRow, client_id: clientId }
-                : { ...DEFAULT_SETTINGS, client_id: clientId };
-
-            // Restore unsaved draft if it's newer than DB
-            const draft = safeParseDraft(localStorage.getItem(draftKey(clientId)));
-            const draftMs = parseDateMs(draft?.updated_at);
-            const dbMs = parseDateMs((merged as any)?.updated_at);
-
-            let finalSettings = merged;
-            if (draft && draftMs > dbMs) {
-                // Draft structure: { settings, website_url, updated_at }
-                if (draft.settings && typeof draft.settings === 'object') {
-                    finalSettings = { ...merged, ...draft.settings, client_id: clientId };
-                }
-                if (typeof draft.website_url === 'string') {
-                    setWebsiteUrl(draft.website_url);
-                }
-                showFeedback('info', 'Restored an unsaved draft for this client.');
+          : { connected: false },
+        retell: voiceRow
+          ? {
+              configured: !!voiceRow.retell_agent_id,
+              agent_id: voiceRow.retell_agent_id,
+              voice_status: voiceRow.voice_status,
+              phone_number: voiceRow.phone_number,
             }
+          : { configured: false },
+      });
+    } catch (err: any) {
+      console.error('[AdminAgentSettings] Failed to fetch settings:', err.message);
+      setSettings({ ...DEFAULT_SETTINGS, client_id: clientId });
+      setWebhookUrls(buildWebhookUrls());
+      setWebhookEvents([]);
+      setIntegrations(null);
+      showFeedback('error', `Failed to load settings: ${err.message}`);
+    } finally {
+      setIsLoading(false);
+    }
+  }, []);
 
-            setSettings(finalSettings);
-            setWebhookUrls(buildWebhookUrls());
-            setWebhookEvents(recentEvents || []);
+  useEffect(() => {
+    if (selectedClientId) {
+      fetchSettings(selectedClientId);
+    } else {
+      setSettings(null);
+      setWebhookUrls(null);
+      setWebhookEvents([]);
+      setIntegrations(null);
+      setWebsiteUrl('');
+    }
+  }, [selectedClientId, fetchSettings]);
 
-            setIntegrations({
-                google_calendar: calendarRow ? {
-                    connected: calendarRow.connection_status === 'connected',
-                    calendar_id: calendarRow.calendar_id,
-                    last_synced: calendarRow.last_synced_at,
-                } : { connected: false },
-                retell: voiceRow ? {
-                    configured: !!voiceRow.retell_agent_id,
-                    agent_id: voiceRow.retell_agent_id,
-                    voice_status: voiceRow.voice_status,
-                    phone_number: voiceRow.phone_number,
-                } : { configured: false },
-            });
+  const updateSetting = <K extends keyof AgentSettings>(key: K, value: AgentSettings[K]) => {
+    if (!settings) return;
+    setSettings({ ...settings, [key]: value });
+  };
 
-            // Restore cached verification for current agent id (so it stays visible after Save)
-            const currentAgentId = String(finalSettings?.retell_agent_id || voiceRow?.retell_agent_id || '').trim();
-            if (currentAgentId) {
-                const cached = readCachedVerification(currentAgentId);
-                if (cached) setRetellLiveStatus(cached);
-            }
+  const updateBusinessHours = (day: string, field: 'start' | 'end', value: string) => {
+    if (!settings) return;
+    const hours = { ...settings.business_hours };
+    hours[day] = hours[day] ? { ...hours[day], [field]: value } : { start: '09:00', end: '17:00', [field]: value };
+    setSettings({ ...settings, business_hours: hours });
+  };
 
-        } catch (err: any) {
-            console.error('Failed to fetch agent settings:', err.message);
-            setSettings({ ...DEFAULT_SETTINGS, client_id: clientId });
-            setWebhookUrls(buildWebhookUrls());
-            setWebhookEvents([]);
-            setIntegrations(null);
-            showFeedback('error', `Failed to load settings: ${err.message}`);
-        } finally {
-            setIsLoading(false);
-        }
-    }, [clients]);
+  const toggleBusinessDay = (day: string) => {
+    if (!settings) return;
+    const hours = { ...settings.business_hours };
+    if (hours[day]) delete hours[day];
+    else hours[day] = { start: '09:00', end: '17:00' };
+    setSettings({ ...settings, business_hours: hours });
+  };
 
-    useEffect(() => {
-        if (selectedClientId) {
-            fetchSettings(selectedClientId);
-        } else {
-            setSettings(null);
-            setWebhookUrls(null);
-            setWebhookEvents([]);
-            setIntegrations(null);
-            setWebsiteUrl('');
-            setRetellLiveStatus(null);
-        }
-    }, [selectedClientId, fetchSettings]);
+  const toggleMeetingType = (type: string) => {
+    if (!settings) return;
+    const types = settings.allowed_meeting_types.includes(type)
+      ? settings.allowed_meeting_types.filter((t) => t !== type)
+      : [...settings.allowed_meeting_types, type];
+    updateSetting('allowed_meeting_types', types);
+  };
 
-    // Persist draft locally so switching tabs/sites doesn't lose work
-    useEffect(() => {
-        if (!selectedClientId || !settings) return;
-        const t = window.setTimeout(() => {
-            try {
-                localStorage.setItem(
-                    draftKey(selectedClientId),
-                    JSON.stringify({
-                        updated_at: new Date().toISOString(),
-                        website_url: websiteUrl,
-                        settings,
-                    })
-                );
-            } catch {
-                // ignore (storage may be disabled)
-            }
-        }, 350);
-        return () => window.clearTimeout(t);
-    }, [selectedClientId, websiteUrl, settings]);
+  const copyToClipboard = (text: string) => {
+    navigator.clipboard.writeText(text);
+    showFeedback('info', 'Copied to clipboard.');
+  };
 
-    // If the Agent ID changes, clear the old verified badge (unless we have a cached verification for the new ID)
-    useEffect(() => {
-        const agentId = String(settings?.retell_agent_id || '').trim();
-        if (!agentId) {
-            setRetellLiveStatus(null);
-            return;
-        }
-        if (retellLiveStatus?.agent_id && retellLiveStatus.agent_id !== agentId) {
-            const cached = readCachedVerification(agentId);
-            setRetellLiveStatus(cached);
-        }
-    }, [settings?.retell_agent_id]);
+  const handleSave = async () => {
+    if (!settings || !selectedClientId) return;
 
-    const handleSave = async () => {
-        if (!settings || !selectedClientId) return;
-        setIsSaving(true);
-        try {
-            // 1) Save agent settings (direct upsert)
-            const payload: any = {
-                client_id: selectedClientId,
-                retell_agent_id: settings.retell_agent_id || null,
-                agent_name: settings.agent_name,
-                system_prompt: settings.system_prompt,
-                greeting_message: settings.greeting_message,
-                can_check_availability: settings.can_check_availability,
-                can_book_meetings: settings.can_book_meetings,
-                can_transfer_calls: settings.can_transfer_calls,
-                can_send_sms: settings.can_send_sms,
-                default_meeting_duration: settings.default_meeting_duration,
-                booking_buffer_minutes: settings.booking_buffer_minutes,
-                max_advance_booking_days: settings.max_advance_booking_days,
-                allowed_meeting_types: settings.allowed_meeting_types,
-                business_hours: settings.business_hours,
-                timezone: settings.timezone,
-                is_active: settings.is_active,
-            };
+    setIsSaving(true);
+    try {
+      const payload: any = {
+        client_id: selectedClientId,
+        retell_agent_id: settings.retell_agent_id || null,
+        agent_name: settings.agent_name,
+        system_prompt: settings.system_prompt,
+        greeting_message: settings.greeting_message,
+        can_check_availability: settings.can_check_availability,
+        can_book_meetings: settings.can_book_meetings,
+        can_transfer_calls: settings.can_transfer_calls,
+        can_send_sms: settings.can_send_sms,
+        default_meeting_duration: settings.default_meeting_duration,
+        booking_buffer_minutes: settings.booking_buffer_minutes,
+        max_advance_booking_days: settings.max_advance_booking_days,
+        allowed_meeting_types: settings.allowed_meeting_types,
+        business_hours: settings.business_hours,
+        timezone: settings.timezone,
+        is_active: settings.is_active,
+      };
 
-            const { error: upsertErr } = await supabase
-                .from('ai_agent_settings')
-                .upsert(payload, { onConflict: 'client_id' });
+      const { error: upsertErr } = await supabase.from('ai_agent_settings').upsert(payload, { onConflict: 'client_id' });
+      if (upsertErr) throw upsertErr;
 
-            if (upsertErr) throw upsertErr;
+      // Keep Retell Agent ID saved in voice integrations too (used by provisioning + webhook routing)
+      if (settings.retell_agent_id && settings.retell_agent_id.trim()) {
+        const { data: twilioIntegration } = await supabase
+          .from('client_integrations')
+          .select('provider')
+          .eq('client_id', selectedClientId)
+          .eq('provider', 'twilio')
+          .maybeSingle();
 
-            // 2) OPTIONAL: also store the Retell Agent ID into voice integrations, so provisioning can use it later.
-            // This is the "bypass voice settings" path.
-            if (settings.retell_agent_id && settings.retell_agent_id.trim()) {
-                const { data: twilioIntegration } = await supabase
-                    .from('client_integrations')
-                    .select('provider')
-                    .eq('client_id', selectedClientId)
-                    .eq('provider', 'twilio')
-                    .maybeSingle();
+        const inferredSource = twilioIntegration ? 'client' : 'platform';
+        await supabase
+          .from('client_voice_integrations')
+          .upsert(
+            {
+              client_id: selectedClientId,
+              retell_agent_id: settings.retell_agent_id.trim(),
+              number_source: inferredSource,
+              voice_status: 'inactive',
+              a2p_status: inferredSource === 'platform' ? 'not_started' : 'none',
+            },
+            { onConflict: 'client_id' }
+          );
+      }
 
-                const inferredSource = twilioIntegration ? 'client' : 'platform';
-                await supabase
-                    .from('client_voice_integrations')
-                    .upsert({
-                        client_id: selectedClientId,
-                        retell_agent_id: settings.retell_agent_id.trim(),
-                        number_source: inferredSource,
-                        voice_status: 'inactive',
-                        a2p_status: inferredSource === 'platform' ? 'not_started' : 'none',
-                    }, { onConflict: 'client_id' });
-            }
+      showFeedback('success', 'Agent settings saved successfully.');
+      await fetchSettings(selectedClientId);
+    } catch (err: any) {
+      showFeedback('error', `Failed to save: ${err.message}`);
+    } finally {
+      setIsSaving(false);
+    }
+  };
 
-            // Clear local draft after successful save
-            try { localStorage.removeItem(draftKey(selectedClientId)); } catch { }
+  const handleGeneratePrompt = async () => {
+    if (!settings) return;
 
-            showFeedback('success', 'Agent settings saved successfully.');
-            await fetchSettings(selectedClientId);
-        } catch (err: any) {
-            showFeedback('error', `Failed to save: ${err.message}`);
-        } finally {
-            setIsSaving(false);
-        }
-    };
+    const url = websiteUrl.trim();
+    if (!url) {
+      showFeedback('error', 'Please enter the business website URL.');
+      return;
+    }
 
-    const updateSetting = <K extends keyof AgentSettings>(key: K, value: AgentSettings[K]) => {
-        if (!settings) return;
-        setSettings({ ...settings, [key]: value });
-    };
+    const clientName = clients.find((c) => c.id === selectedClientId)?.business_name;
 
-    const updateBusinessHours = (day: string, field: 'start' | 'end', value: string) => {
-        if (!settings) return;
-        const hours = { ...settings.business_hours };
-        if (hours[day]) {
-            hours[day] = { ...hours[day], [field]: value };
-        } else {
-            hours[day] = { start: '09:00', end: '17:00', [field]: value };
-        }
-        setSettings({ ...settings, business_hours: hours });
-    };
+    setIsGeneratingPrompt(true);
+    try {
+      const result = await AdminService.generateSystemPromptFromWebsite(url, clientName);
+      if (!result?.success) {
+        throw new Error(result?.error || 'Prompt generation failed');
+      }
 
-    const toggleBusinessDay = (day: string) => {
-        if (!settings) return;
-        const hours = { ...settings.business_hours };
-        if (hours[day]) {
-            delete hours[day];
-        } else {
-            hours[day] = { start: '09:00', end: '17:00' };
-        }
-        setSettings({ ...settings, business_hours: hours });
-    };
+      const prompt = result?.system_prompt;
+      if (!prompt) throw new Error('No prompt returned');
 
-    const copyToClipboard = (text: string) => {
-        navigator.clipboard.writeText(text);
-        showFeedback('info', 'Copied to clipboard.');
-    };
+      updateSetting('system_prompt', prompt);
+      showFeedback('success', 'System prompt generated. Review and click Save Settings.');
+    } catch (err: any) {
+      showFeedback('error', `Failed to generate prompt: ${err.message}`);
+    } finally {
+      setIsGeneratingPrompt(false);
+    }
+  };
 
-    const toggleMeetingType = (type: string) => {
-        if (!settings) return;
-        const types = settings.allowed_meeting_types.includes(type)
-            ? settings.allowed_meeting_types.filter(t => t !== type)
-            : [...settings.allowed_meeting_types, type];
-        updateSetting('allowed_meeting_types', types);
-    };
+  return (
+    <AdminLayout>
+      <div className="max-w-5xl mx-auto px-4 py-8">
+        <div className="mb-8">
+          <h1 className="text-2xl font-bold text-slate-900 flex items-center gap-3">
+            <Bot className="w-7 h-7 text-indigo-600" />
+            AI Agent Settings
+          </h1>
+          <p className="text-sm text-slate-500 mt-1">Configure per-client AI agent behavior and integrations.</p>
+        </div>
 
-    const handleGeneratePrompt = async () => {
-        if (!settings) return;
-        const url = websiteUrl.trim();
-        if (!url) {
-            showFeedback('error', 'Please enter the business website URL.');
-            return;
-        }
+        {feedback && (
+          <div
+            className={`mb-6 p-4 rounded-lg flex items-center gap-3 ${
+              feedback.type === 'success'
+                ? 'bg-green-50 text-green-800 border border-green-200'
+                : feedback.type === 'error'
+                  ? 'bg-red-50 text-red-800 border border-red-200'
+                  : 'bg-blue-50 text-blue-800 border border-blue-200'
+            }`}
+          >
+            {feedback.type === 'success' ? (
+              <CheckCircle2 className="w-5 h-5" />
+            ) : feedback.type === 'error' ? (
+              <AlertTriangle className="w-5 h-5" />
+            ) : (
+              <Info className="w-5 h-5" />
+            )}
+            <span className="text-sm">{feedback.text}</span>
+          </div>
+        )}
 
-        const clientName = clients.find(c => c.id === selectedClientId)?.business_name;
+        <div className="bg-white rounded-xl border border-slate-200 p-6 mb-6">
+          <label className="block text-sm font-semibold text-slate-700 mb-2">Select Client</label>
+          <select
+            value={selectedClientId}
+            onChange={(e) => setSelectedClientId(e.target.value)}
+            className="w-full md:w-96 px-4 py-2 border border-slate-300 rounded-lg text-sm focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500"
+          >
+            <option value="">-- Choose a client --</option>
+            {clients.map((c) => (
+              <option key={c.id} value={c.id}>
+                {c.business_name}
+              </option>
+            ))}
+          </select>
+        </div>
 
-        setIsGeneratingPrompt(true);
-        try {
-            const result = await AdminService.generateSystemPromptFromWebsite(url, clientName);
-            const prompt = result?.system_prompt;
-            if (!prompt) throw new Error(result?.error || 'No prompt returned');
-            updateSetting('system_prompt', prompt);
-            showFeedback('success', 'System prompt generated. Review and click Save Settings.');
-        } catch (err: any) {
-            const msg = String(err.message || err);
-            showFeedback('error', `Failed to generate prompt: ${msg}`);
-        } finally {
-            setIsGeneratingPrompt(false);
-        }
-    };
+        {isLoading && selectedClientId && (
+          <div className="flex items-center gap-2 text-slate-500 py-12 justify-center">
+            <Loader2 className="w-5 h-5 animate-spin" />
+            <span>Loading agent settings...</span>
+          </div>
+        )}
 
-    const handleCheckRetellAgent = async () => {
-        const agentId = (settings?.retell_agent_id || integrations?.retell?.agent_id || '').trim();
-        if (!agentId) {
-            showFeedback('error', 'Please enter a Retell Agent ID first.');
-            return;
-        }
-
-        setIsCheckingRetell(true);
-        try {
-            const data = await AdminService.getRetellAgent(agentId);
-            const agent = data?.agent;
-
-            const status: RetellLiveAgentStatus = {
-                checked_at: new Date().toISOString(),
-                ok: true,
-                agent_id: agent?.agent_id || agentId,
-                agent_name: agent?.agent_name,
-                is_published: agent?.is_published,
-                raw: agent,
-            };
-
-            setRetellLiveStatus(status);
-            writeCachedVerification(status);
-
-            showFeedback('success', `Retell agent fetched successfully${typeof agent?.is_published === 'boolean' ? ` (published=${agent.is_published})` : ''}.`);
-        } catch (err: any) {
-            const msg = String(err.message || err);
-            const status: RetellLiveAgentStatus = {
-                checked_at: new Date().toISOString(),
-                ok: false,
-                agent_id: agentId,
-                error: msg,
-            };
-            setRetellLiveStatus(status);
-            showFeedback('error', `Retell check failed: ${msg}`);
-        } finally {
-            setIsCheckingRetell(false);
-        }
-    };
-
-    return (
-        <AdminLayout>
-            <div className="max-w-5xl mx-auto px-4 py-8">
-                {/* Header */}
-                <div className="mb-8">
-                    <h1 className="text-2xl font-bold text-slate-900 flex items-center gap-3">
-                        <Bot className="w-7 h-7 text-indigo-600" />
-                        AI Agent Settings
-                    </h1>
-                    <p className="text-sm text-slate-500 mt-1">
-                        Configure per-client AI agent behavior, capabilities, and webhook integrations for Retell AI.
+        {settings && !isLoading && (
+          <>
+            {integrations && (
+              <div className="bg-white rounded-xl border border-slate-200 p-6 mb-6">
+                <h2 className="text-sm font-semibold text-slate-700 mb-3 flex items-center gap-2">
+                  <Shield className="w-4 h-4 text-indigo-500" />
+                  Integration Status
+                </h2>
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  <div
+                    className={`p-3 rounded-lg border ${
+                      integrations.google_calendar.connected ? 'border-green-200 bg-green-50' : 'border-amber-200 bg-amber-50'
+                    }`}
+                  >
+                    <div className="flex items-center gap-2">
+                      <Calendar
+                        className={`w-4 h-4 ${integrations.google_calendar.connected ? 'text-green-600' : 'text-amber-600'}`}
+                      />
+                      <span className="text-sm font-medium">Google Calendar</span>
+                    </div>
+                    <p className="text-xs mt-1 text-slate-600">
+                      {integrations.google_calendar.connected
+                        ? `Connected (${integrations.google_calendar.calendar_id || 'primary'})`
+                        : 'Not connected'}
                     </p>
+                  </div>
+
+                  <div
+                    className={`p-3 rounded-lg border ${
+                      integrations.retell.configured ? 'border-green-200 bg-green-50' : 'border-amber-200 bg-amber-50'
+                    }`}
+                  >
+                    <div className="flex items-center gap-2">
+                      <Phone className={`w-4 h-4 ${integrations.retell.configured ? 'text-green-600' : 'text-amber-600'}`} />
+                      <span className="text-sm font-medium">Retell AI</span>
+                    </div>
+                    <p className="text-xs mt-1 text-slate-600">
+                      {integrations.retell.configured
+                        ? `Agent: ${integrations.retell.agent_id} | ${integrations.retell.voice_status || 'inactive'}`
+                        : 'No agent configured yet'}
+                    </p>
+                  </div>
+                </div>
+              </div>
+            )}
+
+            <div className="bg-white rounded-xl border border-slate-200 p-6 mb-6">
+              <h2 className="text-sm font-semibold text-slate-700 mb-4 flex items-center gap-2">
+                <Bot className="w-4 h-4 text-indigo-500" />
+                Agent Identity
+              </h2>
+
+              <div className="space-y-4">
+                <div>
+                  <label className="block text-xs font-medium text-slate-600 mb-1">Retell Agent ID</label>
+                  <input
+                    type="text"
+                    value={settings.retell_agent_id || ''}
+                    onChange={(e) => updateSetting('retell_agent_id', e.target.value)}
+                    className="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm font-mono focus:ring-2 focus:ring-indigo-500"
+                    placeholder="agent_xxxxxxxxxxxxxxxx"
+                  />
                 </div>
 
-                {/* Feedback */}
-                {feedback && (
-                    <div className={`mb-6 p-4 rounded-lg flex items-center gap-3 ${
-                        feedback.type === 'success' ? 'bg-green-50 text-green-800 border border-green-200' :
-                        feedback.type === 'error' ? 'bg-red-50 text-red-800 border border-red-200' :
-                        'bg-blue-50 text-blue-800 border border-blue-200'
-                    }`}>
-                        {feedback.type === 'success' ? <CheckCircle2 className="w-5 h-5" /> :
-                            feedback.type === 'error' ? <AlertTriangle className="w-5 h-5" /> :
-                                <Info className="w-5 h-5" />}
-                        <span className="text-sm">{feedback.text}</span>
-                    </div>
-                )}
+                <div>
+                  <label className="block text-xs font-medium text-slate-600 mb-1">Agent Name</label>
+                  <input
+                    type="text"
+                    value={settings.agent_name}
+                    onChange={(e) => updateSetting('agent_name', e.target.value)}
+                    className="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm focus:ring-2 focus:ring-indigo-500"
+                  />
+                </div>
 
-                {/* Client Selector */}
-                <div className="bg-white rounded-xl border border-slate-200 p-6 mb-6">
-                    <label className="block text-sm font-semibold text-slate-700 mb-2">Select Client</label>
-                    <select
-                        value={selectedClientId}
-                        onChange={(e) => setSelectedClientId(e.target.value)}
-                        className="w-full md:w-96 px-4 py-2 border border-slate-300 rounded-lg text-sm focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500"
+                <div className="p-4 rounded-lg border border-indigo-200 bg-indigo-50">
+                  <div className="flex items-center justify-between gap-3">
+                    <div>
+                      <p className="text-sm font-semibold text-indigo-900 flex items-center gap-2">
+                        <Wand2 className="w-4 h-4" /> AI Prompt Assistant
+                      </p>
+                      <p className="text-xs text-indigo-700 mt-1">
+                        Generates a phone-agent system prompt from a business website using Gemini 2.5 Flash.
+                      </p>
+                    </div>
+                    <button
+                      onClick={handleGeneratePrompt}
+                      disabled={isGeneratingPrompt}
+                      className="px-4 py-2 bg-indigo-600 text-white text-sm font-semibold rounded-lg hover:bg-indigo-700 disabled:opacity-50 flex items-center gap-2"
                     >
-                        <option value="">-- Choose a client --</option>
-                        {clients.map(c => (
-                            <option key={c.id} value={c.id}>{c.business_name}</option>
-                        ))}
-                    </select>
+                      {isGeneratingPrompt ? <Loader2 className="w-4 h-4 animate-spin" /> : <Wand2 className="w-4 h-4" />}
+                      {isGeneratingPrompt ? 'Generating...' : 'Generate'}
+                    </button>
+                  </div>
+                  <div className="mt-3">
+                    <input
+                      type="text"
+                      value={websiteUrl}
+                      onChange={(e) => setWebsiteUrl(e.target.value)}
+                      className="w-full px-3 py-2 border border-indigo-300 rounded-lg text-sm"
+                      placeholder="https://example.com"
+                    />
+                  </div>
                 </div>
 
-                {isLoading && selectedClientId && (
-                    <div className="flex items-center gap-2 text-slate-500 py-12 justify-center">
-                        <Loader2 className="w-5 h-5 animate-spin" />
-                        <span>Loading agent settings...</span>
-                    </div>
-                )}
+                <div>
+                  <label className="block text-xs font-medium text-slate-600 mb-1">System Prompt</label>
+                  <textarea
+                    value={settings.system_prompt}
+                    onChange={(e) => updateSetting('system_prompt', e.target.value)}
+                    rows={8}
+                    className="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm focus:ring-2 focus:ring-indigo-500"
+                  />
+                </div>
 
-                {settings && !isLoading && (
-                    <>
-                        {/* Integration Status Banner */}
-                        {integrations && (
-                            <div className="bg-white rounded-xl border border-slate-200 p-6 mb-6">
-                                <h2 className="text-sm font-semibold text-slate-700 mb-3 flex items-center gap-2">
-                                    <Shield className="w-4 h-4 text-indigo-500" />
-                                    Integration Status
-                                </h2>
-                                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                                    <div className={`p-3 rounded-lg border ${integrations.google_calendar.connected ? 'border-green-200 bg-green-50' : 'border-amber-200 bg-amber-50'}`}>
-                                        <div className="flex items-center gap-2">
-                                            <Calendar className={`w-4 h-4 ${integrations.google_calendar.connected ? 'text-green-600' : 'text-amber-600'}`} />
-                                            <span className="text-sm font-medium">Google Calendar</span>
-                                        </div>
-                                        <p className="text-xs mt-1 text-slate-600">
-                                            {integrations.google_calendar.connected
-                                                ? `Connected (${integrations.google_calendar.calendar_id || 'primary'})`
-                                                : 'Not connected — agent cannot check availability or book meetings'}
-                                        </p>
-                                    </div>
-                                    <div className={`p-3 rounded-lg border ${integrations.retell.configured ? 'border-green-200 bg-green-50' : 'border-amber-200 bg-amber-50'}`}>
-                                        <div className="flex items-center gap-2 justify-between">
-                                            <div className="flex items-center gap-2">
-                                                <Phone className={`w-4 h-4 ${integrations.retell.configured ? 'text-green-600' : 'text-amber-600'}`} />
-                                                <span className="text-sm font-medium">Retell AI</span>
-                                            </div>
-                                            <button
-                                                onClick={handleCheckRetellAgent}
-                                                disabled={isCheckingRetell}
-                                                className="px-2 py-1 text-xs border border-slate-300 rounded hover:bg-white disabled:opacity-50 flex items-center gap-1"
-                                                title="Fetch agent details from Retell (verifies API key and publish state)"
-                                            >
-                                                {isCheckingRetell ? <Loader2 className="w-3 h-3 animate-spin" /> : <RefreshCw className="w-3 h-3" />}
-                                                Verify
-                                            </button>
-                                        </div>
-                                        <p className="text-xs mt-1 text-slate-600">
-                                            {integrations.retell.configured
-                                                ? `Saved Agent ID: ${integrations.retell.agent_id} • AI Calls status: ${integrations.retell.voice_status || 'inactive'}`
-                                                : 'No agent configured yet — you can paste an existing Retell Agent ID below'}
-                                        </p>
-                                        <p className="text-[11px] mt-1 text-slate-400">
-                                            "AI Calls status" is this app's provisioning state (active/pending/inactive) — not whether your agent is published in Retell.
-                                        </p>
-                                        {retellLiveStatus && (
-                                            <div className={`mt-2 text-xs rounded-lg border p-2 ${retellLiveStatus.ok ? 'bg-emerald-50 border-emerald-200 text-emerald-800' : 'bg-red-50 border-red-200 text-red-800'}`}>
-                                                {retellLiveStatus.ok ? (
-                                                    <div className="space-y-0.5">
-                                                        <div className="font-semibold">Retell API check: OK</div>
-                                                        <div className="font-mono">agent_id: {retellLiveStatus.agent_id}</div>
-                                                        {retellLiveStatus.agent_name && <div>name: {retellLiveStatus.agent_name}</div>}
-                                                        {typeof retellLiveStatus.is_published === 'boolean' && <div>published: {String(retellLiveStatus.is_published)}</div>}
-                                                        <div className="text-[11px] text-emerald-700/80">verified at {new Date(retellLiveStatus.checked_at).toLocaleString()}</div>
-                                                    </div>
-                                                ) : (
-                                                    <div>
-                                                        <div className="font-semibold">Retell API check: Failed</div>
-                                                        <div className="mt-1 text-xs">{retellLiveStatus.error}</div>
-                                                    </div>
-                                                )}
-                                            </div>
-                                        )}
-                                    </div>
-                                </div>
-                            </div>
-                        )}
-
-                        {/* Agent Identity */}
-                        <div className="bg-white rounded-xl border border-slate-200 p-6 mb-6">
-                            <h2 className="text-sm font-semibold text-slate-700 mb-4 flex items-center gap-2">
-                                <Bot className="w-4 h-4 text-indigo-500" />
-                                Agent Identity
-                            </h2>
-                            <div className="space-y-4">
-                                <div>
-                                    <label className="block text-xs font-medium text-slate-600 mb-1">Retell Agent ID (connect existing)</label>
-                                    <input
-                                        type="text"
-                                        value={settings.retell_agent_id || ''}
-                                        onChange={(e) => updateSetting('retell_agent_id', e.target.value)}
-                                        className="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm font-mono focus:ring-2 focus:ring-indigo-500"
-                                        placeholder="agent_xxxxxxxxxxxxxxxx"
-                                    />
-                                    <p className="text-xs text-slate-400 mt-1">
-                                        Paste an existing agent ID from your Retell account here (this bypasses the Voice Settings page for agent linking).
-                                    </p>
-                                </div>
-
-                                <div>
-                                    <label className="block text-xs font-medium text-slate-600 mb-1">Agent Name</label>
-                                    <input
-                                        type="text"
-                                        value={settings.agent_name}
-                                        onChange={(e) => updateSetting('agent_name', e.target.value)}
-                                        className="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm focus:ring-2 focus:ring-indigo-500"
-                                        placeholder="e.g. Luna, Alex, Reception AI"
-                                    />
-                                </div>
-
-                                {/* AI Prompt Assistant */}
-                                <div className="p-4 rounded-lg border border-indigo-200 bg-indigo-50">
-                                    <div className="flex items-center justify-between gap-3">
-                                        <div>
-                                            <p className="text-sm font-semibold text-indigo-900 flex items-center gap-2">
-                                                <Wand2 className="w-4 h-4" /> AI Prompt Assistant
-                                            </p>
-                                            <p className="text-xs text-indigo-700 mt-1">
-                                                Enter the business website URL and generate a high-quality phone-agent system prompt using Gemini.
-                                            </p>
-                                        </div>
-                                        <button
-                                            onClick={handleGeneratePrompt}
-                                            disabled={isGeneratingPrompt}
-                                            className="px-4 py-2 bg-indigo-600 text-white text-sm font-semibold rounded-lg hover:bg-indigo-700 disabled:opacity-50 flex items-center gap-2"
-                                        >
-                                            {isGeneratingPrompt ? <Loader2 className="w-4 h-4 animate-spin" /> : <Wand2 className="w-4 h-4" />}
-                                            {isGeneratingPrompt ? 'Generating...' : 'Generate'}
-                                        </button>
-                                    </div>
-                                    <div className="mt-3">
-                                        <input
-                                            type="text"
-                                            value={websiteUrl}
-                                            onChange={(e) => setWebsiteUrl(e.target.value)}
-                                            className="w-full px-3 py-2 border border-indigo-300 rounded-lg text-sm"
-                                            placeholder="https://example.com"
-                                        />
-                                        <p className="text-[11px] text-indigo-700 mt-2">
-                                            Tip: your unsaved work on this page is cached locally per client, so switching tabs to copy/paste won't wipe it.
-                                        </p>
-                                    </div>
-                                </div>
-
-                                <div>
-                                    <label className="block text-xs font-medium text-slate-600 mb-1">System Prompt</label>
-                                    <textarea
-                                        value={settings.system_prompt}
-                                        onChange={(e) => updateSetting('system_prompt', e.target.value)}
-                                        rows={8}
-                                        className="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm focus:ring-2 focus:ring-indigo-500"
-                                        placeholder="Instructions for how the agent should behave, what info to provide, tone of voice, etc."
-                                    />
-                                    <p className="text-xs text-slate-400 mt-1">
-                                        This prompt is used in Retell agent configuration. Include business details, services, pricing, and behavioral guidelines.
-                                    </p>
-                                </div>
-                                <div>
-                                    <label className="block text-xs font-medium text-slate-600 mb-1">Greeting Message</label>
-                                    <input
-                                        type="text"
-                                        value={settings.greeting_message}
-                                        onChange={(e) => updateSetting('greeting_message', e.target.value)}
-                                        className="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm focus:ring-2 focus:ring-indigo-500"
-                                        placeholder="e.g. Hi, thank you for calling! How can I help you today?"
-                                    />
-                                </div>
-                            </div>
-                        </div>
-
-                        {/* Agent Capabilities */}
-                        <div className="bg-white rounded-xl border border-slate-200 p-6 mb-6">
-                            <h2 className="text-sm font-semibold text-slate-700 mb-4 flex items-center gap-2">
-                                <Zap className="w-4 h-4 text-indigo-500" />
-                                Agent Capabilities
-                            </h2>
-                            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                                {[
-                                    { key: 'can_check_availability' as const, label: 'Check Calendar Availability', desc: 'Query Google Calendar free/busy slots' },
-                                    { key: 'can_book_meetings' as const, label: 'Book Meetings', desc: 'Create appointments on Google Calendar' },
-                                    { key: 'can_transfer_calls' as const, label: 'Transfer Calls', desc: 'Transfer to a live agent (requires Retell config)' },
-                                    { key: 'can_send_sms' as const, label: 'Send SMS', desc: 'Send text confirmations (requires Twilio)' },
-                                ].map(cap => (
-                                    <label key={cap.key} className="flex items-start gap-3 p-3 rounded-lg border border-slate-200 hover:bg-slate-50 cursor-pointer">
-                                        <input
-                                            type="checkbox"
-                                            checked={settings[cap.key]}
-                                            onChange={(e) => updateSetting(cap.key, e.target.checked)}
-                                            className="mt-0.5 rounded border-slate-300 text-indigo-600 focus:ring-indigo-500"
-                                        />
-                                        <div>
-                                            <span className="text-sm font-medium text-slate-700">{cap.label}</span>
-                                            <p className="text-xs text-slate-400">{cap.desc}</p>
-                                        </div>
-                                    </label>
-                                ))}
-                            </div>
-                        </div>
-
-                        {/* Booking Configuration */}
-                        <div className="bg-white rounded-xl border border-slate-200 p-6 mb-6">
-                            <h2 className="text-sm font-semibold text-slate-700 mb-4 flex items-center gap-2">
-                                <Calendar className="w-4 h-4 text-indigo-500" />
-                                Booking Configuration
-                            </h2>
-                            <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-4">
-                                <div>
-                                    <label className="block text-xs font-medium text-slate-600 mb-1">Meeting Duration (min)</label>
-                                    <input
-                                        type="number"
-                                        value={settings.default_meeting_duration}
-                                        onChange={(e) => updateSetting('default_meeting_duration', parseInt(e.target.value) || 30)}
-                                        className="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm"
-                                        min={15} max={120} step={15}
-                                    />
-                                </div>
-                                <div>
-                                    <label className="block text-xs font-medium text-slate-600 mb-1">Buffer Between Meetings (min)</label>
-                                    <input
-                                        type="number"
-                                        value={settings.booking_buffer_minutes}
-                                        onChange={(e) => updateSetting('booking_buffer_minutes', parseInt(e.target.value) || 0)}
-                                        className="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm"
-                                        min={0} max={60} step={5}
-                                    />
-                                </div>
-                                <div>
-                                    <label className="block text-xs font-medium text-slate-600 mb-1">Max Advance Booking (days)</label>
-                                    <input
-                                        type="number"
-                                        value={settings.max_advance_booking_days}
-                                        onChange={(e) => updateSetting('max_advance_booking_days', parseInt(e.target.value) || 30)}
-                                        className="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm"
-                                        min={1} max={90}
-                                    />
-                                </div>
-                            </div>
-
-                            <div className="mb-4">
-                                <label className="block text-xs font-medium text-slate-600 mb-2">Meeting Types</label>
-                                <div className="flex gap-3">
-                                    {['phone', 'video', 'in_person'].map(type => (
-                                        <label key={type} className="flex items-center gap-2 cursor-pointer">
-                                            <input
-                                                type="checkbox"
-                                                checked={settings.allowed_meeting_types.includes(type)}
-                                                onChange={() => toggleMeetingType(type)}
-                                                className="rounded border-slate-300 text-indigo-600 focus:ring-indigo-500"
-                                            />
-                                            <span className="text-sm text-slate-700 capitalize">{type.replace('_', ' ')}</span>
-                                        </label>
-                                    ))}
-                                </div>
-                            </div>
-
-                            <div>
-                                <label className="block text-xs font-medium text-slate-600 mb-1">Timezone</label>
-                                <select
-                                    value={settings.timezone}
-                                    onChange={(e) => updateSetting('timezone', e.target.value)}
-                                    className="w-full md:w-72 px-3 py-2 border border-slate-300 rounded-lg text-sm"
-                                >
-                                    {TIMEZONE_OPTIONS.map(tz => (
-                                        <option key={tz} value={tz}>{tz}</option>
-                                    ))}
-                                </select>
-                            </div>
-                        </div>
-
-                        {/* Business Hours */}
-                        <div className="bg-white rounded-xl border border-slate-200 p-6 mb-6">
-                            <button
-                                onClick={() => setShowBusinessHours(!showBusinessHours)}
-                                className="w-full flex items-center justify-between text-sm font-semibold text-slate-700"
-                            >
-                                <span className="flex items-center gap-2">
-                                    <Clock className="w-4 h-4 text-indigo-500" />
-                                    Business Hours
-                                </span>
-                                {showBusinessHours ? <ChevronUp className="w-4 h-4" /> : <ChevronDown className="w-4 h-4" />}
-                            </button>
-                            {showBusinessHours && (
-                                <div className="mt-4 space-y-3">
-                                    {Object.entries(DAY_NAMES).map(([day, name]) => {
-                                        const isEnabled = !!settings.business_hours[day];
-                                        return (
-                                            <div key={day} className="flex items-center gap-4">
-                                                <label className="flex items-center gap-2 w-32 cursor-pointer">
-                                                    <input
-                                                        type="checkbox"
-                                                        checked={isEnabled}
-                                                        onChange={() => toggleBusinessDay(day)}
-                                                        className="rounded border-slate-300 text-indigo-600"
-                                                    />
-                                                    <span className="text-sm text-slate-700">{name}</span>
-                                                </label>
-                                                {isEnabled && (
-                                                    <div className="flex items-center gap-2">
-                                                        <input
-                                                            type="time"
-                                                            value={settings.business_hours[day].start}
-                                                            onChange={(e) => updateBusinessHours(day, 'start', e.target.value)}
-                                                            className="px-2 py-1 border border-slate-300 rounded text-sm"
-                                                        />
-                                                        <span className="text-xs text-slate-400">to</span>
-                                                        <input
-                                                            type="time"
-                                                            value={settings.business_hours[day].end}
-                                                            onChange={(e) => updateBusinessHours(day, 'end', e.target.value)}
-                                                            className="px-2 py-1 border border-slate-300 rounded text-sm"
-                                                        />
-                                                    </div>
-                                                )}
-                                                {!isEnabled && (
-                                                    <span className="text-xs text-slate-400">Closed</span>
-                                                )}
-                                            </div>
-                                        );
-                                    })}
-                                </div>
-                            )}
-                        </div>
-
-                        {/* Webhook URLs */}
-                        <div className="bg-white rounded-xl border border-slate-200 p-6 mb-6">
-                            <button
-                                onClick={() => setShowWebhooks(!showWebhooks)}
-                                className="w-full flex items-center justify-between text-sm font-semibold text-slate-700"
-                            >
-                                <span className="flex items-center gap-2">
-                                    <Globe className="w-4 h-4 text-indigo-500" />
-                                    Webhook URLs (for Retell AI Configuration)
-                                </span>
-                                {showWebhooks ? <ChevronUp className="w-4 h-4" /> : <ChevronDown className="w-4 h-4" />}
-                            </button>
-                            {showWebhooks && (
-                                <div className="mt-4 space-y-4">
-                                    <div className="p-3 bg-indigo-50 border border-indigo-200 rounded-lg">
-                                        <p className="text-xs text-indigo-700">
-                                            Copy these URLs into your Retell AI dashboard. These URLs are shared across clients — Retell includes <strong>agent_id</strong> in every request and we route it to the correct client.
-                                        </p>
-                                    </div>
-
-                                    {webhookUrls && Object.entries(webhookUrls).map(([key, url]) => (
-                                        <div key={key} className="flex items-center gap-2">
-                                            <div className="flex-1">
-                                                <label className="block text-xs font-medium text-slate-600 mb-1 capitalize">
-                                                    {key.replace(/_/g, ' ')}
-                                                </label>
-                                                <div className="flex items-center gap-2">
-                                                    <input
-                                                        type="text"
-                                                        value={String(url)}
-                                                        readOnly
-                                                        className="flex-1 px-3 py-2 bg-slate-50 border border-slate-300 rounded-lg text-xs font-mono"
-                                                    />
-                                                    <button
-                                                        onClick={() => copyToClipboard(String(url))}
-                                                        className="p-2 text-slate-500 hover:text-indigo-600"
-                                                        title="Copy URL"
-                                                    >
-                                                        <Copy className="w-4 h-4" />
-                                                    </button>
-                                                </div>
-                                            </div>
-                                        </div>
-                                    ))}
-                                </div>
-                            )}
-                        </div>
-
-                        {/* Recent Webhook Events */}
-                        <div className="bg-white rounded-xl border border-slate-200 p-6 mb-6">
-                            <button
-                                onClick={() => setShowEvents(!showEvents)}
-                                className="w-full flex items-center justify-between text-sm font-semibold text-slate-700"
-                            >
-                                <span className="flex items-center gap-2">
-                                    <MessageSquare className="w-4 h-4 text-indigo-500" />
-                                    Recent Webhook Events ({webhookEvents.length})
-                                </span>
-                                {showEvents ? <ChevronUp className="w-4 h-4" /> : <ChevronDown className="w-4 h-4" />}
-                            </button>
-                            {showEvents && (
-                                <div className="mt-4">
-                                    {webhookEvents.length === 0 ? (
-                                        <p className="text-xs text-slate-400 py-4 text-center">No webhook events yet.</p>
-                                    ) : (
-                                        <div className="overflow-x-auto">
-                                            <table className="w-full text-xs">
-                                                <thead>
-                                                    <tr className="border-b border-slate-200">
-                                                        <th className="text-left py-2 px-2 text-slate-500 font-medium">Event</th>
-                                                        <th className="text-left py-2 px-2 text-slate-500 font-medium">Call ID</th>
-                                                        <th className="text-left py-2 px-2 text-slate-500 font-medium">Status</th>
-                                                        <th className="text-left py-2 px-2 text-slate-500 font-medium">Duration</th>
-                                                        <th className="text-left py-2 px-2 text-slate-500 font-medium">Time</th>
-                                                    </tr>
-                                                </thead>
-                                                <tbody>
-                                                    {webhookEvents.map(event => (
-                                                        <tr key={event.id} className="border-b border-slate-100 hover:bg-slate-50">
-                                                            <td className="py-2 px-2 font-mono">{event.event_type}</td>
-                                                            <td className="py-2 px-2 text-slate-500">{event.external_id ? event.external_id.slice(0, 12) + '...' : '—'}</td>
-                                                            <td className="py-2 px-2">
-                                                                <span className={`inline-block px-2 py-0.5 rounded text-xs font-medium ${
-                                                                    event.status === 'completed' ? 'bg-green-100 text-green-700' :
-                                                                        event.status === 'failed' ? 'bg-red-100 text-red-700' :
-                                                                            'bg-amber-100 text-amber-700'
-                                                                }`}>
-                                                                    {event.status}
-                                                                </span>
-                                                            </td>
-                                                            <td className="py-2 px-2 text-slate-500">{event.duration_ms ? `${event.duration_ms}ms` : '—'}</td>
-                                                            <td className="py-2 px-2 text-slate-500">
-                                                                {new Date(event.created_at).toLocaleString('en-US', { month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' })}
-                                                            </td>
-                                                        </tr>
-                                                    ))}
-                                                </tbody>
-                                            </table>
-                                        </div>
-                                    )}
-                                </div>
-                            )}
-                        </div>
-
-                        {/* Active Toggle + Save */}
-                        <div className="bg-white rounded-xl border border-slate-200 p-6 mb-6">
-                            <div className="flex items-center justify-between">
-                                <label className="flex items-center gap-3 cursor-pointer">
-                                    <input
-                                        type="checkbox"
-                                        checked={settings.is_active}
-                                        onChange={(e) => updateSetting('is_active', e.target.checked)}
-                                        className="rounded border-slate-300 text-indigo-600 focus:ring-indigo-500"
-                                    />
-                                    <div>
-                                        <span className="text-sm font-medium text-slate-700">Agent Active</span>
-                                        <p className="text-xs text-slate-400">When disabled, the agent will not process availability checks or bookings</p>
-                                    </div>
-                                </label>
-
-                                <div className="flex items-center gap-3">
-                                    <button
-                                        onClick={() => fetchSettings(selectedClientId)}
-                                        className="px-4 py-2 text-sm text-slate-600 border border-slate-300 rounded-lg hover:bg-slate-50"
-                                    >
-                                        <RefreshCw className="w-4 h-4" />
-                                    </button>
-                                    <button
-                                        onClick={handleSave}
-                                        disabled={isSaving}
-                                        className="flex items-center gap-2 px-6 py-2 bg-indigo-600 text-white text-sm font-medium rounded-lg hover:bg-indigo-700 disabled:opacity-50"
-                                    >
-                                        {isSaving ? <Loader2 className="w-4 h-4 animate-spin" /> : <Save className="w-4 h-4" />}
-                                        {isSaving ? 'Saving...' : 'Save Settings'}
-                                    </button>
-                                </div>
-                            </div>
-                        </div>
-                    </>
-                )}
+                <div>
+                  <label className="block text-xs font-medium text-slate-600 mb-1">Greeting Message</label>
+                  <input
+                    type="text"
+                    value={settings.greeting_message}
+                    onChange={(e) => updateSetting('greeting_message', e.target.value)}
+                    className="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm focus:ring-2 focus:ring-indigo-500"
+                  />
+                </div>
+              </div>
             </div>
-        </AdminLayout>
-    );
+
+            <div className="bg-white rounded-xl border border-slate-200 p-6 mb-6">
+              <h2 className="text-sm font-semibold text-slate-700 mb-4 flex items-center gap-2">
+                <Zap className="w-4 h-4 text-indigo-500" />
+                Agent Capabilities
+              </h2>
+
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                {[
+                  {
+                    key: 'can_check_availability' as const,
+                    label: 'Check Calendar Availability',
+                    desc: 'Query Google Calendar free/busy slots',
+                  },
+                  { key: 'can_book_meetings' as const, label: 'Book Meetings', desc: 'Create appointments on Google Calendar' },
+                  { key: 'can_transfer_calls' as const, label: 'Transfer Calls', desc: 'Transfer to a live agent (requires Retell config)' },
+                  { key: 'can_send_sms' as const, label: 'Send SMS', desc: 'Send text confirmations (requires Twilio)' },
+                ].map((cap) => (
+                  <label
+                    key={cap.key}
+                    className="flex items-start gap-3 p-3 rounded-lg border border-slate-200 hover:bg-slate-50 cursor-pointer"
+                  >
+                    <input
+                      type="checkbox"
+                      checked={settings[cap.key]}
+                      onChange={(e) => updateSetting(cap.key, e.target.checked)}
+                      className="mt-0.5 rounded border-slate-300 text-indigo-600 focus:ring-indigo-500"
+                    />
+                    <div>
+                      <span className="text-sm font-medium text-slate-700">{cap.label}</span>
+                      <p className="text-xs text-slate-400">{cap.desc}</p>
+                    </div>
+                  </label>
+                ))}
+              </div>
+            </div>
+
+            <div className="bg-white rounded-xl border border-slate-200 p-6 mb-6">
+              <h2 className="text-sm font-semibold text-slate-700 mb-4 flex items-center gap-2">
+                <Calendar className="w-4 h-4 text-indigo-500" />
+                Booking Configuration
+              </h2>
+
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-4">
+                <div>
+                  <label className="block text-xs font-medium text-slate-600 mb-1">Meeting Duration (min)</label>
+                  <input
+                    type="number"
+                    value={settings.default_meeting_duration}
+                    onChange={(e) => updateSetting('default_meeting_duration', parseInt(e.target.value) || 30)}
+                    className="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm"
+                    min={15}
+                    max={120}
+                    step={15}
+                  />
+                </div>
+                <div>
+                  <label className="block text-xs font-medium text-slate-600 mb-1">Buffer Between Meetings (min)</label>
+                  <input
+                    type="number"
+                    value={settings.booking_buffer_minutes}
+                    onChange={(e) => updateSetting('booking_buffer_minutes', parseInt(e.target.value) || 0)}
+                    className="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm"
+                    min={0}
+                    max={60}
+                    step={5}
+                  />
+                </div>
+                <div>
+                  <label className="block text-xs font-medium text-slate-600 mb-1">Max Advance Booking (days)</label>
+                  <input
+                    type="number"
+                    value={settings.max_advance_booking_days}
+                    onChange={(e) => updateSetting('max_advance_booking_days', parseInt(e.target.value) || 30)}
+                    className="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm"
+                    min={1}
+                    max={90}
+                  />
+                </div>
+              </div>
+
+              <div className="mb-4">
+                <label className="block text-xs font-medium text-slate-600 mb-2">Meeting Types</label>
+                <div className="flex gap-3">
+                  {['phone', 'video', 'in_person'].map((type) => (
+                    <label key={type} className="flex items-center gap-2 cursor-pointer">
+                      <input
+                        type="checkbox"
+                        checked={settings.allowed_meeting_types.includes(type)}
+                        onChange={() => toggleMeetingType(type)}
+                        className="rounded border-slate-300 text-indigo-600 focus:ring-indigo-500"
+                      />
+                      <span className="text-sm text-slate-700 capitalize">{type.replace('_', ' ')}</span>
+                    </label>
+                  ))}
+                </div>
+              </div>
+
+              <div>
+                <label className="block text-xs font-medium text-slate-600 mb-1">Timezone</label>
+                <select
+                  value={settings.timezone}
+                  onChange={(e) => updateSetting('timezone', e.target.value)}
+                  className="w-full md:w-72 px-3 py-2 border border-slate-300 rounded-lg text-sm"
+                >
+                  {TIMEZONE_OPTIONS.map((tz) => (
+                    <option key={tz} value={tz}>
+                      {tz}
+                    </option>
+                  ))}
+                </select>
+              </div>
+            </div>
+
+            <div className="bg-white rounded-xl border border-slate-200 p-6 mb-6">
+              <button
+                onClick={() => setShowBusinessHours(!showBusinessHours)}
+                className="w-full flex items-center justify-between text-sm font-semibold text-slate-700"
+              >
+                <span className="flex items-center gap-2">
+                  <Clock className="w-4 h-4 text-indigo-500" />
+                  Business Hours
+                </span>
+                {showBusinessHours ? <ChevronUp className="w-4 h-4" /> : <ChevronDown className="w-4 h-4" />}
+              </button>
+
+              {showBusinessHours && (
+                <div className="mt-4 space-y-3">
+                  {Object.entries(DAY_NAMES).map(([day, name]) => {
+                    const isEnabled = !!settings.business_hours[day];
+                    return (
+                      <div key={day} className="flex items-center gap-4">
+                        <label className="flex items-center gap-2 w-32 cursor-pointer">
+                          <input
+                            type="checkbox"
+                            checked={isEnabled}
+                            onChange={() => toggleBusinessDay(day)}
+                            className="rounded border-slate-300 text-indigo-600"
+                          />
+                          <span className="text-sm text-slate-700">{name}</span>
+                        </label>
+
+                        {isEnabled ? (
+                          <div className="flex items-center gap-2">
+                            <input
+                              type="time"
+                              value={settings.business_hours[day].start}
+                              onChange={(e) => updateBusinessHours(day, 'start', e.target.value)}
+                              className="px-2 py-1 border border-slate-300 rounded text-sm"
+                            />
+                            <span className="text-xs text-slate-400">to</span>
+                            <input
+                              type="time"
+                              value={settings.business_hours[day].end}
+                              onChange={(e) => updateBusinessHours(day, 'end', e.target.value)}
+                              className="px-2 py-1 border border-slate-300 rounded text-sm"
+                            />
+                          </div>
+                        ) : (
+                          <span className="text-xs text-slate-400">Closed</span>
+                        )}
+                      </div>
+                    );
+                  })}
+                </div>
+              )}
+            </div>
+
+            <div className="bg-white rounded-xl border border-slate-200 p-6 mb-6">
+              <button
+                onClick={() => setShowWebhooks(!showWebhooks)}
+                className="w-full flex items-center justify-between text-sm font-semibold text-slate-700"
+              >
+                <span className="flex items-center gap-2">
+                  <Globe className="w-4 h-4 text-indigo-500" />
+                  Webhook URLs (for Retell AI Configuration)
+                </span>
+                {showWebhooks ? <ChevronUp className="w-4 h-4" /> : <ChevronDown className="w-4 h-4" />}
+              </button>
+
+              {showWebhooks && (
+                <div className="mt-4 space-y-4">
+                  <div className="p-3 bg-indigo-50 border border-indigo-200 rounded-lg">
+                    <p className="text-xs text-indigo-700">Copy these URLs into your Retell AI dashboard.</p>
+                  </div>
+
+                  {webhookUrls &&
+                    Object.entries(webhookUrls).map(([key, url]) => (
+                      <div key={key} className="flex items-center gap-2">
+                        <div className="flex-1">
+                          <label className="block text-xs font-medium text-slate-600 mb-1 capitalize">{key.replace(/_/g, ' ')}</label>
+                          <div className="flex items-center gap-2">
+                            <input
+                              type="text"
+                              value={String(url)}
+                              readOnly
+                              className="flex-1 px-3 py-2 bg-slate-50 border border-slate-300 rounded-lg text-xs font-mono"
+                            />
+                            <button
+                              onClick={() => copyToClipboard(String(url))}
+                              className="p-2 text-slate-500 hover:text-indigo-600"
+                              title="Copy URL"
+                            >
+                              <Copy className="w-4 h-4" />
+                            </button>
+                          </div>
+                        </div>
+                      </div>
+                    ))}
+                </div>
+              )}
+            </div>
+
+            <div className="bg-white rounded-xl border border-slate-200 p-6 mb-6">
+              <button
+                onClick={() => setShowEvents(!showEvents)}
+                className="w-full flex items-center justify-between text-sm font-semibold text-slate-700"
+              >
+                <span className="flex items-center gap-2">
+                  <MessageSquare className="w-4 h-4 text-indigo-500" />
+                  Recent Webhook Events ({webhookEvents.length})
+                </span>
+                {showEvents ? <ChevronUp className="w-4 h-4" /> : <ChevronDown className="w-4 h-4" />}
+              </button>
+
+              {showEvents && (
+                <div className="mt-4">
+                  {webhookEvents.length === 0 ? (
+                    <p className="text-xs text-slate-400 py-4 text-center">No webhook events yet.</p>
+                  ) : (
+                    <div className="overflow-x-auto">
+                      <table className="w-full text-xs">
+                        <thead>
+                          <tr className="border-b border-slate-200">
+                            <th className="text-left py-2 px-2 text-slate-500 font-medium">Event</th>
+                            <th className="text-left py-2 px-2 text-slate-500 font-medium">Call ID</th>
+                            <th className="text-left py-2 px-2 text-slate-500 font-medium">Status</th>
+                            <th className="text-left py-2 px-2 text-slate-500 font-medium">Duration</th>
+                            <th className="text-left py-2 px-2 text-slate-500 font-medium">Time</th>
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {webhookEvents.map((event) => (
+                            <tr key={event.id} className="border-b border-slate-100 hover:bg-slate-50">
+                              <td className="py-2 px-2 font-mono">{event.event_type}</td>
+                              <td className="py-2 px-2 text-slate-500">
+                                {event.external_id ? event.external_id.slice(0, 12) + '...' : '—'}
+                              </td>
+                              <td className="py-2 px-2">
+                                <span
+                                  className={`inline-block px-2 py-0.5 rounded text-xs font-medium ${
+                                    event.status === 'completed'
+                                      ? 'bg-green-100 text-green-700'
+                                      : event.status === 'failed'
+                                        ? 'bg-red-100 text-red-700'
+                                        : 'bg-amber-100 text-amber-700'
+                                  }`}
+                                >
+                                  {event.status}
+                                </span>
+                              </td>
+                              <td className="py-2 px-2 text-slate-500">{event.duration_ms ? `${event.duration_ms}ms` : '—'}</td>
+                              <td className="py-2 px-2 text-slate-500">
+                                {new Date(event.created_at).toLocaleString('en-US', {
+                                  month: 'short',
+                                  day: 'numeric',
+                                  hour: 'numeric',
+                                  minute: '2-digit',
+                                })}
+                              </td>
+                            </tr>
+                          ))}
+                        </tbody>
+                      </table>
+                    </div>
+                  )}
+                </div>
+              )}
+            </div>
+
+            <div className="bg-white rounded-xl border border-slate-200 p-6 mb-6">
+              <div className="flex items-center justify-between">
+                <label className="flex items-center gap-3 cursor-pointer">
+                  <input
+                    type="checkbox"
+                    checked={settings.is_active}
+                    onChange={(e) => updateSetting('is_active', e.target.checked)}
+                    className="rounded border-slate-300 text-indigo-600 focus:ring-indigo-500"
+                  />
+                  <div>
+                    <span className="text-sm font-medium text-slate-700">Agent Active</span>
+                    <p className="text-xs text-slate-400">When disabled, the agent will not process availability checks or bookings</p>
+                  </div>
+                </label>
+
+                <div className="flex items-center gap-3">
+                  <button
+                    onClick={() => fetchSettings(selectedClientId)}
+                    className="px-4 py-2 text-sm text-slate-600 border border-slate-300 rounded-lg hover:bg-slate-50"
+                    title="Refresh"
+                  >
+                    <RefreshCw className="w-4 h-4" />
+                  </button>
+
+                  <button
+                    onClick={handleSave}
+                    disabled={isSaving}
+                    className="flex items-center gap-2 px-6 py-2 bg-indigo-600 text-white text-sm font-medium rounded-lg hover:bg-indigo-700 disabled:opacity-50"
+                  >
+                    {isSaving ? <Loader2 className="w-4 h-4 animate-spin" /> : <Save className="w-4 h-4" />}
+                    {isSaving ? 'Saving...' : 'Save Settings'}
+                  </button>
+                </div>
+              </div>
+            </div>
+          </>
+        )}
+      </div>
+    </AdminLayout>
+  );
 };
 
 export default AdminAgentSettings;

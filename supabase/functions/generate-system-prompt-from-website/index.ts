@@ -39,48 +39,36 @@ function htmlToText(html: string): string {
 }
 
 async function callGemini(apiKey: string, prompt: string) {
-  // Try a couple model names because Google sometimes changes availability per key.
-  const modelsToTry = [
-    'gemini-1.5-flash',
-    'gemini-1.5-flash-latest',
-    'gemini-1.5-pro',
-    'gemini-1.5-pro-latest',
-  ];
+  // User-requested model for consistency across the app.
+  const model = 'gemini-2.5-flash';
+  const url = `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent`;
 
-  let lastErr: string | null = null;
+  console.log('[generate-system-prompt-from-website] Calling Gemini', { model });
 
-  for (const model of modelsToTry) {
-    const url = `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent`;
-
-    console.log('[generate-system-prompt-from-website] Calling Gemini', { model });
-
-    const res = await fetch(url, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'x-goog-api-key': apiKey,
+  const res = await fetch(url, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      'x-goog-api-key': apiKey,
+    },
+    body: JSON.stringify({
+      contents: [{ parts: [{ text: prompt }] }],
+      generationConfig: {
+        temperature: 0.4,
+        maxOutputTokens: 900,
       },
-      body: JSON.stringify({
-        contents: [{ parts: [{ text: prompt }] }],
-        generationConfig: {
-          temperature: 0.4,
-          maxOutputTokens: 900,
-        },
-      }),
-    });
+    }),
+  });
 
-    const text = await res.text();
-    let json: any = null;
-    try {
-      json = JSON.parse(text);
-    } catch {
-      json = null;
-    }
+  const text = await res.text();
+  let json: any = null;
+  try {
+    json = JSON.parse(text);
+  } catch {
+    json = null;
+  }
 
-    if (res.ok) {
-      return { model, json };
-    }
-
+  if (!res.ok) {
     const msg = json?.error?.message || json?.message || json?.detail || text || `HTTP ${res.status}`;
     console.error('[generate-system-prompt-from-website] Gemini API error', {
       model,
@@ -88,15 +76,14 @@ async function callGemini(apiKey: string, prompt: string) {
       message: msg?.slice?.(0, 500) || msg,
     });
 
-    lastErr = `Model ${model}: ${msg}`;
-
-    // If unauthorized, don't bother trying other models.
     if (res.status === 401 || res.status === 403) {
       throw new Error('Unauthorized to Gemini API (check GEMINI_API_KEY)');
     }
+
+    throw new Error(`Model ${model}: ${msg}`);
   }
 
-  throw new Error(lastErr || 'AI generation failed');
+  return { model, json };
 }
 
 serve(async (req) => {
