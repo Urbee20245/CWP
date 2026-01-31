@@ -28,6 +28,7 @@ import AdminDocumentGenerator from './src/pages/AdminDocumentGenerator';
 import AdminEmailGenerator from './src/pages/AdminEmailGenerator';
 import AdminTwilioSettings from './src/pages/AdminTwilioSettings';
 import AdminVoiceManagement from './src/pages/AdminVoiceManagement';
+import AdminAgentSettings from './src/pages/AdminAgentSettings';
 import NotFoundPage from './src/pages/NotFoundPage';
 import ErrorBoundary from './src/components/ErrorBoundary';
 import GlobalLoading from './src/components/GlobalLoading';
@@ -88,6 +89,7 @@ const AppContent: React.FC = () => {
           <Route path="projects" element={<AdminProjectList />} />
           <Route path="projects/:id" element={<AdminProjectDetail />} />
           <Route path="voice" element={<AdminVoiceManagement />} />
+          <Route path="agent-settings" element={<AdminAgentSettings />} />
           <Route path="appointments" element={<AdminAppointmentManagement />} />
           <Route path="billing/products" element={<AdminBillingProducts />} />
           <Route path="billing/revenue" element={<AdminRevenueDashboard />} />
