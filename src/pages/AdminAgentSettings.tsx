@@ -23,6 +23,7 @@ import {
   Shield,
   Wand2,
   Zap,
+  X
 } from 'lucide-react';
 
 interface Client {
@@ -92,23 +93,13 @@ const DEFAULT_SETTINGS: Omit<AgentSettings, 'client_id'> = {
 };
 
 const DAY_NAMES: Record<string, string> = {
-  '0': 'Sunday',
-  '1': 'Monday',
-  '2': 'Tuesday',
-  '3': 'Wednesday',
-  '4': 'Thursday',
-  '5': 'Friday',
-  '6': 'Saturday',
+  '0': 'Sunday', '1': 'Monday', '2': 'Tuesday', '3': 'Wednesday',
+  '4': 'Thursday', '5': 'Friday', '6': 'Saturday',
 };
 
 const TIMEZONE_OPTIONS = [
-  'America/New_York',
-  'America/Chicago',
-  'America/Denver',
-  'America/Los_Angeles',
-  'America/Phoenix',
-  'America/Anchorage',
-  'Pacific/Honolulu',
+  'America/New_York', 'America/Chicago', 'America/Denver', 'America/Los_Angeles',
+  'America/Phoenix', 'America/Anchorage', 'Pacific/Honolulu',
 ];
 
 const AdminAgentSettings: React.FC = () => {
@@ -128,7 +119,14 @@ const AdminAgentSettings: React.FC = () => {
   const [showBusinessHours, setShowBusinessHours] = useState(false);
 
   // Prompt assistant
+  const [showAssistant, setShowAssistant] = useState(false);
   const [websiteUrl, setWebsiteUrl] = useState('');
+  const [industry, setIndustry] = useState('');
+  const [tone, setTone] = useState('Professional and friendly');
+  const [location, setLocation] = useState('');
+  const [businessPhone, setBusinessPhone] = useState('');
+  const [servicesOffered, setServicesOffered] = useState('');
+  const [specialInstructions, setSpecialInstructions] = useState('');
   const [isGeneratingPrompt, setIsGeneratingPrompt] = useState(false);
 
   const showFeedback = (type: 'success' | 'error' | 'info', text: string) => {
@@ -147,12 +145,10 @@ const AdminAgentSettings: React.FC = () => {
         setClients(data || []);
       } catch (err: any) {
         console.error('[AdminAgentSettings] Failed to fetch clients:', err.message);
-        showFeedback('error', `Failed to fetch clients: ${err.message}`);
       } finally {
         setIsLoading(false);
       }
     };
-
     fetchClients();
   }, []);
 
@@ -164,31 +160,17 @@ const AdminAgentSettings: React.FC = () => {
 
   const fetchSettings = useCallback(async (clientId: string) => {
     if (!clientId) return;
-
     setIsLoading(true);
     try {
-      const [{ data: settingsRow, error: settingsErr }, { data: recentEvents, error: eventsErr }, { data: calendarRow }, { data: voiceRow }] = await Promise.all([
+      const [{ data: settingsRow, error: settingsErr }, { data: recentEvents, error: eventsErr }, { data: calendarRow }, { data: voiceRow }, { data: clientRow }] = await Promise.all([
         supabase.from('ai_agent_settings').select('*').eq('client_id', clientId).maybeSingle(),
-        supabase
-          .from('webhook_events')
-          .select('id, event_type, event_source, external_id, status, error_message, duration_ms, created_at')
-          .eq('client_id', clientId)
-          .order('created_at', { ascending: false })
-          .limit(20),
-        supabase
-          .from('client_google_calendar')
-          .select('connection_status, calendar_id, last_synced_at')
-          .eq('client_id', clientId)
-          .maybeSingle(),
-        supabase
-          .from('client_voice_integrations')
-          .select('retell_agent_id, voice_status, phone_number')
-          .eq('client_id', clientId)
-          .maybeSingle(),
+        supabase.from('webhook_events').select('id, event_type, event_source, external_id, status, error_message, duration_ms, created_at').eq('client_id', clientId).order('created_at', { ascending: false }).limit(20),
+        supabase.from('client_google_calendar').select('connection_status, calendar_id, last_synced_at').eq('client_id', clientId).maybeSingle(),
+        supabase.from('client_voice_integrations').select('retell_agent_id, voice_status, phone_number').eq('client_id', clientId).maybeSingle(),
+        supabase.from('clients').select('phone, address').eq('id', clientId).maybeSingle(),
       ]);
 
       if (settingsErr) throw settingsErr;
-      if (eventsErr) console.warn('[AdminAgentSettings] webhook events fetch failed:', eventsErr.message);
 
       const merged = settingsRow
         ? { ...DEFAULT_SETTINGS, ...settingsRow, client_id: clientId }
@@ -197,30 +179,28 @@ const AdminAgentSettings: React.FC = () => {
       setSettings(merged);
       setWebhookUrls(buildWebhookUrls());
       setWebhookEvents(recentEvents || []);
+      
+      // Auto-fill assistant fields from client record
+      if (clientRow) {
+        setBusinessPhone(clientRow.phone || '');
+        setLocation(clientRow.address || '');
+      }
 
       setIntegrations({
-        google_calendar: calendarRow
-          ? {
-              connected: calendarRow.connection_status === 'connected',
-              calendar_id: calendarRow.calendar_id,
-              last_synced: calendarRow.last_synced_at,
-            }
-          : { connected: false },
-        retell: voiceRow
-          ? {
-              configured: !!voiceRow.retell_agent_id,
-              agent_id: voiceRow.retell_agent_id,
-              voice_status: voiceRow.voice_status,
-              phone_number: voiceRow.phone_number,
-            }
-          : { configured: false },
+        google_calendar: calendarRow ? {
+          connected: calendarRow.connection_status === 'connected',
+          calendar_id: calendarRow.calendar_id,
+          last_synced: calendarRow.last_synced_at,
+        } : { connected: false },
+        retell: voiceRow ? {
+          configured: !!voiceRow.retell_agent_id,
+          agent_id: voiceRow.retell_agent_id,
+          voice_status: voiceRow.voice_status,
+          phone_number: voiceRow.phone_number,
+        } : { configured: false },
       });
     } catch (err: any) {
       console.error('[AdminAgentSettings] Failed to fetch settings:', err.message);
-      setSettings({ ...DEFAULT_SETTINGS, client_id: clientId });
-      setWebhookUrls(buildWebhookUrls());
-      setWebhookEvents([]);
-      setIntegrations(null);
       showFeedback('error', `Failed to load settings: ${err.message}`);
     } finally {
       setIsLoading(false);
@@ -235,7 +215,6 @@ const AdminAgentSettings: React.FC = () => {
       setWebhookUrls(null);
       setWebhookEvents([]);
       setIntegrations(null);
-      setWebsiteUrl('');
     }
   }, [selectedClientId, fetchSettings]);
 
@@ -244,37 +223,8 @@ const AdminAgentSettings: React.FC = () => {
     setSettings({ ...settings, [key]: value });
   };
 
-  const updateBusinessHours = (day: string, field: 'start' | 'end', value: string) => {
-    if (!settings) return;
-    const hours = { ...settings.business_hours };
-    hours[day] = hours[day] ? { ...hours[day], [field]: value } : { start: '09:00', end: '17:00', [field]: value };
-    setSettings({ ...settings, business_hours: hours });
-  };
-
-  const toggleBusinessDay = (day: string) => {
-    if (!settings) return;
-    const hours = { ...settings.business_hours };
-    if (hours[day]) delete hours[day];
-    else hours[day] = { start: '09:00', end: '17:00' };
-    setSettings({ ...settings, business_hours: hours });
-  };
-
-  const toggleMeetingType = (type: string) => {
-    if (!settings) return;
-    const types = settings.allowed_meeting_types.includes(type)
-      ? settings.allowed_meeting_types.filter((t) => t !== type)
-      : [...settings.allowed_meeting_types, type];
-    updateSetting('allowed_meeting_types', types);
-  };
-
-  const copyToClipboard = (text: string) => {
-    navigator.clipboard.writeText(text);
-    showFeedback('info', 'Copied to clipboard.');
-  };
-
   const handleSave = async () => {
     if (!settings || !selectedClientId) return;
-
     setIsSaving(true);
     try {
       const payload: any = {
@@ -299,28 +249,16 @@ const AdminAgentSettings: React.FC = () => {
       const { error: upsertErr } = await supabase.from('ai_agent_settings').upsert(payload, { onConflict: 'client_id' });
       if (upsertErr) throw upsertErr;
 
-      // Keep Retell Agent ID saved in voice integrations too (used by provisioning + webhook routing)
       if (settings.retell_agent_id && settings.retell_agent_id.trim()) {
-        const { data: twilioIntegration } = await supabase
-          .from('client_integrations')
-          .select('provider')
-          .eq('client_id', selectedClientId)
-          .eq('provider', 'twilio')
-          .maybeSingle();
-
+        const { data: twilioIntegration } = await supabase.from('client_integrations').select('provider').eq('client_id', selectedClientId).eq('provider', 'twilio').maybeSingle();
         const inferredSource = twilioIntegration ? 'client' : 'platform';
-        await supabase
-          .from('client_voice_integrations')
-          .upsert(
-            {
-              client_id: selectedClientId,
-              retell_agent_id: settings.retell_agent_id.trim(),
-              number_source: inferredSource,
-              voice_status: 'inactive',
-              a2p_status: inferredSource === 'platform' ? 'not_started' : 'none',
-            },
-            { onConflict: 'client_id' }
-          );
+        await supabase.from('client_voice_integrations').upsert({
+          client_id: selectedClientId,
+          retell_agent_id: settings.retell_agent_id.trim(),
+          number_source: inferredSource,
+          voice_status: 'inactive',
+          a2p_status: inferredSource === 'platform' ? 'not_started' : 'none',
+        }, { onConflict: 'client_id' });
       }
 
       showFeedback('success', 'Agent settings saved successfully.');
@@ -334,27 +272,23 @@ const AdminAgentSettings: React.FC = () => {
 
   const handleGeneratePrompt = async () => {
     if (!settings) return;
-
-    const url = websiteUrl.trim();
-    if (!url) {
-      showFeedback('error', 'Please enter the business website URL.');
-      return;
-    }
-
-    const clientName = clients.find((c) => c.id === selectedClientId)?.business_name;
-
     setIsGeneratingPrompt(true);
     try {
-      const result = await AdminService.generateSystemPromptFromWebsite(url, clientName);
-      if (!result?.success) {
-        throw new Error(result?.error || 'Prompt generation failed');
-      }
-
-      const prompt = result?.system_prompt;
-      if (!prompt) throw new Error('No prompt returned');
-
-      updateSetting('system_prompt', prompt);
-      showFeedback('success', 'System prompt generated. Review and click Save Settings.');
+      const clientName = clients.find(c => c.id === selectedClientId)?.business_name;
+      const result = await AdminService.generateSystemPromptFromWebsite(websiteUrl, clientName, {
+        industry,
+        tone,
+        location,
+        phone: businessPhone,
+        services: servicesOffered,
+        special_instructions: specialInstructions
+      });
+      
+      if (!result?.success) throw new Error(result?.error || 'Generation failed');
+      
+      updateSetting('system_prompt', result.system_prompt);
+      showFeedback('success', 'System prompt generated using Gemini 2.5 Flash.');
+      setShowAssistant(false);
     } catch (err: any) {
       showFeedback('error', `Failed to generate prompt: ${err.message}`);
     } finally {
@@ -370,52 +304,23 @@ const AdminAgentSettings: React.FC = () => {
             <Bot className="w-7 h-7 text-indigo-600" />
             AI Agent Settings
           </h1>
-          <p className="text-sm text-slate-500 mt-1">Configure per-client AI agent behavior and integrations.</p>
+          <p className="text-sm text-slate-500 mt-1">Configure per-client AI agent behavior, capabilities, and webhook integrations for Retell AI.</p>
         </div>
 
         {feedback && (
-          <div
-            className={`mb-6 p-4 rounded-lg flex items-center gap-3 ${
-              feedback.type === 'success'
-                ? 'bg-green-50 text-green-800 border border-green-200'
-                : feedback.type === 'error'
-                  ? 'bg-red-50 text-red-800 border border-red-200'
-                  : 'bg-blue-50 text-blue-800 border border-blue-200'
-            }`}
-          >
-            {feedback.type === 'success' ? (
-              <CheckCircle2 className="w-5 h-5" />
-            ) : feedback.type === 'error' ? (
-              <AlertTriangle className="w-5 h-5" />
-            ) : (
-              <Info className="w-5 h-5" />
-            )}
+          <div className={`mb-6 p-4 rounded-lg flex items-center gap-3 ${feedback.type === 'success' ? 'bg-green-50 text-green-800 border border-green-200' : feedback.type === 'error' ? 'bg-red-50 text-red-800 border border-red-200' : 'bg-blue-50 text-blue-800 border border-blue-200'}`}>
+            {feedback.type === 'success' ? <CheckCircle2 className="w-5 h-5" /> : feedback.type === 'error' ? <AlertTriangle className="w-5 h-5" /> : <Info className="w-5 h-5" />}
             <span className="text-sm">{feedback.text}</span>
           </div>
         )}
 
         <div className="bg-white rounded-xl border border-slate-200 p-6 mb-6">
           <label className="block text-sm font-semibold text-slate-700 mb-2">Select Client</label>
-          <select
-            value={selectedClientId}
-            onChange={(e) => setSelectedClientId(e.target.value)}
-            className="w-full md:w-96 px-4 py-2 border border-slate-300 rounded-lg text-sm focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500"
-          >
+          <select value={selectedClientId} onChange={(e) => setSelectedClientId(e.target.value)} className="w-full md:w-96 px-4 py-2 border border-slate-300 rounded-lg text-sm focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500">
             <option value="">-- Choose a client --</option>
-            {clients.map((c) => (
-              <option key={c.id} value={c.id}>
-                {c.business_name}
-              </option>
-            ))}
+            {clients.map(c => <option key={c.id} value={c.id}>{c.business_name}</option>)}
           </select>
         </div>
-
-        {isLoading && selectedClientId && (
-          <div className="flex items-center gap-2 text-slate-500 py-12 justify-center">
-            <Loader2 className="w-5 h-5 animate-spin" />
-            <span>Loading agent settings...</span>
-          </div>
-        )}
 
         {settings && !isLoading && (
           <>
@@ -426,38 +331,19 @@ const AdminAgentSettings: React.FC = () => {
                   Integration Status
                 </h2>
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                  <div
-                    className={`p-3 rounded-lg border ${
-                      integrations.google_calendar.connected ? 'border-green-200 bg-green-50' : 'border-amber-200 bg-amber-50'
-                    }`}
-                  >
+                  <div className={`p-3 rounded-lg border ${integrations.google_calendar.connected ? 'border-green-200 bg-green-50' : 'border-amber-200 bg-amber-50'}`}>
                     <div className="flex items-center gap-2">
-                      <Calendar
-                        className={`w-4 h-4 ${integrations.google_calendar.connected ? 'text-green-600' : 'text-amber-600'}`}
-                      />
+                      <Calendar className={`w-4 h-4 ${integrations.google_calendar.connected ? 'text-green-600' : 'text-amber-600'}`} />
                       <span className="text-sm font-medium">Google Calendar</span>
                     </div>
-                    <p className="text-xs mt-1 text-slate-600">
-                      {integrations.google_calendar.connected
-                        ? `Connected (${integrations.google_calendar.calendar_id || 'primary'})`
-                        : 'Not connected'}
-                    </p>
+                    <p className="text-xs mt-1 text-slate-600">{integrations.google_calendar.connected ? `Connected (${integrations.google_calendar.calendar_id || 'primary'})` : 'Not connected'}</p>
                   </div>
-
-                  <div
-                    className={`p-3 rounded-lg border ${
-                      integrations.retell.configured ? 'border-green-200 bg-green-50' : 'border-amber-200 bg-amber-50'
-                    }`}
-                  >
+                  <div className={`p-3 rounded-lg border ${integrations.retell.configured ? 'border-green-200 bg-green-50' : 'border-amber-200 bg-amber-50'}`}>
                     <div className="flex items-center gap-2">
                       <Phone className={`w-4 h-4 ${integrations.retell.configured ? 'text-green-600' : 'text-amber-600'}`} />
                       <span className="text-sm font-medium">Retell AI</span>
                     </div>
-                    <p className="text-xs mt-1 text-slate-600">
-                      {integrations.retell.configured
-                        ? `Agent: ${integrations.retell.agent_id} | ${integrations.retell.voice_status || 'inactive'}`
-                        : 'No agent configured yet'}
-                    </p>
+                    <p className="text-xs mt-1 text-slate-600">{integrations.retell.configured ? `Agent: ${integrations.retell.agent_id} | ${integrations.retell.voice_status || 'inactive'}` : 'No agent configured yet'}</p>
                   </div>
                 </div>
               </div>
@@ -468,108 +354,98 @@ const AdminAgentSettings: React.FC = () => {
                 <Bot className="w-4 h-4 text-indigo-500" />
                 Agent Identity
               </h2>
-
               <div className="space-y-4">
                 <div>
-                  <label className="block text-xs font-medium text-slate-600 mb-1">Retell Agent ID</label>
-                  <input
-                    type="text"
-                    value={settings.retell_agent_id || ''}
-                    onChange={(e) => updateSetting('retell_agent_id', e.target.value)}
-                    className="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm font-mono focus:ring-2 focus:ring-indigo-500"
-                    placeholder="agent_xxxxxxxxxxxxxxxx"
-                  />
-                </div>
-
-                <div>
                   <label className="block text-xs font-medium text-slate-600 mb-1">Agent Name</label>
-                  <input
-                    type="text"
-                    value={settings.agent_name}
-                    onChange={(e) => updateSetting('agent_name', e.target.value)}
-                    className="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm focus:ring-2 focus:ring-indigo-500"
-                  />
+                  <input type="text" value={settings.agent_name} onChange={(e) => updateSetting('agent_name', e.target.value)} className="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm focus:ring-2 focus:ring-indigo-500" />
                 </div>
-
-                <div className="p-4 rounded-lg border border-indigo-200 bg-indigo-50">
-                  <div className="flex items-center justify-between gap-3">
-                    <div>
-                      <p className="text-sm font-semibold text-indigo-900 flex items-center gap-2">
-                        <Wand2 className="w-4 h-4" /> AI Prompt Assistant
-                      </p>
-                      <p className="text-xs text-indigo-700 mt-1">
-                        Generates a phone-agent system prompt from a business website using Gemini 2.5 Flash.
-                      </p>
-                    </div>
-                    <button
-                      onClick={handleGeneratePrompt}
-                      disabled={isGeneratingPrompt}
-                      className="px-4 py-2 bg-indigo-600 text-white text-sm font-semibold rounded-lg hover:bg-indigo-700 disabled:opacity-50 flex items-center gap-2"
-                    >
-                      {isGeneratingPrompt ? <Loader2 className="w-4 h-4 animate-spin" /> : <Wand2 className="w-4 h-4" />}
-                      {isGeneratingPrompt ? 'Generating...' : 'Generate'}
+                <div>
+                  <div className="flex items-center justify-between mb-1">
+                    <label className="block text-xs font-medium text-slate-600">System Prompt</label>
+                    <button onClick={() => setShowAssistant(!showAssistant)} className="text-xs text-indigo-600 font-medium flex items-center gap-1 hover:text-indigo-700">
+                      <Wand2 className="w-3 h-3" /> {showAssistant ? 'Close Assistant' : 'AI Prompt Assistant'}
                     </button>
                   </div>
-                  <div className="mt-3">
-                    <input
-                      type="text"
-                      value={websiteUrl}
-                      onChange={(e) => setWebsiteUrl(e.target.value)}
-                      className="w-full px-3 py-2 border border-indigo-300 rounded-lg text-sm"
-                      placeholder="https://example.com"
-                    />
-                  </div>
-                </div>
+                  
+                  {showAssistant && (
+                    <div className="mb-4 p-4 rounded-lg border border-indigo-200 bg-indigo-50 space-y-4 animate-in fade-in slide-in-from-top-2">
+                      <div className="flex items-center justify-between">
+                        <p className="text-sm font-bold text-indigo-900 flex items-center gap-2"><Zap className="w-4 h-4" /> AI Prompt Assistant <span className="text-[10px] bg-indigo-200 px-1.5 py-0.5 rounded text-indigo-700 uppercase">Gemini</span></p>
+                        <button onClick={() => setShowAssistant(false)} className="text-slate-400 hover:text-slate-600"><X className="w-4 h-4" /></button>
+                      </div>
+                      <p className="text-xs text-indigo-700">Provide context about this client's business and we'll generate a tailored system prompt. The more detail you provide, the better the result.</p>
+                      
+                      <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                        <div>
+                          <label className="block text-[10px] font-bold text-indigo-800 uppercase mb-1">Industry / Business Type</label>
+                          <input type="text" value={industry} onChange={(e) => setIndustry(e.target.value)} className="w-full px-3 py-2 border border-indigo-200 rounded-lg text-sm" placeholder="e.g. Plumbing, Dental Office, Law Firm" />
+                        </div>
+                        <div>
+                          <label className="block text-[10px] font-bold text-indigo-800 uppercase mb-1">Tone / Style</label>
+                          <select value={tone} onChange={(e) => setTone(e.target.value)} className="w-full px-3 py-2 border border-indigo-200 rounded-lg text-sm">
+                            <option>Professional and friendly</option>
+                            <option>Aggressive and sales-focused</option>
+                            <option>Empathetic and supportive</option>
+                            <option>Casual and upbeat</option>
+                          </select>
+                        </div>
+                        <div>
+                          <label className="block text-[10px] font-bold text-indigo-800 uppercase mb-1">Location / Service Area</label>
+                          <input type="text" value={location} onChange={(e) => setLocation(e.target.value)} className="w-full px-3 py-2 border border-indigo-200 rounded-lg text-sm" placeholder="e.g. Metro Atlanta, GA" />
+                        </div>
+                        <div>
+                          <label className="block text-[10px] font-bold text-indigo-800 uppercase mb-1">Business Phone</label>
+                          <input type="text" value={businessPhone} onChange={(e) => setBusinessPhone(e.target.value)} className="w-full px-3 py-2 border border-indigo-200 rounded-lg text-sm" placeholder="e.g. (404) 555-1234" />
+                        </div>
+                      </div>
+                      
+                      <div>
+                        <label className="block text-[10px] font-bold text-indigo-800 uppercase mb-1">Services Offered</label>
+                        <input type="text" value={servicesOffered} onChange={(e) => setServicesOffered(e.target.value)} className="w-full px-3 py-2 border border-indigo-200 rounded-lg text-sm" placeholder="e.g. Emergency repairs, installations, maintenance plans, free estimates" />
+                      </div>
+                      
+                      <div>
+                        <label className="block text-[10px] font-bold text-indigo-800 uppercase mb-1">Special Instructions (optional)</label>
+                        <textarea value={specialInstructions} onChange={(e) => setSpecialInstructions(e.target.value)} rows={2} className="w-full px-3 py-2 border border-indigo-200 rounded-lg text-sm" placeholder="e.g. Always ask for the caller's name and phone. Never quote prices over the phone." />
+                      </div>
 
-                <div>
-                  <label className="block text-xs font-medium text-slate-600 mb-1">System Prompt</label>
-                  <textarea
-                    value={settings.system_prompt}
-                    onChange={(e) => updateSetting('system_prompt', e.target.value)}
-                    rows={8}
-                    className="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm focus:ring-2 focus:ring-indigo-500"
-                  />
-                </div>
+                      <div>
+                        <label className="block text-[10px] font-bold text-indigo-800 uppercase mb-1">Website URL (for scraping)</label>
+                        <input type="text" value={websiteUrl} onChange={(e) => setWebsiteUrl(e.target.value)} className="w-full px-3 py-2 border border-indigo-200 rounded-lg text-sm" placeholder="https://example.com" />
+                      </div>
 
+                      <div className="p-2 bg-indigo-100/50 rounded border border-indigo-200">
+                        <p className="text-[10px] text-indigo-700 flex items-center gap-1.5"><Info className="w-3 h-3" /> Agent name, capabilities, and business hours from this page are included automatically.</p>
+                      </div>
+
+                      <button onClick={handleGeneratePrompt} disabled={isGeneratingPrompt} className="w-full py-2.5 bg-indigo-600 text-white text-sm font-bold rounded-lg hover:bg-indigo-700 disabled:opacity-50 flex items-center justify-center gap-2">
+                        {isGeneratingPrompt ? <Loader2 className="w-4 h-4 animate-spin" /> : <Zap className="w-4 h-4" />}
+                        {isGeneratingPrompt ? 'Generating...' : 'Generate System Prompt'}
+                      </button>
+                    </div>
+                  )}
+
+                  <textarea value={settings.system_prompt} onChange={(e) => updateSetting('system_prompt', e.target.value)} rows={10} className="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm focus:ring-2 focus:ring-indigo-500" placeholder="Instructions for how the agent should behave..." />
+                  <p className="text-[10px] text-slate-400 mt-1">This prompt is used in Retell agent configuration. Include business details, services, pricing, and behavioral guidelines.</p>
+                </div>
                 <div>
                   <label className="block text-xs font-medium text-slate-600 mb-1">Greeting Message</label>
-                  <input
-                    type="text"
-                    value={settings.greeting_message}
-                    onChange={(e) => updateSetting('greeting_message', e.target.value)}
-                    className="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm focus:ring-2 focus:ring-indigo-500"
-                  />
+                  <input type="text" value={settings.greeting_message} onChange={(e) => updateSetting('greeting_message', e.target.value)} className="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm focus:ring-2 focus:ring-indigo-500" placeholder="e.g. Hi, thank you for calling! How can I help you today?" />
                 </div>
               </div>
             </div>
 
             <div className="bg-white rounded-xl border border-slate-200 p-6 mb-6">
-              <h2 className="text-sm font-semibold text-slate-700 mb-4 flex items-center gap-2">
-                <Zap className="w-4 h-4 text-indigo-500" />
-                Agent Capabilities
-              </h2>
-
+              <h2 className="text-sm font-semibold text-slate-700 mb-4 flex items-center gap-2"><Zap className="w-4 h-4 text-indigo-500" /> Agent Capabilities</h2>
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                 {[
-                  {
-                    key: 'can_check_availability' as const,
-                    label: 'Check Calendar Availability',
-                    desc: 'Query Google Calendar free/busy slots',
-                  },
+                  { key: 'can_check_availability' as const, label: 'Check Calendar Availability', desc: 'Query Google Calendar free/busy slots' },
                   { key: 'can_book_meetings' as const, label: 'Book Meetings', desc: 'Create appointments on Google Calendar' },
                   { key: 'can_transfer_calls' as const, label: 'Transfer Calls', desc: 'Transfer to a live agent (requires Retell config)' },
                   { key: 'can_send_sms' as const, label: 'Send SMS', desc: 'Send text confirmations (requires Twilio)' },
-                ].map((cap) => (
-                  <label
-                    key={cap.key}
-                    className="flex items-start gap-3 p-3 rounded-lg border border-slate-200 hover:bg-slate-50 cursor-pointer"
-                  >
-                    <input
-                      type="checkbox"
-                      checked={settings[cap.key]}
-                      onChange={(e) => updateSetting(cap.key, e.target.checked)}
-                      className="mt-0.5 rounded border-slate-300 text-indigo-600 focus:ring-indigo-500"
-                    />
+                ].map(cap => (
+                  <label key={cap.key} className="flex items-start gap-3 p-3 rounded-lg border border-slate-200 hover:bg-slate-50 cursor-pointer">
+                    <input type="checkbox" checked={settings[cap.key]} onChange={(e) => updateSetting(cap.key, e.target.checked)} className="mt-0.5 rounded border-slate-300 text-indigo-600 focus:ring-indigo-500" />
                     <div>
                       <span className="text-sm font-medium text-slate-700">{cap.label}</span>
                       <p className="text-xs text-slate-400">{cap.desc}</p>
@@ -580,94 +456,45 @@ const AdminAgentSettings: React.FC = () => {
             </div>
 
             <div className="bg-white rounded-xl border border-slate-200 p-6 mb-6">
-              <h2 className="text-sm font-semibold text-slate-700 mb-4 flex items-center gap-2">
-                <Calendar className="w-4 h-4 text-indigo-500" />
-                Booking Configuration
-              </h2>
-
+              <h2 className="text-sm font-semibold text-slate-700 mb-4 flex items-center gap-2"><Calendar className="w-4 h-4 text-indigo-500" /> Booking Configuration</h2>
               <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-4">
                 <div>
                   <label className="block text-xs font-medium text-slate-600 mb-1">Meeting Duration (min)</label>
-                  <input
-                    type="number"
-                    value={settings.default_meeting_duration}
-                    onChange={(e) => updateSetting('default_meeting_duration', parseInt(e.target.value) || 30)}
-                    className="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm"
-                    min={15}
-                    max={120}
-                    step={15}
-                  />
+                  <input type="number" value={settings.default_meeting_duration} onChange={(e) => updateSetting('default_meeting_duration', parseInt(e.target.value) || 30)} className="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm" min={15} max={120} step={15} />
                 </div>
                 <div>
                   <label className="block text-xs font-medium text-slate-600 mb-1">Buffer Between Meetings (min)</label>
-                  <input
-                    type="number"
-                    value={settings.booking_buffer_minutes}
-                    onChange={(e) => updateSetting('booking_buffer_minutes', parseInt(e.target.value) || 0)}
-                    className="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm"
-                    min={0}
-                    max={60}
-                    step={5}
-                  />
+                  <input type="number" value={settings.booking_buffer_minutes} onChange={(e) => updateSetting('booking_buffer_minutes', parseInt(e.target.value) || 0)} className="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm" min={0} max={60} step={5} />
                 </div>
                 <div>
                   <label className="block text-xs font-medium text-slate-600 mb-1">Max Advance Booking (days)</label>
-                  <input
-                    type="number"
-                    value={settings.max_advance_booking_days}
-                    onChange={(e) => updateSetting('max_advance_booking_days', parseInt(e.target.value) || 30)}
-                    className="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm"
-                    min={1}
-                    max={90}
-                  />
+                  <input type="number" value={settings.max_advance_booking_days} onChange={(e) => updateSetting('max_advance_booking_days', parseInt(e.target.value) || 30)} className="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm" min={1} max={90} />
                 </div>
               </div>
-
               <div className="mb-4">
                 <label className="block text-xs font-medium text-slate-600 mb-2">Meeting Types</label>
                 <div className="flex gap-3">
-                  {['phone', 'video', 'in_person'].map((type) => (
+                  {['phone', 'video', 'in_person'].map(type => (
                     <label key={type} className="flex items-center gap-2 cursor-pointer">
-                      <input
-                        type="checkbox"
-                        checked={settings.allowed_meeting_types.includes(type)}
-                        onChange={() => toggleMeetingType(type)}
-                        className="rounded border-slate-300 text-indigo-600 focus:ring-indigo-500"
-                      />
+                      <input type="checkbox" checked={settings.allowed_meeting_types.includes(type)} onChange={() => toggleMeetingType(type)} className="rounded border-slate-300 text-indigo-600 focus:ring-indigo-500" />
                       <span className="text-sm text-slate-700 capitalize">{type.replace('_', ' ')}</span>
                     </label>
                   ))}
                 </div>
               </div>
-
               <div>
                 <label className="block text-xs font-medium text-slate-600 mb-1">Timezone</label>
-                <select
-                  value={settings.timezone}
-                  onChange={(e) => updateSetting('timezone', e.target.value)}
-                  className="w-full md:w-72 px-3 py-2 border border-slate-300 rounded-lg text-sm"
-                >
-                  {TIMEZONE_OPTIONS.map((tz) => (
-                    <option key={tz} value={tz}>
-                      {tz}
-                    </option>
-                  ))}
+                <select value={settings.timezone} onChange={(e) => updateSetting('timezone', e.target.value)} className="w-full md:w-72 px-3 py-2 border border-slate-300 rounded-lg text-sm">
+                  {TIMEZONE_OPTIONS.map(tz => <option key={tz} value={tz}>{tz}</option>)}
                 </select>
               </div>
             </div>
 
             <div className="bg-white rounded-xl border border-slate-200 p-6 mb-6">
-              <button
-                onClick={() => setShowBusinessHours(!showBusinessHours)}
-                className="w-full flex items-center justify-between text-sm font-semibold text-slate-700"
-              >
-                <span className="flex items-center gap-2">
-                  <Clock className="w-4 h-4 text-indigo-500" />
-                  Business Hours
-                </span>
+              <button onClick={() => setShowBusinessHours(!showBusinessHours)} className="w-full flex items-center justify-between text-sm font-semibold text-slate-700">
+                <span className="flex items-center gap-2"><Clock className="w-4 h-4 text-indigo-500" /> Business Hours</span>
                 {showBusinessHours ? <ChevronUp className="w-4 h-4" /> : <ChevronDown className="w-4 h-4" />}
               </button>
-
               {showBusinessHours && (
                 <div className="mt-4 space-y-3">
                   {Object.entries(DAY_NAMES).map(([day, name]) => {
@@ -675,34 +502,16 @@ const AdminAgentSettings: React.FC = () => {
                     return (
                       <div key={day} className="flex items-center gap-4">
                         <label className="flex items-center gap-2 w-32 cursor-pointer">
-                          <input
-                            type="checkbox"
-                            checked={isEnabled}
-                            onChange={() => toggleBusinessDay(day)}
-                            className="rounded border-slate-300 text-indigo-600"
-                          />
+                          <input type="checkbox" checked={isEnabled} onChange={() => toggleBusinessDay(day)} className="rounded border-slate-300 text-indigo-600" />
                           <span className="text-sm text-slate-700">{name}</span>
                         </label>
-
                         {isEnabled ? (
                           <div className="flex items-center gap-2">
-                            <input
-                              type="time"
-                              value={settings.business_hours[day].start}
-                              onChange={(e) => updateBusinessHours(day, 'start', e.target.value)}
-                              className="px-2 py-1 border border-slate-300 rounded text-sm"
-                            />
+                            <input type="time" value={settings.business_hours[day].start} onChange={(e) => updateBusinessHours(day, 'start', e.target.value)} className="px-2 py-1 border border-slate-300 rounded text-sm" />
                             <span className="text-xs text-slate-400">to</span>
-                            <input
-                              type="time"
-                              value={settings.business_hours[day].end}
-                              onChange={(e) => updateBusinessHours(day, 'end', e.target.value)}
-                              className="px-2 py-1 border border-slate-300 rounded text-sm"
-                            />
+                            <input type="time" value={settings.business_hours[day].end} onChange={(e) => updateBusinessHours(day, 'end', e.target.value)} className="px-2 py-1 border border-slate-300 rounded text-sm" />
                           </div>
-                        ) : (
-                          <span className="text-xs text-slate-400">Closed</span>
-                        )}
+                        ) : <span className="text-xs text-slate-400">Closed</span>}
                       </div>
                     );
                   })}
@@ -711,67 +520,38 @@ const AdminAgentSettings: React.FC = () => {
             </div>
 
             <div className="bg-white rounded-xl border border-slate-200 p-6 mb-6">
-              <button
-                onClick={() => setShowWebhooks(!showWebhooks)}
-                className="w-full flex items-center justify-between text-sm font-semibold text-slate-700"
-              >
-                <span className="flex items-center gap-2">
-                  <Globe className="w-4 h-4 text-indigo-500" />
-                  Webhook URLs (for Retell AI Configuration)
-                </span>
+              <button onClick={() => setShowWebhooks(!showWebhooks)} className="w-full flex items-center justify-between text-sm font-semibold text-slate-700">
+                <span className="flex items-center gap-2"><Globe className="w-4 h-4 text-indigo-500" /> Webhook URLs (for Retell AI Configuration)</span>
                 {showWebhooks ? <ChevronUp className="w-4 h-4" /> : <ChevronDown className="w-4 h-4" />}
               </button>
-
               {showWebhooks && (
                 <div className="mt-4 space-y-4">
                   <div className="p-3 bg-indigo-50 border border-indigo-200 rounded-lg">
                     <p className="text-xs text-indigo-700">Copy these URLs into your Retell AI dashboard.</p>
                   </div>
-
-                  {webhookUrls &&
-                    Object.entries(webhookUrls).map(([key, url]) => (
-                      <div key={key} className="flex items-center gap-2">
-                        <div className="flex-1">
-                          <label className="block text-xs font-medium text-slate-600 mb-1 capitalize">{key.replace(/_/g, ' ')}</label>
-                          <div className="flex items-center gap-2">
-                            <input
-                              type="text"
-                              value={String(url)}
-                              readOnly
-                              className="flex-1 px-3 py-2 bg-slate-50 border border-slate-300 rounded-lg text-xs font-mono"
-                            />
-                            <button
-                              onClick={() => copyToClipboard(String(url))}
-                              className="p-2 text-slate-500 hover:text-indigo-600"
-                              title="Copy URL"
-                            >
-                              <Copy className="w-4 h-4" />
-                            </button>
-                          </div>
+                  {webhookUrls && Object.entries(webhookUrls).map(([key, url]) => (
+                    <div key={key} className="flex items-center gap-2">
+                      <div className="flex-1">
+                        <label className="block text-xs font-medium text-slate-600 mb-1 capitalize">{key.replace(/_/g, ' ')}</label>
+                        <div className="flex items-center gap-2">
+                          <input type="text" value={String(url)} readOnly className="flex-1 px-3 py-2 bg-slate-50 border border-slate-300 rounded-lg text-xs font-mono" />
+                          <button onClick={() => copyToClipboard(String(url))} className="p-2 text-slate-500 hover:text-indigo-600" title="Copy URL"><Copy className="w-4 h-4" /></button>
                         </div>
                       </div>
-                    ))}
+                    </div>
+                  ))}
                 </div>
               )}
             </div>
 
             <div className="bg-white rounded-xl border border-slate-200 p-6 mb-6">
-              <button
-                onClick={() => setShowEvents(!showEvents)}
-                className="w-full flex items-center justify-between text-sm font-semibold text-slate-700"
-              >
-                <span className="flex items-center gap-2">
-                  <MessageSquare className="w-4 h-4 text-indigo-500" />
-                  Recent Webhook Events ({webhookEvents.length})
-                </span>
+              <button onClick={() => setShowEvents(!showEvents)} className="w-full flex items-center justify-between text-sm font-semibold text-slate-700">
+                <span className="flex items-center gap-2"><MessageSquare className="w-4 h-4 text-indigo-500" /> Recent Webhook Events ({webhookEvents.length})</span>
                 {showEvents ? <ChevronUp className="w-4 h-4" /> : <ChevronDown className="w-4 h-4" />}
               </button>
-
               {showEvents && (
                 <div className="mt-4">
-                  {webhookEvents.length === 0 ? (
-                    <p className="text-xs text-slate-400 py-4 text-center">No webhook events yet.</p>
-                  ) : (
+                  {webhookEvents.length === 0 ? <p className="text-xs text-slate-400 py-4 text-center">No webhook events yet.</p> : (
                     <div className="overflow-x-auto">
                       <table className="w-full text-xs">
                         <thead>
@@ -784,34 +564,15 @@ const AdminAgentSettings: React.FC = () => {
                           </tr>
                         </thead>
                         <tbody>
-                          {webhookEvents.map((event) => (
+                          {webhookEvents.map(event => (
                             <tr key={event.id} className="border-b border-slate-100 hover:bg-slate-50">
                               <td className="py-2 px-2 font-mono">{event.event_type}</td>
-                              <td className="py-2 px-2 text-slate-500">
-                                {event.external_id ? event.external_id.slice(0, 12) + '...' : '—'}
-                              </td>
+                              <td className="py-2 px-2 text-slate-500">{event.external_id ? event.external_id.slice(0, 12) + '...' : '—'}</td>
                               <td className="py-2 px-2">
-                                <span
-                                  className={`inline-block px-2 py-0.5 rounded text-xs font-medium ${
-                                    event.status === 'completed'
-                                      ? 'bg-green-100 text-green-700'
-                                      : event.status === 'failed'
-                                        ? 'bg-red-100 text-red-700'
-                                        : 'bg-amber-100 text-amber-700'
-                                  }`}
-                                >
-                                  {event.status}
-                                </span>
+                                <span className={`inline-block px-2 py-0.5 rounded text-xs font-medium ${event.status === 'completed' ? 'bg-green-100 text-green-700' : event.status === 'failed' ? 'bg-red-100 text-red-700' : 'bg-amber-100 text-amber-700'}`}>{event.status}</span>
                               </td>
                               <td className="py-2 px-2 text-slate-500">{event.duration_ms ? `${event.duration_ms}ms` : '—'}</td>
-                              <td className="py-2 px-2 text-slate-500">
-                                {new Date(event.created_at).toLocaleString('en-US', {
-                                  month: 'short',
-                                  day: 'numeric',
-                                  hour: 'numeric',
-                                  minute: '2-digit',
-                                })}
-                              </td>
+                              <td className="py-2 px-2 text-slate-500">{new Date(event.created_at).toLocaleString('en-US', { month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' })}</td>
                             </tr>
                           ))}
                         </tbody>
@@ -825,32 +586,15 @@ const AdminAgentSettings: React.FC = () => {
             <div className="bg-white rounded-xl border border-slate-200 p-6 mb-6">
               <div className="flex items-center justify-between">
                 <label className="flex items-center gap-3 cursor-pointer">
-                  <input
-                    type="checkbox"
-                    checked={settings.is_active}
-                    onChange={(e) => updateSetting('is_active', e.target.checked)}
-                    className="rounded border-slate-300 text-indigo-600 focus:ring-indigo-500"
-                  />
+                  <input type="checkbox" checked={settings.is_active} onChange={(e) => updateSetting('is_active', e.target.checked)} className="rounded border-slate-300 text-indigo-600 focus:ring-indigo-500" />
                   <div>
                     <span className="text-sm font-medium text-slate-700">Agent Active</span>
                     <p className="text-xs text-slate-400">When disabled, the agent will not process availability checks or bookings</p>
                   </div>
                 </label>
-
                 <div className="flex items-center gap-3">
-                  <button
-                    onClick={() => fetchSettings(selectedClientId)}
-                    className="px-4 py-2 text-sm text-slate-600 border border-slate-300 rounded-lg hover:bg-slate-50"
-                    title="Refresh"
-                  >
-                    <RefreshCw className="w-4 h-4" />
-                  </button>
-
-                  <button
-                    onClick={handleSave}
-                    disabled={isSaving}
-                    className="flex items-center gap-2 px-6 py-2 bg-indigo-600 text-white text-sm font-medium rounded-lg hover:bg-indigo-700 disabled:opacity-50"
-                  >
+                  <button onClick={() => fetchSettings(selectedClientId)} className="px-4 py-2 text-sm text-slate-600 border border-slate-300 rounded-lg hover:bg-slate-50" title="Refresh"><RefreshCw className="w-4 h-4" /></button>
+                  <button onClick={handleSave} disabled={isSaving} className="flex items-center gap-2 px-6 py-2 bg-indigo-600 text-white text-sm font-medium rounded-lg hover:bg-indigo-700 disabled:opacity-50">
                     {isSaving ? <Loader2 className="w-4 h-4 animate-spin" /> : <Save className="w-4 h-4" />}
                     {isSaving ? 'Saving...' : 'Save Settings'}
                   </button>

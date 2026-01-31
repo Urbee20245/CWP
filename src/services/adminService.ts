@@ -70,10 +70,11 @@ export const AdminService = {
   },
 
   // Generate a system prompt by scraping a website (Gemini)
-  generateSystemPromptFromWebsite: async (websiteUrl: string, businessName?: string) => {
+  generateSystemPromptFromWebsite: async (websiteUrl: string, businessName?: string, context?: any) => {
     return invokeEdgeFunction('generate-system-prompt-from-website', {
       website_url: websiteUrl,
       business_name: businessName,
+      ...context
     });
   },
 

@@ -11,8 +11,6 @@ const corsHeaders = {
 };
 
 function jsonRes(body: any) {
-  // IMPORTANT: Always return 200 so the client SDK doesn't hide the real error
-  // behind a generic "non-2xx" message. We communicate success/failure in JSON.
   return new Response(JSON.stringify(body), { status: 200, headers: corsHeaders });
 }
 
@@ -39,11 +37,8 @@ function htmlToText(html: string): string {
 }
 
 async function callGemini(apiKey: string, prompt: string) {
-  // User-requested model for consistency across the app.
   const model = 'gemini-2.5-flash';
   const url = `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent`;
-
-  console.log('[generate-system-prompt-from-website] Calling Gemini', { model });
 
   const res = await fetch(url, {
     method: 'POST',
@@ -55,7 +50,7 @@ async function callGemini(apiKey: string, prompt: string) {
       contents: [{ parts: [{ text: prompt }] }],
       generationConfig: {
         temperature: 0.4,
-        maxOutputTokens: 900,
+        maxOutputTokens: 2000,
       },
     }),
   });
@@ -70,16 +65,9 @@ async function callGemini(apiKey: string, prompt: string) {
 
   if (!res.ok) {
     const msg = json?.error?.message || json?.message || json?.detail || text || `HTTP ${res.status}`;
-    console.error('[generate-system-prompt-from-website] Gemini API error', {
-      model,
-      status: res.status,
-      message: msg?.slice?.(0, 500) || msg,
-    });
-
     if (res.status === 401 || res.status === 403) {
       throw new Error('Unauthorized to Gemini API (check GEMINI_API_KEY)');
     }
-
     throw new Error(`Model ${model}: ${msg}`);
   }
 
@@ -94,68 +82,76 @@ serve(async (req) => {
   try {
     const GEMINI_API_KEY = Deno.env.get('GEMINI_API_KEY');
     if (!GEMINI_API_KEY) {
-      console.error('[generate-system-prompt-from-website] Missing GEMINI_API_KEY');
       return jsonRes({ success: false, error: 'AI service unavailable (missing GEMINI_API_KEY)' });
     }
 
-    const { website_url, business_name } = await req.json();
+    const { 
+      website_url, 
+      business_name,
+      industry,
+      tone,
+      location,
+      phone,
+      services,
+      special_instructions
+    } = await req.json();
+
     const url = normalizeUrl(website_url);
-    const biz = typeof business_name === 'string' ? business_name.trim() : '';
+    const biz = (business_name || '').trim();
 
-    if (!url) {
-      return jsonRes({ success: false, error: 'Missing website_url' });
+    let websiteContext = "";
+    if (url) {
+      console.log('[generate-system-prompt-from-website] Fetching website content', { url });
+      try {
+        const siteRes = await fetch(url, {
+          headers: { 'User-Agent': 'Mozilla/5.0 (compatible; CWPBot/1.0; +https://customwebsitesplus.com)' },
+        });
+        if (siteRes.ok) {
+          const html = await siteRes.text();
+          websiteContext = htmlToText(html).slice(0, 12000);
+        }
+      } catch (e) {
+        console.warn('[generate-system-prompt-from-website] Website fetch failed, proceeding with provided fields only', e.message);
+      }
     }
-
-    console.log('[generate-system-prompt-from-website] Fetching website content', { url });
-
-    const siteRes = await fetch(url, {
-      headers: {
-        'User-Agent': 'Mozilla/5.0 (compatible; CWPBot/1.0; +https://customwebsitesplus.com)'
-      },
-    });
-
-    if (!siteRes.ok) {
-      const text = await siteRes.text();
-      console.error('[generate-system-prompt-from-website] Website fetch failed', {
-        status: siteRes.status,
-        body: text?.slice?.(0, 200),
-      });
-      return jsonRes({ success: false, error: `Failed to fetch website (HTTP ${siteRes.status})` });
-    }
-
-    const html = await siteRes.text();
-    const extractedText = htmlToText(html);
-
-    // Keep the prompt payload small to avoid token blowups.
-    const websiteTextForModel = extractedText.slice(0, 12000);
 
     const systemPromptInstruction = `You are an expert prompt engineer for AI phone receptionists.
 
-Using the website text below, write a high-quality SYSTEM PROMPT for an AI call-handling agent for the business.
+Using the context below, write a high-quality, in-depth SYSTEM PROMPT for an AI call-handling agent.
 
-REQUIREMENTS:
-- Output ONLY the system prompt text (no markdown, no labels)
-- Assume this is a voice/phone agent that answers inbound calls
-- Include: business overview, services, service area/location, hours if found, how to handle pricing questions, FAQs, how to book/next steps, and tone/brand style
-- If something is unknown, instruct the agent to ask clarifying questions rather than guessing
-- Keep it practical, structured, and easy to follow
+CONTEXT:
+- Business Name: ${biz || 'Unknown'}
+- Industry: ${industry || 'Unknown'}
+- Tone/Style: ${tone || 'Professional and friendly'}
+- Location/Service Area: ${location || 'Unknown'}
+- Business Phone: ${phone || 'Unknown'}
+- Services Offered: ${services || 'Unknown'}
+- Special Instructions: ${special_instructions || 'None'}
+- Website Content: """${websiteContext}"""
 
-Business name (if known): ${biz || 'Unknown'}
+STRUCTURE REQUIREMENTS:
+You MUST follow this EXACT structure for the generated prompt:
 
-Website text:
-"""${websiteTextForModel}"""`;
+1. IDENTITY & GOAL: Define the agent's name (e.g., Sarah), role, and primary goal (booking qualified discovery calls).
+2. ABSOLUTE RULES: Include the "Value Proposition Structure", "Objection Handling", "Complete Sentences Only", "Booking Attempt", "Interest Check", and "Urgency/Scarcity" rules provided in the user's reference.
+3. CONVERSATION FLOW: Step-by-step guide (Opening, Qualification, Discovery, Value Prop, Interest Check, Booking).
+4. TOOL USAGE: Instructions for check-calendar-availability and book-appointment.
+5. DO'S AND DON'TS: Specific behavioral guidelines.
+6. FORBIDDEN PHRASES: List of things never to say.
+7. SUCCESS CONDITION: Clear definition of a successful call.
 
-    const { model, json } = await callGemini(GEMINI_API_KEY, systemPromptInstruction);
+CRITICAL: The "Value Proposition Structure" MUST acknowledge the situation, add social proof, quantify the problem, present the solution, and show the outcome as separate sentences.
 
+Output ONLY the system prompt text. No markdown labels like "System Prompt:".`;
+
+    const { json } = await callGemini(GEMINI_API_KEY, systemPromptInstruction);
     const generated = json?.candidates?.[0]?.content?.parts?.[0]?.text?.trim?.();
 
     if (!generated) {
-      console.error('[generate-system-prompt-from-website] Empty model output', { model });
       return jsonRes({ success: false, error: 'AI returned empty output' });
     }
 
-    console.log('[generate-system-prompt-from-website] Success', { model });
-    return jsonRes({ success: true, system_prompt: generated, model });
+    return jsonRes({ success: true, system_prompt: generated });
   } catch (error: any) {
     console.error('[generate-system-prompt-from-website] Unhandled error', { message: error?.message });
     return jsonRes({ success: false, error: error?.message || 'Generation failed' });
