@@ -26,6 +26,7 @@ interface EventDetails {
     endTime: string;   // ISO 8601
     description: string;
     attendeeEmail?: string;
+    timeZone?: string;
 }
 
 /**
@@ -107,11 +108,13 @@ export async function createCalendarEvent(clientId: string, eventDetails: EventD
         throw new Error("Calendar not connected or token refresh failed.");
     }
 
+    const timeZone = eventDetails.timeZone || 'America/New_York';
+
     const event = {
         summary: eventDetails.title,
         description: eventDetails.description,
-        start: { dateTime: eventDetails.startTime, timeZone: 'America/New_York' },
-        end: { dateTime: eventDetails.endTime, timeZone: 'America/New_York' },
+        start: { dateTime: eventDetails.startTime, timeZone },
+        end: { dateTime: eventDetails.endTime, timeZone },
         attendees: eventDetails.attendeeEmail ? [{ email: eventDetails.attendeeEmail }] : [],
         reminders: {
             useDefault: true,

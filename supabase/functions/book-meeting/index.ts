@@ -52,19 +52,37 @@ serve(async (req) => {
         }
 
         // 2. Resolve client from agent_id
-        const { data: voiceData } = await supabaseAdmin
-            .from('client_voice_integrations')
+        let clientId: string | null = null;
+
+        // Prefer ai_agent_settings.retell_agent_id
+        const { data: agentRow, error: agentRowError } = await supabaseAdmin
+            .from('ai_agent_settings')
             .select('client_id')
             .eq('retell_agent_id', agentId)
             .maybeSingle();
 
-        if (!voiceData?.client_id) {
+        if (agentRowError) {
+            console.error('[book-meeting] ai_agent_settings lookup failed:', agentRowError);
+        }
+
+        clientId = agentRow?.client_id || null;
+
+        // Fallback to client_voice_integrations.retell_agent_id
+        if (!clientId) {
+            const { data: voiceData } = await supabaseAdmin
+                .from('client_voice_integrations')
+                .select('client_id')
+                .eq('retell_agent_id', agentId)
+                .maybeSingle();
+
+            clientId = voiceData?.client_id || null;
+        }
+
+        if (!clientId) {
             return jsonResponse({
                 result: 'I am unable to complete the booking right now. Please leave your number and someone will call you back to schedule.',
             });
         }
-
-        const clientId = voiceData.client_id;
 
         // 3. Get agent settings
         const { data: agentSettings } = await supabaseAdmin
@@ -164,6 +182,7 @@ serve(async (req) => {
                     startTime: appointmentTime.toISOString(),
                     endTime: endTime.toISOString(),
                     attendeeEmail: callerEmail || undefined,
+                    timeZone: timezone,
                 });
 
                 // Extract event ID from the response
@@ -222,6 +241,8 @@ serve(async (req) => {
                 client_id: clientId,
                 event_type: 'retell.book_meeting',
                 event_source: 'retell',
+                agent_id: agentId,
+                retell_call_id: callId,
                 external_id: callId,
                 request_payload: { agent_id: agentId, args },
                 response_payload: {

@@ -30,58 +30,90 @@ serve(async (req) => {
 
         console.log(`[retell-webhook] Received event: ${eventType}, call_id: ${callId}`);
 
-        // Resolve client_id from the retell_agent_id in the call data
-        const agentId = body.agent_id || body.call?.agent_id || null;
+        // Resolve client_id from the retell agent id
+        const agentId = body.agent_id || body.call?.agent_id || body.retell_agent_id || null;
         let clientId: string | null = null;
+        let resolutionError: string | null = null;
 
         if (agentId) {
-            const { data: voiceData } = await supabaseAdmin
-                .from('client_voice_integrations')
+            // 1) Prefer ai_agent_settings.retell_agent_id
+            const { data: agentSettings, error: agentSettingsError } = await supabaseAdmin
+                .from('ai_agent_settings')
                 .select('client_id')
                 .eq('retell_agent_id', agentId)
                 .maybeSingle();
 
-            clientId = voiceData?.client_id || null;
+            if (agentSettingsError) {
+                console.error('[retell-webhook] Failed to resolve via ai_agent_settings:', agentSettingsError);
+            }
+
+            clientId = agentSettings?.client_id || null;
+
+            // 2) Fallback to client_voice_integrations.retell_agent_id
+            if (!clientId) {
+                const { data: voiceData, error: voiceError } = await supabaseAdmin
+                    .from('client_voice_integrations')
+                    .select('client_id')
+                    .eq('retell_agent_id', agentId)
+                    .maybeSingle();
+
+                if (voiceError) {
+                    console.error('[retell-webhook] Failed to resolve via client_voice_integrations:', voiceError);
+                }
+
+                clientId = voiceData?.client_id || null;
+            }
+
+            if (!clientId) {
+                resolutionError = `Unable to resolve client_id for agent_id ${agentId}`;
+            }
+        } else {
+            resolutionError = 'Missing agent_id in Retell webhook payload';
         }
 
-        // Log the webhook event
+        // Log the webhook event (best effort, always attempt)
         const { error: logError } = await supabaseAdmin
             .from('webhook_events')
             .insert({
                 client_id: clientId,
                 event_type: `retell.${eventType}`,
                 event_source: 'retell',
+                agent_id: agentId,
+                retell_call_id: callId,
                 external_id: callId,
                 request_payload: body,
-                status: 'processing',
-                ip_address: req.headers.get('x-forwarded-for') || req.headers.get('cf-connecting-ip') || 'unknown',
+                response_payload: resolutionError ? { error: resolutionError } : {},
+                status: resolutionError ? 'failed' : 'processing',
+                duration_ms: Date.now() - startTime,
             });
 
         if (logError) {
             console.error('[retell-webhook] Failed to log event:', logError);
         }
 
-        // Handle specific event types
+        // Return 200 quickly even if we couldn't resolve client
+        if (!clientId) {
+            return jsonResponse({ received: true });
+        }
+
+        // Handle specific event types (lightweight only)
         let responsePayload: Record<string, any> = { received: true };
 
         switch (eventType) {
             case 'call_started': {
                 console.log(`[retell-webhook] Call started for client ${clientId}, call_id: ${callId}`);
-                // Nothing to do yet — call is in progress
                 break;
             }
 
             case 'call_ended': {
                 console.log(`[retell-webhook] Call ended for client ${clientId}, call_id: ${callId}`);
 
-                // Store call metadata if we have a client
-                if (clientId && callId) {
+                if (callId) {
                     const transcript = body.transcript || body.call?.transcript || null;
                     const callDuration = body.duration_ms || body.call?.duration_ms || null;
                     const recordingUrl = body.recording_url || body.call?.recording_url || null;
                     const disconnectReason = body.disconnect_reason || body.call?.disconnect_reason || null;
 
-                    // Update the webhook event with response data
                     await supabaseAdmin
                         .from('webhook_events')
                         .update({
@@ -94,7 +126,7 @@ serve(async (req) => {
                             status: 'completed',
                             duration_ms: Date.now() - startTime,
                         })
-                        .eq('external_id', callId)
+                        .eq('retell_call_id', callId)
                         .eq('event_type', 'retell.call_ended');
                 }
                 break;
@@ -103,7 +135,7 @@ serve(async (req) => {
             case 'call_analyzed': {
                 console.log(`[retell-webhook] Call analyzed for client ${clientId}, call_id: ${callId}`);
 
-                if (clientId && callId) {
+                if (callId) {
                     await supabaseAdmin
                         .from('webhook_events')
                         .update({
@@ -111,7 +143,7 @@ serve(async (req) => {
                             status: 'completed',
                             duration_ms: Date.now() - startTime,
                         })
-                        .eq('external_id', callId)
+                        .eq('retell_call_id', callId)
                         .eq('event_type', `retell.${eventType}`);
                 }
                 break;
@@ -122,7 +154,7 @@ serve(async (req) => {
             }
         }
 
-        // Mark event as completed
+        // Mark event as completed if still processing
         if (callId) {
             await supabaseAdmin
                 .from('webhook_events')
@@ -130,7 +162,7 @@ serve(async (req) => {
                     status: 'completed',
                     duration_ms: Date.now() - startTime,
                 })
-                .eq('external_id', callId)
+                .eq('retell_call_id', callId)
                 .eq('event_type', `retell.${eventType}`)
                 .eq('status', 'processing');
         }
@@ -139,20 +171,6 @@ serve(async (req) => {
 
     } catch (error: any) {
         console.error(`[retell-webhook] Error: ${error.message}`);
-
-        // Try to log the failure
-        try {
-            await supabaseAdmin
-                .from('webhook_events')
-                .insert({
-                    event_type: 'retell.error',
-                    event_source: 'retell',
-                    status: 'failed',
-                    error_message: error.message,
-                    duration_ms: Date.now() - startTime,
-                });
-        } catch (_) { /* best effort */ }
-
         return errorResponse(`Webhook processing error: ${error.message}`, 500);
     }
 });

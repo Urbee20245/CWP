@@ -39,19 +39,35 @@ serve(async (req) => {
             return jsonResponse({ error: 'Missing agent_id' }, 400);
         }
 
-        const { data: voiceData } = await supabaseAdmin
-            .from('client_voice_integrations')
+        // Prefer ai_agent_settings.retell_agent_id
+        const { data: agentRow, error: agentRowError } = await supabaseAdmin
+            .from('ai_agent_settings')
             .select('client_id')
             .eq('retell_agent_id', agentId)
             .maybeSingle();
 
-        if (!voiceData?.client_id) {
+        if (agentRowError) {
+            console.error('[check-availability] ai_agent_settings lookup failed:', agentRowError);
+        }
+
+        let clientId = agentRow?.client_id || null;
+
+        // Fallback to client_voice_integrations.retell_agent_id
+        if (!clientId) {
+            const { data: voiceData } = await supabaseAdmin
+                .from('client_voice_integrations')
+                .select('client_id')
+                .eq('retell_agent_id', agentId)
+                .maybeSingle();
+
+            clientId = voiceData?.client_id || null;
+        }
+
+        if (!clientId) {
             return jsonResponse({
                 result: 'I apologize, but I am unable to check availability right now. Please call back or leave your contact information.',
             });
         }
-
-        const clientId = voiceData.client_id;
 
         // 2. Get agent settings for this client
         const { data: agentSettings } = await supabaseAdmin
@@ -62,8 +78,8 @@ serve(async (req) => {
             .maybeSingle();
 
         const meetingDuration = agentSettings?.default_meeting_duration || 30;
-        const bufferMinutes = agentSettings?.booking_buffer_minutes || 15;
-        const maxAdvanceDays = agentSettings?.max_advance_booking_days || 30;
+        const bufferMinutes = agentSettings?.booking_buffer_minutes ?? 0;
+        const maxAdvanceDays = agentSettings?.max_advance_booking_days || 60;
         const businessHours = agentSettings?.business_hours || {
             "1": { "start": "09:00", "end": "17:00" },
             "2": { "start": "09:00", "end": "17:00" },
@@ -237,6 +253,8 @@ serve(async (req) => {
                 client_id: clientId,
                 event_type: 'retell.check_availability',
                 event_source: 'retell',
+                agent_id: agentId,
+                retell_call_id: callId,
                 external_id: callId,
                 request_payload: { agent_id: agentId, args },
                 response_payload: { slots_found: availableSlots.length },

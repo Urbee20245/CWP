@@ -18,6 +18,6 @@ export function jsonResponse(body: any, status: number = 200) {
 }
 
 export function errorResponse(message: string, status: number = 500) {
-  console.error(`[stripe-api] Error: ${message}`);
+  // Intentionally no logging here; edge functions should log with their own [function-name] prefix.
   return jsonResponse({ error: message }, status);
 }
