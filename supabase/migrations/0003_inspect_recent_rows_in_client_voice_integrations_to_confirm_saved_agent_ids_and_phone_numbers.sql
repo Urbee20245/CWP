@@ -1,0 +1,1 @@
+select * from public.client_voice_integrations order by updated_at desc limit 20;

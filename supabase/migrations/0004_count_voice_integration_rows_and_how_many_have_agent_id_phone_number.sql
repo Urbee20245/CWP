@@ -1,0 +1,1 @@
+select count(*) as rows, count(retell_agent_id) as with_agent, count(phone_number) as with_phone from public.client_voice_integrations;

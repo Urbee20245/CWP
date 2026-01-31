@@ -23,6 +23,16 @@ interface Client {
     connection_method: string;
 }
 
+type SavedVoiceIntegration = {
+    client_id: string;
+    retell_agent_id: string | null;
+    phone_number: string | null;
+    number_source: 'client' | 'platform' | string | null;
+    voice_status: string | null;
+    a2p_status: string | null;
+    updated_at?: string | null;
+};
+
 const AdminVoiceManagement: React.FC = () => {
     const [clients, setClients] = useState<Client[]>([]);
     const [searchQuery, setSearchQuery] = useState('');
@@ -181,6 +191,33 @@ const AdminVoiceManagement: React.FC = () => {
         (isPlatformOwned && isPlatformA2PReady && saveSuccess && platformNumberSaved && hasPlatformNumberInput)
     );
 
+    const applySavedVoiceIntegrationToLocalState = (voice: SavedVoiceIntegration) => {
+        // Keep the UI fields filled with what the API says is saved
+        if (voice.retell_agent_id) {
+            lastLoadedAgentIdRef.current = voice.retell_agent_id;
+            setRetellAgentId(voice.retell_agent_id);
+            setSaveSuccess(true);
+        }
+        if (voice.phone_number) {
+            lastLoadedPlatformNumberRef.current = voice.phone_number;
+            setPlatformNumber(voice.phone_number);
+            setPlatformNumberSaved(true);
+        }
+
+        // Keep the list client row updated even if the refetch fails
+        setClients((prev) => prev.map((c) => {
+            if (c.id !== voice.client_id) return c;
+            return {
+                ...c,
+                retell_agent_id: (voice.retell_agent_id ?? c.retell_agent_id) || '',
+                phone_number: voice.phone_number ?? c.phone_number,
+                number_source: (voice.number_source ?? c.number_source) || c.number_source,
+                voice_status: (voice.voice_status ?? c.voice_status) || c.voice_status,
+                a2p_status: (voice.a2p_status ?? c.a2p_status) || c.a2p_status,
+            };
+        }));
+    };
+
     // --- Handlers ---
 
     const handleSaveAgentId = async () => {
@@ -195,11 +232,18 @@ const AdminVoiceManagement: React.FC = () => {
         setFeedbackMessage(null);
 
         try {
-            await AdminService.saveRetellAgentId(selectedClientId, agentIdToSave, effectiveSource);
-            lastLoadedAgentIdRef.current = agentIdToSave;
-            setSaveSuccess(true);
-            await fetchClients();
+            const result = await AdminService.saveRetellAgentId(selectedClientId, agentIdToSave, effectiveSource);
+            if (result?.voice_integration) {
+                applySavedVoiceIntegrationToLocalState(result.voice_integration as SavedVoiceIntegration);
+            } else {
+                // Fallback: keep what user typed as "saved" (shouldn't happen, but avoids blanking)
+                lastLoadedAgentIdRef.current = agentIdToSave;
+                setSaveSuccess(true);
+            }
             showFeedback('success', 'Retell Agent ID saved successfully.', 5000);
+
+            // Refresh in the background (but UI will not blank because local state is already updated)
+            fetchClients();
         } catch (e: any) {
             showFeedback('error', `Save Failed: ${e.message}`);
         } finally {
@@ -221,11 +265,17 @@ const AdminVoiceManagement: React.FC = () => {
 
         try {
             // We allow saving just the phone number (agent id can be empty here)
-            await AdminService.saveRetellAgentId(selectedClientId, retellAgentId.trim(), 'platform', phoneToSave);
-            lastLoadedPlatformNumberRef.current = phoneToSave;
-            setPlatformNumberSaved(true);
-            await fetchClients();
+            const result = await AdminService.saveRetellAgentId(selectedClientId, retellAgentId.trim(), 'platform', phoneToSave);
+            if (result?.voice_integration) {
+                applySavedVoiceIntegrationToLocalState(result.voice_integration as SavedVoiceIntegration);
+            } else {
+                lastLoadedPlatformNumberRef.current = phoneToSave;
+                setPlatformNumberSaved(true);
+            }
             showFeedback('success', 'Platform phone number saved successfully.', 5000);
+
+            // Refresh in the background
+            fetchClients();
         } catch (e: any) {
             showFeedback('error', `Save Failed: ${e.message}`);
         } finally {
@@ -342,6 +392,16 @@ const AdminVoiceManagement: React.FC = () => {
                 ? `Saved: ${lastLoadedAgentIdRef.current}`
                 : 'Enter an agent ID, then click Save',
         });
+
+        if (isPlatformOwned) {
+            steps.push({
+                label: 'Platform Phone Number',
+                done: platformNumberSaved,
+                description: platformNumberSaved
+                    ? `Saved: ${lastLoadedPlatformNumberRef.current}`
+                    : 'Enter a platform phone number, then click Save',
+            });
+        }
 
         steps.push({
             label: 'AI Calls Active',
@@ -683,7 +743,7 @@ const AdminVoiceManagement: React.FC = () => {
                                         <p className="text-xs text-slate-500 text-center">
                                             {isClientOwned && !selectedClient?.twilio_configured && 'Client needs to configure Twilio credentials first.'}
                                             {isPlatformOwned && !isPlatformA2PReady && 'A2P compliance must be approved before enabling.'}
-                                            {isPlatformOwned && isPlatformA2PReady && (!hasPlatformNumberInput || !platformNumberSaved) && 'Save the platform phone number above.'}
+                                            {isPlatformOwned && isPlatformA2PReady && (!hasPlatformNumberInput || !platformNumberSaved) && ' Save the platform phone number above.'}
                                             {(!saveSuccess && hasAgentIdInput) && ' Save the Retell Agent ID above.'}
                                             {(!hasAgentIdInput) && ' Enter and save the Retell Agent ID above.'}
                                         </p>

@@ -46,17 +46,19 @@ serve(async (req) => {
       number_source: source,
     });
 
-    const { data: existing } = await supabaseAdmin
+    const { data: existing, error: existingError } = await supabaseAdmin
       .from('client_voice_integrations')
-      .select('a2p_status, a2p_registration_data, voice_status, number_source')
+      .select('voice_status, number_source')
       .eq('client_id', client_id)
       .maybeSingle();
 
-    const payload: any = {
-      client_id,
-    };
+    if (existingError) {
+      console.error('[save-retell-agent-id] Failed fetching existing row:', existingError);
+    }
 
-    // Always include a number_source on first insert (column is NOT NULL)
+    const payload: any = { client_id };
+
+    // Always include number_source if the column is NOT NULL (some envs have no default)
     payload.number_source = source || existing?.number_source || 'platform';
 
     if (agentId) {
@@ -75,26 +77,34 @@ serve(async (req) => {
       payload.phone_number = platformPhone;
     }
 
+    // If this row is being created or was previously failed, make it eligible to retry
     if (!existing) {
       payload.voice_status = 'inactive';
-      payload.a2p_status = 'not_started';
     }
-
     if (existing?.voice_status === 'failed') {
       payload.voice_status = 'inactive';
     }
 
-    const { error: upsertError } = await supabaseAdmin
+    const { data: saved, error: upsertError } = await supabaseAdmin
       .from('client_voice_integrations')
-      .upsert(payload, { onConflict: 'client_id' });
+      .upsert(payload, { onConflict: 'client_id' })
+      .select('client_id, retell_agent_id, phone_number, number_source, voice_status, a2p_status, updated_at')
+      .single();
 
     if (upsertError) {
       console.error('[save-retell-agent-id] DB upsert failed:', upsertError);
       return jsonRes({ error: `Database update failed: ${upsertError.message}` }, 500);
     }
 
-    console.log('[save-retell-agent-id] Voice config saved successfully.');
-    return jsonRes({ success: true });
+    console.log('[save-retell-agent-id] Voice config saved successfully.', {
+      client_id: saved?.client_id,
+      number_source: saved?.number_source,
+      has_agent_id: !!saved?.retell_agent_id,
+      has_phone_number: !!saved?.phone_number,
+      updated_at: saved?.updated_at,
+    });
+
+    return jsonRes({ success: true, voice_integration: saved });
   } catch (error: any) {
     console.error('[save-retell-agent-id] Unhandled error:', error.message);
     return jsonRes({ error: error.message }, 500);
