@@ -52,10 +52,10 @@ serve(async (req) => {
       return errRes('Missing required fields: client_id and source.', 400);
     }
 
-    // 1) Load voice config (for A2P status and persisted values)
+    // 1) Load voice config and short-circuit if manual
     const { data: voiceConfig, error: voiceConfigError } = await supabaseAdmin
       .from('client_voice_integrations')
-      .select('retell_phone_id, voice_status, a2p_registration_data, a2p_status, retell_agent_id, phone_number, number_source')
+      .select('retell_phone_id, voice_status, a2p_registration_data, a2p_status, retell_agent_id, phone_number, number_source, manually_provisioned')
       .eq('client_id', client_id)
       .maybeSingle();
 
@@ -63,8 +63,22 @@ serve(async (req) => {
       console.error('[provision-voice-number] Error fetching voice config:', voiceConfigError);
     }
 
-    // If Agent ID not provided by request, fall back to DB. Also check ai_agent_settings if missing.
-    let finalAgentId = (typeof retell_agent_id === 'string' ? retell_agent_id.trim() : '') || (voiceConfig?.retell_agent_id?.trim?.() || '');
+    if (voiceConfig?.manually_provisioned) {
+      // Ensure status is active locally and return success
+      if (voiceConfig.voice_status !== 'active') {
+        await supabaseAdmin
+          .from('client_voice_integrations')
+          .upsert({ client_id, voice_status: 'active' }, { onConflict: 'client_id' });
+      }
+      return jsonRes({
+        success: true,
+        message: 'Already marked as manually provisioned.',
+        retell_phone_id: voiceConfig.retell_phone_id || null,
+      });
+    }
+
+    const agentIdFromRequest = typeof retell_agent_id === 'string' ? retell_agent_id.trim() : '';
+    let finalAgentId = agentIdFromRequest || (voiceConfig?.retell_agent_id?.trim?.() || '');
     if (!finalAgentId) {
       const { data: agentSettings } = await supabaseAdmin
         .from('ai_agent_settings')
@@ -76,12 +90,10 @@ serve(async (req) => {
       }
     }
 
-    // Resolve phone number preference: request -> DB (voice config)
     const phoneFromRequest = typeof phone_number === 'string' ? phone_number.trim() : '';
     const phoneFromDb = typeof voiceConfig?.phone_number === 'string' ? voiceConfig.phone_number.trim() : '';
     const a2p_status = voiceConfig?.a2p_status || 'not_started';
 
-    // Platform-owned: honor pending behavior (kept for completeness)
     if (source === 'platform' && a2p_status !== 'approved') {
       if (!finalAgentId) return errRes('Please save the Retell Agent ID first.', 400);
       const final_phone_for_pending = phoneFromRequest || phoneFromDb;
@@ -111,7 +123,6 @@ serve(async (req) => {
       });
     }
 
-    // 2) From here: real provisioning into Retell (import existing number)
     if (!RETELL_API_KEY) {
       return errRes('Retell API Key is not configured. Please add RETELL_API_KEY to Supabase secrets.', 500);
     }
@@ -125,7 +136,6 @@ serve(async (req) => {
     let twilio_token = "";
     let final_phone = phoneFromRequest || phoneFromDb;
 
-    // 3) Gather Twilio credentials and resolve final_phone
     if (source === 'client') {
       const { data: config, error: configError } = await supabaseAdmin
         .from('client_integrations')
@@ -137,7 +147,6 @@ serve(async (req) => {
       if (configError) {
         return errRes('Error fetching client Twilio credentials from database.', 500);
       }
-
       if (!config) {
         return errRes('Client has not configured their Twilio credentials yet.', 404);
       }
@@ -159,15 +168,13 @@ serve(async (req) => {
       return errRes('Incomplete credentials for provisioning (missing Twilio SID/token or phone).', 400);
     }
 
-    // 4) Idempotency check
     if (voiceConfig?.voice_status === 'active') {
       console.log('[provision-voice-number] Already active.');
       return jsonRes({ success: true, retell_phone_id: voiceConfig.retell_phone_id, message: "Already active." });
     }
 
-    // 5) Import the existing Twilio number into Retell
+    // Import the existing number into Retell
     console.log(`[provision-voice-number] Importing ${final_phone} into Retell with agent ${finalAgentId}...`);
-
     const inboundWebhookUrl = `${Deno.env.get('SUPABASE_URL')}/functions/v1/retell-webhook`;
 
     const retellBody = {
@@ -195,7 +202,6 @@ serve(async (req) => {
       return { response, text };
     }
 
-    // Prefer v2, fallback to non-v2 if needed
     let { response: retellResponse, text: retellText } = await tryImport('https://api.retellai.com/v2/import-phone-number');
     if (!retellResponse.ok && (retellResponse.status === 404 || retellText.startsWith('<!DOCTYPE html>'))) {
       console.warn('[provision-voice-number] v2 import endpoint not available; trying non-v2 endpoint.');
@@ -214,6 +220,19 @@ serve(async (req) => {
     }
 
     if (!retellResponse.ok) {
+      // If the number already exists at Retell, treat it as success locally
+      const alreadyExists = /already|exists|duplicate/i.test(retellData?.message || retellData?.error || '');
+      if (alreadyExists) {
+        await supabaseAdmin.from('client_voice_integrations').upsert({
+          client_id,
+          voice_status: 'active',
+          number_source: source,
+          phone_number: final_phone,
+          retell_agent_id: finalAgentId,
+        }, { onConflict: 'client_id' });
+        return jsonRes({ success: true, message: 'Number already imported at Retell. Marked active locally.' });
+      }
+
       await supabaseAdmin.from('client_voice_integrations').upsert({
         client_id,
         voice_status: 'failed',
@@ -230,7 +249,6 @@ serve(async (req) => {
       return errRes(`Retell Error: ${errorMessage}`, 400);
     }
 
-    // 6) Save result
     const retellPhoneId = retellData.phone_number_id || retellData.phone_id || retellData.id;
 
     const { error: dbError } = await supabaseAdmin

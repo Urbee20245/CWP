@@ -21,6 +21,7 @@ interface Client {
   retell_agent_id: string;
   phone_number: string | null;
   connection_method: string;
+  manually_provisioned?: boolean;
 }
 
 const AdminVoiceManagement: React.FC = () => {
@@ -31,6 +32,9 @@ const AdminVoiceManagement: React.FC = () => {
   const [isProvisioning, setIsProvisioning] = useState(false);
   const [isDisabling, setIsDisabling] = useState(false);
   const [feedbackMessage, setFeedbackMessage] = useState<{ type: 'success' | 'error' | 'info', text: string } | null>(null);
+
+  // Manual override state
+  const [manualRetellId, setManualRetellId] = useState('');
 
   const showFeedback = (type: 'success' | 'error' | 'info', text: string, durationMs = 8000) => {
     setFeedbackMessage({ type, text });
@@ -61,6 +65,7 @@ const AdminVoiceManagement: React.FC = () => {
         twilio_phone: twilioIntegration?.phone_number || null,
         phone_number: voiceData?.phone_number || twilioIntegration?.phone_number || null,
         connection_method: twilioIntegration?.connection_method || 'none',
+        manually_provisioned: !!voiceData?.manually_provisioned,
       };
     });
   };
@@ -80,7 +85,8 @@ const AdminVoiceManagement: React.FC = () => {
             a2p_status,
             retell_agent_id,
             phone_number,
-            retell_phone_id
+            retell_phone_id,
+            manually_provisioned
           ),
           client_integrations (
             provider,
@@ -115,13 +121,18 @@ const AdminVoiceManagement: React.FC = () => {
 
   useEffect(() => { fetchClients(); }, [fetchClients]);
 
+  useEffect(() => {
+    // Reset manualRetellId when client changes
+    setManualRetellId('');
+  }, [selectedClientId]);
+
   const filteredClients = clients.filter(c =>
     c.business_name.toLowerCase().includes(searchQuery.toLowerCase())
   );
 
   const selectedClient = clients.find(c => c.id === selectedClientId);
 
-  const isVoiceActive = selectedClient?.voice_status === 'active';
+  const isVoiceActive = selectedClient?.voice_status === 'active' || selectedClient?.manually_provisioned;
   const hasTwilio = selectedClient?.twilio_configured === true;
   const hasAgent = !!selectedClient?.retell_agent_id?.trim?.();
   const canEnable = hasTwilio && hasAgent && !isVoiceActive;
@@ -205,6 +216,34 @@ const AdminVoiceManagement: React.FC = () => {
     }
   };
 
+  const handleManualProvision = async () => {
+    if (!selectedClientId) return;
+    setFeedbackMessage(null);
+
+    try {
+      const payload: any = {
+        client_id: selectedClientId,
+        manually_provisioned: true,
+        voice_status: 'active',
+        number_source: 'client',
+      };
+      if (manualRetellId.trim()) {
+        payload.retell_phone_id = manualRetellId.trim();
+      }
+
+      const { error } = await supabase
+        .from('client_voice_integrations')
+        .upsert(payload, { onConflict: 'client_id' });
+
+      if (error) throw error;
+
+      showFeedback('success', 'Marked as manually provisioned.');
+      await fetchClients();
+    } catch (e: any) {
+      showFeedback('error', `Failed to save manual override: ${e.message}`);
+    }
+  };
+
   return (
     <AdminLayout>
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-12">
@@ -251,6 +290,11 @@ const AdminVoiceManagement: React.FC = () => {
                           {c.twilio_configured && (
                             <span className={`px-1.5 py-0.5 text-[9px] font-bold rounded uppercase flex-shrink-0 ${c.connection_method === 'twilio_connect' ? 'bg-emerald-100 text-emerald-700' : 'bg-purple-100 text-purple-700'}`}>
                               {c.connection_method === 'twilio_connect' ? 'Connected' : 'Twilio'}
+                            </span>
+                          )}
+                          {c.manually_provisioned && (
+                            <span className="px-1.5 py-0.5 text-[9px] font-bold rounded uppercase flex-shrink-0 bg-amber-100 text-amber-700">
+                              Manual
                             </span>
                           )}
                         </div>
@@ -399,6 +443,34 @@ const AdminVoiceManagement: React.FC = () => {
                       Ensure Twilio is connected and the Retell Agent is set on the AI Agent Settings page.
                     </p>
                   )}
+                </div>
+
+                {/* Manual Provisioning Override */}
+                <div className="mt-6 p-4 border border-amber-200 bg-amber-50 rounded-xl">
+                  <div className="flex items-start gap-3">
+                    <Info className="w-5 h-5 text-amber-600 mt-0.5" />
+                    <div className="flex-1">
+                      <p className="text-sm font-semibold text-amber-800">Manual Provisioning Override</p>
+                      <p className="text-xs text-amber-700 mt-1">
+                        If you already imported this client’s number into Retell manually, mark it here to skip automatic provisioning. You can optionally store the Retell Phone ID for reference.
+                      </p>
+                      <div className="mt-3 grid grid-cols-1 md:grid-cols-[1fr_auto] gap-2">
+                        <input
+                          type="text"
+                          placeholder="Retell Phone ID (optional)"
+                          value={manualRetellId}
+                          onChange={(e) => setManualRetellId(e.target.value)}
+                          className="w-full p-2 border border-amber-300 rounded-lg text-sm bg-white font-mono"
+                        />
+                        <button
+                          onClick={handleManualProvision}
+                          className="px-4 py-2 bg-amber-600 text-white rounded-lg text-sm font-semibold hover:bg-amber-700 transition-colors"
+                        >
+                          Mark as Provisioned Manually
+                        </button>
+                      </div>
+                    </div>
+                  </div>
                 </div>
 
                 <p className="text-center text-[10px] text-slate-400 mt-6 uppercase tracking-[0.2em]">
