@@ -25,7 +25,7 @@ import {
   Zap,
   X
 } from 'lucide-react';
-import { renderPromptTemplate, getPromptCategories, TemplateCategory } from '../utils/promptTemplates';
+import { renderPromptTemplate, getPromptCategories, TemplateCategory, buildRoleDirectives } from '../utils/promptTemplates';
 
 interface Client {
   id: string;
@@ -130,6 +130,11 @@ const AdminAgentSettings: React.FC = () => {
   const [specialInstructions, setSpecialInstructions] = useState('');
   const [isGeneratingPrompt, setIsGeneratingPrompt] = useState(false);
   const [selectedTemplate, setSelectedTemplate] = useState<TemplateCategory | ''>('');
+
+  // Role rules
+  const [roleBookCalls, setRoleBookCalls] = useState(true);
+  const [roleAskQuestions, setRoleAskQuestions] = useState(true);
+  const [roleCollectData, setRoleCollectData] = useState(true);
 
   const showFeedback = (type: 'success' | 'error' | 'info', text: string) => {
     setFeedback({ type, text });
@@ -283,13 +288,34 @@ const AdminAgentSettings: React.FC = () => {
         location,
         phone: businessPhone,
         services: servicesOffered,
-        special_instructions: specialInstructions
+        special_instructions: specialInstructions,
+        // Encourage richer extraction
+        include: ['business_name', 'services', 'contact', 'faqs', 'value_props', 'booking_policies'],
+        min_detail: 'high',
       });
-      
+
       if (!result?.success) throw new Error(result?.error || 'Generation failed');
-      
-      updateSetting('system_prompt', result.system_prompt);
-      showFeedback('success', 'System prompt generated using Gemini 2.5 Flash.');
+
+      // Augment the generated prompt with role rules and business context
+      const rules = buildRoleDirectives({
+        bookCalls: roleBookCalls,
+        askQuestions: roleAskQuestions,
+        collectData: roleCollectData,
+      });
+
+      const businessBlock = [
+        '',
+        'BUSINESS CONTEXT (Auto-filled):',
+        `- Business: ${clientName || ''}`,
+        `- Location: ${location || 'N/A'}`,
+        `- Phone: ${businessPhone || 'N/A'}`,
+        `- Services: ${servicesOffered || 'N/A'}`,
+        `- Website: ${websiteUrl || 'N/A'}`,
+      ].join('\n');
+
+      const finalPrompt = [result.system_prompt || '', businessBlock, rules].filter(Boolean).join('\n');
+      updateSetting('system_prompt', finalPrompt);
+      showFeedback('success', 'Robust prompt generated and enriched with role rules and business context.');
       setShowAssistant(false);
     } catch (err: any) {
       showFeedback('error', `Failed to generate prompt: ${err.message}`);
@@ -303,7 +329,7 @@ const AdminAgentSettings: React.FC = () => {
     const clientName = clients.find(c => c.id === selectedClientId)?.business_name || '';
     return {
       businessName: clientName,
-      industry: industry || 'service',
+      industry: industry || (settings?.agent_name ? settings.agent_name : 'service'),
       location: location || '',
       phone: businessPhone || '',
       services: servicesOffered || '',
@@ -313,9 +339,23 @@ const AdminAgentSettings: React.FC = () => {
 
   const handleInsertTemplate = () => {
     if (!settings || !selectedTemplate) return;
-    const prompt = renderPromptTemplate(selectedTemplate, buildTemplateContext(), settings.agent_name || 'AI Assistant');
-    updateSetting('system_prompt', prompt);
-    showFeedback('success', 'Template inserted into System Prompt.');
+    const base = renderPromptTemplate(selectedTemplate, buildTemplateContext(), settings.agent_name || 'AI Assistant');
+    const rules = buildRoleDirectives({
+      bookCalls: roleBookCalls,
+      askQuestions: roleAskQuestions,
+      collectData: roleCollectData,
+    });
+    const businessBlock = [
+      '',
+      'BUSINESS CONTEXT (Auto-filled):',
+      `- Business: ${clients.find(c => c.id === selectedClientId)?.business_name || ''}`,
+      `- Location: ${location || 'N/A'}`,
+      `- Phone: ${businessPhone || 'N/A'}`,
+      `- Services: ${servicesOffered || 'N/A'}`,
+      `- Website: ${websiteUrl || 'N/A'}`,
+    ].join('\n');
+    updateSetting('system_prompt', [base, businessBlock, rules].filter(Boolean).join('\n'));
+    showFeedback('success', 'Template inserted with role rules and business context.');
   };
 
   // Generate Retell functions JSON for copy
@@ -397,7 +437,27 @@ const AdminAgentSettings: React.FC = () => {
                 Agent Identity
               </h2>
 
-              {/* New: Prompt Templates */}
+              {/* Role Rules */}
+              <div className="mb-4 p-3 rounded-lg border border-slate-200 bg-slate-50">
+                <p className="text-xs font-semibold text-slate-700 mb-2">Role Rules</p>
+                <div className="flex flex-col sm:flex-row gap-3">
+                  <label className="inline-flex items-center gap-2">
+                    <input type="checkbox" checked={roleBookCalls} onChange={(e) => setRoleBookCalls(e.target.checked)} className="rounded border-slate-300 text-indigo-600" />
+                    <span className="text-xs text-slate-700">Book Calls</span>
+                  </label>
+                  <label className="inline-flex items-center gap-2">
+                    <input type="checkbox" checked={roleAskQuestions} onChange={(e) => setRoleAskQuestions(e.target.checked)} className="rounded border-slate-300 text-indigo-600" />
+                    <span className="text-xs text-slate-700">Ask Questions (Discovery)</span>
+                  </label>
+                  <label className="inline-flex items-center gap-2">
+                    <input type="checkbox" checked={roleCollectData} onChange={(e) => setRoleCollectData(e.target.checked)} className="rounded border-slate-300 text-indigo-600" />
+                    <span className="text-xs text-slate-700">Collect Data</span>
+                  </label>
+                </div>
+                <p className="text-[11px] text-slate-500 mt-2">These rules append explicit directives to the prompt so the agent reliably books calls, qualifies leads, and collects the right info.</p>
+              </div>
+
+              {/* Prompt Templates (industry-specific) */}
               <div className="mb-4 p-3 rounded-lg border border-indigo-200 bg-indigo-50">
                 <div className="flex flex-col md:flex-row md:items-end md:gap-3">
                   <div className="flex-1">
@@ -424,7 +484,7 @@ const AdminAgentSettings: React.FC = () => {
                   </button>
                 </div>
                 <p className="text-[11px] text-indigo-700 mt-2">
-                  Templates auto-fill business name, location, phone, and services. You can adjust the text after inserting.
+                  Templates auto-fill business name, location, phone, and services. Role Rules are appended automatically.
                 </p>
               </div>
 
