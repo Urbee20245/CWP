@@ -28,24 +28,7 @@ serve(async (req) => {
         return new Response(JSON.stringify({ error: 'Client ID is required' }), { status: 400, headers: corsHeaders });
     }
 
-    // Manual Auth Check: Verify the user's token manually since auth: false
-    const authHeader = req.headers.get('Authorization');
-    if (!authHeader) {
-      return new Response(JSON.stringify({ error: 'Unauthorized: Missing token' }), { status: 401, headers: corsHeaders });
-    }
-
-    const supabaseClient = createClient(
-      Deno.env.get('SUPABASE_URL')!,
-      Deno.env.get('SUPABASE_ANON_KEY')!,
-      { global: { headers: { Authorization: authHeader } } }
-    );
-
-    const { data: { user }, error: authError } = await supabaseClient.auth.getUser();
-    if (authError || !user) {
-      console.error("[get-twilio-config] Auth error:", authError);
-      return new Response(JSON.stringify({ error: 'Unauthorized: Invalid token' }), { status: 401, headers: corsHeaders });
-    }
-
+   
     // Verify ownership via RLS-enabled query
     const { data: client, error: clientError } = await supabaseClient
         .from('clients')
