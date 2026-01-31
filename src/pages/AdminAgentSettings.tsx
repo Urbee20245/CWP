@@ -25,6 +25,7 @@ import {
   Zap,
   X
 } from 'lucide-react';
+import { renderPromptTemplate, getPromptCategories, TemplateCategory } from '../utils/promptTemplates';
 
 interface Client {
   id: string;
@@ -128,6 +129,7 @@ const AdminAgentSettings: React.FC = () => {
   const [servicesOffered, setServicesOffered] = useState('');
   const [specialInstructions, setSpecialInstructions] = useState('');
   const [isGeneratingPrompt, setIsGeneratingPrompt] = useState(false);
+  const [selectedTemplate, setSelectedTemplate] = useState<TemplateCategory | ''>('');
 
   const showFeedback = (type: 'success' | 'error' | 'info', text: string) => {
     setFeedback({ type, text });
@@ -296,6 +298,46 @@ const AdminAgentSettings: React.FC = () => {
     }
   };
 
+  // Helper to build template context
+  const buildTemplateContext = () => {
+    const clientName = clients.find(c => c.id === selectedClientId)?.business_name || '';
+    return {
+      businessName: clientName,
+      industry: industry || 'service',
+      location: location || '',
+      phone: businessPhone || '',
+      services: servicesOffered || '',
+      website: websiteUrl || '',
+    };
+  };
+
+  const handleInsertTemplate = () => {
+    if (!settings || !selectedTemplate) return;
+    const prompt = renderPromptTemplate(selectedTemplate, buildTemplateContext(), settings.agent_name || 'AI Assistant');
+    updateSetting('system_prompt', prompt);
+    showFeedback('success', 'Template inserted into System Prompt.');
+  };
+
+  // Generate Retell functions JSON for copy
+  const functionsJson = (() => {
+    const base = SUPABASE_FUNCTIONS_BASE;
+    const defs = [
+      {
+        name: "check-availability",
+        description: "Check Google Calendar availability before booking.",
+        method: "POST",
+        url: `${base}/check-availability`
+      },
+      {
+        name: "book-appointment",
+        description: "Book a meeting on Google Calendar after user confirms.",
+        method: "POST",
+        url: `${base}/book-meeting`
+      }
+    ];
+    return JSON.stringify({ functions: defs }, null, 2);
+  })();
+
   return (
     <AdminLayout>
       <div className="max-w-5xl mx-auto px-4 py-8">
@@ -354,6 +396,38 @@ const AdminAgentSettings: React.FC = () => {
                 <Bot className="w-4 h-4 text-indigo-500" />
                 Agent Identity
               </h2>
+
+              {/* New: Prompt Templates */}
+              <div className="mb-4 p-3 rounded-lg border border-indigo-200 bg-indigo-50">
+                <div className="flex flex-col md:flex-row md:items-end md:gap-3">
+                  <div className="flex-1">
+                    <label className="block text-[10px] font-bold text-indigo-800 uppercase mb-1">
+                      Prompt Templates (industry-specific)
+                    </label>
+                    <select
+                      className="w-full px-3 py-2 border border-indigo-300 rounded-lg text-sm bg-white"
+                      value={selectedTemplate}
+                      onChange={(e) => setSelectedTemplate(e.target.value as TemplateCategory)}
+                    >
+                      <option value="">-- Choose a template --</option>
+                      {getPromptCategories().map(cat => (
+                        <option key={cat} value={cat}>{cat}</option>
+                      ))}
+                    </select>
+                  </div>
+                  <button
+                    onClick={handleInsertTemplate}
+                    disabled={!selectedTemplate}
+                    className="mt-3 md:mt-0 px-4 py-2 bg-indigo-600 text-white rounded-lg text-sm font-semibold hover:bg-indigo-700 disabled:opacity-50"
+                  >
+                    Insert Template
+                  </button>
+                </div>
+                <p className="text-[11px] text-indigo-700 mt-2">
+                  Templates auto-fill business name, location, phone, and services. You can adjust the text after inserting.
+                </p>
+              </div>
+
               <div className="space-y-4">
                 <div>
                   <label className="block text-xs font-medium text-slate-600 mb-1">Agent Name</label>
@@ -542,6 +616,22 @@ const AdminAgentSettings: React.FC = () => {
                   ))}
                 </div>
               )}
+            </div>
+
+            <div className="bg-white rounded-xl border border-slate-200 p-6 mb-6">
+              <h2 className="text-sm font-semibold text-slate-700 mb-3 flex items-center gap-2">
+                <Globe className="w-4 h-4 text-indigo-500" />
+                Retell Custom Functions (copy into Retell)
+              </h2>
+              <p className="text-xs text-slate-600 mb-2">
+                Paste this into Retell's Custom Functions to enable live availability checks and booking via your connected Google Calendar.
+              </p>
+              <textarea
+                readOnly
+                value={functionsJson}
+                className="w-full font-mono text-xs p-3 border border-slate-300 rounded-lg bg-slate-50"
+                rows={8}
+              />
             </div>
 
             <div className="bg-white rounded-xl border border-slate-200 p-6 mb-6">
