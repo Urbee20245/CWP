@@ -5,9 +5,9 @@ import AdminLayout from '../components/AdminLayout';
 import { AdminService } from '../services/adminService';
 import { supabase } from '../integrations/supabase/client';
 import {
-    Bot, Settings, Calendar, Phone, Globe, Clock, Save,
-    Loader2, CheckCircle2, AlertTriangle, Info, Copy, ExternalLink,
-    Shield, Zap, MessageSquare, RefreshCw, ChevronDown, ChevronUp
+    Bot, Calendar, Phone, Globe, Clock, Save,
+    Loader2, CheckCircle2, AlertTriangle, Info, Copy,
+    Shield, Zap, MessageSquare, RefreshCw, ChevronDown, ChevronUp, Wand2
 } from 'lucide-react';
 
 interface Client {
@@ -18,6 +18,7 @@ interface Client {
 interface AgentSettings {
     id?: string;
     client_id: string;
+    retell_agent_id?: string;
     agent_name: string;
     system_prompt: string;
     greeting_message: string;
@@ -49,6 +50,8 @@ interface IntegrationStatus {
     google_calendar: { connected: boolean; calendar_id?: string; last_synced?: string };
     retell: { configured: boolean; agent_id?: string; voice_status?: string; phone_number?: string };
 }
+
+const SUPABASE_FUNCTIONS_BASE = 'https://nvgumhlewbqynrhlkqhx.supabase.co/functions/v1';
 
 const DEFAULT_SETTINGS: Omit<AgentSettings, 'client_id'> = {
     agent_name: 'AI Assistant',
@@ -99,6 +102,10 @@ const AdminAgentSettings: React.FC = () => {
     const [showEvents, setShowEvents] = useState(false);
     const [showBusinessHours, setShowBusinessHours] = useState(false);
 
+    // Prompt assistant
+    const [websiteUrl, setWebsiteUrl] = useState('');
+    const [isGeneratingPrompt, setIsGeneratingPrompt] = useState(false);
+
     const showFeedback = (type: 'success' | 'error' | 'info', text: string) => {
         setFeedback({ type, text });
         setTimeout(() => setFeedback(null), 6000);
@@ -123,28 +130,91 @@ const AdminAgentSettings: React.FC = () => {
         fetchClients();
     }, []);
 
-    // Fetch agent settings when client changes
+    const buildWebhookUrls = () => ({
+        retell_webhook: `${SUPABASE_FUNCTIONS_BASE}/retell-webhook`,
+        check_availability: `${SUPABASE_FUNCTIONS_BASE}/check-availability`,
+        book_meeting: `${SUPABASE_FUNCTIONS_BASE}/book-meeting`,
+    });
+
+    // Fetch agent settings when client changes (direct queries; avoids edge function dependency)
     const fetchSettings = useCallback(async (clientId: string) => {
         if (!clientId) return;
         setIsLoading(true);
         try {
-            const result = await AdminService.getAgentSettings(clientId);
-            if (result.settings) {
-                setSettings({ ...DEFAULT_SETTINGS, ...result.settings, client_id: clientId });
-            } else {
-                setSettings({ ...DEFAULT_SETTINGS, client_id: clientId });
+            const [{ data: settingsRow, error: settingsErr }, { data: recentEvents, error: eventsErr }, { data: calendarRow }, { data: voiceRow }, { data: twilioIntegration }] = await Promise.all([
+                supabase
+                    .from('ai_agent_settings')
+                    .select('*')
+                    .eq('client_id', clientId)
+                    .maybeSingle(),
+                supabase
+                    .from('webhook_events')
+                    .select('id, event_type, event_source, external_id, status, error_message, duration_ms, created_at')
+                    .eq('client_id', clientId)
+                    .order('created_at', { ascending: false })
+                    .limit(20),
+                supabase
+                    .from('client_google_calendar')
+                    .select('connection_status, calendar_id, last_synced_at')
+                    .eq('client_id', clientId)
+                    .maybeSingle(),
+                supabase
+                    .from('client_voice_integrations')
+                    .select('retell_agent_id, voice_status, phone_number')
+                    .eq('client_id', clientId)
+                    .maybeSingle(),
+                supabase
+                    .from('client_integrations')
+                    .select('provider')
+                    .eq('client_id', clientId)
+                    .eq('provider', 'twilio')
+                    .maybeSingle(),
+            ]);
+
+            if (settingsErr) throw settingsErr;
+            if (eventsErr) console.warn('[AdminAgentSettings] webhook events fetch failed:', eventsErr.message);
+
+            const merged = settingsRow
+                ? { ...DEFAULT_SETTINGS, ...settingsRow, client_id: clientId }
+                : { ...DEFAULT_SETTINGS, client_id: clientId };
+
+            setSettings(merged);
+            setWebhookUrls(buildWebhookUrls());
+            setWebhookEvents(recentEvents || []);
+
+            setIntegrations({
+                google_calendar: calendarRow ? {
+                    connected: calendarRow.connection_status === 'connected',
+                    calendar_id: calendarRow.calendar_id,
+                    last_synced: calendarRow.last_synced_at,
+                } : { connected: false },
+                retell: voiceRow ? {
+                    configured: !!voiceRow.retell_agent_id,
+                    agent_id: voiceRow.retell_agent_id,
+                    voice_status: voiceRow.voice_status,
+                    phone_number: voiceRow.phone_number,
+                } : { configured: false },
+            });
+
+            // Initialize prompt assistant URL if empty (best-effort)
+            if (!websiteUrl) {
+                const client = clients.find(c => c.id === clientId);
+                if (client?.business_name) {
+                    // leave url empty; user enters it.
+                }
             }
-            setWebhookUrls(result.webhook_urls || null);
-            setWebhookEvents(result.recent_events || []);
-            setIntegrations(result.integrations || null);
+
         } catch (err: any) {
             console.error('Failed to fetch agent settings:', err.message);
             setSettings({ ...DEFAULT_SETTINGS, client_id: clientId });
+            setWebhookUrls(buildWebhookUrls());
+            setWebhookEvents([]);
+            setIntegrations(null);
             showFeedback('error', `Failed to load settings: ${err.message}`);
         } finally {
             setIsLoading(false);
         }
-    }, []);
+    }, [clients, websiteUrl]);
 
     useEffect(() => {
         if (selectedClientId) {
@@ -161,11 +231,56 @@ const AdminAgentSettings: React.FC = () => {
         if (!settings || !selectedClientId) return;
         setIsSaving(true);
         try {
-            await AdminService.saveAgentSettings({
+            // 1) Save agent settings (direct upsert)
+            const payload: any = {
                 client_id: selectedClientId,
-                ...settings,
-            });
+                retell_agent_id: settings.retell_agent_id || null,
+                agent_name: settings.agent_name,
+                system_prompt: settings.system_prompt,
+                greeting_message: settings.greeting_message,
+                can_check_availability: settings.can_check_availability,
+                can_book_meetings: settings.can_book_meetings,
+                can_transfer_calls: settings.can_transfer_calls,
+                can_send_sms: settings.can_send_sms,
+                default_meeting_duration: settings.default_meeting_duration,
+                booking_buffer_minutes: settings.booking_buffer_minutes,
+                max_advance_booking_days: settings.max_advance_booking_days,
+                allowed_meeting_types: settings.allowed_meeting_types,
+                business_hours: settings.business_hours,
+                timezone: settings.timezone,
+                is_active: settings.is_active,
+            };
+
+            const { error: upsertErr } = await supabase
+                .from('ai_agent_settings')
+                .upsert(payload, { onConflict: 'client_id' });
+
+            if (upsertErr) throw upsertErr;
+
+            // 2) OPTIONAL: also store the Retell Agent ID into voice integrations, so provisioning can use it later.
+            // This is the "bypass voice settings" path.
+            if (settings.retell_agent_id && settings.retell_agent_id.trim()) {
+                const { data: twilioIntegration } = await supabase
+                    .from('client_integrations')
+                    .select('provider')
+                    .eq('client_id', selectedClientId)
+                    .eq('provider', 'twilio')
+                    .maybeSingle();
+
+                const inferredSource = twilioIntegration ? 'client' : 'platform';
+                await supabase
+                    .from('client_voice_integrations')
+                    .upsert({
+                        client_id: selectedClientId,
+                        retell_agent_id: settings.retell_agent_id.trim(),
+                        number_source: inferredSource,
+                        voice_status: 'inactive',
+                        a2p_status: inferredSource === 'platform' ? 'not_started' : 'none',
+                    }, { onConflict: 'client_id' });
+            }
+
             showFeedback('success', 'Agent settings saved successfully.');
+            await fetchSettings(selectedClientId);
         } catch (err: any) {
             showFeedback('error', `Failed to save: ${err.message}`);
         } finally {
@@ -213,6 +328,30 @@ const AdminAgentSettings: React.FC = () => {
         updateSetting('allowed_meeting_types', types);
     };
 
+    const handleGeneratePrompt = async () => {
+        if (!settings) return;
+        const url = websiteUrl.trim();
+        if (!url) {
+            showFeedback('error', 'Please enter the business website URL.');
+            return;
+        }
+
+        const clientName = clients.find(c => c.id === selectedClientId)?.business_name;
+
+        setIsGeneratingPrompt(true);
+        try {
+            const result = await AdminService.generateSystemPromptFromWebsite(url, clientName);
+            const prompt = result?.system_prompt;
+            if (!prompt) throw new Error('No prompt returned');
+            updateSetting('system_prompt', prompt);
+            showFeedback('success', 'System prompt generated. Review and click Save Settings.');
+        } catch (err: any) {
+            showFeedback('error', `Failed to generate prompt: ${err.message}`);
+        } finally {
+            setIsGeneratingPrompt(false);
+        }
+    };
+
     return (
         <AdminLayout>
             <div className="max-w-5xl mx-auto px-4 py-8">
@@ -235,8 +374,8 @@ const AdminAgentSettings: React.FC = () => {
                         'bg-blue-50 text-blue-800 border border-blue-200'
                     }`}>
                         {feedback.type === 'success' ? <CheckCircle2 className="w-5 h-5" /> :
-                         feedback.type === 'error' ? <AlertTriangle className="w-5 h-5" /> :
-                         <Info className="w-5 h-5" />}
+                            feedback.type === 'error' ? <AlertTriangle className="w-5 h-5" /> :
+                                <Info className="w-5 h-5" />}
                         <span className="text-sm">{feedback.text}</span>
                     </div>
                 )}
@@ -292,7 +431,7 @@ const AdminAgentSettings: React.FC = () => {
                                         <p className="text-xs mt-1 text-slate-600">
                                             {integrations.retell.configured
                                                 ? `Agent: ${integrations.retell.agent_id} | ${integrations.retell.voice_status}`
-                                                : 'No agent configured — set up in AI Voice management'}
+                                                : 'No agent configured yet — you can paste an existing Retell Agent ID below'}
                                         </p>
                                     </div>
                                 </div>
@@ -307,6 +446,20 @@ const AdminAgentSettings: React.FC = () => {
                             </h2>
                             <div className="space-y-4">
                                 <div>
+                                    <label className="block text-xs font-medium text-slate-600 mb-1">Retell Agent ID (connect existing)</label>
+                                    <input
+                                        type="text"
+                                        value={settings.retell_agent_id || ''}
+                                        onChange={(e) => updateSetting('retell_agent_id', e.target.value)}
+                                        className="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm font-mono focus:ring-2 focus:ring-indigo-500"
+                                        placeholder="agent_xxxxxxxxxxxxxxxx"
+                                    />
+                                    <p className="text-xs text-slate-400 mt-1">
+                                        Paste an existing agent ID from your Retell account here (this bypasses the Voice Settings page for agent linking).
+                                    </p>
+                                </div>
+
+                                <div>
                                     <label className="block text-xs font-medium text-slate-600 mb-1">Agent Name</label>
                                     <input
                                         type="text"
@@ -316,12 +469,44 @@ const AdminAgentSettings: React.FC = () => {
                                         placeholder="e.g. Luna, Alex, Reception AI"
                                     />
                                 </div>
+
+                                {/* AI Prompt Assistant */}
+                                <div className="p-4 rounded-lg border border-indigo-200 bg-indigo-50">
+                                    <div className="flex items-center justify-between gap-3">
+                                        <div>
+                                            <p className="text-sm font-semibold text-indigo-900 flex items-center gap-2">
+                                                <Wand2 className="w-4 h-4" /> AI Prompt Assistant
+                                            </p>
+                                            <p className="text-xs text-indigo-700 mt-1">
+                                                Enter the business website URL and generate a high-quality phone-agent system prompt using Gemini.
+                                            </p>
+                                        </div>
+                                        <button
+                                            onClick={handleGeneratePrompt}
+                                            disabled={isGeneratingPrompt}
+                                            className="px-4 py-2 bg-indigo-600 text-white text-sm font-semibold rounded-lg hover:bg-indigo-700 disabled:opacity-50 flex items-center gap-2"
+                                        >
+                                            {isGeneratingPrompt ? <Loader2 className="w-4 h-4 animate-spin" /> : <Wand2 className="w-4 h-4" />}
+                                            {isGeneratingPrompt ? 'Generating...' : 'Generate'}
+                                        </button>
+                                    </div>
+                                    <div className="mt-3">
+                                        <input
+                                            type="text"
+                                            value={websiteUrl}
+                                            onChange={(e) => setWebsiteUrl(e.target.value)}
+                                            className="w-full px-3 py-2 border border-indigo-300 rounded-lg text-sm"
+                                            placeholder="https://example.com"
+                                        />
+                                    </div>
+                                </div>
+
                                 <div>
                                     <label className="block text-xs font-medium text-slate-600 mb-1">System Prompt</label>
                                     <textarea
                                         value={settings.system_prompt}
                                         onChange={(e) => updateSetting('system_prompt', e.target.value)}
-                                        rows={6}
+                                        rows={8}
                                         className="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm focus:ring-2 focus:ring-indigo-500"
                                         placeholder="Instructions for how the agent should behave, what info to provide, tone of voice, etc."
                                     />
@@ -512,8 +697,7 @@ const AdminAgentSettings: React.FC = () => {
                                     <div className="p-3 bg-indigo-50 border border-indigo-200 rounded-lg">
                                         <p className="text-xs text-indigo-700">
                                             Copy these URLs into your Retell AI dashboard. The <strong>Retell Webhook</strong> receives call lifecycle events.
-                                            The <strong>Check Availability</strong> and <strong>Book Meeting</strong> URLs are registered as Custom Functions
-                                            that the agent calls mid-conversation.
+                                            The <strong>Check Availability</strong> and <strong>Book Meeting</strong> URLs are registered as Custom Functions.
                                         </p>
                                     </div>
 
@@ -526,12 +710,12 @@ const AdminAgentSettings: React.FC = () => {
                                                 <div className="flex items-center gap-2">
                                                     <input
                                                         type="text"
-                                                        value={url}
+                                                        value={String(url)}
                                                         readOnly
                                                         className="flex-1 px-3 py-2 bg-slate-50 border border-slate-300 rounded-lg text-xs font-mono"
                                                     />
                                                     <button
-                                                        onClick={() => copyToClipboard(url)}
+                                                        onClick={() => copyToClipboard(String(url))}
                                                         className="p-2 text-slate-500 hover:text-indigo-600"
                                                         title="Copy URL"
                                                     >
@@ -541,10 +725,6 @@ const AdminAgentSettings: React.FC = () => {
                                             </div>
                                         </div>
                                     ))}
-
-                                    {!webhookUrls && (
-                                        <p className="text-xs text-slate-400">Webhook URLs will be generated after saving settings.</p>
-                                    )}
                                 </div>
                             )}
                         </div>
@@ -564,7 +744,7 @@ const AdminAgentSettings: React.FC = () => {
                             {showEvents && (
                                 <div className="mt-4">
                                     {webhookEvents.length === 0 ? (
-                                        <p className="text-xs text-slate-400 py-4 text-center">No webhook events yet. Events will appear here once Retell AI starts making calls.</p>
+                                        <p className="text-xs text-slate-400 py-4 text-center">No webhook events yet.</p>
                                     ) : (
                                         <div className="overflow-x-auto">
                                             <table className="w-full text-xs">
@@ -585,8 +765,8 @@ const AdminAgentSettings: React.FC = () => {
                                                             <td className="py-2 px-2">
                                                                 <span className={`inline-block px-2 py-0.5 rounded text-xs font-medium ${
                                                                     event.status === 'completed' ? 'bg-green-100 text-green-700' :
-                                                                    event.status === 'failed' ? 'bg-red-100 text-red-700' :
-                                                                    'bg-amber-100 text-amber-700'
+                                                                        event.status === 'failed' ? 'bg-red-100 text-red-700' :
+                                                                            'bg-amber-100 text-amber-700'
                                                                 }`}>
                                                                     {event.status}
                                                                 </span>

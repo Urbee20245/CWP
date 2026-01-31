@@ -69,6 +69,14 @@ export const AdminService = {
     });
   },
 
+  // Generate a system prompt by scraping a website (Gemini)
+  generateSystemPromptFromWebsite: async (websiteUrl: string, businessName?: string) => {
+    return invokeEdgeFunction('generate-system-prompt-from-website', {
+      website_url: websiteUrl,
+      business_name: businessName,
+    });
+  },
+
   // Update A2P compliance status (admin only)
   updateA2PStatus: async (clientId: string, a2pStatus: string) => {
     return invokeEdgeFunction('update-a2p-status', {
