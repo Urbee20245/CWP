@@ -164,30 +164,48 @@ serve(async (req) => {
       return jsonRes({ success: true, retell_phone_id: voiceConfig.retell_phone_id, message: "Already active." });
     }
 
-    // 5) Call Retell API
-    console.log(`[provision-voice-number] Importing ${final_phone} into Retell with agent ${finalAgentId}...`);
+    // 5) Import existing phone number into Retell (Twilio via Connect)
+    console.log(`[provision-voice-number] Importing existing ${final_phone} into Retell with agent ${finalAgentId}...`);
+
+    const inboundWebhookUrl = `${Deno.env.get('SUPABASE_URL')}/functions/v1/retell-webhook`;
 
     const retellBody = {
       phone_number: final_phone,
-      agent_id: finalAgentId,
+      inbound_agent_id: finalAgentId,
+      outbound_agent_id: finalAgentId,
+      inbound_webhook_url: inboundWebhookUrl,
       telephony_provider: 'twilio',
       twilio_account_sid: twilio_sid,
       twilio_auth_token: twilio_token,
     };
 
-    console.log('[provision-voice-number] Retell request body keys:', Object.keys(retellBody).join(', '));
+    console.log('[provision-voice-number] Retell import request keys:', Object.keys(retellBody).join(', '));
 
-    const retellResponse = await fetch('https://api.retellai.com/v2/create-phone-number', {
-      method: 'POST',
-      headers: {
-        'Authorization': `Bearer ${RETELL_API_KEY}`,
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify(retellBody),
-    });
+    // Try v2 first, then fallback to non-v2 if needed
+    async function tryImport(url: string) {
+      const response = await fetch(url, {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${RETELL_API_KEY}`,
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify(retellBody),
+      });
+      const text = await response.text();
+      return { response, text };
+    }
 
-    const retellText = await retellResponse.text();
-    console.log(`[provision-voice-number] Retell response status: ${retellResponse.status}, body: ${retellText}`);
+    let { response: retellResponse, text: retellText } = await tryImport('https://api.retellai.com/v2/import-phone-number');
+
+    // Fallback if v2 returns 404 or non-JSON HTML
+    if (!retellResponse.ok && (retellResponse.status === 404 || retellText.startsWith('<!DOCTYPE html>'))) {
+      console.warn('[provision-voice-number] v2 import endpoint not available; trying non-v2 endpoint.');
+      const fallback = await tryImport('https://api.retellai.com/import-phone-number');
+      retellResponse = fallback.response;
+      retellText = fallback.text;
+    }
+
+    console.log(`[provision-voice-number] Retell import response status: ${retellResponse.status}, body: ${retellText}`);
 
     let retellData: any;
     try {
@@ -229,7 +247,7 @@ serve(async (req) => {
         a2p_status: source === 'platform' ? 'approved' : a2p_status,
       }, { onConflict: 'client_id' });
 
-    if (dbError) return errRes('Provisioned in Retell but failed to update local DB.', 500);
+    if (dbError) return errRes('Imported into Retell but failed to update local DB.', 500);
 
     console.log(`[provision-voice-number] Success! Retell phone ID: ${retellPhoneId}`);
     return jsonRes({ success: true, retell_phone_id: retellPhoneId });
