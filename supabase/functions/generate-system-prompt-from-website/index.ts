@@ -10,8 +10,10 @@ const corsHeaders = {
   'Content-Type': 'application/json',
 };
 
-function jsonRes(body: any, status = 200) {
-  return new Response(JSON.stringify(body), { status, headers: corsHeaders });
+function jsonRes(body: any) {
+  // IMPORTANT: Always return 200 so the client SDK doesn't hide the real error
+  // behind a generic "non-2xx" message. We communicate success/failure in JSON.
+  return new Response(JSON.stringify(body), { status: 200, headers: corsHeaders });
 }
 
 function normalizeUrl(input: string): string {
@@ -36,6 +38,67 @@ function htmlToText(html: string): string {
     .trim();
 }
 
+async function callGemini(apiKey: string, prompt: string) {
+  // Try a couple model names because Google sometimes changes availability per key.
+  const modelsToTry = [
+    'gemini-1.5-flash',
+    'gemini-1.5-flash-latest',
+    'gemini-1.5-pro',
+    'gemini-1.5-pro-latest',
+  ];
+
+  let lastErr: string | null = null;
+
+  for (const model of modelsToTry) {
+    const url = `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent`;
+
+    console.log('[generate-system-prompt-from-website] Calling Gemini', { model });
+
+    const res = await fetch(url, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'x-goog-api-key': apiKey,
+      },
+      body: JSON.stringify({
+        contents: [{ parts: [{ text: prompt }] }],
+        generationConfig: {
+          temperature: 0.4,
+          maxOutputTokens: 900,
+        },
+      }),
+    });
+
+    const text = await res.text();
+    let json: any = null;
+    try {
+      json = JSON.parse(text);
+    } catch {
+      json = null;
+    }
+
+    if (res.ok) {
+      return { model, json };
+    }
+
+    const msg = json?.error?.message || json?.message || json?.detail || text || `HTTP ${res.status}`;
+    console.error('[generate-system-prompt-from-website] Gemini API error', {
+      model,
+      status: res.status,
+      message: msg?.slice?.(0, 500) || msg,
+    });
+
+    lastErr = `Model ${model}: ${msg}`;
+
+    // If unauthorized, don't bother trying other models.
+    if (res.status === 401 || res.status === 403) {
+      throw new Error('Unauthorized to Gemini API (check GEMINI_API_KEY)');
+    }
+  }
+
+  throw new Error(lastErr || 'AI generation failed');
+}
+
 serve(async (req) => {
   if (req.method === 'OPTIONS') {
     return new Response(null, { headers: corsHeaders });
@@ -45,7 +108,7 @@ serve(async (req) => {
     const GEMINI_API_KEY = Deno.env.get('GEMINI_API_KEY');
     if (!GEMINI_API_KEY) {
       console.error('[generate-system-prompt-from-website] Missing GEMINI_API_KEY');
-      return jsonRes({ error: 'AI service unavailable' }, 500);
+      return jsonRes({ success: false, error: 'AI service unavailable (missing GEMINI_API_KEY)' });
     }
 
     const { website_url, business_name } = await req.json();
@@ -53,7 +116,7 @@ serve(async (req) => {
     const biz = typeof business_name === 'string' ? business_name.trim() : '';
 
     if (!url) {
-      return jsonRes({ error: 'Missing website_url' }, 400);
+      return jsonRes({ success: false, error: 'Missing website_url' });
     }
 
     console.log('[generate-system-prompt-from-website] Fetching website content', { url });
@@ -66,8 +129,11 @@ serve(async (req) => {
 
     if (!siteRes.ok) {
       const text = await siteRes.text();
-      console.error('[generate-system-prompt-from-website] Website fetch failed', { status: siteRes.status, body: text?.slice?.(0, 200) });
-      return jsonRes({ error: `Failed to fetch website (HTTP ${siteRes.status})` }, 400);
+      console.error('[generate-system-prompt-from-website] Website fetch failed', {
+        status: siteRes.status,
+        body: text?.slice?.(0, 200),
+      });
+      return jsonRes({ success: false, error: `Failed to fetch website (HTTP ${siteRes.status})` });
     }
 
     const html = await siteRes.text();
@@ -75,8 +141,6 @@ serve(async (req) => {
 
     // Keep the prompt payload small to avoid token blowups.
     const websiteTextForModel = extractedText.slice(0, 12000);
-
-    console.log('[generate-system-prompt-from-website] Calling Gemini', { chars: websiteTextForModel.length });
 
     const systemPromptInstruction = `You are an expert prompt engineer for AI phone receptionists.
 
@@ -94,39 +158,19 @@ Business name (if known): ${biz || 'Unknown'}
 Website text:
 """${websiteTextForModel}"""`;
 
-    const geminiRes = await fetch(
-      `https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${GEMINI_API_KEY}`,
-      {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          contents: [{ parts: [{ text: systemPromptInstruction }] }],
-          generationConfig: {
-            temperature: 0.4,
-            maxOutputTokens: 900,
-          },
-        }),
-      }
-    );
+    const { model, json } = await callGemini(GEMINI_API_KEY, systemPromptInstruction);
 
-    if (!geminiRes.ok) {
-      const err = await geminiRes.text();
-      console.error('[generate-system-prompt-from-website] Gemini API error', { err: err?.slice?.(0, 500) });
-      return jsonRes({ error: 'AI generation failed' }, 500);
-    }
-
-    const data = await geminiRes.json();
-    const generated = data?.candidates?.[0]?.content?.parts?.[0]?.text?.trim?.();
+    const generated = json?.candidates?.[0]?.content?.parts?.[0]?.text?.trim?.();
 
     if (!generated) {
-      console.error('[generate-system-prompt-from-website] Empty model output');
-      return jsonRes({ error: 'AI returned empty output' }, 500);
+      console.error('[generate-system-prompt-from-website] Empty model output', { model });
+      return jsonRes({ success: false, error: 'AI returned empty output' });
     }
 
-    console.log('[generate-system-prompt-from-website] Success');
-    return jsonRes({ success: true, system_prompt: generated });
+    console.log('[generate-system-prompt-from-website] Success', { model });
+    return jsonRes({ success: true, system_prompt: generated, model });
   } catch (error: any) {
     console.error('[generate-system-prompt-from-website] Unhandled error', { message: error?.message });
-    return jsonRes({ error: error?.message || 'Generation failed' }, 500);
+    return jsonRes({ success: false, error: error?.message || 'Generation failed' });
   }
 });

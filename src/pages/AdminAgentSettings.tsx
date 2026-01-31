@@ -98,6 +98,7 @@ const TIMEZONE_OPTIONS = [
 ];
 
 const draftKey = (clientId: string) => `agent-settings-draft:${clientId}`;
+const verifiedKey = (agentId: string) => `retell-verified:${agentId}`;
 
 const safeParseDraft = (raw: string | null): any | null => {
     if (!raw) return null;
@@ -143,6 +144,22 @@ const AdminAgentSettings: React.FC = () => {
         setTimeout(() => setFeedback(null), 6000);
     };
 
+    const readCachedVerification = (agentId: string): RetellLiveAgentStatus | null => {
+        const raw = safeParseDraft(localStorage.getItem(verifiedKey(agentId)));
+        if (!raw || typeof raw !== 'object') return null;
+        if (raw.agent_id !== agentId) return null;
+        return raw as RetellLiveAgentStatus;
+    };
+
+    const writeCachedVerification = (status: RetellLiveAgentStatus) => {
+        if (!status?.agent_id) return;
+        try {
+            localStorage.setItem(verifiedKey(status.agent_id), JSON.stringify(status));
+        } catch {
+            // ignore
+        }
+    };
+
     // Fetch clients list
     useEffect(() => {
         const fetchClients = async () => {
@@ -162,6 +179,11 @@ const AdminAgentSettings: React.FC = () => {
         fetchClients();
     }, []);
 
+    // Clear retell verification when switching clients (avoids showing a previous client's verified badge)
+    useEffect(() => {
+        setRetellLiveStatus(null);
+    }, [selectedClientId]);
+
     const buildWebhookUrls = () => ({
         retell_webhook: `${SUPABASE_FUNCTIONS_BASE}/retell-webhook`,
         check_availability: `${SUPABASE_FUNCTIONS_BASE}/check-availability`,
@@ -172,10 +194,9 @@ const AdminAgentSettings: React.FC = () => {
     const fetchSettings = useCallback(async (clientId: string) => {
         if (!clientId) return;
         setIsLoading(true);
-        setRetellLiveStatus(null);
 
         try {
-            const [{ data: settingsRow, error: settingsErr }, { data: recentEvents, error: eventsErr }, { data: calendarRow }, { data: voiceRow }, { data: twilioIntegration }] = await Promise.all([
+            const [{ data: settingsRow, error: settingsErr }, { data: recentEvents, error: eventsErr }, { data: calendarRow }, { data: voiceRow }] = await Promise.all([
                 supabase
                     .from('ai_agent_settings')
                     .select('*')
@@ -196,12 +217,6 @@ const AdminAgentSettings: React.FC = () => {
                     .from('client_voice_integrations')
                     .select('retell_agent_id, voice_status, phone_number')
                     .eq('client_id', clientId)
-                    .maybeSingle(),
-                supabase
-                    .from('client_integrations')
-                    .select('provider')
-                    .eq('client_id', clientId)
-                    .eq('provider', 'twilio')
                     .maybeSingle(),
             ]);
 
@@ -227,9 +242,6 @@ const AdminAgentSettings: React.FC = () => {
                     setWebsiteUrl(draft.website_url);
                 }
                 showFeedback('info', 'Restored an unsaved draft for this client.');
-            } else {
-                // Keep URL as-is unless empty
-                if (!websiteUrl) setWebsiteUrl('');
             }
 
             setSettings(finalSettings);
@@ -249,6 +261,13 @@ const AdminAgentSettings: React.FC = () => {
                     phone_number: voiceRow.phone_number,
                 } : { configured: false },
             });
+
+            // Restore cached verification for current agent id (so it stays visible after Save)
+            const currentAgentId = String(finalSettings?.retell_agent_id || voiceRow?.retell_agent_id || '').trim();
+            if (currentAgentId) {
+                const cached = readCachedVerification(currentAgentId);
+                if (cached) setRetellLiveStatus(cached);
+            }
 
         } catch (err: any) {
             console.error('Failed to fetch agent settings:', err.message);
@@ -294,6 +313,19 @@ const AdminAgentSettings: React.FC = () => {
         }, 350);
         return () => window.clearTimeout(t);
     }, [selectedClientId, websiteUrl, settings]);
+
+    // If the Agent ID changes, clear the old verified badge (unless we have a cached verification for the new ID)
+    useEffect(() => {
+        const agentId = String(settings?.retell_agent_id || '').trim();
+        if (!agentId) {
+            setRetellLiveStatus(null);
+            return;
+        }
+        if (retellLiveStatus?.agent_id && retellLiveStatus.agent_id !== agentId) {
+            const cached = readCachedVerification(agentId);
+            setRetellLiveStatus(cached);
+        }
+    }, [settings?.retell_agent_id]);
 
     const handleSave = async () => {
         if (!settings || !selectedClientId) return;
@@ -413,16 +445,12 @@ const AdminAgentSettings: React.FC = () => {
         try {
             const result = await AdminService.generateSystemPromptFromWebsite(url, clientName);
             const prompt = result?.system_prompt;
-            if (!prompt) throw new Error('No prompt returned');
+            if (!prompt) throw new Error(result?.error || 'No prompt returned');
             updateSetting('system_prompt', prompt);
             showFeedback('success', 'System prompt generated. Review and click Save Settings.');
         } catch (err: any) {
             const msg = String(err.message || err);
-            if (msg.toLowerCase().includes('ai service unavailable')) {
-                showFeedback('error', 'Prompt assistant is unavailable (missing GEMINI_API_KEY in Supabase secrets).');
-            } else {
-                showFeedback('error', `Failed to generate prompt: ${msg}`);
-            }
+            showFeedback('error', `Failed to generate prompt: ${msg}`);
         } finally {
             setIsGeneratingPrompt(false);
         }
@@ -440,24 +468,28 @@ const AdminAgentSettings: React.FC = () => {
             const data = await AdminService.getRetellAgent(agentId);
             const agent = data?.agent;
 
-            setRetellLiveStatus({
+            const status: RetellLiveAgentStatus = {
                 checked_at: new Date().toISOString(),
                 ok: true,
                 agent_id: agent?.agent_id || agentId,
                 agent_name: agent?.agent_name,
                 is_published: agent?.is_published,
                 raw: agent,
-            });
+            };
+
+            setRetellLiveStatus(status);
+            writeCachedVerification(status);
 
             showFeedback('success', `Retell agent fetched successfully${typeof agent?.is_published === 'boolean' ? ` (published=${agent.is_published})` : ''}.`);
         } catch (err: any) {
             const msg = String(err.message || err);
-            setRetellLiveStatus({
+            const status: RetellLiveAgentStatus = {
                 checked_at: new Date().toISOString(),
                 ok: false,
                 agent_id: agentId,
                 error: msg,
-            });
+            };
+            setRetellLiveStatus(status);
             showFeedback('error', `Retell check failed: ${msg}`);
         } finally {
             setIsCheckingRetell(false);
@@ -567,6 +599,7 @@ const AdminAgentSettings: React.FC = () => {
                                                         <div className="font-mono">agent_id: {retellLiveStatus.agent_id}</div>
                                                         {retellLiveStatus.agent_name && <div>name: {retellLiveStatus.agent_name}</div>}
                                                         {typeof retellLiveStatus.is_published === 'boolean' && <div>published: {String(retellLiveStatus.is_published)}</div>}
+                                                        <div className="text-[11px] text-emerald-700/80">verified at {new Date(retellLiveStatus.checked_at).toLocaleString()}</div>
                                                     </div>
                                                 ) : (
                                                     <div>
@@ -642,7 +675,7 @@ const AdminAgentSettings: React.FC = () => {
                                             placeholder="https://example.com"
                                         />
                                         <p className="text-[11px] text-indigo-700 mt-2">
-                                            Tip: your unsaved work on this page is now cached locally per client, so switching tabs to copy/paste won't wipe it.
+                                            Tip: your unsaved work on this page is cached locally per client, so switching tabs to copy/paste won't wipe it.
                                         </p>
                                     </div>
                                 </div>
