@@ -44,14 +44,13 @@ const AdminVoiceManagement: React.FC = () => {
 
     // Form State
     const [retellAgentId, setRetellAgentId] = useState('');
-    const [isSavingAgentId, setIsSavingAgentId] = useState(false);
-    const [saveSuccess, setSaveSuccess] = useState(false);
-    const [isUpdatingA2P, setIsUpdatingA2P] = useState(false);
-
-    // Platform number input (for done-for-you flow)
     const [platformNumber, setPlatformNumber] = useState('');
-    const [isSavingPlatformNumber, setIsSavingPlatformNumber] = useState(false);
-    const [platformNumberSaved, setPlatformNumberSaved] = useState(false);
+
+    // Save state
+    const [isSavingConfig, setIsSavingConfig] = useState(false);
+    const [configSaved, setConfigSaved] = useState(false);
+
+    const [isUpdatingA2P, setIsUpdatingA2P] = useState(false);
 
     // Ref to track last loaded DB value to prevent resetting user input
     const lastLoadedAgentIdRef = useRef('');
@@ -94,12 +93,10 @@ const AdminVoiceManagement: React.FC = () => {
     const fetchClients = useCallback(async () => {
         setIsLoading(true);
         try {
-            // Primary: edge function (uses service role, bypasses RLS)
             const clientsData = await AdminService.getVoiceClients();
             setClients(mapClientData(clientsData || []));
         } catch (edgeFnErr: any) {
             console.warn('[AdminVoiceManagement] Edge function failed:', edgeFnErr.message);
-            // Fallback: direct Supabase query
             try {
                 const { data, error } = await supabase
                     .from('clients')
@@ -139,19 +136,12 @@ const AdminVoiceManagement: React.FC = () => {
 
     const selectedClient = clients.find(c => c.id === selectedClientId);
 
-    // Derived state for the selected client
     const isClientOwned = selectedClient?.twilio_configured === true;
     const isPlatformOwned = !isClientOwned;
     const effectiveSource = isClientOwned ? 'client' : 'platform';
     const isVoiceActive = selectedClient?.voice_status === 'active';
-    const isVoiceFailed = selectedClient?.voice_status === 'failed';
 
-    // For platform-owned: A2P must be approved before enabling
-    const isPlatformA2PReady = isPlatformOwned && selectedClient?.a2p_status === 'approved';
-    // For client-owned: they manage A2P in Twilio console, so we skip the platform A2P check
-    const isClientReady = isClientOwned && selectedClient?.twilio_configured;
-
-    // --- Sync form fields from DB (without wiping user feedback on refresh) ---
+    // --- Sync form fields from DB ---
     useEffect(() => {
         if (!selectedClientId) return;
 
@@ -160,16 +150,15 @@ const AdminVoiceManagement: React.FC = () => {
 
         const client = clients.find(c => c.id === selectedClientId);
 
-        // Only clear transient UI state when the user changes clients
         if (selectionChanged) {
             setFeedbackMessage(null);
+            setConfigSaved(false);
         }
 
         const newAgentId = client?.retell_agent_id || '';
         if (selectionChanged || newAgentId !== lastLoadedAgentIdRef.current) {
             setRetellAgentId(newAgentId);
             lastLoadedAgentIdRef.current = newAgentId;
-            setSaveSuccess(!!newAgentId);
         }
 
         const newPlatformNumber = (client?.phone_number && client.number_source === 'platform')
@@ -178,33 +167,34 @@ const AdminVoiceManagement: React.FC = () => {
         if (selectionChanged || newPlatformNumber !== lastLoadedPlatformNumberRef.current) {
             setPlatformNumber(newPlatformNumber);
             lastLoadedPlatformNumberRef.current = newPlatformNumber;
-            setPlatformNumberSaved(!!newPlatformNumber);
         }
+
+        // If we have both values (or only agent for client-owned), consider it saved/persisted
+        const hasAgent = !!newAgentId;
+        const hasPlatformPhone = isPlatformOwned ? !!newPlatformNumber : true;
+        setConfigSaved(hasAgent && hasPlatformPhone);
     }, [selectedClientId, clients]);
 
     const hasAgentIdInput = !!retellAgentId.trim();
     const hasPlatformNumberInput = !!platformNumber.trim();
 
-    // Enable button should reflect that values were successfully saved (not just typed)
-    const canEnable = !isVoiceActive && (
-        (isClientOwned && isClientReady && saveSuccess) ||
-        (isPlatformOwned && isPlatformA2PReady && saveSuccess && platformNumberSaved && hasPlatformNumberInput)
-    );
+    const canSave = isClientOwned
+        ? hasAgentIdInput
+        : (hasAgentIdInput && hasPlatformNumberInput);
+
+    // Enable should NOT require A2P approval anymore. If A2P is pending, backend will mark as pending.
+    const canEnable = configSaved && !isVoiceActive;
 
     const applySavedVoiceIntegrationToLocalState = (voice: SavedVoiceIntegration) => {
-        // Keep the UI fields filled with what the API says is saved
         if (voice.retell_agent_id) {
             lastLoadedAgentIdRef.current = voice.retell_agent_id;
             setRetellAgentId(voice.retell_agent_id);
-            setSaveSuccess(true);
         }
         if (voice.phone_number) {
             lastLoadedPlatformNumberRef.current = voice.phone_number;
             setPlatformNumber(voice.phone_number);
-            setPlatformNumberSaved(true);
         }
 
-        // Keep the list client row updated even if the refetch fails
         setClients((prev) => prev.map((c) => {
             if (c.id !== voice.client_id) return c;
             return {
@@ -216,70 +206,41 @@ const AdminVoiceManagement: React.FC = () => {
                 a2p_status: (voice.a2p_status ?? c.a2p_status) || c.a2p_status,
             };
         }));
+
+        const savedHasAgent = !!voice.retell_agent_id;
+        const savedHasPhone = isPlatformOwned ? !!voice.phone_number : true;
+        setConfigSaved(savedHasAgent && savedHasPhone);
     };
 
-    // --- Handlers ---
+    const handleSaveConfig = async () => {
+        if (!selectedClientId || !canSave) return;
 
-    const handleSaveAgentId = async () => {
-        if (!selectedClientId) return;
-        const agentIdToSave = retellAgentId.trim();
-        if (!agentIdToSave) {
-            showFeedback('error', 'Please enter the Retell Agent ID.');
-            return;
-        }
-
-        setIsSavingAgentId(true);
+        setIsSavingConfig(true);
         setFeedbackMessage(null);
 
         try {
-            const result = await AdminService.saveRetellAgentId(selectedClientId, agentIdToSave, effectiveSource);
+            const result = await AdminService.saveRetellAgentId(
+                selectedClientId,
+                retellAgentId.trim(),
+                effectiveSource,
+                isPlatformOwned ? platformNumber.trim() : undefined
+            );
+
             if (result?.voice_integration) {
                 applySavedVoiceIntegrationToLocalState(result.voice_integration as SavedVoiceIntegration);
             } else {
-                // Fallback: keep what user typed as "saved" (shouldn't happen, but avoids blanking)
-                lastLoadedAgentIdRef.current = agentIdToSave;
-                setSaveSuccess(true);
+                // Fallback: mark saved based on inputs
+                lastLoadedAgentIdRef.current = retellAgentId.trim();
+                if (isPlatformOwned) lastLoadedPlatformNumberRef.current = platformNumber.trim();
+                setConfigSaved(true);
             }
-            showFeedback('success', 'Retell Agent ID saved successfully.', 5000);
 
-            // Refresh in the background (but UI will not blank because local state is already updated)
+            showFeedback('success', 'Configuration saved successfully.', 5000);
             fetchClients();
         } catch (e: any) {
             showFeedback('error', `Save Failed: ${e.message}`);
         } finally {
-            setIsSavingAgentId(false);
-        }
-    };
-
-    const handleSavePlatformNumber = async () => {
-        if (!selectedClientId) return;
-        if (!isPlatformOwned) return;
-        const phoneToSave = platformNumber.trim();
-        if (!phoneToSave) {
-            showFeedback('error', 'Please enter the platform phone number.');
-            return;
-        }
-
-        setIsSavingPlatformNumber(true);
-        setFeedbackMessage(null);
-
-        try {
-            // We allow saving just the phone number (agent id can be empty here)
-            const result = await AdminService.saveRetellAgentId(selectedClientId, retellAgentId.trim(), 'platform', phoneToSave);
-            if (result?.voice_integration) {
-                applySavedVoiceIntegrationToLocalState(result.voice_integration as SavedVoiceIntegration);
-            } else {
-                lastLoadedPlatformNumberRef.current = phoneToSave;
-                setPlatformNumberSaved(true);
-            }
-            showFeedback('success', 'Platform phone number saved successfully.', 5000);
-
-            // Refresh in the background
-            fetchClients();
-        } catch (e: any) {
-            showFeedback('error', `Save Failed: ${e.message}`);
-        } finally {
-            setIsSavingPlatformNumber(false);
+            setIsSavingConfig(false);
         }
     };
 
@@ -290,14 +251,20 @@ const AdminVoiceManagement: React.FC = () => {
         setFeedbackMessage(null);
 
         try {
-            await AdminService.provisionVoiceNumber(
+            const result = await AdminService.provisionVoiceNumber(
                 selectedClientId,
                 effectiveSource,
                 effectiveSource === 'platform' ? platformNumber.trim() : undefined,
                 undefined,
                 retellAgentId.trim()
             );
-            showFeedback('success', 'AI Call Handling successfully enabled!');
+
+            if (result?.pending) {
+                showFeedback('success', result.message || 'Enabled (pending A2P approval).');
+            } else {
+                showFeedback('success', 'AI Call Handling successfully enabled!');
+            }
+
             await fetchClients();
         } catch (e: any) {
             showFeedback('error', e.message || 'Provisioning failed.');
@@ -339,8 +306,6 @@ const AdminVoiceManagement: React.FC = () => {
         }
     };
 
-    // --- UI Helpers ---
-
     const getA2PStatusDisplay = (status: string) => {
         switch (status) {
             case 'approved': return { label: 'Approved', color: 'text-emerald-600', bg: 'bg-emerald-100', border: 'border-emerald-200', icon: CheckCircle2 };
@@ -354,18 +319,15 @@ const AdminVoiceManagement: React.FC = () => {
         switch (status) {
             case 'active': return 'bg-emerald-100 text-emerald-700';
             case 'failed': return 'bg-red-100 text-red-700';
+            case 'pending': return 'bg-amber-100 text-amber-700';
             default: return 'bg-slate-100 text-slate-500';
         }
     };
 
-    // --- Steps indicator ---
-    const getSteps = () => {
-        if (!selectedClient) return [];
-        const steps = [];
-
+    const steps = selectedClient ? (() => {
+        const s: { label: string; done: boolean; description: string }[] = [];
         if (isClientOwned) {
-            // Option 2: Client-Owned Twilio
-            steps.push({
+            s.push({
                 label: 'Twilio Credentials',
                 done: selectedClient.twilio_configured,
                 description: selectedClient.twilio_configured
@@ -373,50 +335,37 @@ const AdminVoiceManagement: React.FC = () => {
                     : 'Client needs to enter Twilio credentials in their Settings page',
             });
         } else {
-            // Option 1: Platform Done-for-You
-            steps.push({
+            s.push({
                 label: 'A2P Compliance',
                 done: selectedClient.a2p_status === 'approved',
                 description: selectedClient.a2p_status === 'approved'
                     ? 'Business verified'
                     : selectedClient.a2p_status === 'pending_approval'
                         ? 'Client submitted — awaiting your review'
-                        : 'Client has not submitted compliance form yet',
+                        : 'Not approved yet (you can still save + enable; activation will be pending)',
             });
         }
 
-        steps.push({
-            label: 'Retell Agent ID',
-            done: saveSuccess,
-            description: saveSuccess
-                ? `Saved: ${lastLoadedAgentIdRef.current}`
-                : 'Enter an agent ID, then click Save',
+        s.push({
+            label: 'Configuration Saved',
+            done: configSaved,
+            description: configSaved
+                ? 'Agent ID (and platform phone number if needed) saved'
+                : 'Enter values and click Save',
         });
 
-        if (isPlatformOwned) {
-            steps.push({
-                label: 'Platform Phone Number',
-                done: platformNumberSaved,
-                description: platformNumberSaved
-                    ? `Saved: ${lastLoadedPlatformNumberRef.current}`
-                    : 'Enter a platform phone number, then click Save',
-            });
-        }
-
-        steps.push({
+        s.push({
             label: 'AI Calls Active',
             done: isVoiceActive,
             description: isVoiceActive
                 ? 'AI Call Handling is live'
-                : isVoiceFailed
-                    ? 'Last activation attempt failed — review and retry'
-                    : 'Ready to enable once previous steps are complete',
+                : (selectedClient.voice_status === 'pending')
+                    ? 'Pending — will auto-activate after A2P is approved'
+                    : 'Ready to enable once saved',
         });
 
-        return steps;
-    };
-
-    const steps = selectedClient ? getSteps() : [];
+        return s;
+    })() : [];
 
     return (
         <AdminLayout>
@@ -474,7 +423,7 @@ const AdminVoiceManagement: React.FC = () => {
                                                 <span className="text-[10px] text-slate-500 uppercase tracking-widest">
                                                     {c.twilio_configured ? 'client number' : 'platform number'}
                                                 </span>
-                                                <span className={`text-[10px] font-bold uppercase ${c.voice_status === 'active' ? 'text-emerald-600' : c.voice_status === 'failed' ? 'text-red-500' : 'text-slate-400'}`}>
+                                                <span className={`text-[10px] font-bold uppercase ${c.voice_status === 'active' ? 'text-emerald-600' : c.voice_status === 'failed' ? 'text-red-500' : c.voice_status === 'pending' ? 'text-amber-600' : 'text-slate-400'}`}>
                                                     {c.voice_status}
                                                 </span>
                                             </div>
@@ -529,7 +478,7 @@ const AdminVoiceManagement: React.FC = () => {
                                             <div>
                                                 <p className="font-bold text-sm text-blue-700">Option 1: Done-For-You (Platform-Managed)</p>
                                                 <p className="text-xs mt-0.5 text-blue-600">
-                                                    We handle everything. Number purchased through Retell AI on your platform Twilio account.
+                                                    We handle everything. You can save + enable now; if A2P isn't approved yet, it will stay pending.
                                                 </p>
                                             </div>
                                         </>
@@ -566,16 +515,12 @@ const AdminVoiceManagement: React.FC = () => {
                                                             <a2pDisplay.icon className={`w-5 h-5 ${a2pDisplay.color}`} />
                                                             <div>
                                                                 <p className={`font-bold text-sm ${a2pDisplay.color}`}>A2P Compliance: {a2pDisplay.label}</p>
-                                                                {selectedClient.a2p_status === 'pending_approval' && (
-                                                                    <p className="text-xs mt-0.5 text-blue-700">Client has submitted their business details. Review and approve or reject below.</p>
-                                                                )}
-                                                                {selectedClient.a2p_status === 'not_started' && (
-                                                                    <p className="text-xs mt-0.5 text-slate-500">Client needs to complete the Messaging Compliance form in their Settings.</p>
+                                                                {selectedClient.a2p_status !== 'approved' && (
+                                                                    <p className="text-xs mt-0.5 text-slate-600">You can still save + enable now; it will stay pending until approved.</p>
                                                                 )}
                                                             </div>
                                                         </div>
 
-                                                        {/* Admin A2P action buttons */}
                                                         {selectedClient.a2p_status !== 'approved' && (
                                                             <div className="flex gap-2">
                                                                 <button
@@ -606,79 +551,61 @@ const AdminVoiceManagement: React.FC = () => {
                                     </div>
                                 )}
 
-                                {/* Retell Agent ID */}
+                                {/* Configuration */}
                                 <div className="bg-indigo-50 p-6 rounded-xl border border-indigo-200 mb-6">
                                     <h4 className="font-bold text-indigo-800 text-sm flex items-center gap-2 mb-3">
-                                        <Bot className="w-4 h-4" /> Retell AI Agent Configuration
+                                        <Bot className="w-4 h-4" /> Retell AI Configuration
                                     </h4>
-                                    <p className="text-xs text-indigo-700 mb-4">
-                                        Enter the Retell Agent ID you created for this client. Each client needs their own custom agent in Retell AI.
-                                    </p>
-                                    <div className="flex gap-3">
-                                        <input
-                                            type="text"
-                                            placeholder="agent_xxxxxxxxxxxxxxxx"
-                                            className="flex-1 p-3 border border-indigo-300 rounded-lg text-sm font-mono bg-white"
-                                            value={retellAgentId}
-                                            onChange={(e) => {
-                                                const v = e.target.value;
-                                                setRetellAgentId(v);
-                                                setSaveSuccess(v.trim() === lastLoadedAgentIdRef.current && !!v.trim());
-                                            }}
-                                        />
-                                        <button
-                                            onClick={handleSaveAgentId}
-                                            disabled={isSavingAgentId || !retellAgentId.trim()}
-                                            className={`px-4 py-2 rounded-lg text-sm font-semibold transition-colors disabled:opacity-50 flex items-center justify-center gap-2 ${saveSuccess ? 'bg-emerald-600 text-white' : 'bg-indigo-600 text-white hover:bg-indigo-700'}`}
-                                        >
-                                            {isSavingAgentId ? <Loader2 className="w-4 h-4 animate-spin" /> : saveSuccess ? <CheckCircle2 className="w-4 h-4" /> : 'Save'}
-                                        </button>
-                                    </div>
-                                    {saveSuccess && lastLoadedAgentIdRef.current && (
-                                        <p className="text-xs text-emerald-600 mt-2 flex items-center gap-1">
-                                            <CheckCircle2 className="w-3 h-3" /> Saved: <span className="font-mono">{lastLoadedAgentIdRef.current}</span>
-                                        </p>
-                                    )}
-                                </div>
 
-                                {/* Platform Number Input (Done-for-you only) */}
-                                {isPlatformOwned && (
-                                    <div className="bg-slate-50 p-6 rounded-xl border border-slate-200 mb-6">
-                                        <div className="flex items-center justify-between gap-3 mb-3">
-                                            <h4 className="font-bold text-slate-700 text-sm flex items-center gap-2">
-                                                <Phone className="w-4 h-4" /> Platform Phone Number
-                                            </h4>
-                                            <button
-                                                onClick={handleSavePlatformNumber}
-                                                disabled={isSavingPlatformNumber || !platformNumber.trim()}
-                                                className={`px-3 py-2 rounded-lg text-xs font-semibold border transition-colors disabled:opacity-50 flex items-center gap-2 ${platformNumberSaved ? 'bg-emerald-600 text-white border-emerald-600' : 'bg-white text-slate-700 border-slate-300 hover:bg-slate-100'}`}
-                                                title="Save platform number"
-                                            >
-                                                {isSavingPlatformNumber ? <Loader2 className="w-3 h-3 animate-spin" /> : platformNumberSaved ? <CheckCircle2 className="w-3 h-3" /> : <Save className="w-3 h-3" />}
-                                                {platformNumberSaved ? 'Saved' : 'Save'}
-                                            </button>
+                                    <div className="space-y-4">
+                                        <div>
+                                            <label className="block text-xs font-semibold text-indigo-800 mb-2">Retell Agent ID</label>
+                                            <input
+                                                type="text"
+                                                placeholder="agent_xxxxxxxxxxxxxxxx"
+                                                className="w-full p-3 border border-indigo-300 rounded-lg text-sm font-mono bg-white"
+                                                value={retellAgentId}
+                                                onChange={(e) => {
+                                                    setRetellAgentId(e.target.value);
+                                                    setConfigSaved(false);
+                                                }}
+                                            />
                                         </div>
-                                        <p className="text-xs text-slate-500 mb-3">
-                                            Enter the phone number you purchased/will use from your platform Twilio account for this client (E.164 format).
-                                        </p>
-                                        <input
-                                            type="text"
-                                            placeholder="+14045551234"
-                                            className="w-full p-3 border border-slate-300 rounded-lg text-sm font-mono bg-white"
-                                            value={platformNumber}
-                                            onChange={(e) => {
-                                                const v = e.target.value;
-                                                setPlatformNumber(v);
-                                                setPlatformNumberSaved(v.trim() === lastLoadedPlatformNumberRef.current && !!v.trim());
-                                            }}
-                                        />
-                                        {platformNumberSaved && lastLoadedPlatformNumberRef.current && (
-                                            <p className="text-xs text-emerald-600 mt-2 flex items-center gap-1">
-                                                <CheckCircle2 className="w-3 h-3" /> Saved: <span className="font-mono">{lastLoadedPlatformNumberRef.current}</span>
-                                            </p>
+
+                                        {isPlatformOwned && (
+                                            <div>
+                                                <label className="block text-xs font-semibold text-indigo-800 mb-2">Platform Phone Number (E.164)</label>
+                                                <input
+                                                    type="text"
+                                                    placeholder="+14045551234"
+                                                    className="w-full p-3 border border-indigo-300 rounded-lg text-sm font-mono bg-white"
+                                                    value={platformNumber}
+                                                    onChange={(e) => {
+                                                        setPlatformNumber(e.target.value);
+                                                        setConfigSaved(false);
+                                                    }}
+                                                />
+                                            </div>
+                                        )}
+
+                                        <button
+                                            onClick={handleSaveConfig}
+                                            disabled={isSavingConfig || !canSave}
+                                            className={`w-full px-4 py-3 rounded-lg text-sm font-semibold transition-colors disabled:opacity-50 flex items-center justify-center gap-2 ${configSaved ? 'bg-emerald-600 text-white' : 'bg-indigo-600 text-white hover:bg-indigo-700'}`}
+                                        >
+                                            {isSavingConfig ? <Loader2 className="w-4 h-4 animate-spin" /> : configSaved ? <CheckCircle2 className="w-4 h-4" /> : <Save className="w-4 h-4" />}
+                                            {configSaved ? 'Saved' : 'Save'}
+                                        </button>
+
+                                        {configSaved && (
+                                            <div className="text-xs text-emerald-700 bg-emerald-50 border border-emerald-200 rounded-lg p-3">
+                                                <div className="font-semibold">Saved values</div>
+                                                <div className="mt-1 font-mono">Agent ID: {lastLoadedAgentIdRef.current}</div>
+                                                {isPlatformOwned && <div className="mt-1 font-mono">Phone: {lastLoadedPlatformNumberRef.current}</div>}
+                                            </div>
                                         )}
                                     </div>
-                                )}
+                                </div>
 
                                 {/* Feedback Message */}
                                 {feedbackMessage && (
@@ -738,14 +665,9 @@ const AdminVoiceManagement: React.FC = () => {
                                         </div>
                                     )}
 
-                                    {/* Help text for why Enable is disabled */}
                                     {!isVoiceActive && !canEnable && (
                                         <p className="text-xs text-slate-500 text-center">
-                                            {isClientOwned && !selectedClient?.twilio_configured && 'Client needs to configure Twilio credentials first.'}
-                                            {isPlatformOwned && !isPlatformA2PReady && 'A2P compliance must be approved before enabling.'}
-                                            {isPlatformOwned && isPlatformA2PReady && (!hasPlatformNumberInput || !platformNumberSaved) && ' Save the platform phone number above.'}
-                                            {(!saveSuccess && hasAgentIdInput) && ' Save the Retell Agent ID above.'}
-                                            {(!hasAgentIdInput) && ' Enter and save the Retell Agent ID above.'}
+                                            Save the configuration above first.
                                         </p>
                                     )}
                                 </div>
