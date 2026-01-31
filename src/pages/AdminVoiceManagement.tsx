@@ -46,6 +46,7 @@ const AdminVoiceManagement: React.FC = () => {
     // Ref to track last loaded DB value to prevent resetting user input
     const lastLoadedAgentIdRef = useRef('');
     const lastLoadedPlatformNumberRef = useRef('');
+    const prevSelectedClientIdRef = useRef<string>('');
 
     const showFeedback = (type: 'success' | 'error' | 'info', text: string, durationMs = 8000) => {
         setFeedbackMessage({ type, text });
@@ -122,30 +123,6 @@ const AdminVoiceManagement: React.FC = () => {
 
     useEffect(() => { fetchClients(); }, [fetchClients]);
 
-    // Load agent ID + platform number when selecting a client
-    useEffect(() => {
-        if (selectedClientId) {
-            const client = clients.find(c => c.id === selectedClientId);
-            const newAgentId = client?.retell_agent_id || '';
-            if (newAgentId !== lastLoadedAgentIdRef.current) {
-                setRetellAgentId(newAgentId);
-                lastLoadedAgentIdRef.current = newAgentId;
-            }
-
-            const newPlatformNumber = (client?.phone_number && client.number_source === 'platform')
-                ? client.phone_number
-                : '';
-            if (newPlatformNumber !== lastLoadedPlatformNumberRef.current) {
-                setPlatformNumber(newPlatformNumber);
-                lastLoadedPlatformNumberRef.current = newPlatformNumber;
-            }
-
-            setSaveSuccess(false);
-            setPlatformNumberSaved(false);
-            setFeedbackMessage(null);
-        }
-    }, [selectedClientId, clients]);
-
     const filteredClients = clients.filter(c =>
         c.business_name.toLowerCase().includes(searchQuery.toLowerCase())
     );
@@ -158,17 +135,50 @@ const AdminVoiceManagement: React.FC = () => {
     const effectiveSource = isClientOwned ? 'client' : 'platform';
     const isVoiceActive = selectedClient?.voice_status === 'active';
     const isVoiceFailed = selectedClient?.voice_status === 'failed';
-    const hasAgentId = !!(selectedClient?.retell_agent_id);
 
     // For platform-owned: A2P must be approved before enabling
     const isPlatformA2PReady = isPlatformOwned && selectedClient?.a2p_status === 'approved';
     // For client-owned: they manage A2P in Twilio console, so we skip the platform A2P check
     const isClientReady = isClientOwned && selectedClient?.twilio_configured;
 
-    // Can we enable voice?
-    const canEnable = hasAgentId && !isVoiceActive && (
-        (isClientOwned && isClientReady) ||
-        (isPlatformOwned && isPlatformA2PReady && !!platformNumber.trim())
+    // --- Sync form fields from DB (without wiping user feedback on refresh) ---
+    useEffect(() => {
+        if (!selectedClientId) return;
+
+        const selectionChanged = prevSelectedClientIdRef.current !== selectedClientId;
+        prevSelectedClientIdRef.current = selectedClientId;
+
+        const client = clients.find(c => c.id === selectedClientId);
+
+        // Only clear transient UI state when the user changes clients
+        if (selectionChanged) {
+            setFeedbackMessage(null);
+        }
+
+        const newAgentId = client?.retell_agent_id || '';
+        if (selectionChanged || newAgentId !== lastLoadedAgentIdRef.current) {
+            setRetellAgentId(newAgentId);
+            lastLoadedAgentIdRef.current = newAgentId;
+            setSaveSuccess(!!newAgentId);
+        }
+
+        const newPlatformNumber = (client?.phone_number && client.number_source === 'platform')
+            ? client.phone_number
+            : '';
+        if (selectionChanged || newPlatformNumber !== lastLoadedPlatformNumberRef.current) {
+            setPlatformNumber(newPlatformNumber);
+            lastLoadedPlatformNumberRef.current = newPlatformNumber;
+            setPlatformNumberSaved(!!newPlatformNumber);
+        }
+    }, [selectedClientId, clients]);
+
+    const hasAgentIdInput = !!retellAgentId.trim();
+    const hasPlatformNumberInput = !!platformNumber.trim();
+
+    // Enable button should reflect that values were successfully saved (not just typed)
+    const canEnable = !isVoiceActive && (
+        (isClientOwned && isClientReady && saveSuccess) ||
+        (isPlatformOwned && isPlatformA2PReady && saveSuccess && platformNumberSaved && hasPlatformNumberInput)
     );
 
     // --- Handlers ---
@@ -182,15 +192,14 @@ const AdminVoiceManagement: React.FC = () => {
         }
 
         setIsSavingAgentId(true);
-        setSaveSuccess(false);
         setFeedbackMessage(null);
 
         try {
             await AdminService.saveRetellAgentId(selectedClientId, agentIdToSave, effectiveSource);
-            setSaveSuccess(true);
             lastLoadedAgentIdRef.current = agentIdToSave;
+            setSaveSuccess(true);
             await fetchClients();
-            showFeedback('success', 'Retell Agent ID saved successfully.', 3000);
+            showFeedback('success', 'Retell Agent ID saved successfully.', 5000);
         } catch (e: any) {
             showFeedback('error', `Save Failed: ${e.message}`);
         } finally {
@@ -208,16 +217,15 @@ const AdminVoiceManagement: React.FC = () => {
         }
 
         setIsSavingPlatformNumber(true);
-        setPlatformNumberSaved(false);
         setFeedbackMessage(null);
 
         try {
             // We allow saving just the phone number (agent id can be empty here)
             await AdminService.saveRetellAgentId(selectedClientId, retellAgentId.trim(), 'platform', phoneToSave);
-            setPlatformNumberSaved(true);
             lastLoadedPlatformNumberRef.current = phoneToSave;
+            setPlatformNumberSaved(true);
             await fetchClients();
-            showFeedback('success', 'Platform phone number saved successfully.', 3000);
+            showFeedback('success', 'Platform phone number saved successfully.', 5000);
         } catch (e: any) {
             showFeedback('error', `Save Failed: ${e.message}`);
         } finally {
@@ -329,10 +337,10 @@ const AdminVoiceManagement: React.FC = () => {
 
         steps.push({
             label: 'Retell Agent ID',
-            done: hasAgentId,
-            description: hasAgentId
-                ? `Agent: ${selectedClient.retell_agent_id}`
-                : 'Create an agent in Retell AI, then enter the ID here',
+            done: saveSuccess,
+            description: saveSuccess
+                ? `Saved: ${lastLoadedAgentIdRef.current}`
+                : 'Enter an agent ID, then click Save',
         });
 
         steps.push({
@@ -552,7 +560,11 @@ const AdminVoiceManagement: React.FC = () => {
                                             placeholder="agent_xxxxxxxxxxxxxxxx"
                                             className="flex-1 p-3 border border-indigo-300 rounded-lg text-sm font-mono bg-white"
                                             value={retellAgentId}
-                                            onChange={(e) => setRetellAgentId(e.target.value)}
+                                            onChange={(e) => {
+                                                const v = e.target.value;
+                                                setRetellAgentId(v);
+                                                setSaveSuccess(v.trim() === lastLoadedAgentIdRef.current && !!v.trim());
+                                            }}
                                         />
                                         <button
                                             onClick={handleSaveAgentId}
@@ -562,9 +574,9 @@ const AdminVoiceManagement: React.FC = () => {
                                             {isSavingAgentId ? <Loader2 className="w-4 h-4 animate-spin" /> : saveSuccess ? <CheckCircle2 className="w-4 h-4" /> : 'Save'}
                                         </button>
                                     </div>
-                                    {selectedClient?.retell_agent_id && (
+                                    {saveSuccess && lastLoadedAgentIdRef.current && (
                                         <p className="text-xs text-emerald-600 mt-2 flex items-center gap-1">
-                                            <CheckCircle2 className="w-3 h-3" /> Saved: <span className="font-mono">{selectedClient.retell_agent_id}</span>
+                                            <CheckCircle2 className="w-3 h-3" /> Saved: <span className="font-mono">{lastLoadedAgentIdRef.current}</span>
                                         </p>
                                     )}
                                 </div>
@@ -595,10 +607,16 @@ const AdminVoiceManagement: React.FC = () => {
                                             className="w-full p-3 border border-slate-300 rounded-lg text-sm font-mono bg-white"
                                             value={platformNumber}
                                             onChange={(e) => {
-                                                setPlatformNumber(e.target.value);
-                                                setPlatformNumberSaved(false);
+                                                const v = e.target.value;
+                                                setPlatformNumber(v);
+                                                setPlatformNumberSaved(v.trim() === lastLoadedPlatformNumberRef.current && !!v.trim());
                                             }}
                                         />
+                                        {platformNumberSaved && lastLoadedPlatformNumberRef.current && (
+                                            <p className="text-xs text-emerald-600 mt-2 flex items-center gap-1">
+                                                <CheckCircle2 className="w-3 h-3" /> Saved: <span className="font-mono">{lastLoadedPlatformNumberRef.current}</span>
+                                            </p>
+                                        )}
                                     </div>
                                 )}
 
@@ -661,16 +679,13 @@ const AdminVoiceManagement: React.FC = () => {
                                     )}
 
                                     {/* Help text for why Enable is disabled */}
-                                    {!isVoiceActive && !canEnable && hasAgentId && (
+                                    {!isVoiceActive && !canEnable && (
                                         <p className="text-xs text-slate-500 text-center">
                                             {isClientOwned && !selectedClient?.twilio_configured && 'Client needs to configure Twilio credentials first.'}
                                             {isPlatformOwned && !isPlatformA2PReady && 'A2P compliance must be approved before enabling.'}
-                                            {isPlatformOwned && isPlatformA2PReady && !platformNumber.trim() && 'Enter the platform phone number above.'}
-                                        </p>
-                                    )}
-                                    {!isVoiceActive && !hasAgentId && (
-                                        <p className="text-xs text-slate-500 text-center">
-                                            Save a Retell Agent ID first to enable AI Call Handling.
+                                            {isPlatformOwned && isPlatformA2PReady && (!hasPlatformNumberInput || !platformNumberSaved) && 'Save the platform phone number above.'}
+                                            {(!saveSuccess && hasAgentIdInput) && ' Save the Retell Agent ID above.'}
+                                            {(!hasAgentIdInput) && ' Enter and save the Retell Agent ID above.'}
                                         </p>
                                     )}
                                 </div>
