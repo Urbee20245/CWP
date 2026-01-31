@@ -93,6 +93,8 @@ const AdminVoiceManagement: React.FC = () => {
     const fetchClients = useCallback(async () => {
         setIsLoading(true);
 
+        let loaded = false;
+
         try {
             // Prefer direct query (works for admins via RLS policies) so the UI doesn't depend on edge function deployment.
             const { data, error } = await supabase
@@ -122,27 +124,30 @@ const AdminVoiceManagement: React.FC = () => {
             if (error) throw error;
 
             setClients(mapClientData(data || []));
-            return;
+            loaded = true;
         } catch (directErr: any) {
             console.warn('[AdminVoiceManagement] Direct clients query failed, trying edge function:', directErr?.message);
         }
 
-        try {
-            const clientsData = await AdminService.getVoiceClients();
-            setClients(mapClientData(clientsData || []));
-        } catch (edgeFnErr: any) {
-            console.warn('[AdminVoiceManagement] Edge function failed:', edgeFnErr.message);
+        if (!loaded) {
+            try {
+                const clientsData = await AdminService.getVoiceClients();
+                setClients(mapClientData(clientsData || []));
+                loaded = true;
+            } catch (edgeFnErr: any) {
+                console.warn('[AdminVoiceManagement] Edge function failed:', edgeFnErr.message);
 
-            // IMPORTANT: Do NOT overwrite the existing client list with an "empty" fallback.
-            // That fallback was clearing saved values from the UI. We keep the last known data instead.
-            if (clients.length === 0) {
-                showFeedback('error', 'Unable to load clients right now. Please try again in a moment.');
-            } else {
-                showFeedback('info', 'Live voice data is temporarily unavailable. Showing last loaded values.');
+                // IMPORTANT: Do NOT overwrite the existing client list with an "empty" fallback.
+                // That fallback was clearing saved values from the UI. We keep the last known data instead.
+                if (clients.length === 0) {
+                    showFeedback('error', 'Unable to load clients right now. Please try again in a moment.');
+                } else {
+                    showFeedback('info', 'Live voice data is temporarily unavailable. Showing last loaded values.');
+                }
             }
-        } finally {
-            setIsLoading(false);
         }
+
+        setIsLoading(false);
     }, [clients.length]);
 
     useEffect(() => { fetchClients(); }, [fetchClients]);
