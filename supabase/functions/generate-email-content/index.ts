@@ -1,3 +1,7 @@
+export const config = {
+  auth: false,
+};
+
 import { serve } from "https://deno.land/std@0.190.0/http/server.ts";
 import { GoogleGenAI } from 'https://esm.sh/@google/genai@1.34.0';
 import { handleCors, jsonResponse, errorResponse } from '../_shared/utils.ts';
