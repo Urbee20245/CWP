@@ -132,6 +132,7 @@ export const AdminService = {
   // AI Agent Settings
   getAgentSettings: async (clientId: string) => invokeEdgeFunction('get-agent-settings', { client_id: clientId }),
   saveAgentSettings: async (settings: any) => invokeEdgeFunction('save-agent-settings', settings),
+  generateAgentPrompt: async (context: any) => invokeEdgeFunction('generate-agent-prompt', context),
 
   disconnectGoogleCalendar: async (clientId: string) => {
     const { error } = await supabase

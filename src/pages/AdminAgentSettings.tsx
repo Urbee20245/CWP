@@ -7,7 +7,8 @@ import { supabase } from '../integrations/supabase/client';
 import {
     Bot, Settings, Calendar, Phone, Globe, Clock, Save,
     Loader2, CheckCircle2, AlertTriangle, Info, Copy, ExternalLink,
-    Shield, Zap, MessageSquare, RefreshCw, ChevronDown, ChevronUp
+    Shield, Zap, MessageSquare, RefreshCw, ChevronDown, ChevronUp,
+    Sparkles, RotateCcw, Check
 } from 'lucide-react';
 
 interface Client {
@@ -98,6 +99,19 @@ const AdminAgentSettings: React.FC = () => {
     const [showWebhooks, setShowWebhooks] = useState(false);
     const [showEvents, setShowEvents] = useState(false);
     const [showBusinessHours, setShowBusinessHours] = useState(false);
+
+    // Prompt Assistant state
+    const [showPromptAssistant, setShowPromptAssistant] = useState(false);
+    const [isGeneratingPrompt, setIsGeneratingPrompt] = useState(false);
+    const [generatedPrompt, setGeneratedPrompt] = useState('');
+    const [promptContext, setPromptContext] = useState({
+        industry: '',
+        services: '',
+        tone: 'Professional and friendly',
+        location: '',
+        phone_number: '',
+        special_instructions: '',
+    });
 
     const showFeedback = (type: 'success' | 'error' | 'info', text: string) => {
         setFeedback({ type, text });
@@ -213,6 +227,57 @@ const AdminAgentSettings: React.FC = () => {
         updateSetting('allowed_meeting_types', types);
     };
 
+    // Build a human-readable business hours summary for the AI
+    const getBusinessHoursSummary = () => {
+        if (!settings) return '';
+        const entries = Object.entries(settings.business_hours);
+        if (entries.length === 0) return 'No business hours set';
+        return entries
+            .map(([day, hours]) => `${DAY_NAMES[day]}: ${hours.start} - ${hours.end}`)
+            .join(', ');
+    };
+
+    const handleGeneratePrompt = async () => {
+        if (!settings || !selectedClientId) return;
+        const selectedClient = clients.find(c => c.id === selectedClientId);
+        if (!selectedClient) return;
+
+        setIsGeneratingPrompt(true);
+        setGeneratedPrompt('');
+        try {
+            const result = await AdminService.generateAgentPrompt({
+                business_name: selectedClient.business_name,
+                agent_name: settings.agent_name,
+                industry: promptContext.industry,
+                services: promptContext.services,
+                tone: promptContext.tone,
+                location: promptContext.location,
+                phone_number: promptContext.phone_number,
+                business_hours_summary: getBusinessHoursSummary(),
+                capabilities: {
+                    can_check_availability: settings.can_check_availability,
+                    can_book_meetings: settings.can_book_meetings,
+                    can_transfer_calls: settings.can_transfer_calls,
+                    can_send_sms: settings.can_send_sms,
+                },
+                special_instructions: promptContext.special_instructions,
+            });
+            setGeneratedPrompt(result.prompt);
+        } catch (err: any) {
+            showFeedback('error', `Prompt generation failed: ${err.message}`);
+        } finally {
+            setIsGeneratingPrompt(false);
+        }
+    };
+
+    const handleUseGeneratedPrompt = () => {
+        if (!generatedPrompt || !settings) return;
+        updateSetting('system_prompt', generatedPrompt);
+        setShowPromptAssistant(false);
+        setGeneratedPrompt('');
+        showFeedback('success', 'AI-generated prompt applied. Review and save when ready.');
+    };
+
     return (
         <AdminLayout>
             <div className="max-w-5xl mx-auto px-4 py-8">
@@ -317,7 +382,16 @@ const AdminAgentSettings: React.FC = () => {
                                     />
                                 </div>
                                 <div>
-                                    <label className="block text-xs font-medium text-slate-600 mb-1">System Prompt</label>
+                                    <div className="flex items-center justify-between mb-1">
+                                        <label className="block text-xs font-medium text-slate-600">System Prompt</label>
+                                        <button
+                                            onClick={() => { setShowPromptAssistant(!showPromptAssistant); setGeneratedPrompt(''); }}
+                                            className="flex items-center gap-1.5 text-xs font-medium text-indigo-600 hover:text-indigo-800 transition-colors"
+                                        >
+                                            <Sparkles className="w-3.5 h-3.5" />
+                                            {showPromptAssistant ? 'Close Assistant' : 'AI Prompt Assistant'}
+                                        </button>
+                                    </div>
                                     <textarea
                                         value={settings.system_prompt}
                                         onChange={(e) => updateSetting('system_prompt', e.target.value)}
@@ -329,6 +403,145 @@ const AdminAgentSettings: React.FC = () => {
                                         This prompt is used in Retell agent configuration. Include business details, services, pricing, and behavioral guidelines.
                                     </p>
                                 </div>
+
+                                {/* AI Prompt Assistant Panel */}
+                                {showPromptAssistant && (
+                                    <div className="border border-indigo-200 bg-indigo-50/50 rounded-xl p-5 space-y-4">
+                                        <div className="flex items-center gap-2 mb-1">
+                                            <Sparkles className="w-4 h-4 text-indigo-600" />
+                                            <h3 className="text-sm font-bold text-indigo-800">AI Prompt Assistant</h3>
+                                            <span className="text-[10px] uppercase tracking-wider bg-indigo-200 text-indigo-700 px-2 py-0.5 rounded-full font-semibold">Gemini</span>
+                                        </div>
+                                        <p className="text-xs text-indigo-700">
+                                            Provide context about this client's business and we'll generate a tailored system prompt. The more detail you provide, the better the result.
+                                        </p>
+
+                                        <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                                            <div>
+                                                <label className="block text-xs font-medium text-indigo-700 mb-1">Industry / Business Type</label>
+                                                <input
+                                                    type="text"
+                                                    value={promptContext.industry}
+                                                    onChange={(e) => setPromptContext(p => ({ ...p, industry: e.target.value }))}
+                                                    className="w-full px-3 py-2 border border-indigo-200 rounded-lg text-sm bg-white focus:ring-2 focus:ring-indigo-400"
+                                                    placeholder="e.g. Plumbing, Dental Office, Law Firm"
+                                                />
+                                            </div>
+                                            <div>
+                                                <label className="block text-xs font-medium text-indigo-700 mb-1">Tone / Style</label>
+                                                <select
+                                                    value={promptContext.tone}
+                                                    onChange={(e) => setPromptContext(p => ({ ...p, tone: e.target.value }))}
+                                                    className="w-full px-3 py-2 border border-indigo-200 rounded-lg text-sm bg-white focus:ring-2 focus:ring-indigo-400"
+                                                >
+                                                    <option>Professional and friendly</option>
+                                                    <option>Warm and casual</option>
+                                                    <option>Formal and authoritative</option>
+                                                    <option>Energetic and upbeat</option>
+                                                    <option>Calm and reassuring</option>
+                                                </select>
+                                            </div>
+                                            <div>
+                                                <label className="block text-xs font-medium text-indigo-700 mb-1">Location / Service Area</label>
+                                                <input
+                                                    type="text"
+                                                    value={promptContext.location}
+                                                    onChange={(e) => setPromptContext(p => ({ ...p, location: e.target.value }))}
+                                                    className="w-full px-3 py-2 border border-indigo-200 rounded-lg text-sm bg-white focus:ring-2 focus:ring-indigo-400"
+                                                    placeholder="e.g. Metro Atlanta, GA"
+                                                />
+                                            </div>
+                                            <div>
+                                                <label className="block text-xs font-medium text-indigo-700 mb-1">Business Phone</label>
+                                                <input
+                                                    type="text"
+                                                    value={promptContext.phone_number}
+                                                    onChange={(e) => setPromptContext(p => ({ ...p, phone_number: e.target.value }))}
+                                                    className="w-full px-3 py-2 border border-indigo-200 rounded-lg text-sm bg-white focus:ring-2 focus:ring-indigo-400"
+                                                    placeholder="e.g. (404) 555-1234"
+                                                />
+                                            </div>
+                                        </div>
+                                        <div>
+                                            <label className="block text-xs font-medium text-indigo-700 mb-1">Services Offered</label>
+                                            <input
+                                                type="text"
+                                                value={promptContext.services}
+                                                onChange={(e) => setPromptContext(p => ({ ...p, services: e.target.value }))}
+                                                className="w-full px-3 py-2 border border-indigo-200 rounded-lg text-sm bg-white focus:ring-2 focus:ring-indigo-400"
+                                                placeholder="e.g. Emergency repairs, installations, maintenance plans, free estimates"
+                                            />
+                                        </div>
+                                        <div>
+                                            <label className="block text-xs font-medium text-indigo-700 mb-1">Special Instructions (optional)</label>
+                                            <textarea
+                                                value={promptContext.special_instructions}
+                                                onChange={(e) => setPromptContext(p => ({ ...p, special_instructions: e.target.value }))}
+                                                rows={2}
+                                                className="w-full px-3 py-2 border border-indigo-200 rounded-lg text-sm bg-white focus:ring-2 focus:ring-indigo-400"
+                                                placeholder="e.g. Always ask for the caller's name and phone. Never quote prices over the phone."
+                                            />
+                                        </div>
+
+                                        <div className="flex items-center gap-2 text-xs text-indigo-600 bg-indigo-100 p-2.5 rounded-lg">
+                                            <Info className="w-3.5 h-3.5 flex-shrink-0" />
+                                            <span>Agent name, capabilities, and business hours from this page are included automatically.</span>
+                                        </div>
+
+                                        <button
+                                            onClick={handleGeneratePrompt}
+                                            disabled={isGeneratingPrompt}
+                                            className="w-full py-2.5 bg-indigo-600 text-white text-sm font-semibold rounded-lg hover:bg-indigo-700 disabled:opacity-50 flex items-center justify-center gap-2 transition-colors"
+                                        >
+                                            {isGeneratingPrompt ? (
+                                                <>
+                                                    <Loader2 className="w-4 h-4 animate-spin" />
+                                                    Generating...
+                                                </>
+                                            ) : (
+                                                <>
+                                                    <Sparkles className="w-4 h-4" />
+                                                    Generate System Prompt
+                                                </>
+                                            )}
+                                        </button>
+
+                                        {/* Generated Result */}
+                                        {generatedPrompt && (
+                                            <div className="border border-indigo-300 bg-white rounded-lg p-4 space-y-3">
+                                                <div className="flex items-center justify-between">
+                                                    <h4 className="text-xs font-bold text-indigo-800 uppercase tracking-wider">Generated Prompt</h4>
+                                                    <div className="flex items-center gap-2">
+                                                        <button
+                                                            onClick={handleGeneratePrompt}
+                                                            disabled={isGeneratingPrompt}
+                                                            className="flex items-center gap-1 text-xs text-slate-500 hover:text-indigo-600 disabled:opacity-50"
+                                                            title="Regenerate"
+                                                        >
+                                                            <RotateCcw className="w-3.5 h-3.5" />
+                                                            Regenerate
+                                                        </button>
+                                                    </div>
+                                                </div>
+                                                <textarea
+                                                    value={generatedPrompt}
+                                                    onChange={(e) => setGeneratedPrompt(e.target.value)}
+                                                    rows={10}
+                                                    className="w-full px-3 py-2 border border-slate-200 rounded-lg text-sm focus:ring-2 focus:ring-indigo-400 font-mono text-xs leading-relaxed"
+                                                />
+                                                <p className="text-[11px] text-slate-400">You can edit the generated prompt above before applying it.</p>
+                                                <button
+                                                    onClick={handleUseGeneratedPrompt}
+                                                    className="w-full py-2.5 bg-emerald-600 text-white text-sm font-semibold rounded-lg hover:bg-emerald-700 flex items-center justify-center gap-2 transition-colors"
+                                                >
+                                                    <Check className="w-4 h-4" />
+                                                    Use This Prompt
+                                                </button>
+                                            </div>
+                                        )}
+                                    </div>
+                                )}
+
                                 <div>
                                     <label className="block text-xs font-medium text-slate-600 mb-1">Greeting Message</label>
                                     <input
