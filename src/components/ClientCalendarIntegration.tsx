@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { Calendar, Loader2, CheckCircle2, AlertTriangle, ExternalLink, X } from 'lucide-react';
 import { ClientIntegrationService } from '../services/clientIntegrationService';
 import { format } from 'date-fns';
@@ -15,22 +15,72 @@ interface CalendarStatus {
     updated_at: string;
 }
 
+const sleep = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
+
+const isLikelyTransientInitialError = (message: string) => {
+  const msg = message.toLowerCase();
+  return (
+    msg.includes('edge function returned a non-2xx status code') ||
+    msg.includes('jwt') ||
+    (msg.includes('auth') && msg.includes('session')) ||
+    msg.includes('failed to fetch')
+  );
+};
+
 const ClientCalendarIntegration: React.FC<ClientCalendarIntegrationProps> = ({ clientId }) => {
   const [status, setStatus] = useState<CalendarStatus | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [isProcessing, setIsProcessing] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
+  const initialFetchRef = useRef(true);
+  const requestIdRef = useRef(0);
+
   const fetchStatus = useCallback(async () => {
+    const requestId = ++requestIdRef.current;
+    const isInitialFetch = initialFetchRef.current;
+
     setIsLoading(true);
     setError(null);
-    try {
+
+    const run = async () => {
       const data = await ClientIntegrationService.getGoogleCalendarStatus(clientId);
+      if (requestId !== requestIdRef.current) return;
       setStatus(data as CalendarStatus | null);
+    };
+
+    try {
+      await run();
     } catch (e: any) {
-      setError(e.message || 'Failed to fetch calendar status.');
+      const message = e?.message || 'Failed to fetch calendar status.';
+
+      // On initial load: suppress transient errors and retry once after a short delay.
+      if (isInitialFetch && isLikelyTransientInitialError(message)) {
+        await sleep(500);
+        try {
+          await run();
+        } catch (retryErr: any) {
+          if (requestId !== requestIdRef.current) return;
+          setError(retryErr?.message || message);
+        }
+      } else if (isInitialFetch) {
+        // Still retry once on initial load, but don't show the banner unless retry fails.
+        await sleep(500);
+        try {
+          await run();
+        } catch (retryErr: any) {
+          if (requestId !== requestIdRef.current) return;
+          setError(retryErr?.message || message);
+        }
+      } else {
+        if (requestId !== requestIdRef.current) return;
+        setError(message);
+      }
     } finally {
-      setIsLoading(false);
+      if (requestId === requestIdRef.current) {
+        setIsLoading(false);
+      }
+      initialFetchRef.current = false;
     }
   }, [clientId]);
 
