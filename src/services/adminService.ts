@@ -77,6 +77,13 @@ export const AdminService = {
     });
   },
 
+  // Verify Retell API connectivity and fetch agent details (server-side)
+  getRetellAgent: async (agentId: string) => {
+    return invokeEdgeFunction('retell-get-agent', {
+      agent_id: agentId,
+    });
+  },
+
   // Update A2P compliance status (admin only)
   updateA2PStatus: async (clientId: string, a2pStatus: string) => {
     return invokeEdgeFunction('update-a2p-status', {

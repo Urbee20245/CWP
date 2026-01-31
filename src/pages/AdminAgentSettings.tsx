@@ -33,6 +33,7 @@ interface AgentSettings {
     business_hours: Record<string, { start: string; end: string }>;
     timezone: string;
     is_active: boolean;
+    updated_at?: string;
 }
 
 interface WebhookEvent {
@@ -50,6 +51,16 @@ interface IntegrationStatus {
     google_calendar: { connected: boolean; calendar_id?: string; last_synced?: string };
     retell: { configured: boolean; agent_id?: string; voice_status?: string; phone_number?: string };
 }
+
+type RetellLiveAgentStatus = {
+    checked_at: string;
+    ok: boolean;
+    agent_id?: string;
+    agent_name?: string;
+    is_published?: boolean;
+    raw?: any;
+    error?: string;
+};
 
 const SUPABASE_FUNCTIONS_BASE = 'https://nvgumhlewbqynrhlkqhx.supabase.co/functions/v1';
 
@@ -86,6 +97,23 @@ const TIMEZONE_OPTIONS = [
     'America/Phoenix', 'America/Anchorage', 'Pacific/Honolulu',
 ];
 
+const draftKey = (clientId: string) => `agent-settings-draft:${clientId}`;
+
+const safeParseDraft = (raw: string | null): any | null => {
+    if (!raw) return null;
+    try {
+        return JSON.parse(raw);
+    } catch {
+        return null;
+    }
+};
+
+const parseDateMs = (value?: string | null) => {
+    if (!value) return 0;
+    const ms = Date.parse(value);
+    return Number.isFinite(ms) ? ms : 0;
+};
+
 const AdminAgentSettings: React.FC = () => {
     const [clients, setClients] = useState<Client[]>([]);
     const [selectedClientId, setSelectedClientId] = useState<string>('');
@@ -105,6 +133,10 @@ const AdminAgentSettings: React.FC = () => {
     // Prompt assistant
     const [websiteUrl, setWebsiteUrl] = useState('');
     const [isGeneratingPrompt, setIsGeneratingPrompt] = useState(false);
+
+    // Retell live status check (verifies RETELL_API_KEY + agent publish state)
+    const [retellLiveStatus, setRetellLiveStatus] = useState<RetellLiveAgentStatus | null>(null);
+    const [isCheckingRetell, setIsCheckingRetell] = useState(false);
 
     const showFeedback = (type: 'success' | 'error' | 'info', text: string) => {
         setFeedback({ type, text });
@@ -140,6 +172,8 @@ const AdminAgentSettings: React.FC = () => {
     const fetchSettings = useCallback(async (clientId: string) => {
         if (!clientId) return;
         setIsLoading(true);
+        setRetellLiveStatus(null);
+
         try {
             const [{ data: settingsRow, error: settingsErr }, { data: recentEvents, error: eventsErr }, { data: calendarRow }, { data: voiceRow }, { data: twilioIntegration }] = await Promise.all([
                 supabase
@@ -178,7 +212,27 @@ const AdminAgentSettings: React.FC = () => {
                 ? { ...DEFAULT_SETTINGS, ...settingsRow, client_id: clientId }
                 : { ...DEFAULT_SETTINGS, client_id: clientId };
 
-            setSettings(merged);
+            // Restore unsaved draft if it's newer than DB
+            const draft = safeParseDraft(localStorage.getItem(draftKey(clientId)));
+            const draftMs = parseDateMs(draft?.updated_at);
+            const dbMs = parseDateMs((merged as any)?.updated_at);
+
+            let finalSettings = merged;
+            if (draft && draftMs > dbMs) {
+                // Draft structure: { settings, website_url, updated_at }
+                if (draft.settings && typeof draft.settings === 'object') {
+                    finalSettings = { ...merged, ...draft.settings, client_id: clientId };
+                }
+                if (typeof draft.website_url === 'string') {
+                    setWebsiteUrl(draft.website_url);
+                }
+                showFeedback('info', 'Restored an unsaved draft for this client.');
+            } else {
+                // Keep URL as-is unless empty
+                if (!websiteUrl) setWebsiteUrl('');
+            }
+
+            setSettings(finalSettings);
             setWebhookUrls(buildWebhookUrls());
             setWebhookEvents(recentEvents || []);
 
@@ -196,14 +250,6 @@ const AdminAgentSettings: React.FC = () => {
                 } : { configured: false },
             });
 
-            // Initialize prompt assistant URL if empty (best-effort)
-            if (!websiteUrl) {
-                const client = clients.find(c => c.id === clientId);
-                if (client?.business_name) {
-                    // leave url empty; user enters it.
-                }
-            }
-
         } catch (err: any) {
             console.error('Failed to fetch agent settings:', err.message);
             setSettings({ ...DEFAULT_SETTINGS, client_id: clientId });
@@ -214,7 +260,7 @@ const AdminAgentSettings: React.FC = () => {
         } finally {
             setIsLoading(false);
         }
-    }, [clients, websiteUrl]);
+    }, [clients]);
 
     useEffect(() => {
         if (selectedClientId) {
@@ -224,8 +270,30 @@ const AdminAgentSettings: React.FC = () => {
             setWebhookUrls(null);
             setWebhookEvents([]);
             setIntegrations(null);
+            setWebsiteUrl('');
+            setRetellLiveStatus(null);
         }
     }, [selectedClientId, fetchSettings]);
+
+    // Persist draft locally so switching tabs/sites doesn't lose work
+    useEffect(() => {
+        if (!selectedClientId || !settings) return;
+        const t = window.setTimeout(() => {
+            try {
+                localStorage.setItem(
+                    draftKey(selectedClientId),
+                    JSON.stringify({
+                        updated_at: new Date().toISOString(),
+                        website_url: websiteUrl,
+                        settings,
+                    })
+                );
+            } catch {
+                // ignore (storage may be disabled)
+            }
+        }, 350);
+        return () => window.clearTimeout(t);
+    }, [selectedClientId, websiteUrl, settings]);
 
     const handleSave = async () => {
         if (!settings || !selectedClientId) return;
@@ -278,6 +346,9 @@ const AdminAgentSettings: React.FC = () => {
                         a2p_status: inferredSource === 'platform' ? 'not_started' : 'none',
                     }, { onConflict: 'client_id' });
             }
+
+            // Clear local draft after successful save
+            try { localStorage.removeItem(draftKey(selectedClientId)); } catch { }
 
             showFeedback('success', 'Agent settings saved successfully.');
             await fetchSettings(selectedClientId);
@@ -346,9 +417,50 @@ const AdminAgentSettings: React.FC = () => {
             updateSetting('system_prompt', prompt);
             showFeedback('success', 'System prompt generated. Review and click Save Settings.');
         } catch (err: any) {
-            showFeedback('error', `Failed to generate prompt: ${err.message}`);
+            const msg = String(err.message || err);
+            if (msg.toLowerCase().includes('ai service unavailable')) {
+                showFeedback('error', 'Prompt assistant is unavailable (missing GEMINI_API_KEY in Supabase secrets).');
+            } else {
+                showFeedback('error', `Failed to generate prompt: ${msg}`);
+            }
         } finally {
             setIsGeneratingPrompt(false);
+        }
+    };
+
+    const handleCheckRetellAgent = async () => {
+        const agentId = (settings?.retell_agent_id || integrations?.retell?.agent_id || '').trim();
+        if (!agentId) {
+            showFeedback('error', 'Please enter a Retell Agent ID first.');
+            return;
+        }
+
+        setIsCheckingRetell(true);
+        try {
+            const data = await AdminService.getRetellAgent(agentId);
+            const agent = data?.agent;
+
+            setRetellLiveStatus({
+                checked_at: new Date().toISOString(),
+                ok: true,
+                agent_id: agent?.agent_id || agentId,
+                agent_name: agent?.agent_name,
+                is_published: agent?.is_published,
+                raw: agent,
+            });
+
+            showFeedback('success', `Retell agent fetched successfully${typeof agent?.is_published === 'boolean' ? ` (published=${agent.is_published})` : ''}.`);
+        } catch (err: any) {
+            const msg = String(err.message || err);
+            setRetellLiveStatus({
+                checked_at: new Date().toISOString(),
+                ok: false,
+                agent_id: agentId,
+                error: msg,
+            });
+            showFeedback('error', `Retell check failed: ${msg}`);
+        } finally {
+            setIsCheckingRetell(false);
         }
     };
 
@@ -424,15 +536,46 @@ const AdminAgentSettings: React.FC = () => {
                                         </p>
                                     </div>
                                     <div className={`p-3 rounded-lg border ${integrations.retell.configured ? 'border-green-200 bg-green-50' : 'border-amber-200 bg-amber-50'}`}>
-                                        <div className="flex items-center gap-2">
-                                            <Phone className={`w-4 h-4 ${integrations.retell.configured ? 'text-green-600' : 'text-amber-600'}`} />
-                                            <span className="text-sm font-medium">Retell AI</span>
+                                        <div className="flex items-center gap-2 justify-between">
+                                            <div className="flex items-center gap-2">
+                                                <Phone className={`w-4 h-4 ${integrations.retell.configured ? 'text-green-600' : 'text-amber-600'}`} />
+                                                <span className="text-sm font-medium">Retell AI</span>
+                                            </div>
+                                            <button
+                                                onClick={handleCheckRetellAgent}
+                                                disabled={isCheckingRetell}
+                                                className="px-2 py-1 text-xs border border-slate-300 rounded hover:bg-white disabled:opacity-50 flex items-center gap-1"
+                                                title="Fetch agent details from Retell (verifies API key and publish state)"
+                                            >
+                                                {isCheckingRetell ? <Loader2 className="w-3 h-3 animate-spin" /> : <RefreshCw className="w-3 h-3" />}
+                                                Verify
+                                            </button>
                                         </div>
                                         <p className="text-xs mt-1 text-slate-600">
                                             {integrations.retell.configured
-                                                ? `Agent: ${integrations.retell.agent_id} | ${integrations.retell.voice_status}`
+                                                ? `Saved Agent ID: ${integrations.retell.agent_id} • AI Calls status: ${integrations.retell.voice_status || 'inactive'}`
                                                 : 'No agent configured yet — you can paste an existing Retell Agent ID below'}
                                         </p>
+                                        <p className="text-[11px] mt-1 text-slate-400">
+                                            "AI Calls status" is this app's provisioning state (active/pending/inactive) — not whether your agent is published in Retell.
+                                        </p>
+                                        {retellLiveStatus && (
+                                            <div className={`mt-2 text-xs rounded-lg border p-2 ${retellLiveStatus.ok ? 'bg-emerald-50 border-emerald-200 text-emerald-800' : 'bg-red-50 border-red-200 text-red-800'}`}>
+                                                {retellLiveStatus.ok ? (
+                                                    <div className="space-y-0.5">
+                                                        <div className="font-semibold">Retell API check: OK</div>
+                                                        <div className="font-mono">agent_id: {retellLiveStatus.agent_id}</div>
+                                                        {retellLiveStatus.agent_name && <div>name: {retellLiveStatus.agent_name}</div>}
+                                                        {typeof retellLiveStatus.is_published === 'boolean' && <div>published: {String(retellLiveStatus.is_published)}</div>}
+                                                    </div>
+                                                ) : (
+                                                    <div>
+                                                        <div className="font-semibold">Retell API check: Failed</div>
+                                                        <div className="mt-1 text-xs">{retellLiveStatus.error}</div>
+                                                    </div>
+                                                )}
+                                            </div>
+                                        )}
                                     </div>
                                 </div>
                             </div>
@@ -498,6 +641,9 @@ const AdminAgentSettings: React.FC = () => {
                                             className="w-full px-3 py-2 border border-indigo-300 rounded-lg text-sm"
                                             placeholder="https://example.com"
                                         />
+                                        <p className="text-[11px] text-indigo-700 mt-2">
+                                            Tip: your unsaved work on this page is now cached locally per client, so switching tabs to copy/paste won't wipe it.
+                                        </p>
                                     </div>
                                 </div>
 
@@ -696,8 +842,7 @@ const AdminAgentSettings: React.FC = () => {
                                 <div className="mt-4 space-y-4">
                                     <div className="p-3 bg-indigo-50 border border-indigo-200 rounded-lg">
                                         <p className="text-xs text-indigo-700">
-                                            Copy these URLs into your Retell AI dashboard. The <strong>Retell Webhook</strong> receives call lifecycle events.
-                                            The <strong>Check Availability</strong> and <strong>Book Meeting</strong> URLs are registered as Custom Functions.
+                                            Copy these URLs into your Retell AI dashboard. These URLs are shared across clients — Retell includes <strong>agent_id</strong> in every request and we route it to the correct client.
                                         </p>
                                     </div>
 
