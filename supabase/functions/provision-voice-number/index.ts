@@ -52,7 +52,7 @@ serve(async (req) => {
       return errRes('Missing required fields: client_id and source.', 400);
     }
 
-    // 1) Load voice config (for A2P status + optional fallback to stored agent id)
+    // 1) Load voice config (for A2P status and persisted values)
     const { data: voiceConfig, error: voiceConfigError } = await supabaseAdmin
       .from('client_voice_integrations')
       .select('retell_phone_id, voice_status, a2p_registration_data, a2p_status, retell_agent_id, phone_number, number_source')
@@ -63,27 +63,29 @@ serve(async (req) => {
       console.error('[provision-voice-number] Error fetching voice config:', voiceConfigError);
     }
 
-    const agentIdFromRequest = typeof retell_agent_id === 'string' ? retell_agent_id.trim() : '';
-    const agentIdFromDb = typeof voiceConfig?.retell_agent_id === 'string' ? voiceConfig.retell_agent_id.trim() : '';
-    const finalAgentId = agentIdFromRequest || agentIdFromDb;
+    // If Agent ID not provided by request, fall back to DB. Also check ai_agent_settings if missing.
+    let finalAgentId = (typeof retell_agent_id === 'string' ? retell_agent_id.trim() : '') || (voiceConfig?.retell_agent_id?.trim?.() || '');
+    if (!finalAgentId) {
+      const { data: agentSettings } = await supabaseAdmin
+        .from('ai_agent_settings')
+        .select('retell_agent_id')
+        .eq('client_id', client_id)
+        .maybeSingle();
+      if (agentSettings?.retell_agent_id) {
+        finalAgentId = agentSettings.retell_agent_id.trim();
+      }
+    }
 
-    // For platform numbers, prefer request phone_number, else stored phone_number
+    // Resolve phone number preference: request -> DB (voice config)
     const phoneFromRequest = typeof phone_number === 'string' ? phone_number.trim() : '';
     const phoneFromDb = typeof voiceConfig?.phone_number === 'string' ? voiceConfig.phone_number.trim() : '';
-
     const a2p_status = voiceConfig?.a2p_status || 'not_started';
 
-    // If this is platform-managed and A2P is NOT approved yet, we do NOT provision.
-    // Instead we mark the integration as pending so you can "Enable" now and auto-provision later.
+    // Platform-owned: honor pending behavior (kept for completeness)
     if (source === 'platform' && a2p_status !== 'approved') {
-      if (!finalAgentId) {
-        return errRes('Please save the Retell Agent ID first.', 400);
-      }
-
+      if (!finalAgentId) return errRes('Please save the Retell Agent ID first.', 400);
       const final_phone_for_pending = phoneFromRequest || phoneFromDb;
-      if (!final_phone_for_pending) {
-        return errRes('Please save the platform phone number first.', 400);
-      }
+      if (!final_phone_for_pending) return errRes('Please save the platform phone number first.', 400);
 
       const { error: pendingErr } = await supabaseAdmin
         .from('client_voice_integrations')
@@ -109,16 +111,15 @@ serve(async (req) => {
       });
     }
 
-    // 2) From here down: real provisioning into Retell
+    // 2) From here: real provisioning into Retell (import existing number)
     if (!RETELL_API_KEY) {
       return errRes('Retell API Key is not configured. Please add RETELL_API_KEY to Supabase secrets.', 500);
     }
-
     if (!finalAgentId) {
-      return errRes('Please enter the Retell Agent ID for this client before enabling AI call handling.', 400);
+      return errRes('Please set the Retell Agent ID for this client on the Agent Settings page before enabling AI call handling.', 400);
     }
 
-    console.log(`[provision-voice-number] Sourcing ${source} number for client ${client_id} with agent ${finalAgentId}`);
+    console.log(`[provision-voice-number] Importing for client ${client_id}, source=${source}, agent=${finalAgentId}`);
 
     let twilio_sid = "";
     let twilio_token = "";
@@ -144,8 +145,8 @@ serve(async (req) => {
       console.log('[provision-voice-number] Decrypting client Twilio credentials...');
       twilio_sid = await decryptSecret(supabaseAdmin, config.account_sid_encrypted);
       twilio_token = await decryptSecret(supabaseAdmin, config.auth_token_encrypted);
-      final_phone = config.phone_number;
-      console.log(`[provision-voice-number] Decrypted SID: ${twilio_sid.substring(0, 6)}..., Phone: ${final_phone}`);
+      final_phone = final_phone || config.phone_number || '';
+      console.log(`[provision-voice-number] Decrypted SID prefix: ${twilio_sid.substring(0, 6)}..., Phone: ${final_phone}`);
     } else {
       if (!PLATFORM_TWILIO_SID || !PLATFORM_TWILIO_TOKEN) {
         return errRes('Platform Twilio credentials not configured in secrets.', 500);
@@ -155,7 +156,7 @@ serve(async (req) => {
     }
 
     if (!twilio_sid || !twilio_token || !final_phone) {
-      return errRes('Incomplete credentials for provisioning.', 400);
+      return errRes('Incomplete credentials for provisioning (missing Twilio SID/token or phone).', 400);
     }
 
     // 4) Idempotency check
@@ -164,8 +165,8 @@ serve(async (req) => {
       return jsonRes({ success: true, retell_phone_id: voiceConfig.retell_phone_id, message: "Already active." });
     }
 
-    // 5) Import existing phone number into Retell (Twilio via Connect)
-    console.log(`[provision-voice-number] Importing existing ${final_phone} into Retell with agent ${finalAgentId}...`);
+    // 5) Import the existing Twilio number into Retell
+    console.log(`[provision-voice-number] Importing ${final_phone} into Retell with agent ${finalAgentId}...`);
 
     const inboundWebhookUrl = `${Deno.env.get('SUPABASE_URL')}/functions/v1/retell-webhook`;
 
@@ -181,7 +182,6 @@ serve(async (req) => {
 
     console.log('[provision-voice-number] Retell import request keys:', Object.keys(retellBody).join(', '));
 
-    // Try v2 first, then fallback to non-v2 if needed
     async function tryImport(url: string) {
       const response = await fetch(url, {
         method: 'POST',
@@ -195,9 +195,8 @@ serve(async (req) => {
       return { response, text };
     }
 
+    // Prefer v2, fallback to non-v2 if needed
     let { response: retellResponse, text: retellText } = await tryImport('https://api.retellai.com/v2/import-phone-number');
-
-    // Fallback if v2 returns 404 or non-JSON HTML
     if (!retellResponse.ok && (retellResponse.status === 404 || retellText.startsWith('<!DOCTYPE html>'))) {
       console.warn('[provision-voice-number] v2 import endpoint not available; trying non-v2 endpoint.');
       const fallback = await tryImport('https://api.retellai.com/import-phone-number');
