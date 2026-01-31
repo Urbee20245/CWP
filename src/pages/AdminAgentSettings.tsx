@@ -373,6 +373,12 @@ const AdminAgentSettings: React.FC = () => {
         description: "Book a meeting on Google Calendar after user confirms.",
         method: "POST",
         url: `${base}/book-meeting`
+      },
+      {
+        name: "append-to-google-sheet",
+        description: "Append caller info (name, phone, email, notes) to a Google Sheet.",
+        method: "POST",
+        url: `${base}/append-to-google-sheet`
       }
     ];
     return JSON.stringify({ functions: defs }, null, 2);
