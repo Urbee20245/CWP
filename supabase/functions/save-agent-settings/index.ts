@@ -32,14 +32,15 @@ serve(async (req) => {
         // Build the payload with only provided fields
         const payload: Record<string, any> = { client_id };
 
+        // NOTE: Keep this list in sync with the actual ai_agent_settings table schema.
         const allowedFields = [
+            'retell_agent_id',
             'agent_name', 'system_prompt', 'greeting_message',
             'can_check_availability', 'can_book_meetings', 'can_transfer_calls', 'can_send_sms',
             'default_meeting_duration', 'booking_buffer_minutes', 'max_advance_booking_days',
             'allowed_meeting_types', 'business_hours', 'timezone',
             'webhook_check_availability', 'webhook_book_meeting',
             'webhook_call_started', 'webhook_call_ended',
-            'retell_check_availability_fn_id', 'retell_book_meeting_fn_id',
             'is_active',
         ];
 

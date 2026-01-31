@@ -6,7 +6,7 @@ import { AdminService } from '../services/adminService';
 import { supabase } from '../integrations/supabase/client';
 import {
     Bot, Phone, Zap, Search, Loader2, CheckCircle2, AlertTriangle,
-    Info, Shield, Globe, Clock, Plus, Power, PowerOff, RefreshCw
+    Info, Globe, Clock, Plus, Power, PowerOff, RefreshCw, Save
 } from 'lucide-react';
 
 interface Client {
@@ -40,9 +40,12 @@ const AdminVoiceManagement: React.FC = () => {
 
     // Platform number input (for done-for-you flow)
     const [platformNumber, setPlatformNumber] = useState('');
+    const [isSavingPlatformNumber, setIsSavingPlatformNumber] = useState(false);
+    const [platformNumberSaved, setPlatformNumberSaved] = useState(false);
 
     // Ref to track last loaded DB value to prevent resetting user input
     const lastLoadedAgentIdRef = useRef('');
+    const lastLoadedPlatformNumberRef = useRef('');
 
     const showFeedback = (type: 'success' | 'error' | 'info', text: string, durationMs = 8000) => {
         setFeedbackMessage({ type, text });
@@ -119,7 +122,7 @@ const AdminVoiceManagement: React.FC = () => {
 
     useEffect(() => { fetchClients(); }, [fetchClients]);
 
-    // Load agent ID when selecting a client
+    // Load agent ID + platform number when selecting a client
     useEffect(() => {
         if (selectedClientId) {
             const client = clients.find(c => c.id === selectedClientId);
@@ -128,13 +131,17 @@ const AdminVoiceManagement: React.FC = () => {
                 setRetellAgentId(newAgentId);
                 lastLoadedAgentIdRef.current = newAgentId;
             }
-            // Load platform number if exists
-            if (client?.phone_number && client.number_source === 'platform') {
-                setPlatformNumber(client.phone_number);
-            } else {
-                setPlatformNumber('');
+
+            const newPlatformNumber = (client?.phone_number && client.number_source === 'platform')
+                ? client.phone_number
+                : '';
+            if (newPlatformNumber !== lastLoadedPlatformNumberRef.current) {
+                setPlatformNumber(newPlatformNumber);
+                lastLoadedPlatformNumberRef.current = newPlatformNumber;
             }
+
             setSaveSuccess(false);
+            setPlatformNumberSaved(false);
             setFeedbackMessage(null);
         }
     }, [selectedClientId, clients]);
@@ -188,6 +195,33 @@ const AdminVoiceManagement: React.FC = () => {
             showFeedback('error', `Save Failed: ${e.message}`);
         } finally {
             setIsSavingAgentId(false);
+        }
+    };
+
+    const handleSavePlatformNumber = async () => {
+        if (!selectedClientId) return;
+        if (!isPlatformOwned) return;
+        const phoneToSave = platformNumber.trim();
+        if (!phoneToSave) {
+            showFeedback('error', 'Please enter the platform phone number.');
+            return;
+        }
+
+        setIsSavingPlatformNumber(true);
+        setPlatformNumberSaved(false);
+        setFeedbackMessage(null);
+
+        try {
+            // We allow saving just the phone number (agent id can be empty here)
+            await AdminService.saveRetellAgentId(selectedClientId, retellAgentId.trim(), 'platform', phoneToSave);
+            setPlatformNumberSaved(true);
+            lastLoadedPlatformNumberRef.current = phoneToSave;
+            await fetchClients();
+            showFeedback('success', 'Platform phone number saved successfully.', 3000);
+        } catch (e: any) {
+            showFeedback('error', `Save Failed: ${e.message}`);
+        } finally {
+            setIsSavingPlatformNumber(false);
         }
     };
 
@@ -538,18 +572,32 @@ const AdminVoiceManagement: React.FC = () => {
                                 {/* Platform Number Input (Done-for-you only) */}
                                 {isPlatformOwned && (
                                     <div className="bg-slate-50 p-6 rounded-xl border border-slate-200 mb-6">
-                                        <h4 className="font-bold text-slate-700 text-sm flex items-center gap-2 mb-3">
-                                            <Phone className="w-4 h-4" /> Platform Phone Number
-                                        </h4>
+                                        <div className="flex items-center justify-between gap-3 mb-3">
+                                            <h4 className="font-bold text-slate-700 text-sm flex items-center gap-2">
+                                                <Phone className="w-4 h-4" /> Platform Phone Number
+                                            </h4>
+                                            <button
+                                                onClick={handleSavePlatformNumber}
+                                                disabled={isSavingPlatformNumber || !platformNumber.trim()}
+                                                className={`px-3 py-2 rounded-lg text-xs font-semibold border transition-colors disabled:opacity-50 flex items-center gap-2 ${platformNumberSaved ? 'bg-emerald-600 text-white border-emerald-600' : 'bg-white text-slate-700 border-slate-300 hover:bg-slate-100'}`}
+                                                title="Save platform number"
+                                            >
+                                                {isSavingPlatformNumber ? <Loader2 className="w-3 h-3 animate-spin" /> : platformNumberSaved ? <CheckCircle2 className="w-3 h-3" /> : <Save className="w-3 h-3" />}
+                                                {platformNumberSaved ? 'Saved' : 'Save'}
+                                            </button>
+                                        </div>
                                         <p className="text-xs text-slate-500 mb-3">
-                                            Enter the phone number you purchased/will use from your platform Twilio account for this client.
+                                            Enter the phone number you purchased/will use from your platform Twilio account for this client (E.164 format).
                                         </p>
                                         <input
                                             type="text"
                                             placeholder="+14045551234"
                                             className="w-full p-3 border border-slate-300 rounded-lg text-sm font-mono bg-white"
                                             value={platformNumber}
-                                            onChange={(e) => setPlatformNumber(e.target.value)}
+                                            onChange={(e) => {
+                                                setPlatformNumber(e.target.value);
+                                                setPlatformNumberSaved(false);
+                                            }}
                                         />
                                     </div>
                                 )}

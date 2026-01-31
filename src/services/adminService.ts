@@ -54,12 +54,18 @@ export const AdminService = {
     return result.clients;
   },
 
-  // Securely save Retell Agent ID
-  saveRetellAgentId: async (clientId: string, retellAgentId: string, numberSource: 'client' | 'platform') => {
+  // Securely save Retell Agent ID (and optionally platform phone number)
+  saveRetellAgentId: async (
+    clientId: string,
+    retellAgentId: string,
+    numberSource: 'client' | 'platform',
+    platformPhoneNumber?: string
+  ) => {
     return invokeEdgeFunction('save-retell-agent-id', {
         client_id: clientId,
         retell_agent_id: retellAgentId,
         number_source: numberSource,
+        phone_number: platformPhoneNumber,
     });
   },
 
