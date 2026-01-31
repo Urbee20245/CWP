@@ -22,15 +22,20 @@ serve(async (req) => {
       return errorResponse('Client ID is required.', 400);
     }
 
-    const scope = 'https://www.googleapis.com/auth/calendar.events';
+    // Request Calendar events + Sheets scopes
+    const scope = [
+      'https://www.googleapis.com/auth/calendar.events',
+      'https://www.googleapis.com/auth/spreadsheets'
+    ].join(' ');
+
     const authUrl = `https://accounts.google.com/o/oauth2/v2/auth?` + new URLSearchParams({
       client_id: GOOGLE_CLIENT_ID,
       redirect_uri: GOOGLE_REDIRECT_URI,
       response_type: 'code',
-      scope: scope,
-      access_type: 'offline', // Required to get a refresh token
-      prompt: 'consent', // Always ask for consent
-      state: client_id, // Pass client_id through state for callback
+      scope,
+      access_type: 'offline', // refresh token
+      prompt: 'consent',      // ensure refresh token
+      state: client_id,       // pass client_id through state
     }).toString();
 
     console.log(`[google-oauth-init] Generated URL for client ${client_id}`);
