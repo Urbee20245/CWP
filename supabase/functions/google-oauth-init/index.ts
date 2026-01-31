@@ -2,7 +2,8 @@ import { serve } from "https://deno.land/std@0.190.0/http/server.ts";
 import { handleCors, jsonResponse, errorResponse } from '../_shared/utils.ts';
 
 const GOOGLE_CLIENT_ID = Deno.env.get('GOOGLE_CLIENT_ID');
-const GOOGLE_REDIRECT_URI = Deno.env.get('GOOGLE_REDIRECT_URI');
+// NOTE: We now compute the callback URL from SUPABASE_URL instead of relying on GOOGLE_REDIRECT_URI
+const SUPABASE_URL = Deno.env.get('SUPABASE_URL');
 
 serve(async (req) => {
   const corsResponse = handleCors(req);
@@ -11,8 +12,8 @@ serve(async (req) => {
   if (!GOOGLE_CLIENT_ID) {
     return errorResponse('GOOGLE_CLIENT_ID is not configured.', 500);
   }
-  if (!GOOGLE_REDIRECT_URI) {
-    return errorResponse('GOOGLE_REDIRECT_URI is not configured.', 500);
+  if (!SUPABASE_URL) {
+    return errorResponse('SUPABASE_URL is not configured.', 500);
   }
 
   try {
@@ -28,9 +29,12 @@ serve(async (req) => {
       'https://www.googleapis.com/auth/spreadsheets'
     ].join(' ');
 
+    // Supabase Functions callback
+    const redirectUri = `${SUPABASE_URL}/functions/v1/google-oauth-callback`;
+
     const authUrl = `https://accounts.google.com/o/oauth2/v2/auth?` + new URLSearchParams({
       client_id: GOOGLE_CLIENT_ID,
-      redirect_uri: GOOGLE_REDIRECT_URI,
+      redirect_uri: redirectUri,
       response_type: 'code',
       scope,
       access_type: 'offline', // refresh token

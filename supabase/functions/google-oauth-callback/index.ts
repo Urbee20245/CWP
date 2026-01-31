@@ -5,16 +5,15 @@ import { errorResponse } from '../_shared/utils.ts';
 
 const GOOGLE_CLIENT_ID = Deno.env.get('GOOGLE_CLIENT_ID');
 const GOOGLE_CLIENT_SECRET = Deno.env.get('GOOGLE_CLIENT_SECRET');
-const GOOGLE_REDIRECT_URI = Deno.env.get('GOOGLE_REDIRECT_URI');
-const CLIENT_REDIRECT_URL = Deno.env.get('CLIENT_REDIRECT_URL');
+// Use computed Supabase Functions callback as the redirect_uri for token exchange
+const SUPABASE_URL = Deno.env.get('SUPABASE_URL');
+const CLIENT_REDIRECT_URL = Deno.env.get('CLIENT_REDIRECT_URL') || 'https://www.customwebsitesplus.com/client/settings';
 
 serve(async (req) => {
-  // CORS is not strictly needed for a redirect handler, but we include it for safety
   if (req.method === 'OPTIONS') {
     return new Response(null, { headers: { 'Access-Control-Allow-Origin': '*' } });
   }
 
-  // Initialize Supabase Admin client for privileged DB access
   const supabaseAdmin = createClient(
     Deno.env.get('SUPABASE_URL')!,
     Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!
@@ -23,30 +22,29 @@ serve(async (req) => {
   try {
     const url = new URL(req.url);
     const code = url.searchParams.get('code');
-    const state = url.searchParams.get('state'); // This is the client_id
+    const state = url.searchParams.get('state'); // client_id
 
     if (!code || !state) {
       console.error('[google-oauth-callback] Missing code or state.');
       return new Response('OAuth failed: Missing authorization code or client state.', { status: 400 });
     }
-    
-    if (!GOOGLE_CLIENT_ID || !GOOGLE_CLIENT_SECRET || !GOOGLE_REDIRECT_URI || !CLIENT_REDIRECT_URL) {
-        console.error('[google-oauth-callback] Missing Google or Redirect secrets.');
-        return new Response('Server configuration error.', { status: 500 });
+    if (!GOOGLE_CLIENT_ID || !GOOGLE_CLIENT_SECRET || !SUPABASE_URL) {
+      console.error('[google-oauth-callback] Missing Google or Supabase configuration.');
+      return new Response('Server configuration error.', { status: 500 });
     }
 
     const clientId = state;
+    const redirectUri = `${SUPABASE_URL}/functions/v1/google-oauth-callback`;
     console.log(`[google-oauth-callback] Received code for client ${clientId}. Exchanging tokens.`);
 
-    // 1. Exchange code for tokens
     const tokenResponse = await fetch('https://oauth2.googleapis.com/token', {
       method: 'POST',
       headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
       body: new URLSearchParams({
-        code: code,
+        code,
         client_id: GOOGLE_CLIENT_ID,
         client_secret: GOOGLE_CLIENT_SECRET,
-        redirect_uri: GOOGLE_REDIRECT_URI,
+        redirect_uri: redirectUri, // must match the one used in google-oauth-init
         grant_type: 'authorization_code',
       }).toString(),
     });
@@ -59,13 +57,11 @@ serve(async (req) => {
     }
 
     const { access_token, refresh_token } = tokenData;
-    
     if (!refresh_token) {
-        console.error('[google-oauth-callback] Refresh token missing. Ensure access_type=offline and prompt=consent were used.');
-        return new Response('Refresh token missing. Please re-authenticate.', { status: 400 });
+      console.error('[google-oauth-callback] Refresh token missing. Ensure access_type=offline and prompt=consent were used.');
+      return new Response('Refresh token missing. Please re-authenticate.', { status: 400 });
     }
 
-    // 2. Encrypt and store tokens
     const encryptedAccessToken = await encryptSecret(access_token);
     const encryptedRefreshToken = await encryptSecret(refresh_token);
 
@@ -85,9 +81,9 @@ serve(async (req) => {
     }
 
     console.log(`[google-oauth-callback] Connection successful for client ${clientId}. Redirecting.`);
-
-    // 3. Redirect back to the client settings page
-    return Response.redirect(`${CLIENT_REDIRECT_URL}?status=success&client_id=${clientId}`, 303);
+    // Redirect back to the client settings page with a success flag
+    const dest = `${CLIENT_REDIRECT_URL}?status=success&client_id=${clientId}`;
+    return Response.redirect(dest, 303);
 
   } catch (error: any) {
     console.error('[google-oauth-callback] Unhandled error:', error.message);

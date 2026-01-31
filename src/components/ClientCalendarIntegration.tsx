@@ -1,7 +1,7 @@
 "use client";
 
 import React, { useState, useEffect, useCallback, useRef } from 'react';
-import { Calendar, Loader2, CheckCircle2, AlertTriangle, ExternalLink, X } from 'lucide-react';
+import { Calendar, Loader2, CheckCircle2, AlertTriangle, ExternalLink, X, Info } from 'lucide-react';
 import { ClientIntegrationService } from '../services/clientIntegrationService';
 import { format } from 'date-fns';
 
@@ -32,6 +32,7 @@ const ClientCalendarIntegration: React.FC<ClientCalendarIntegrationProps> = ({ c
   const [isLoading, setIsLoading] = useState(true);
   const [isProcessing, setIsProcessing] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [notice, setNotice] = useState<string | null>(null); // success/info banner
 
   const initialFetchRef = useRef(true);
   const requestIdRef = useRef(0);
@@ -54,7 +55,6 @@ const ClientCalendarIntegration: React.FC<ClientCalendarIntegrationProps> = ({ c
     } catch (e: any) {
       const message = e?.message || 'Failed to fetch calendar status.';
 
-      // On initial load: suppress transient errors and retry once after a short delay.
       if (isInitialFetch && isLikelyTransientInitialError(message)) {
         await sleep(500);
         try {
@@ -64,7 +64,6 @@ const ClientCalendarIntegration: React.FC<ClientCalendarIntegrationProps> = ({ c
           setError(retryErr?.message || message);
         }
       } else if (isInitialFetch) {
-        // Still retry once on initial load, but don't show the banner unless retry fails.
         await sleep(500);
         try {
           await run();
@@ -88,12 +87,22 @@ const ClientCalendarIntegration: React.FC<ClientCalendarIntegrationProps> = ({ c
     fetchStatus();
   }, [fetchStatus]);
 
+  // Detect success flag after returning from Google OAuth
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search);
+    if (params.get('status') === 'success') {
+      setNotice('Google authorized successfully. Calendar and Sheets access are connected.');
+      // Optionally remove the flag from URL (not required)
+      // history.replaceState(null, '', window.location.pathname);
+    }
+  }, []);
+
   const handleConnect = async () => {
     setIsProcessing(true);
     setError(null);
+    setNotice(null);
     try {
       const result = await ClientIntegrationService.initGoogleCalendarAuth(clientId);
-      // Redirect the user to the Google OAuth URL
       window.location.href = result.auth_url;
     } catch (e: any) {
       setError(e.message || 'Failed to initiate Google OAuth.');
@@ -108,6 +117,7 @@ const ClientCalendarIntegration: React.FC<ClientCalendarIntegrationProps> = ({ c
     try {
       await ClientIntegrationService.disconnectGoogleCalendar(clientId);
       setStatus(prev => prev ? { ...prev, connection_status: 'disconnected' } : null);
+      setNotice(null);
       setIsProcessing(false);
     } catch (e: any) {
       setError(e.message || 'Failed to disconnect calendar.');
@@ -126,6 +136,13 @@ const ClientCalendarIntegration: React.FC<ClientCalendarIntegrationProps> = ({ c
       <h2 className="text-xl font-bold text-slate-900 flex items-center gap-2 border-b border-slate-100 pb-4">
         <Calendar className="w-5 h-5 text-indigo-600" /> Google Calendar Integration
       </h2>
+
+      {notice && (
+        <div className="p-3 bg-emerald-100 border border-emerald-300 text-emerald-800 rounded-lg text-sm flex items-center gap-2">
+          <CheckCircle2 className="w-4 h-4" />
+          {notice}
+        </div>
+      )}
 
       {error && (
         <div className="p-3 bg-red-100 border border-red-300 text-red-800 rounded-lg text-sm flex items-center gap-2">
@@ -160,8 +177,17 @@ const ClientCalendarIntegration: React.FC<ClientCalendarIntegrationProps> = ({ c
             <Calendar className="w-5 h-5 text-slate-500" />
             <p className="font-bold text-slate-700">Not Connected</p>
           </div>
+          <div className="p-3 bg-amber-50 border border-amber-200 rounded-lg text-sm text-amber-800 flex items-start gap-2">
+            <Info className="w-4 h-4 mt-0.5" />
+            <div>
+              <p className="font-semibold">Heads up: Google hasn't verified this app yet.</p>
+              <p className="text-xs mt-1">
+                When Google shows the "Google hasn't verified this app" page, click "Advanced" and then "Continue" to proceed. This is expected until verification is complete.
+              </p>
+            </div>
+          </div>
           <p className="text-sm text-slate-600">
-            Connect your Google Calendar to automatically book appointments from your website forms.
+            Connect your Google Calendar (and Sheets) to automatically book appointments and log caller info.
           </p>
           <button
             onClick={handleConnect}
