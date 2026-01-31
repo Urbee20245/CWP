@@ -92,41 +92,58 @@ const AdminVoiceManagement: React.FC = () => {
 
     const fetchClients = useCallback(async () => {
         setIsLoading(true);
+
+        try {
+            // Prefer direct query (works for admins via RLS policies) so the UI doesn't depend on edge function deployment.
+            const { data, error } = await supabase
+                .from('clients')
+                .select(`
+                    id,
+                    business_name,
+                    phone,
+                    client_voice_integrations (
+                        voice_status,
+                        number_source,
+                        a2p_status,
+                        retell_agent_id,
+                        phone_number,
+                        retell_phone_id
+                    ),
+                    client_integrations (
+                        provider,
+                        phone_number,
+                        account_sid_encrypted,
+                        auth_token_encrypted,
+                        connection_method
+                    )
+                `)
+                .order('business_name', { ascending: true });
+
+            if (error) throw error;
+
+            setClients(mapClientData(data || []));
+            return;
+        } catch (directErr: any) {
+            console.warn('[AdminVoiceManagement] Direct clients query failed, trying edge function:', directErr?.message);
+        }
+
         try {
             const clientsData = await AdminService.getVoiceClients();
             setClients(mapClientData(clientsData || []));
         } catch (edgeFnErr: any) {
             console.warn('[AdminVoiceManagement] Edge function failed:', edgeFnErr.message);
-            try {
-                const { data, error } = await supabase
-                    .from('clients')
-                    .select('id, business_name, phone')
-                    .order('business_name', { ascending: true });
 
-                if (error) throw error;
-
-                setClients((data || []).map((c: any) => ({
-                    id: c.id,
-                    business_name: c.business_name || 'Unknown',
-                    phone: c.phone || '',
-                    voice_status: 'inactive',
-                    number_source: 'platform',
-                    a2p_status: 'not_started',
-                    retell_agent_id: '',
-                    twilio_configured: false,
-                    twilio_phone: null,
-                    phone_number: null,
-                    connection_method: 'none',
-                })));
-                showFeedback('info', 'Edge function unavailable — loaded clients without voice data. Please redeploy get-voice-clients edge function.');
-            } catch (fallbackErr: any) {
-                console.error('[AdminVoiceManagement] All fetch methods failed:', fallbackErr);
-                showFeedback('error', `Failed to load clients: ${edgeFnErr.message}`);
+            // IMPORTANT: Do NOT overwrite the existing client list with an "empty" fallback.
+            // That fallback was clearing saved values from the UI. We keep the last known data instead.
+            if (clients.length === 0) {
+                showFeedback('error', 'Unable to load clients right now. Please try again in a moment.');
+            } else {
+                showFeedback('info', 'Live voice data is temporarily unavailable. Showing last loaded values.');
             }
         } finally {
             setIsLoading(false);
         }
-    }, []);
+    }, [clients.length]);
 
     useEffect(() => { fetchClients(); }, [fetchClients]);
 
@@ -141,7 +158,7 @@ const AdminVoiceManagement: React.FC = () => {
     const effectiveSource = isClientOwned ? 'client' : 'platform';
     const isVoiceActive = selectedClient?.voice_status === 'active';
 
-    // --- Sync form fields from DB ---
+    // --- Sync form fields from DB (never clear existing inputs just because a refresh failed) ---
     useEffect(() => {
         if (!selectedClientId) return;
 
@@ -149,6 +166,8 @@ const AdminVoiceManagement: React.FC = () => {
         prevSelectedClientIdRef.current = selectedClientId;
 
         const client = clients.find(c => c.id === selectedClientId);
+        const clientIsClientOwned = client?.twilio_configured === true;
+        const clientIsPlatformOwned = !clientIsClientOwned;
 
         if (selectionChanged) {
             setFeedbackMessage(null);
@@ -156,22 +175,33 @@ const AdminVoiceManagement: React.FC = () => {
         }
 
         const newAgentId = client?.retell_agent_id || '';
-        if (selectionChanged || newAgentId !== lastLoadedAgentIdRef.current) {
+        if (selectionChanged) {
             setRetellAgentId(newAgentId);
             lastLoadedAgentIdRef.current = newAgentId;
+        } else {
+            // On background refresh: only update when we got a real (non-empty) value.
+            if (newAgentId && newAgentId !== lastLoadedAgentIdRef.current) {
+                setRetellAgentId(newAgentId);
+                lastLoadedAgentIdRef.current = newAgentId;
+            }
         }
 
         const newPlatformNumber = (client?.phone_number && client.number_source === 'platform')
             ? client.phone_number
             : '';
-        if (selectionChanged || newPlatformNumber !== lastLoadedPlatformNumberRef.current) {
+        if (selectionChanged) {
             setPlatformNumber(newPlatformNumber);
             lastLoadedPlatformNumberRef.current = newPlatformNumber;
+        } else {
+            if (newPlatformNumber && newPlatformNumber !== lastLoadedPlatformNumberRef.current) {
+                setPlatformNumber(newPlatformNumber);
+                lastLoadedPlatformNumberRef.current = newPlatformNumber;
+            }
         }
 
-        // If we have both values (or only agent for client-owned), consider it saved/persisted
-        const hasAgent = !!newAgentId;
-        const hasPlatformPhone = isPlatformOwned ? !!newPlatformNumber : true;
+        // Determine persisted state based on last-known persisted values (not on possibly-missing refresh data)
+        const hasAgent = !!lastLoadedAgentIdRef.current;
+        const hasPlatformPhone = clientIsPlatformOwned ? !!lastLoadedPlatformNumberRef.current : true;
         setConfigSaved(hasAgent && hasPlatformPhone);
     }, [selectedClientId, clients]);
 
@@ -236,6 +266,7 @@ const AdminVoiceManagement: React.FC = () => {
             }
 
             showFeedback('success', 'Configuration saved successfully.', 5000);
+            // Refresh in background; if it fails, we will not wipe state.
             fetchClients();
         } catch (e: any) {
             showFeedback('error', `Save Failed: ${e.message}`);
