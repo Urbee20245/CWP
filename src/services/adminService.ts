@@ -1,6 +1,11 @@
 import { supabase } from '../integrations/supabase/client';
 import { marked } from 'marked';
 
+// Add: constants for direct public edge invocation
+const SUPABASE_EDGE_BASE = 'https://nvgumhlewbqynrhlkqhx.supabase.co/functions/v1';
+// Using the publishable anon key (already public in the client) to satisfy gateway headers
+const SUPABASE_ANON_KEY_PUBLIC = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Im52Z3VtaGxld2JxeW5yaGxrcWh4Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3Njc4MTQzNTcsImV4cCI6MjA4MzM5MDM1N30.OQb2wiXmof5xneC_HTorjnguBmfA19yghSluozTvmKU';
+
 async function tryParseJson(text: string) {
   try {
     return JSON.parse(text);
@@ -70,6 +75,40 @@ const invokeEdgeFunction = async (functionName: string, payload: any, options?: 
 
   return parsed;
 };
+
+// Add: direct public edge invocation to avoid session JWT
+async function callPublicEdgeFunction(functionName: string, payload: any) {
+  const url = `${SUPABASE_EDGE_BASE}/${functionName}`;
+  const res = await fetch(url, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      // Provide anon key in both Authorization and apikey, as recommended by Supabase
+      'Authorization': `Bearer ${SUPABASE_ANON_KEY_PUBLIC}`,
+      'apikey': SUPABASE_ANON_KEY_PUBLIC,
+    },
+    body: JSON.stringify(payload),
+  });
+
+  const text = await res.text();
+  let json: any = null;
+  try {
+    json = JSON.parse(text);
+  } catch {
+    // leave as null, handle below
+  }
+
+  if (!res.ok) {
+    const message = json?.error || json?.message || text || `Edge function ${functionName} failed (${res.status})`;
+    throw new Error(message);
+  }
+
+  if (json?.error) {
+    throw new Error(json.error);
+  }
+
+  return json;
+}
 
 export const AdminService = {
   // ... (keep existing methods)
@@ -192,8 +231,8 @@ export const AdminService = {
     return data;
   },
   // AI Agent Settings
-  // Keep default invoke behavior so Authorization is sent; the function itself is public (auth: false).
-  getAgentSettings: async (clientId: string) => invokeEdgeFunction('get-agent-settings', { client_id: clientId }),
+  // Use direct public fetch to avoid Invalid JWT from expired browser sessions
+  getAgentSettings: async (clientId: string) => callPublicEdgeFunction('get-agent-settings', { client_id: clientId }),
   saveAgentSettings: async (settings: any) => invokeEdgeFunction('save-agent-settings', settings),
 
   disconnectGoogleCalendar: async (clientId: string) => {
