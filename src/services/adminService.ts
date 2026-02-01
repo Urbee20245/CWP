@@ -194,8 +194,8 @@ export const AdminService = {
     return data;
   },
   // AI Agent Settings
-  getAgentSettings: async (clientId: string) => 
-    // This function is public (auth: false); explicitly clear Authorization to avoid "Invalid JWT".
+  getAgentSettings: async (clientId: string) =>
+    // Public (auth: false) — explicitly clear Authorization to avoid "Invalid JWT"
     invokeEdgeFunction('get-agent-settings', { client_id: clientId }, { headers: { Authorization: '' } }),
   saveAgentSettings: async (settings: any) => invokeEdgeFunction('save-agent-settings', settings),
 

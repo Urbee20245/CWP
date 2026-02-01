@@ -136,6 +136,9 @@ const AdminAgentSettings: React.FC = () => {
   const [roleAskQuestions, setRoleAskQuestions] = useState(true);
   const [roleCollectData, setRoleCollectData] = useState(true);
 
+  // Add retrieving state for integration status
+  const [isRetrieving, setIsRetrieving] = useState(false);
+
   const showFeedback = (type: 'success' | 'error' | 'info', text: string) => {
     setFeedback({ type, text });
     setTimeout(() => setFeedback(null), 6000);
@@ -254,6 +257,26 @@ const AdminAgentSettings: React.FC = () => {
       setIsLoading(false);
     }
   }, []);
+
+  // Add: retrieve integrations handler (server-side only for accurate status)
+  const handleRetrieveIntegrations = async () => {
+    if (!selectedClientId) return;
+    setIsRetrieving(true);
+    try {
+      const edge = await AdminService.getAgentSettings(selectedClientId);
+      if (edge?.integrations) {
+        setIntegrations(edge.integrations);
+        showFeedback('success', 'Integration status retrieved from server.');
+      } else {
+        await fetchSettings(selectedClientId);
+        showFeedback('info', 'Refreshed settings.');
+      }
+    } catch (err: any) {
+      showFeedback('error', err?.message || 'Failed to retrieve status.');
+    } finally {
+      setIsRetrieving(false);
+    }
+  };
 
   useEffect(() => {
     if (selectedClientId) {
@@ -511,6 +534,17 @@ const AdminAgentSettings: React.FC = () => {
                     </div>
                     <p className="text-xs mt-1 text-slate-600">{integrations.retell.configured ? `Agent: ${integrations.retell.agent_id} | ${integrations.retell.voice_status || 'inactive'}` : 'No agent configured yet'}</p>
                   </div>
+                </div>
+                <div className="mt-4 flex justify-end">
+                  <button
+                    onClick={handleRetrieveIntegrations}
+                    disabled={isRetrieving || !selectedClientId}
+                    className="inline-flex items-center gap-2 px-3 py-1.5 text-sm border border-slate-300 rounded-lg hover:bg-slate-50"
+                    title="Retrieve latest status from server"
+                  >
+                    {isRetrieving ? <Loader2 className="w-4 h-4 animate-spin" /> : <RefreshCw className="w-4 h-4" />}
+                    {isRetrieving ? 'Retrieving...' : 'Retrieve Latest Status'}
+                  </button>
                 </div>
               </div>
             )}
