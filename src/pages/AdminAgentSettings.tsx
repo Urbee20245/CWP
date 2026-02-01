@@ -169,13 +169,28 @@ const AdminAgentSettings: React.FC = () => {
     if (!clientId) return;
     setIsLoading(true);
     try {
-      const [{ data: settingsRow, error: settingsErr }, { data: recentEvents, error: eventsErr }, { data: calendarRow }, { data: voiceRow }, { data: clientRow }] = await Promise.all([
+      // Prefer the secure Edge Function so admins always see integration status
+      // even if RLS/admin JWT claims aren't present in the browser session.
+      let edge: any = null;
+      try {
+        edge = await AdminService.getAgentSettings(clientId);
+      } catch (edgeErr: any) {
+        console.warn('[AdminAgentSettings] getAgentSettings edge function failed, falling back to direct queries:', edgeErr?.message);
+      }
+
+      const [{ data: settingsRow, error: settingsErr }, { data: recentEvents }, { data: clientRow }] = await Promise.all([
         supabase.from('ai_agent_settings').select('*').eq('client_id', clientId).maybeSingle(),
-        supabase.from('webhook_events').select('id, event_type, event_source, external_id, status, error_message, duration_ms, created_at').eq('client_id', clientId).order('created_at', { ascending: false }).limit(20),
-        supabase.from('client_google_calendar').select('connection_status, calendar_id, last_synced_at').eq('client_id', clientId).maybeSingle(),
-        supabase.from('client_voice_integrations').select('retell_agent_id, voice_status, phone_number').eq('client_id', clientId).maybeSingle(),
+        // If edge function worked, use its events; otherwise fall back to direct.
+        edge?.recent_events
+          ? Promise.resolve({ data: edge.recent_events })
+          : supabase
+              .from('webhook_events')
+              .select('id, event_type, event_source, external_id, status, error_message, duration_ms, created_at')
+              .eq('client_id', clientId)
+              .order('created_at', { ascending: false })
+              .limit(20),
         supabase.from('clients').select('phone, address').eq('id', clientId).maybeSingle(),
-      ]);
+      ] as any);
 
       if (settingsErr) throw settingsErr;
 
@@ -184,28 +199,54 @@ const AdminAgentSettings: React.FC = () => {
         : { ...DEFAULT_SETTINGS, client_id: clientId };
 
       setSettings(merged);
-      setWebhookUrls(buildWebhookUrls());
+
+      // Webhook URLs: prefer edge function output (always correct base)
+      setWebhookUrls(edge?.webhook_urls ? edge.webhook_urls : buildWebhookUrls());
+
       setWebhookEvents(recentEvents || []);
-      
+
       // Auto-fill assistant fields from client record
       if (clientRow) {
         setBusinessPhone(clientRow.phone || '');
         setLocation(clientRow.address || '');
       }
 
-      setIntegrations({
-        google_calendar: calendarRow ? {
-          connected: calendarRow.connection_status === 'connected',
-          calendar_id: calendarRow.calendar_id,
-          last_synced: calendarRow.last_synced_at,
-        } : { connected: false },
-        retell: voiceRow ? {
-          configured: !!voiceRow.retell_agent_id,
-          agent_id: voiceRow.retell_agent_id,
-          voice_status: voiceRow.voice_status,
-          phone_number: voiceRow.phone_number,
-        } : { configured: false },
-      });
+      // Integration status: prefer edge function output
+      if (edge?.integrations) {
+        setIntegrations(edge.integrations);
+      } else {
+        // Direct fallback
+        const [{ data: calendarRow }, { data: voiceRow }] = await Promise.all([
+          supabase
+            .from('client_google_calendar')
+            .select('connection_status, calendar_id, last_synced_at')
+            .eq('client_id', clientId)
+            .maybeSingle(),
+          supabase
+            .from('client_voice_integrations')
+            .select('retell_agent_id, voice_status, phone_number')
+            .eq('client_id', clientId)
+            .maybeSingle(),
+        ]);
+
+        setIntegrations({
+          google_calendar: calendarRow
+            ? {
+                connected: calendarRow.connection_status === 'connected',
+                calendar_id: calendarRow.calendar_id,
+                last_synced: calendarRow.last_synced_at,
+              }
+            : { connected: false },
+          retell: voiceRow
+            ? {
+                configured: !!voiceRow.retell_agent_id,
+                agent_id: voiceRow.retell_agent_id,
+                voice_status: voiceRow.voice_status,
+                phone_number: voiceRow.phone_number,
+              }
+            : { configured: false },
+        });
+      }
     } catch (err: any) {
       console.error('[AdminAgentSettings] Failed to fetch settings:', err.message);
       showFeedback('error', `Failed to load settings: ${err.message}`);
@@ -228,6 +269,43 @@ const AdminAgentSettings: React.FC = () => {
   const updateSetting = <K extends keyof AgentSettings>(key: K, value: AgentSettings[K]) => {
     if (!settings) return;
     setSettings({ ...settings, [key]: value });
+  };
+
+  const copyToClipboard = async (text: string) => {
+    try {
+      await navigator.clipboard.writeText(text);
+      showFeedback('success', 'Copied to clipboard.');
+    } catch {
+      showFeedback('error', 'Failed to copy.');
+    }
+  };
+
+  const toggleMeetingType = (type: string) => {
+    if (!settings) return;
+    const current = settings.allowed_meeting_types || [];
+    const next = current.includes(type)
+      ? current.filter((t) => t !== type)
+      : [...current, type];
+    updateSetting('allowed_meeting_types', next);
+  };
+
+  const toggleBusinessDay = (day: string) => {
+    if (!settings) return;
+    const hours = { ...(settings.business_hours || {}) };
+    if (hours[day]) {
+      delete hours[day];
+    } else {
+      hours[day] = { start: '09:00', end: '17:00' };
+    }
+    updateSetting('business_hours', hours);
+  };
+
+  const updateBusinessHours = (day: string, field: 'start' | 'end', value: string) => {
+    if (!settings) return;
+    const hours = { ...(settings.business_hours || {}) };
+    if (!hours[day]) hours[day] = { start: '09:00', end: '17:00' };
+    hours[day] = { ...hours[day], [field]: value };
+    updateSetting('business_hours', hours);
   };
 
   const handleSave = async () => {
