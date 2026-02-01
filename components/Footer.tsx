@@ -87,8 +87,8 @@ const Footer: React.FC = () => {
                     <LogIn className="w-3 h-3" />
                     Portal
                 </Link>
-                <Link to="/privacy-policy" className="hover:text-white transition-colors">Privacy Policy</Link>
-                <Link to="/terms-and-conditions" className="hover:text-white transition-colors">Terms of Service</Link>
+                <a href="/privacy.html" className="hover:text-white transition-colors">Privacy Policy</a>
+                <a href="/terms.html" className="hover:text-white transition-colors">Terms of Service</a>
                 <a href="#" className="hover:text-white transition-colors">Sitemap</a>
             </div>
         </div>
