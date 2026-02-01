@@ -11,6 +11,7 @@ CREATE TABLE IF NOT EXISTS public.google_oauth_states (
   state_token TEXT PRIMARY KEY,
   client_id UUID NOT NULL REFERENCES public.clients(id) ON DELETE CASCADE,
   created_by UUID REFERENCES public.profiles(id) ON DELETE SET NULL,
+  return_to TEXT,
   expires_at TIMESTAMPTZ,
   created_at TIMESTAMPTZ DEFAULT now()
 );

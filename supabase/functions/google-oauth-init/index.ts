@@ -30,7 +30,7 @@ serve(async (req) => {
       return errorResponse('Unauthorized', 401);
     }
 
-    const { client_id } = await req.json();
+    const { client_id, return_to } = await req.json();
     if (!client_id) return errorResponse('Client ID is required.', 400);
 
     // Check admin role OR ownership
@@ -45,7 +45,6 @@ serve(async (req) => {
       return errorResponse('Forbidden', 403);
     }
 
-    // --- OAuth params ---
     // Scopes:
     // - calendar.events: create events (booking)
     // - calendar.events.freebusy: check availability via freeBusy endpoint
@@ -59,7 +58,6 @@ serve(async (req) => {
     const redirectUri = `${SUPABASE_URL}/functions/v1/google-oauth-callback`;
 
     // IMPORTANT: use a one-time state token, not raw client_id.
-    // This prevents a forged callback from binding tokens to the wrong client.
     const stateToken = crypto.randomUUID();
 
     // Store state for 10 minutes
@@ -70,6 +68,7 @@ serve(async (req) => {
         state_token: stateToken,
         client_id,
         created_by: user.id,
+        return_to: typeof return_to === 'string' ? return_to : null,
         expires_at: expiresAt,
       });
 
@@ -83,8 +82,8 @@ serve(async (req) => {
       redirect_uri: redirectUri,
       response_type: 'code',
       scope,
-      access_type: 'offline', // refresh token
-      prompt: 'consent',      // ensure refresh token
+      access_type: 'offline',
+      prompt: 'consent',
       state: stateToken,
     }).toString();
 

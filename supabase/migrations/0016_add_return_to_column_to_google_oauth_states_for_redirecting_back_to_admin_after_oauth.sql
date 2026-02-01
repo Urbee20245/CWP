@@ -1,0 +1,1 @@
+ALTER TABLE public.google_oauth_states ADD COLUMN IF NOT EXISTS return_to TEXT;

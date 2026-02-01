@@ -51,7 +51,7 @@ serve(async (req) => {
     const clientId = body?.client_id;
     if (!clientId) return errorResponse('Missing required field: client_id', 400);
 
-    // Force the state only; do NOT delete tokens.
+    // Force re-auth AND clear stored tokens so a new refresh token is required.
     const { error: upsertErr } = await supabaseAdmin
       .from('client_google_calendar')
       .upsert(
@@ -60,6 +60,10 @@ serve(async (req) => {
           connection_status: 'needs_reauth',
           reauth_reason: 'forced_by_admin',
           last_error: null,
+          google_access_token: '',
+          google_refresh_token: '',
+          refresh_token_present: false,
+          access_token_expires_at: null,
         },
         { onConflict: 'client_id' }
       );

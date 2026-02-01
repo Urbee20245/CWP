@@ -12,6 +12,12 @@ const corsHeaders = {
   'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
 };
 
+function appendParams(url: string, params: Record<string, string>) {
+  const u = new URL(url);
+  for (const [k, v] of Object.entries(params)) u.searchParams.set(k, v);
+  return u.toString();
+}
+
 serve(async (req) => {
   if (req.method === 'OPTIONS') {
     return new Response(null, { headers: corsHeaders });
@@ -36,10 +42,10 @@ serve(async (req) => {
       return new Response('Server configuration error.', { status: 500, headers: corsHeaders });
     }
 
-    // Resolve client_id from one-time state token
+    // Resolve client_id + return_to from one-time state token
     const { data: stateRow, error: stateErr } = await supabaseAdmin
       .from('google_oauth_states')
-      .select('client_id, expires_at')
+      .select('client_id, expires_at, return_to')
       .eq('state_token', stateToken)
       .maybeSingle();
 
@@ -54,6 +60,7 @@ serve(async (req) => {
     }
 
     const clientId = stateRow.client_id;
+    const returnTo = typeof stateRow.return_to === 'string' && stateRow.return_to.trim() ? stateRow.return_to.trim() : null;
 
     // One-time use: delete state
     await supabaseAdmin.from('google_oauth_states').delete().eq('state_token', stateToken);
@@ -61,7 +68,7 @@ serve(async (req) => {
     const redirectUri = `${SUPABASE_URL}/functions/v1/google-oauth-callback`;
     console.log(`[google-oauth-callback] Received code for client ${clientId}. Exchanging tokens.`);
 
-    // Load existing connection (if any). Critical: Google may not return refresh_token on subsequent consents.
+    // Load existing connection (if any)
     const { data: existingConn } = await supabaseAdmin
       .from('client_google_calendar')
       .select('google_refresh_token, calendar_id')
@@ -96,10 +103,7 @@ serve(async (req) => {
       return new Response('Token exchange failed: access_token missing.', { status: 400, headers: corsHeaders });
     }
 
-    // Refresh token handling:
-    // - If Google returns refresh_token, persist it.
-    // - If Google does NOT return refresh_token (common on subsequent auth), keep the existing refresh token if present.
-    // - Only require reauth if we have no refresh token at all.
+    // Prefer new refresh token; fall back to existing if present
     let encryptedRefreshToken: string = '';
     if (refreshToken && refreshToken.trim()) {
       encryptedRefreshToken = await encryptSecret(refreshToken);
@@ -142,7 +146,9 @@ serve(async (req) => {
 
     console.log(`[google-oauth-callback] Connection saved for client ${clientId}. refresh_token_present=${refreshTokenPresent}`);
 
-    const dest = `${CLIENT_REDIRECT_URL}?status=${refreshTokenPresent ? 'success' : 'needs_reauth'}&client_id=${clientId}`;
+    const status = refreshTokenPresent ? 'success' : 'needs_reauth';
+    const destBase = returnTo || CLIENT_REDIRECT_URL;
+    const dest = appendParams(destBase, { status, client_id: clientId });
     return Response.redirect(dest, 303);
 
   } catch (error: any) {

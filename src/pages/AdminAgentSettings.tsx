@@ -327,12 +327,27 @@ const AdminAgentSettings: React.FC = () => {
   const handleForceReauth = async () => {
     if (!selectedClientId) return;
     if (!confirm('Force Google Calendar re-authorization for this client?')) return;
+
     try {
+      // 1) Mark needs_reauth + clear stored tokens (server-side)
       await AdminService.forceCalendarReauth(selectedClientId);
-      await fetchCalendarDiagnostics(selectedClientId);
-      showFeedback('success', 'Forced calendar status to needs_reauth.');
+
+      // 2) Immediately re-run OAuth using the existing init+callback flow
+      const returnTo = `${window.location.origin}/admin/agent-settings?client_id=${encodeURIComponent(selectedClientId)}&calendar_diag=1`;
+      const { auth_url } = await supabase.functions.invoke('google-oauth-init', {
+        body: { client_id: selectedClientId, return_to: returnTo },
+      }).then(({ data, error }) => {
+        if (error) throw error;
+        return (typeof data === 'string' ? JSON.parse(data) : data) as any;
+      });
+
+      if (!auth_url) throw new Error('Failed to start Google OAuth.');
+
+      // Redirect to Google OAuth (no new UI inside app)
+      window.location.href = auth_url;
     } catch (e: any) {
       showFeedback('error', e?.message || 'Failed to force re-auth');
+      await fetchCalendarDiagnostics(selectedClientId);
     }
   };
 
