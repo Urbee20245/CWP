@@ -6,37 +6,50 @@ import { ThemeSupa } from "@supabase/auth-ui-shared";
 import { supabase } from "../integrations/supabase/client";
 import { Loader2, Mail, Lock, CheckCircle2, AlertTriangle, X } from "lucide-react";
 
-const RESET_REDIRECT = `${window.location.origin}/login?reset=1`;
+const getResetRedirect = () => {
+  if (typeof window !== "undefined" && window.location?.origin) {
+    return `${window.location.origin}/login?reset=1`;
+  }
+  // Fallback path (will be recalculated on mount)
+  return "/login?reset=1";
+};
 
 const Login: React.FC = () => {
+  // Forgot-password UI
   const [showReset, setShowReset] = useState(false);
   const [resetEmail, setResetEmail] = useState("");
   const [resetLoading, setResetLoading] = useState(false);
   const [resetMessage, setResetMessage] = useState<{ type: "success" | "error"; text: string } | null>(null);
 
+  // Recovery (update password) UI
   const [isRecoveryMode, setIsRecoveryMode] = useState(false);
   const [newPassword, setNewPassword] = useState("");
   const [confirmPassword, setConfirmPassword] = useState("");
   const [updatingPassword, setUpdatingPassword] = useState(false);
   const [updateMessage, setUpdateMessage] = useState<{ type: "success" | "error"; text: string } | null>(null);
 
-  // Determine if we landed here from the reset link
+  // Compute redirect lazily and keep in state to avoid window access at module load
+  const [resetRedirect, setResetRedirect] = useState<string>(getResetRedirect());
+
   useEffect(() => {
+    // Ensure redirect is correct after mount
+    setResetRedirect(getResetRedirect());
+    // Detect query flag if returning from reset link
     const params = new URLSearchParams(window.location.search);
     if (params.get("reset") === "1") {
       setIsRecoveryMode(true);
     }
   }, []);
 
-  // Ask Supabase to mark the session in recovery mode if there is a type=recovery event
+  // Listen for Supabase PASSWORD_RECOVERY events
   useEffect(() => {
-    const sub = supabase.auth.onAuthStateChange((event) => {
+    const { data } = supabase.auth.onAuthStateChange((event) => {
       if (event === "PASSWORD_RECOVERY") {
         setIsRecoveryMode(true);
       }
     });
     return () => {
-      sub.data.subscription.unsubscribe();
+      data.subscription.unsubscribe();
     };
   }, []);
 
@@ -49,7 +62,7 @@ const Login: React.FC = () => {
     }
     setResetLoading(true);
     try {
-      const { error } = await supabase.auth.resetPasswordForEmail(resetEmail, { redirectTo: RESET_REDIRECT });
+      const { error } = await supabase.auth.resetPasswordForEmail(resetEmail, { redirectTo: resetRedirect });
       if (error) throw error;
       setResetMessage({ type: "success", text: "Password reset email sent. Please check your inbox." });
     } catch (err: any) {
@@ -112,7 +125,7 @@ const Login: React.FC = () => {
 
         {!isRecoveryMode ? (
           <>
-            <Auth supabaseClient={supabase} providers={[]} appearance={authAppearance} theme="light" onlyThirdPartyProviders={false} />
+            <Auth supabaseClient={supabase} providers={[]} appearance={authAppearance} theme="light" />
 
             {/* Forgot password */}
             <div className="mt-4">
