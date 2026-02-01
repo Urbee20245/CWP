@@ -133,6 +133,22 @@ serve(async (req) => {
       if (!allowedOrigins.includes(origin)) return errorResponse("Forbidden", 403);
     }
 
+    // HARD LIMIT: 50 active leads (status != resolved)
+    const { count: activeCount, error: countErr } = await supabaseAdmin
+      .from("leads")
+      .select("id", { count: "exact", head: true })
+      .eq("client_id", clientId)
+      .neq("status", "resolved");
+
+    if (countErr) {
+      console.error("[ingest-lead] active lead count failed", { message: countErr.message });
+      return errorResponse("Unable to accept lead right now", 503);
+    }
+
+    if ((activeCount || 0) >= 50) {
+      return errorResponse("Lead limit reached (50 active leads). Resolve existing leads to accept new ones.", 429);
+    }
+
     // Validate lead fields
     const name = safeTrim(body.name, 200);
     const email = normalizeEmail(body.email);
