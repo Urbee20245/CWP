@@ -540,7 +540,6 @@ const AdminAgentSettings: React.FC = () => {
                     onClick={handleRetrieveIntegrations}
                     disabled={isRetrieving || !selectedClientId}
                     className="inline-flex items-center gap-2 px-3 py-1.5 text-sm border border-slate-300 rounded-lg hover:bg-slate-50"
-                    title="Retrieve latest status from server"
                   >
                     {isRetrieving ? <Loader2 className="w-4 h-4 animate-spin" /> : <RefreshCw className="w-4 h-4" />}
                     {isRetrieving ? 'Retrieving...' : 'Retrieve Latest Status'}

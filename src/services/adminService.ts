@@ -50,13 +50,11 @@ const invokeEdgeFunction = async (functionName: string, payload: any, options?: 
     headers: options?.headers,
   });
 
-  // Parse data regardless of error — on non-2xx, the SDK sets error but
-  // we may still get a useful JSON error body.
   let parsed: any = null;
   try {
     parsed = typeof data === 'string' ? JSON.parse(data) : data;
   } catch {
-    // data wasn't valid JSON — ignore
+    // ignore
   }
 
   if (error) {
@@ -194,9 +192,8 @@ export const AdminService = {
     return data;
   },
   // AI Agent Settings
-  getAgentSettings: async (clientId: string) =>
-    // Public (auth: false) — explicitly clear Authorization to avoid "Invalid JWT"
-    invokeEdgeFunction('get-agent-settings', { client_id: clientId }, { headers: { Authorization: '' } }),
+  // Keep default invoke behavior so Authorization is sent; the function itself is public (auth: false).
+  getAgentSettings: async (clientId: string) => invokeEdgeFunction('get-agent-settings', { client_id: clientId }),
   saveAgentSettings: async (settings: any) => invokeEdgeFunction('save-agent-settings', settings),
 
   disconnectGoogleCalendar: async (clientId: string) => {
