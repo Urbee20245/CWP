@@ -7,6 +7,7 @@ import { supabase } from '../integrations/supabase/client';
 import { Settings, ShieldCheck, ArrowRight, Loader2, MessageSquare, Phone, Globe, Zap, Info, AlertTriangle, Clock, CheckCircle2, Calendar } from 'lucide-react';
 import ClientTwilioIntegration from '../components/ClientTwilioIntegration';
 import ClientCalendarIntegration from '../components/ClientCalendarIntegration'; // NEW IMPORT
+import ClientLeadIngestion from '../components/ClientLeadIngestion';
 import { Link } from 'react-router-dom';
 
 interface VoiceIntegration {
@@ -142,6 +143,11 @@ const ClientSettings: React.FC = () => {
               {/* Google Calendar Integration Card */}
               <div className="bg-white rounded-2xl shadow-lg border border-slate-200 overflow-hidden group p-8">
                 {clientId && <ClientCalendarIntegration clientId={clientId} />}
+              </div>
+
+              {/* Leads API Card */}
+              <div className="bg-white rounded-2xl shadow-lg border border-slate-200 overflow-hidden group p-8">
+                {clientId && <ClientLeadIngestion clientId={clientId} />}
               </div>
 
               {/* Twilio Integration Card */}
