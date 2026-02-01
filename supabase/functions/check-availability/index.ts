@@ -149,6 +149,21 @@ serve(async (req) => {
 
         if (!freeBusyResponse.ok) {
             console.error('[check-availability] Free/busy API error:', freeBusyData);
+
+            // If scopes are missing or auth fails, mark needs_reauth so UI stops showing "Connected".
+            if (freeBusyResponse.status === 401 || freeBusyResponse.status === 403) {
+                const reason = freeBusyData?.error?.errors?.[0]?.reason || freeBusyData?.error?.status || 'calendar_api_auth_error';
+                const message = freeBusyData?.error?.message || 'Calendar API authorization failed.';
+                await supabaseAdmin
+                    .from('client_google_calendar')
+                    .update({
+                        connection_status: 'needs_reauth',
+                        reauth_reason: reason,
+                        last_error: message,
+                    })
+                    .eq('client_id', clientId);
+            }
+
             return jsonResponse({
                 result: 'I am having trouble checking the calendar right now. Can I take your number and have someone call you back?',
             });

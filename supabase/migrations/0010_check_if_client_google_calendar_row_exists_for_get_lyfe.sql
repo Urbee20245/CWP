@@ -1,0 +1,1 @@
+select c.business_name, g.connection_status, g.google_access_token, g.google_refresh_token from public.client_google_calendar g join public.clients c on c.id=g.client_id where c.business_name='GET LYFE' limit 1;

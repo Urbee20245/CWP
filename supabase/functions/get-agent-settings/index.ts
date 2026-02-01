@@ -54,11 +54,18 @@ serve(async (req) => {
         }
 
         // Check Google Calendar connection status
+        // Guardrail: "connected" is only true if refresh_token_present is true.
         const { data: calendarStatus } = await supabaseAdmin
             .from('client_google_calendar')
-            .select('connection_status, calendar_id, last_synced_at')
+            .select('connection_status, calendar_id, last_synced_at, refresh_token_present, reauth_reason, last_error')
             .eq('client_id', client_id)
             .maybeSingle();
+
+        const calendarConnected = !!(
+            calendarStatus &&
+            calendarStatus.connection_status === 'connected' &&
+            calendarStatus.refresh_token_present === true
+        );
 
         // Check voice integration status
         const { data: voiceStatus } = await supabaseAdmin
@@ -76,10 +83,13 @@ serve(async (req) => {
             recent_events: recentEvents || [],
             integrations: {
                 google_calendar: calendarStatus ? {
-                    connected: calendarStatus.connection_status === 'connected',
+                    connected: calendarConnected,
                     calendar_id: calendarStatus.calendar_id,
                     last_synced: calendarStatus.last_synced_at,
-                } : { connected: false },
+                    status: calendarStatus.connection_status,
+                    reauth_reason: calendarStatus.reauth_reason,
+                    last_error: calendarStatus.last_error,
+                } : { connected: false, status: 'disconnected' },
                 retell: voiceStatus ? {
                     configured: !!voiceStatus.retell_agent_id,
                     agent_id: voiceStatus.retell_agent_id,

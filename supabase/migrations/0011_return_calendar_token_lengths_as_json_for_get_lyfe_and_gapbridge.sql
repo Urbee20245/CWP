@@ -1,0 +1,1 @@
+select json_agg(row_to_json(t)) from (select c.business_name, g.connection_status, length(g.google_access_token) as access_len, length(g.google_refresh_token) as refresh_len, g.calendar_id from public.client_google_calendar g join public.clients c on c.id=g.client_id where c.business_name in ('GET LYFE','GAPBRIDGE') order by c.business_name) t;

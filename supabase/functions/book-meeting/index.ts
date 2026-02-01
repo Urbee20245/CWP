@@ -137,13 +137,32 @@ serve(async (req) => {
             });
 
             const freeBusyData = await freeBusyResponse.json();
-            const calendarId = tokenData.calendarId || 'primary';
-            const busyPeriods = freeBusyData.calendars?.[calendarId]?.busy || [];
 
-            if (busyPeriods.length > 0) {
-                return jsonResponse({
-                    result: 'It looks like that time slot was just taken. Would you like to check availability again for another time?',
-                });
+            if (!freeBusyResponse.ok) {
+                console.error('[book-meeting] Free/busy API error:', freeBusyData);
+
+                if (freeBusyResponse.status === 401 || freeBusyResponse.status === 403) {
+                    const reason = freeBusyData?.error?.errors?.[0]?.reason || freeBusyData?.error?.status || 'calendar_api_auth_error';
+                    const message = freeBusyData?.error?.message || 'Calendar API authorization failed.';
+                    await supabaseAdmin
+                        .from('client_google_calendar')
+                        .update({
+                            connection_status: 'needs_reauth',
+                            reauth_reason: reason,
+                            last_error: message,
+                        })
+                        .eq('client_id', clientId);
+                }
+                // Continue without Calendar availability check
+            } else {
+                const calendarId = tokenData.calendarId || 'primary';
+                const busyPeriods = freeBusyData.calendars?.[calendarId]?.busy || [];
+
+                if (busyPeriods.length > 0) {
+                    return jsonResponse({
+                        result: 'It looks like that time slot was just taken. Would you like to check availability again for another time?',
+                    });
+                }
             }
         }
 

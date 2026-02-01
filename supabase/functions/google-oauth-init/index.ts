@@ -23,9 +23,13 @@ serve(async (req) => {
       return errorResponse('Client ID is required.', 400);
     }
 
-    // Request Calendar events + Sheets scopes
+    // Scopes:
+    // - calendar.events: create events (booking)
+    // - calendar.events.freebusy: check availability via freeBusy endpoint
+    // - spreadsheets: optional lead logging to Google Sheets
     const scope = [
       'https://www.googleapis.com/auth/calendar.events',
+      'https://www.googleapis.com/auth/calendar.events.freebusy',
       'https://www.googleapis.com/auth/spreadsheets'
     ].join(' ');
 
