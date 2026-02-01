@@ -44,9 +44,10 @@ async function extractEdgeFunctionErrorMessage(error: any, parsedBody: any) {
   return error?.message || 'Edge Function call failed.';
 }
 
-const invokeEdgeFunction = async (functionName: string, payload: any) => {
+const invokeEdgeFunction = async (functionName: string, payload: any, options?: { headers?: Record<string, string> }) => {
   const { data, error } = await supabase.functions.invoke(functionName, {
     body: payload,
+    headers: options?.headers,
   });
 
   // Parse data regardless of error — on non-2xx, the SDK sets error but
@@ -193,7 +194,9 @@ export const AdminService = {
     return data;
   },
   // AI Agent Settings
-  getAgentSettings: async (clientId: string) => invokeEdgeFunction('get-agent-settings', { client_id: clientId }),
+  getAgentSettings: async (clientId: string) => 
+    // This function is public (auth: false); explicitly clear Authorization to avoid "Invalid JWT".
+    invokeEdgeFunction('get-agent-settings', { client_id: clientId }, { headers: { Authorization: '' } }),
   saveAgentSettings: async (settings: any) => invokeEdgeFunction('save-agent-settings', settings),
 
   disconnectGoogleCalendar: async (clientId: string) => {
