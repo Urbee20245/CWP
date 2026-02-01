@@ -123,7 +123,23 @@ const Login: React.FC = () => {
   };
 
   return (
-    <div className="min-h-screen flex items-center justify-center bg-slate-50 p-4">
+    <div className="min-h-screen bg-slate-50 p-4 pt-24 flex items-center justify-center relative">
+      {/* Top bar with Return link and Logo */}
+      <div className="fixed top-0 left-0 right-0 p-4">
+        <div className="max-w-6xl mx-auto flex items-center justify-between">
+          <a href="/" className="text-sm text-indigo-600 hover:text-indigo-700 font-medium">
+            ← Return to homepage
+          </a>
+          <a href="/">
+            <img
+              src="/CWPlogolight.png"
+              alt="Custom Websites Plus"
+              className="h-8 w-auto"
+            />
+          </a>
+        </div>
+      </div>
+
       <div className="w-full max-w-md bg-white border border-slate-200 rounded-2xl shadow-sm p-6">
         <h1 className="text-2xl font-bold text-slate-900 mb-1">Welcome Back</h1>
         <p className="text-sm text-slate-600 mb-6">Sign in to your account</p>
@@ -229,7 +245,7 @@ const Login: React.FC = () => {
                     </button>
                   </form>
                   <p className="text-[11px] text-slate-500 mt-2">
-                    We’ll email you a secure link to reset your password.
+                    We'll email you a secure link to reset your password.
                   </p>
                 </div>
               )}
