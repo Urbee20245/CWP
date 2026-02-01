@@ -1,20 +1,28 @@
 "use client";
 
 import React, { useEffect, useMemo, useState } from "react";
-import { Auth } from "@supabase/auth-ui-react";
-import { ThemeSupa } from "@supabase/auth-ui-shared";
 import { supabase } from "../integrations/supabase/client";
 import { Loader2, Mail, Lock, CheckCircle2, AlertTriangle, X } from "lucide-react";
+import { useLocation, useNavigate } from "react-router-dom";
 
 const getResetRedirect = () => {
   if (typeof window !== "undefined" && window.location?.origin) {
     return `${window.location.origin}/login?reset=1`;
   }
-  // Fallback path (will be recalculated on mount)
   return "/login?reset=1";
 };
 
 const Login: React.FC = () => {
+  const navigate = useNavigate();
+  const location = useLocation() as any;
+  const redirectTo = location?.state?.from?.pathname || "/back-office";
+
+  // Sign-in form
+  const [email, setEmail] = useState("");
+  const [password, setPassword] = useState("");
+  const [signingIn, setSigningIn] = useState(false);
+  const [signInError, setSignInError] = useState<string | null>(null);
+
   // Forgot-password UI
   const [showReset, setShowReset] = useState(false);
   const [resetEmail, setResetEmail] = useState("");
@@ -28,13 +36,10 @@ const Login: React.FC = () => {
   const [updatingPassword, setUpdatingPassword] = useState(false);
   const [updateMessage, setUpdateMessage] = useState<{ type: "success" | "error"; text: string } | null>(null);
 
-  // Compute redirect lazily and keep in state to avoid window access at module load
+  // Reset link redirect (computed safely on mount)
   const [resetRedirect, setResetRedirect] = useState<string>(getResetRedirect());
-
   useEffect(() => {
-    // Ensure redirect is correct after mount
     setResetRedirect(getResetRedirect());
-    // Detect query flag if returning from reset link
     const params = new URLSearchParams(window.location.search);
     if (params.get("reset") === "1") {
       setIsRecoveryMode(true);
@@ -52,6 +57,25 @@ const Login: React.FC = () => {
       data.subscription.unsubscribe();
     };
   }, []);
+
+  const handleSignIn = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setSignInError(null);
+    if (!email || !password) {
+      setSignInError("Please enter your email and password.");
+      return;
+    }
+    setSigningIn(true);
+    try {
+      const { error } = await supabase.auth.signInWithPassword({ email, password });
+      if (error) throw error;
+      navigate(redirectTo, { replace: true });
+    } catch (err: any) {
+      setSignInError(err?.message || "Failed to sign in.");
+    } finally {
+      setSigningIn(false);
+    }
+  };
 
   const handleSendReset = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -98,25 +122,6 @@ const Login: React.FC = () => {
     }
   };
 
-  const authAppearance = useMemo(
-    () => ({
-      theme: ThemeSupa,
-      variables: {
-        default: {
-          colors: {
-            brand: "#4f46e5",
-            brandAccent: "#4338ca",
-          },
-          radii: {
-            borderRadiusButton: "8px",
-            inputBorderRadius: "8px",
-          },
-        },
-      },
-    }),
-    []
-  );
-
   return (
     <div className="min-h-screen flex items-center justify-center bg-slate-50 p-4">
       <div className="w-full max-w-md bg-white border border-slate-200 rounded-2xl shadow-sm p-6">
@@ -125,7 +130,45 @@ const Login: React.FC = () => {
 
         {!isRecoveryMode ? (
           <>
-            <Auth supabaseClient={supabase} providers={[]} appearance={authAppearance} theme="light" />
+            <form onSubmit={handleSignIn} className="space-y-3">
+              {signInError && (
+                <div className="p-2 text-sm rounded border bg-red-50 text-red-800 border-red-200">
+                  <span className="inline-flex items-center gap-2">
+                    <AlertTriangle className="w-4 h-4" /> {signInError}
+                  </span>
+                </div>
+              )}
+              <div>
+                <label className="block text-xs font-medium text-slate-600 mb-1">Email</label>
+                <input
+                  type="email"
+                  value={email}
+                  onChange={(e) => setEmail(e.target.value)}
+                  className="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm focus:ring-2 focus:ring-indigo-500"
+                  placeholder="you@company.com"
+                  autoComplete="email"
+                />
+              </div>
+              <div>
+                <label className="block text-xs font-medium text-slate-600 mb-1">Password</label>
+                <input
+                  type="password"
+                  value={password}
+                  onChange={(e) => setPassword(e.target.value)}
+                  className="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm focus:ring-2 focus:ring-indigo-500"
+                  placeholder="••••••••"
+                  autoComplete="current-password"
+                />
+              </div>
+              <button
+                type="submit"
+                disabled={signingIn}
+                className="w-full inline-flex items-center justify-center gap-2 px-4 py-2 bg-indigo-600 text-white text-sm font-semibold rounded-lg hover:bg-indigo-700 disabled:opacity-50"
+              >
+                {signingIn ? <Loader2 className="w-4 h-4 animate-spin" /> : <Lock className="w-4 h-4" />}
+                {signingIn ? "Signing in..." : "Sign in"}
+              </button>
+            </form>
 
             {/* Forgot password */}
             <div className="mt-4">
