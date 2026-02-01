@@ -10,9 +10,12 @@ interface ClientCalendarIntegrationProps {
 }
 
 interface CalendarStatus {
-    connection_status: 'connected' | 'disconnected';
-    calendar_id: string;
-    updated_at: string;
+  connection_status: 'connected' | 'disconnected' | 'needs_reauth';
+  calendar_id: string;
+  updated_at: string;
+  refresh_token_present?: boolean;
+  reauth_reason?: string | null;
+  last_error?: string | null;
 }
 
 const sleep = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
@@ -90,10 +93,11 @@ const ClientCalendarIntegration: React.FC<ClientCalendarIntegrationProps> = ({ c
   // Detect success flag after returning from Google OAuth
   useEffect(() => {
     const params = new URLSearchParams(window.location.search);
-    if (params.get('status') === 'success') {
+    const oauthStatus = params.get('status');
+    if (oauthStatus === 'success') {
       setNotice('Google authorized successfully. Calendar and Sheets access are connected.');
-      // Optionally remove the flag from URL (not required)
-      // history.replaceState(null, '', window.location.pathname);
+    } else if (oauthStatus === 'needs_reauth') {
+      setNotice('Google authorized, but we still need one-time re-authorization to enable calendar access.');
     }
   }, []);
 
@@ -116,7 +120,7 @@ const ClientCalendarIntegration: React.FC<ClientCalendarIntegrationProps> = ({ c
     setError(null);
     try {
       await ClientIntegrationService.disconnectGoogleCalendar(clientId);
-      setStatus(prev => prev ? { ...prev, connection_status: 'disconnected' } : null);
+      await fetchStatus();
       setNotice(null);
       setIsProcessing(false);
     } catch (e: any) {
@@ -125,7 +129,8 @@ const ClientCalendarIntegration: React.FC<ClientCalendarIntegrationProps> = ({ c
     }
   };
 
-  const isConnected = status?.connection_status === 'connected';
+  const isConnected = status?.connection_status === 'connected' && status?.refresh_token_present === true;
+  const needsReauth = status?.connection_status === 'needs_reauth' || (status?.connection_status === 'connected' && status?.refresh_token_present === false);
 
   if (isLoading) {
     return <div className="flex justify-center items-center h-20"><Loader2 className="w-6 h-6 animate-spin text-indigo-600" /></div>;
@@ -158,10 +163,12 @@ const ClientCalendarIntegration: React.FC<ClientCalendarIntegrationProps> = ({ c
             <p className="font-bold text-emerald-800">Calendar Connected</p>
           </div>
           <p className="text-sm text-emerald-700">
-            Events will be automatically created in your calendar: <span className="font-mono font-semibold">{status.calendar_id}</span>
+            Events will be automatically created in your calendar: <span className="font-mono font-semibold">{status?.calendar_id || 'primary'}</span>
           </p>
-          <p className="text-xs text-slate-500">Last Synced: {format(new Date(status.updated_at), 'MMM dd, yyyy h:mm a')}</p>
-          
+          {status?.updated_at && (
+            <p className="text-xs text-slate-500">Last Updated: {format(new Date(status.updated_at), 'MMM dd, yyyy h:mm a')}</p>
+          )}
+
           <button
             onClick={handleDisconnect}
             disabled={isProcessing}
@@ -175,17 +182,34 @@ const ClientCalendarIntegration: React.FC<ClientCalendarIntegrationProps> = ({ c
         <div className="p-4 bg-slate-50 border border-slate-200 rounded-xl space-y-3">
           <div className="flex items-center gap-2">
             <Calendar className="w-5 h-5 text-slate-500" />
-            <p className="font-bold text-slate-700">Not Connected</p>
+            <p className="font-bold text-slate-700">{needsReauth ? 'Needs Re-Authorization' : 'Not Connected'}</p>
           </div>
-          <div className="p-3 bg-amber-50 border border-amber-200 rounded-lg text-sm text-amber-800 flex items-start gap-2">
-            <Info className="w-4 h-4 mt-0.5" />
-            <div>
-              <p className="font-semibold">Heads up: Google hasn't verified this app yet.</p>
-              <p className="text-xs mt-1">
-                When Google shows the "Google hasn't verified this app" page, click "Advanced" and then "Continue" to proceed. This is expected until verification is complete.
-              </p>
+
+          {needsReauth ? (
+            <div className="p-3 bg-amber-50 border border-amber-200 rounded-lg text-sm text-amber-800 flex items-start gap-2">
+              <Info className="w-4 h-4 mt-0.5" />
+              <div>
+                <p className="font-semibold">One-time fix required</p>
+                <p className="text-xs mt-1">
+                  We need you to reconnect Google once so we can securely store a refresh token and required calendar permissions.
+                </p>
+                {status?.last_error && (
+                  <p className="text-xs mt-1"><span className="font-semibold">Last error:</span> {status.last_error}</p>
+                )}
+              </div>
             </div>
-          </div>
+          ) : (
+            <div className="p-3 bg-amber-50 border border-amber-200 rounded-lg text-sm text-amber-800 flex items-start gap-2">
+              <Info className="w-4 h-4 mt-0.5" />
+              <div>
+                <p className="font-semibold">Heads up: Google hasn't verified this app yet.</p>
+                <p className="text-xs mt-1">
+                  When Google shows the "Google hasn't verified this app" page, click "Advanced" and then "Continue" to proceed.
+                </p>
+              </div>
+            </div>
+          )}
+
           <p className="text-sm text-slate-600">
             Connect your Google Calendar (and Sheets) to automatically book appointments and log caller info.
           </p>
@@ -195,7 +219,7 @@ const ClientCalendarIntegration: React.FC<ClientCalendarIntegrationProps> = ({ c
             className="w-full py-3 bg-indigo-600 text-white rounded-lg font-semibold hover:bg-indigo-700 transition-colors disabled:opacity-50 flex items-center justify-center gap-2"
           >
             {isProcessing ? <Loader2 className="w-5 h-5 animate-spin" /> : <ExternalLink className="w-5 h-5" />}
-            Connect Google Calendar
+            {needsReauth ? 'Reconnect Google Calendar' : 'Connect Google Calendar'}
           </button>
         </div>
       )}

@@ -64,7 +64,14 @@ interface WebhookEvent {
 }
 
 interface IntegrationStatus {
-  google_calendar: { connected: boolean; calendar_id?: string; last_synced?: string };
+  google_calendar: {
+    connected: boolean;
+    calendar_id?: string;
+    last_synced?: string;
+    status?: string;
+    reauth_reason?: string | null;
+    last_error?: string | null;
+  };
   retell: { configured: boolean; agent_id?: string; voice_status?: string; phone_number?: string };
 }
 
@@ -222,7 +229,7 @@ const AdminAgentSettings: React.FC = () => {
         const [{ data: calendarRow }, { data: voiceRow }] = await Promise.all([
           supabase
             .from('client_google_calendar')
-            .select('connection_status, calendar_id, last_synced_at')
+            .select('connection_status, calendar_id, last_synced_at, status, reauth_reason, last_error')
             .eq('client_id', clientId)
             .maybeSingle(),
           supabase
@@ -238,6 +245,9 @@ const AdminAgentSettings: React.FC = () => {
                 connected: calendarRow.connection_status === 'connected',
                 calendar_id: calendarRow.calendar_id,
                 last_synced: calendarRow.last_synced_at,
+                status: calendarRow.status,
+                reauth_reason: calendarRow.reauth_reason,
+                last_error: calendarRow.last_error,
               }
             : { connected: false },
           retell: voiceRow
@@ -525,7 +535,18 @@ const AdminAgentSettings: React.FC = () => {
                       <Calendar className={`w-4 h-4 ${integrations.google_calendar.connected ? 'text-green-600' : 'text-amber-600'}`} />
                       <span className="text-sm font-medium">Google Calendar</span>
                     </div>
-                    <p className="text-xs mt-1 text-slate-600">{integrations.google_calendar.connected ? `Connected (${integrations.google_calendar.calendar_id || 'primary'})` : 'Not connected'}</p>
+                    <p className="text-xs mt-1 text-slate-600">
+                      {integrations.google_calendar.connected
+                        ? `Connected (${integrations.google_calendar.calendar_id || 'primary'})`
+                        : (integrations.google_calendar.status === 'needs_reauth'
+                            ? 'Needs re-authorization'
+                            : 'Not connected')}
+                    </p>
+                    {!integrations.google_calendar.connected && integrations.google_calendar.last_error && (
+                      <p className="text-[11px] mt-1 text-slate-500">
+                        Last error: {integrations.google_calendar.last_error}
+                      </p>
+                    )}
                   </div>
                   <div className={`p-3 rounded-lg border ${integrations.retell.configured ? 'border-green-200 bg-green-50' : 'border-amber-200 bg-amber-50'}`}>
                     <div className="flex items-center gap-2">

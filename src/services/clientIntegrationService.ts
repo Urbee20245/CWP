@@ -128,7 +128,7 @@ export const ClientIntegrationService = {
   getGoogleCalendarStatus: async (clientId: string) => {
     const { data, error } = await supabase
         .from('client_google_calendar')
-        .select('connection_status, calendar_id, updated_at')
+        .select('connection_status, calendar_id, updated_at, refresh_token_present, reauth_reason, last_error')
         .eq('client_id', clientId)
         .maybeSingle();
 
@@ -142,6 +142,11 @@ export const ClientIntegrationService = {
         .update({
             connection_status: 'disconnected',
             google_access_token: '',
+            google_refresh_token: '',
+            refresh_token_present: false,
+            access_token_expires_at: null,
+            reauth_reason: null,
+            last_error: null,
             last_synced_at: new Date().toISOString()
         })
         .eq('client_id', clientId);

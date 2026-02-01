@@ -25,18 +25,39 @@ serve(async (req) => {
   try {
     const url = new URL(req.url);
     const code = url.searchParams.get('code');
-    const state = url.searchParams.get('state'); // client_id
+    const stateToken = url.searchParams.get('state');
 
-    if (!code || !state) {
+    if (!code || !stateToken) {
       console.error('[google-oauth-callback] Missing code or state.');
-      return new Response('OAuth failed: Missing authorization code or client state.', { status: 400, headers: corsHeaders });
+      return new Response('OAuth failed: Missing authorization code or state.', { status: 400, headers: corsHeaders });
     }
     if (!GOOGLE_CLIENT_ID || !GOOGLE_CLIENT_SECRET || !SUPABASE_URL) {
       console.error('[google-oauth-callback] Missing Google or Supabase configuration.');
       return new Response('Server configuration error.', { status: 500, headers: corsHeaders });
     }
 
-    const clientId = state;
+    // Resolve client_id from one-time state token
+    const { data: stateRow, error: stateErr } = await supabaseAdmin
+      .from('google_oauth_states')
+      .select('client_id, expires_at')
+      .eq('state_token', stateToken)
+      .maybeSingle();
+
+    if (stateErr || !stateRow) {
+      console.error('[google-oauth-callback] Invalid or unknown state token.', { message: stateErr?.message });
+      return new Response('OAuth failed: Invalid state.', { status: 400, headers: corsHeaders });
+    }
+
+    if (stateRow.expires_at && new Date(stateRow.expires_at).getTime() < Date.now()) {
+      console.error('[google-oauth-callback] State token expired.');
+      return new Response('OAuth failed: State expired. Please reconnect.', { status: 400, headers: corsHeaders });
+    }
+
+    const clientId = stateRow.client_id;
+
+    // One-time use: delete state
+    await supabaseAdmin.from('google_oauth_states').delete().eq('state_token', stateToken);
+
     const redirectUri = `${SUPABASE_URL}/functions/v1/google-oauth-callback`;
     console.log(`[google-oauth-callback] Received code for client ${clientId}. Exchanging tokens.`);
 
@@ -121,7 +142,6 @@ serve(async (req) => {
 
     console.log(`[google-oauth-callback] Connection saved for client ${clientId}. refresh_token_present=${refreshTokenPresent}`);
 
-    // Redirect back to the client settings page with status flag
     const dest = `${CLIENT_REDIRECT_URL}?status=${refreshTokenPresent ? 'success' : 'needs_reauth'}&client_id=${clientId}`;
     return Response.redirect(dest, 303);
 
