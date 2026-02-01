@@ -1,226 +1,249 @@
 "use client";
 
-import React, { useState, useRef } from 'react';
-import { Bot, Loader2, LogIn, UserPlus, ArrowLeft, AlertTriangle } from 'lucide-react';
-import { useNavigate, Link } from 'react-router-dom';
-import { useAuth } from '../hooks/useAuth';
-import ReCAPTCHA from 'react-google-recaptcha';
-import { AuthService } from '../services/authService';
-import { supabase } from '../integrations/supabase/client'; // Import supabase client
+import React, { useEffect, useMemo, useState } from "react";
+import { Auth } from "@supabase/auth-ui-react";
+import { ThemeSupa } from "@supabase/auth-ui-shared";
+import { supabase } from "../integrations/supabase/client";
+import { Loader2, Mail, Lock, CheckCircle2, AlertTriangle, X } from "lucide-react";
 
-// NOTE: This key must be set in .env.local or Vercel environment variables
-const RECAPTCHA_SITE_KEY = import.meta.env.VITE_RECAPTCHA_SITE_KEY;
+const RESET_REDIRECT = `${window.location.origin}/login?reset=1`;
 
-export default function LoginPage() {
-  const [email, setEmail] = useState('');
-  const [password, setPassword] = useState('');
-  const [loading, setLoading] = useState(false);
-  const [error, setError] = useState<string | null>(null);
-  const [isSignupMode, setIsSignupMode] = useState(false);
-  const [signupSuccess, setSignupSuccess] = useState(false);
-  const [isRedirecting, setIsRedirecting] = useState(false); 
-  
-  // Ref for reCAPTCHA component to manually trigger token generation
-  const recaptchaRef = useRef<ReCAPTCHA>(null);
-  
-  const navigate = useNavigate();
-  const { user, isLoading } = useAuth(); 
+const Login: React.FC = () => {
+  const [showReset, setShowReset] = useState(false);
+  const [resetEmail, setResetEmail] = useState("");
+  const [resetLoading, setResetLoading] = useState(false);
+  const [resetMessage, setResetMessage] = useState<{ type: "success" | "error"; text: string } | null>(null);
 
-  // If user is already logged in and session is loaded, redirect immediately
-  if (!isLoading && user) {
-    navigate('/back-office', { replace: true });
-    return null; 
-  }
-  
-  const executeRecaptcha = async (action: 'login' | 'signup') => {
-    if (!recaptchaRef.current) {
-        setError("reCAPTCHA is not initialized. Please ensure VITE_RECAPTCHA_SITE_KEY is set.");
-        return null;
+  const [isRecoveryMode, setIsRecoveryMode] = useState(false);
+  const [newPassword, setNewPassword] = useState("");
+  const [confirmPassword, setConfirmPassword] = useState("");
+  const [updatingPassword, setUpdatingPassword] = useState(false);
+  const [updateMessage, setUpdateMessage] = useState<{ type: "success" | "error"; text: string } | null>(null);
+
+  // Determine if we landed here from the reset link
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search);
+    if (params.get("reset") === "1") {
+      setIsRecoveryMode(true);
     }
-    
-    // Manually execute reCAPTCHA v3 to get a token
-    const token = await recaptchaRef.current.execute(action);
-    console.log("recaptcha_token_acquired");
-    return token;
+  }, []);
+
+  // Ask Supabase to mark the session in recovery mode if there is a type=recovery event
+  useEffect(() => {
+    const sub = supabase.auth.onAuthStateChange((event) => {
+      if (event === "PASSWORD_RECOVERY") {
+        setIsRecoveryMode(true);
+      }
+    });
+    return () => {
+      sub.data.subscription.unsubscribe();
+    };
+  }, []);
+
+  const handleSendReset = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setResetMessage(null);
+    if (!resetEmail || !/\S+@\S+\.\S+/.test(resetEmail)) {
+      setResetMessage({ type: "error", text: "Please enter a valid email address." });
+      return;
+    }
+    setResetLoading(true);
+    try {
+      const { error } = await supabase.auth.resetPasswordForEmail(resetEmail, { redirectTo: RESET_REDIRECT });
+      if (error) throw error;
+      setResetMessage({ type: "success", text: "Password reset email sent. Please check your inbox." });
+    } catch (err: any) {
+      setResetMessage({ type: "error", text: err?.message || "Failed to send reset email." });
+    } finally {
+      setResetLoading(false);
+    }
   };
 
-  async function handleAuth(e: React.FormEvent) {
+  const handleUpdatePassword = async (e: React.FormEvent) => {
     e.preventDefault();
-    setLoading(true);
-    setError(null);
-    setSignupSuccess(false);
-    
-    console.log("login_start");
-    
-    const actionType = isSignupMode ? 'signup' : 'login';
-    const recaptchaToken = await executeRecaptcha(actionType);
-
-    if (!recaptchaToken) {
-        setLoading(false);
-        return; 
+    setUpdateMessage(null);
+    if (!newPassword || newPassword.length < 6) {
+      setUpdateMessage({ type: "error", text: "Password must be at least 6 characters." });
+      return;
     }
-
+    if (newPassword !== confirmPassword) {
+      setUpdateMessage({ type: "error", text: "Passwords do not match." });
+      return;
+    }
+    setUpdatingPassword(true);
     try {
-        console.log("edge_invoke_start");
-        const result = actionType === 'login' 
-            ? await AuthService.secureLogin(email, password, recaptchaToken)
-            : await AuthService.secureSignup(email, password, recaptchaToken);
-            
-        console.log(`edge_invoke_result: ${actionType} success`, result);
-        
-        if (actionType === 'login' || (actionType === 'signup' && result.access_token)) {
-            
-            // STEP 2: Set the session explicitly on the client
-            if (result.access_token && result.refresh_token) {
-                await supabase.auth.setSession({
-                    access_token: result.access_token,
-                    refresh_token: result.refresh_token,
-                });
-                console.log("session_set_success");
-            }
-            
-            // STEP 3: Redirect immediately after session is set
-            console.log("redirecting_after_login");
-            setIsRedirecting(true); 
-            navigate('/back-office', { replace: true });
-            
-        } else if (actionType === 'signup' && result.user && !result.access_token) {
-            // Standard signup flow requiring email confirmation
-            setSignupSuccess(true);
-            setEmail('');
-            setPassword('');
-        }
-        
-    } catch (e: any) {
-        console.error("Authentication failed:", e);
-        
-        let userFriendlyError = e.message || `${actionType} failed. Check credentials or try again.`;
-        
-        // Check for the generic security error message from the Edge Function
-        if (userFriendlyError.includes('Invalid login credentials')) {
-            userFriendlyError = "The email or password you entered is incorrect. Please double-check your credentials.";
-        }
-        
-        setError(userFriendlyError);
+      const { error } = await supabase.auth.updateUser({ password: newPassword });
+      if (error) throw error;
+      setUpdateMessage({ type: "success", text: "Password updated successfully. You can now sign in." });
+      setIsRecoveryMode(false);
+      setNewPassword("");
+      setConfirmPassword("");
+    } catch (err: any) {
+      setUpdateMessage({ type: "error", text: err?.message || "Failed to update password." });
     } finally {
-        setLoading(false);
-        recaptchaRef.current?.reset();
+      setUpdatingPassword(false);
     }
-  }
+  };
 
-  // STEP 4: Combine global loading and local redirect loading
-  if (isLoading || isRedirecting) {
-    return (
-        <div className="min-h-screen flex items-center justify-center pt-20">
-            <Loader2 className="w-8 h-8 animate-spin text-indigo-600" />
-        </div>
-    );
-  }
+  const authAppearance = useMemo(
+    () => ({
+      theme: ThemeSupa,
+      variables: {
+        default: {
+          colors: {
+            brand: "#4f46e5",
+            brandAccent: "#4338ca",
+          },
+          radii: {
+            borderRadiusButton: "8px",
+            inputBorderRadius: "8px",
+          },
+        },
+      },
+    }),
+    []
+  );
 
   return (
-    <div className="min-h-screen bg-slate-50 flex items-center justify-center p-4 pt-20">
-        <div className="w-full max-w-md mx-auto bg-white rounded-2xl shadow-xl p-8 border border-slate-100">
-            <Link to="/" className="text-indigo-600 hover:text-indigo-800 text-sm font-medium mb-4 flex items-center gap-1">
-                <ArrowLeft className="w-4 h-4" /> Back to Homepage
-            </Link>
-            
-            <div className="text-center mb-8">
-                <div className="w-12 h-12 bg-slate-900 rounded-full flex items-center justify-center mx-auto mb-3">
-                    <Bot className="w-6 h-6 text-indigo-400" />
-                </div>
-                <h1 className="text-2xl font-bold text-slate-900">{isSignupMode ? 'Create Account' : 'Client Portal Login'}</h1>
-                <p className="text-sm text-slate-500">Access your project dashboard.</p>
-            </div>
+    <div className="min-h-screen flex items-center justify-center bg-slate-50 p-4">
+      <div className="w-full max-w-md bg-white border border-slate-200 rounded-2xl shadow-sm p-6">
+        <h1 className="text-2xl font-bold text-slate-900 mb-1">Welcome Back</h1>
+        <p className="text-sm text-slate-600 mb-6">Sign in to your account</p>
 
-            {signupSuccess ? (
-                <div className="p-6 bg-emerald-50 border border-emerald-200 rounded-xl text-center">
-                    <h3 className="font-bold text-emerald-800 mb-2">Success! Check your email.</h3>
-                    <p className="text-sm text-emerald-700">A confirmation link has been sent to your email address. Please click the link to complete registration.</p>
-                    <button type="button" onClick={() => { setIsSignupMode(false); setSignupSuccess(false); }} className="mt-4 text-indigo-600 text-sm font-medium hover:text-indigo-800">
-                        Return to Login
+        {!isRecoveryMode ? (
+          <>
+            <Auth supabaseClient={supabase} providers={[]} appearance={authAppearance} theme="light" onlyThirdPartyProviders={false} />
+
+            {/* Forgot password */}
+            <div className="mt-4">
+              {!showReset ? (
+                <button
+                  onClick={() => setShowReset(true)}
+                  className="text-sm text-indigo-600 hover:text-indigo-700 font-medium"
+                >
+                  Forgot your password?
+                </button>
+              ) : (
+                <div className="mt-3 p-3 border border-slate-200 rounded-lg bg-slate-50">
+                  <div className="flex items-center justify-between mb-2">
+                    <p className="text-sm font-semibold text-slate-800 flex items-center gap-2">
+                      <Mail className="w-4 h-4 text-indigo-600" /> Reset your password
+                    </p>
+                    <button onClick={() => setShowReset(false)} className="text-slate-400 hover:text-slate-600">
+                      <X className="w-4 h-4" />
                     </button>
-                </div>
-            ) : (
-                <form onSubmit={handleAuth} className="space-y-6">
-                    {error && (
-                        <div className="p-3 mb-4 bg-red-100 border border-red-300 text-red-800 rounded-lg text-sm flex items-center gap-2">
-                            <AlertTriangle className="w-4 h-4" />
-                            {error}
-                        </div>
-                    )}
-
-                    <div>
-                        <label className="block text-sm font-bold text-slate-700 mb-2">Email</label>
-                        <input
-                            type="email"
-                            value={email}
-                            onChange={(e) => setEmail(e.target.value)}
-                            placeholder="your@email.com"
-                            className="w-full px-4 py-3 border border-slate-300 rounded-xl focus:border-indigo-500 focus:ring-2 focus:ring-indigo-200 outline-none transition-all"
-                            required
-                            disabled={loading}
-                        />
-                    </div>
-
-                    <div>
-                        <label className="block text-sm font-bold text-slate-700 mb-2">Password</label>
-                        <input
-                            type="password"
-                            value={password}
-                            onChange={(e) => setPassword(e.target.value)}
-                            placeholder="••••••••"
-                            className="w-full px-4 py-3 border border-slate-300 rounded-xl focus:border-indigo-500 focus:ring-2 focus:ring-indigo-200 outline-none transition-all"
-                            required
-                            disabled={loading}
-                        />
-                    </div>
-                    
-                    {/* Invisible ReCAPTCHA v3 Component */}
-                    <div className="flex justify-center">
-                        {RECAPTCHA_SITE_KEY ? (
-                            <ReCAPTCHA
-                                ref={recaptchaRef}
-                                sitekey={RECAPTCHA_SITE_KEY}
-                                size="invisible" // Use invisible size for v3
-                            />
-                        ) : (
-                            <div className="p-3 bg-amber-50 border border-amber-200 rounded-lg text-sm text-amber-800">
-                                ⚠️ ReCAPTCHA Key Missing. Set VITE_RECAPTCHA_SITE_KEY.
-                            </div>
-                        )}
-                    </div>
-
-                    <button
-                        type="submit"
-                        disabled={loading}
-                        className="w-full py-4 bg-gradient-to-r from-indigo-600 to-purple-600 text-white rounded-xl font-bold text-lg hover:shadow-xl hover:shadow-indigo-200 transition-all disabled:opacity-50 flex items-center justify-center gap-2"
+                  </div>
+                  {resetMessage && (
+                    <div
+                      className={`mb-2 p-2 text-sm rounded border ${
+                        resetMessage.type === "success"
+                          ? "bg-emerald-50 text-emerald-800 border-emerald-200"
+                          : "bg-red-50 text-red-800 border-red-200"
+                      }`}
                     >
-                        {loading ? (
-                            <>
-                                <Loader2 className="w-5 h-5 animate-spin" />
-                                {isSignupMode ? 'Signing Up...' : 'Signing In...'}
-                            </>
-                        ) : (
-                            <>
-                                {isSignupMode ? <UserPlus className="w-5 h-5" /> : <LogIn className="w-5 h-5" />}
-                                {isSignupMode ? 'Sign Up' : 'Log In'}
-                            </>
-                        )}
-                    </button>
-                    
-                    <div className="text-center pt-4 border-t border-slate-100">
-                        <button 
-                            type="button"
-                            onClick={() => setIsSignupMode(p => !p)}
-                            className="text-sm text-indigo-600 hover:text-indigo-800 font-medium"
-                            disabled={loading}
-                        >
-                            {isSignupMode ? 'Already have an account? Log In' : 'Need an account? Sign Up'}
-                        </button>
+                      {resetMessage.type === "success" ? (
+                        <span className="inline-flex items-center gap-2">
+                          <CheckCircle2 className="w-4 h-4" /> {resetMessage.text}
+                        </span>
+                      ) : (
+                        <span className="inline-flex items-center gap-2">
+                          <AlertTriangle className="w-4 h-4" /> {resetMessage.text}
+                        </span>
+                      )}
                     </div>
-                </form>
+                  )}
+                  <form onSubmit={handleSendReset} className="space-y-3">
+                    <div>
+                      <label className="block text-xs font-medium text-slate-600 mb-1">Email address</label>
+                      <input
+                        type="email"
+                        value={resetEmail}
+                        onChange={(e) => setResetEmail(e.target.value)}
+                        placeholder="you@company.com"
+                        className="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm focus:ring-2 focus:ring-indigo-500"
+                      />
+                    </div>
+                    <button
+                      type="submit"
+                      disabled={resetLoading}
+                      className="w-full inline-flex items-center justify-center gap-2 px-4 py-2 bg-indigo-600 text-white text-sm font-semibold rounded-lg hover:bg-indigo-700 disabled:opacity-50"
+                    >
+                      {resetLoading ? <Loader2 className="w-4 h-4 animate-spin" /> : <Mail className="w-4 h-4" />}
+                      {resetLoading ? "Sending..." : "Send reset link"}
+                    </button>
+                  </form>
+                  <p className="text-[11px] text-slate-500 mt-2">
+                    We’ll email you a secure link to reset your password.
+                  </p>
+                </div>
+              )}
+            </div>
+          </>
+        ) : (
+          // Password recovery UI
+          <div className="mt-2">
+            <div className="p-3 border border-slate-200 rounded-lg bg-slate-50 mb-3">
+              <p className="text-sm font-semibold text-slate-800 flex items-center gap-2">
+                <Lock className="w-4 h-4 text-indigo-600" /> Set a new password
+              </p>
+              <p className="text-xs text-slate-600 mt-1">
+                Enter a new password for your account. After updating, you can sign in as usual.
+              </p>
+            </div>
+            {updateMessage && (
+              <div
+                className={`mb-3 p-2 text-sm rounded border ${
+                  updateMessage.type === "success"
+                    ? "bg-emerald-50 text-emerald-800 border-emerald-200"
+                    : "bg-red-50 text-red-800 border-red-200"
+                }`}
+              >
+                {updateMessage.type === "success" ? (
+                  <span className="inline-flex items-center gap-2">
+                    <CheckCircle2 className="w-4 h-4" /> {updateMessage.text}
+                  </span>
+                ) : (
+                  <span className="inline-flex items-center gap-2">
+                    <AlertTriangle className="w-4 h-4" /> {updateMessage.text}
+                  </span>
+                )}
+              </div>
             )}
-        </div>
+            <form onSubmit={handleUpdatePassword} className="space-y-3">
+              <div>
+                <label className="block text-xs font-medium text-slate-600 mb-1">New password</label>
+                <input
+                  type="password"
+                  value={newPassword}
+                  onChange={(e) => setNewPassword(e.target.value)}
+                  className="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm focus:ring-2 focus:ring-indigo-500"
+                  placeholder="Enter a new password"
+                />
+              </div>
+              <div>
+                <label className="block text-xs font-medium text-slate-600 mb-1">Confirm new password</label>
+                <input
+                  type="password"
+                  value={confirmPassword}
+                  onChange={(e) => setConfirmPassword(e.target.value)}
+                  className="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm focus:ring-2 focus:ring-indigo-500"
+                  placeholder="Re-enter your new password"
+                />
+              </div>
+              <button
+                type="submit"
+                disabled={updatingPassword}
+                className="w-full inline-flex items-center justify-center gap-2 px-4 py-2 bg-indigo-600 text-white text-sm font-semibold rounded-lg hover:bg-indigo-700 disabled:opacity-50"
+              >
+                {updatingPassword ? <Loader2 className="w-4 h-4 animate-spin" /> : <Lock className="w-4 h-4" />}
+                {updatingPassword ? "Updating..." : "Update password"}
+              </button>
+            </form>
+          </div>
+        )}
+      </div>
     </div>
   );
-}
+};
+
+export default Login;
