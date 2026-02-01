@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useCallback, useEffect, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import AdminLayout from '../components/AdminLayout';
 import { AdminService } from '../services/adminService';
 import { supabase } from '../integrations/supabase/client';
@@ -23,9 +23,12 @@ import {
   Shield,
   Wand2,
   Zap,
-  X
+  X,
+  Wrench,
 } from 'lucide-react';
 import { renderPromptTemplate, getPromptCategories, TemplateCategory, buildRoleDirectives } from '../utils/promptTemplates';
+import { useAuth } from '../hooks/useAuth';
+import { formatDistanceToNowStrict } from 'date-fns';
 
 interface Client {
   id: string;
@@ -75,6 +78,21 @@ interface IntegrationStatus {
   retell: { configured: boolean; agent_id?: string; voice_status?: string; phone_number?: string };
 }
 
+interface CalendarDiagnostics {
+  client_id: string;
+  retell_agent_id: string | null;
+  retell_voice_status: string | null;
+  google_calendar: {
+    connection_status: string;
+    refresh_token_present: boolean;
+    access_token_expires_at: string | null;
+    calendar_id: string;
+    last_successful_calendar_call: string | null;
+    last_error: string | null;
+    reauth_reason: string | null;
+  };
+}
+
 const SUPABASE_FUNCTIONS_BASE = 'https://nvgumhlewbqynrhlkqhx.supabase.co/functions/v1';
 
 const DEFAULT_SETTINGS: Omit<AgentSettings, 'client_id'> = {
@@ -111,12 +129,21 @@ const TIMEZONE_OPTIONS = [
 ];
 
 const AdminAgentSettings: React.FC = () => {
+  const { profile } = useAuth();
+  const isAdmin = profile?.role === 'admin';
+
   const [clients, setClients] = useState<Client[]>([]);
   const [selectedClientId, setSelectedClientId] = useState<string>('');
   const [settings, setSettings] = useState<AgentSettings | null>(null);
   const [webhookUrls, setWebhookUrls] = useState<Record<string, string> | null>(null);
   const [webhookEvents, setWebhookEvents] = useState<WebhookEvent[]>([]);
   const [integrations, setIntegrations] = useState<IntegrationStatus | null>(null);
+
+  // Calendar Diagnostics
+  const [showCalendarDiagnostics, setShowCalendarDiagnostics] = useState(false);
+  const [calendarDiag, setCalendarDiag] = useState<CalendarDiagnostics | null>(null);
+  const [calendarDiagLoading, setCalendarDiagLoading] = useState(false);
+  const [calendarDiagSpinner, setCalendarDiagSpinner] = useState(false);
 
   const [isLoading, setIsLoading] = useState(true);
   const [isSaving, setIsSaving] = useState(false);
@@ -179,8 +206,6 @@ const AdminAgentSettings: React.FC = () => {
     if (!clientId) return;
     setIsLoading(true);
     try {
-      // Prefer the secure Edge Function so admins always see integration status
-      // even if RLS/admin JWT claims aren't present in the browser session.
       let edge: any = null;
       try {
         edge = await AdminService.getAgentSettings(clientId);
@@ -190,7 +215,6 @@ const AdminAgentSettings: React.FC = () => {
 
       const [{ data: settingsRow, error: settingsErr }, { data: recentEvents }, { data: clientRow }] = await Promise.all([
         supabase.from('ai_agent_settings').select('*').eq('client_id', clientId).maybeSingle(),
-        // If edge function worked, use its events; otherwise fall back to direct.
         edge?.recent_events
           ? Promise.resolve({ data: edge.recent_events })
           : supabase
@@ -209,23 +233,17 @@ const AdminAgentSettings: React.FC = () => {
         : { ...DEFAULT_SETTINGS, client_id: clientId };
 
       setSettings(merged);
-
-      // Webhook URLs: prefer edge function output (always correct base)
       setWebhookUrls(edge?.webhook_urls ? edge.webhook_urls : buildWebhookUrls());
-
       setWebhookEvents(recentEvents || []);
 
-      // Auto-fill assistant fields from client record
       if (clientRow) {
         setBusinessPhone(clientRow.phone || '');
         setLocation(clientRow.address || '');
       }
 
-      // Integration status: prefer edge function output
       if (edge?.integrations) {
         setIntegrations(edge.integrations);
       } else {
-        // Direct fallback
         const [{ data: calendarRow }, { data: voiceRow }] = await Promise.all([
           supabase
             .from('client_google_calendar')
@@ -268,7 +286,6 @@ const AdminAgentSettings: React.FC = () => {
     }
   }, []);
 
-  // Add: retrieve integrations handler (server-side only for accurate status)
   const handleRetrieveIntegrations = async () => {
     if (!selectedClientId) return;
     setIsRetrieving(true);
@@ -288,16 +305,84 @@ const AdminAgentSettings: React.FC = () => {
     }
   };
 
+  const fetchCalendarDiagnostics = useCallback(async (clientId: string) => {
+    if (!clientId || !isAdmin) return;
+    setCalendarDiagLoading(true);
+    setCalendarDiagSpinner(true);
+    const spinnerTimeout = setTimeout(() => setCalendarDiagSpinner(false), 1000);
+
+    try {
+      const data = await AdminService.getCalendarDiagnostics(clientId);
+      setCalendarDiag(data as CalendarDiagnostics);
+    } catch (e: any) {
+      showFeedback('error', e?.message || 'Failed to load calendar diagnostics');
+      setCalendarDiag(null);
+    } finally {
+      clearTimeout(spinnerTimeout);
+      setCalendarDiagLoading(false);
+      setCalendarDiagSpinner(false);
+    }
+  }, [isAdmin]);
+
+  const handleForceReauth = async () => {
+    if (!selectedClientId) return;
+    if (!confirm('Force Google Calendar re-authorization for this client?')) return;
+    try {
+      await AdminService.forceCalendarReauth(selectedClientId);
+      await fetchCalendarDiagnostics(selectedClientId);
+      showFeedback('success', 'Forced calendar status to needs_reauth.');
+    } catch (e: any) {
+      showFeedback('error', e?.message || 'Failed to force re-auth');
+    }
+  };
+
   useEffect(() => {
     if (selectedClientId) {
       fetchSettings(selectedClientId);
+      setCalendarDiag(null);
+      if (showCalendarDiagnostics && isAdmin) {
+        fetchCalendarDiagnostics(selectedClientId);
+      }
     } else {
       setSettings(null);
       setWebhookUrls(null);
       setWebhookEvents([]);
       setIntegrations(null);
+      setCalendarDiag(null);
     }
-  }, [selectedClientId, fetchSettings]);
+  }, [selectedClientId, fetchSettings, showCalendarDiagnostics, isAdmin, fetchCalendarDiagnostics]);
+
+  const calendarBadges = useMemo(() => {
+    if (!calendarDiag) return [] as { label: string; cls: string }[];
+    const gc = calendarDiag.google_calendar;
+    const badges: { label: string; cls: string }[] = [];
+
+    const usable = gc.connection_status === 'connected' && gc.refresh_token_present === true;
+    const needsReauth = gc.refresh_token_present === false || gc.connection_status === 'needs_reauth';
+    const hasError = !!gc.last_error;
+
+    if (usable) badges.push({ label: 'Connected', cls: 'bg-emerald-100 text-emerald-800 border-emerald-200' });
+    if (needsReauth) badges.push({ label: 'Needs Re-Authorization', cls: 'bg-amber-100 text-amber-800 border-amber-200' });
+    if (hasError) badges.push({ label: 'Error', cls: 'bg-red-100 text-red-800 border-red-200' });
+
+    if (badges.length === 0) badges.push({ label: 'Not Connected', cls: 'bg-slate-100 text-slate-700 border-slate-200' });
+    return badges;
+  }, [calendarDiag]);
+
+  const formatExpires = (iso: string | null) => {
+    if (!iso) return '—';
+    const d = new Date(iso);
+    if (Number.isNaN(d.getTime())) return '—';
+    const inWords = formatDistanceToNowStrict(d, { addSuffix: true });
+    return inWords;
+  };
+
+  const formatTs = (iso: string | null) => {
+    if (!iso) return 'never';
+    const d = new Date(iso);
+    if (Number.isNaN(d.getTime())) return 'never';
+    return d.toLocaleString();
+  };
 
   const updateSetting = <K extends keyof AgentSettings>(key: K, value: AgentSettings[K]) => {
     if (!settings) return;
@@ -400,14 +485,12 @@ const AdminAgentSettings: React.FC = () => {
         phone: businessPhone,
         services: servicesOffered,
         special_instructions: specialInstructions,
-        // Encourage richer extraction
         include: ['business_name', 'services', 'contact', 'faqs', 'value_props', 'booking_policies'],
         min_detail: 'high',
       });
 
       if (!result?.success) throw new Error(result?.error || 'Generation failed');
 
-      // Augment the generated prompt with role rules and business context
       const rules = buildRoleDirectives({
         bookCalls: roleBookCalls,
         askQuestions: roleAskQuestions,
@@ -435,7 +518,6 @@ const AdminAgentSettings: React.FC = () => {
     }
   };
 
-  // Helper to build template context
   const buildTemplateContext = () => {
     const clientName = clients.find(c => c.id === selectedClientId)?.business_name || '';
     return {
@@ -566,6 +648,109 @@ const AdminAgentSettings: React.FC = () => {
                     {isRetrieving ? 'Retrieving...' : 'Retrieve Latest Status'}
                   </button>
                 </div>
+              </div>
+            )}
+
+            {/* Calendar Diagnostics (Admins only) */}
+            {isAdmin && (
+              <div className="bg-white rounded-xl border border-slate-200 p-6 mb-6">
+                <button
+                  onClick={() => setShowCalendarDiagnostics((v) => !v)}
+                  className="w-full flex items-center justify-between text-sm font-semibold text-slate-700"
+                >
+                  <span className="flex items-center gap-2">
+                    <Wrench className="w-4 h-4 text-indigo-500" /> Calendar Diagnostics
+                  </span>
+                  {showCalendarDiagnostics ? <ChevronUp className="w-4 h-4" /> : <ChevronDown className="w-4 h-4" />}
+                </button>
+
+                {showCalendarDiagnostics && (
+                  <div className="mt-4">
+                    <div className="flex items-start justify-between gap-3 mb-4">
+                      <div className="text-xs text-slate-600">
+                        <span
+                          className="inline-flex items-center gap-1"
+                          title="Connected means a refresh token exists and calendar access is usable."
+                        >
+                          <Info className="w-3 h-3" /> Connected means a refresh token exists and calendar access is usable.
+                        </span>
+                      </div>
+                      <div className="flex items-center gap-2">
+                        <button
+                          onClick={() => fetchCalendarDiagnostics(selectedClientId)}
+                          disabled={!selectedClientId || calendarDiagLoading}
+                          className="inline-flex items-center gap-2 px-3 py-1.5 text-sm border border-slate-300 rounded-lg hover:bg-slate-50 disabled:opacity-50"
+                        >
+                          {calendarDiagSpinner ? <Loader2 className="w-4 h-4 animate-spin" /> : <RefreshCw className="w-4 h-4" />}
+                          Refresh Status
+                        </button>
+                        <button
+                          onClick={handleForceReauth}
+                          disabled={!selectedClientId}
+                          className="inline-flex items-center gap-2 px-3 py-1.5 text-sm border border-amber-300 text-amber-800 rounded-lg hover:bg-amber-50 disabled:opacity-50"
+                        >
+                          <AlertTriangle className="w-4 h-4" /> Force Re-Auth
+                        </button>
+                      </div>
+                    </div>
+
+                    {!selectedClientId ? (
+                      <p className="text-sm text-slate-500">Select a client to view diagnostics.</p>
+                    ) : !calendarDiag ? (
+                      <div className="text-sm text-slate-500">
+                        {calendarDiagLoading ? 'Loading diagnostics…' : 'Click "Refresh Status" to load diagnostics.'}
+                      </div>
+                    ) : (
+                      <div className="space-y-3">
+                        <div className="flex flex-wrap items-center gap-2">
+                          {calendarBadges.map((b) => (
+                            <span key={b.label} className={`px-2 py-0.5 text-xs rounded border ${b.cls}`}>{b.label}</span>
+                          ))}
+                        </div>
+
+                        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                          <div className="p-3 rounded-lg border border-slate-200 bg-slate-50">
+                            <p className="text-xs text-slate-500">connection_status</p>
+                            <p className="text-sm font-mono text-slate-900">{calendarDiag.google_calendar.connection_status}</p>
+                          </div>
+                          <div className="p-3 rounded-lg border border-slate-200 bg-slate-50">
+                            <p className="text-xs text-slate-500">refresh_token_present</p>
+                            <p className="text-sm font-mono text-slate-900">{String(calendarDiag.google_calendar.refresh_token_present)}</p>
+                          </div>
+                          <div className="p-3 rounded-lg border border-slate-200 bg-slate-50">
+                            <p className="text-xs text-slate-500">access_token_expires_at</p>
+                            <p className="text-sm text-slate-900">
+                              {calendarDiag.google_calendar.access_token_expires_at
+                                ? `${formatTs(calendarDiag.google_calendar.access_token_expires_at)} (${formatExpires(calendarDiag.google_calendar.access_token_expires_at)})`
+                                : '—'}
+                            </p>
+                          </div>
+                          <div className="p-3 rounded-lg border border-slate-200 bg-slate-50">
+                            <p className="text-xs text-slate-500">calendar_id</p>
+                            <p className="text-sm font-mono text-slate-900">{calendarDiag.google_calendar.calendar_id || 'primary'}</p>
+                          </div>
+                          <div className="p-3 rounded-lg border border-slate-200 bg-slate-50">
+                            <p className="text-xs text-slate-500">last_successful_calendar_call</p>
+                            <p className="text-sm text-slate-900">{formatTs(calendarDiag.google_calendar.last_successful_calendar_call)}</p>
+                          </div>
+                          <div className="p-3 rounded-lg border border-slate-200 bg-slate-50">
+                            <p className="text-xs text-slate-500">last_error</p>
+                            <p className="text-sm text-slate-900">{calendarDiag.google_calendar.last_error || '—'}</p>
+                          </div>
+                          <div className="p-3 rounded-lg border border-slate-200 bg-slate-50">
+                            <p className="text-xs text-slate-500">reauth_reason</p>
+                            <p className="text-sm text-slate-900">{calendarDiag.google_calendar.reauth_reason || '—'}</p>
+                          </div>
+                          <div className="p-3 rounded-lg border border-slate-200 bg-slate-50">
+                            <p className="text-xs text-slate-500">Retell agent / voice</p>
+                            <p className="text-sm font-mono text-slate-900">{calendarDiag.retell_agent_id || '—'}</p>
+                            <p className="text-xs text-slate-500 mt-1">{calendarDiag.retell_voice_status || '—'}</p>
+                          </div>
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                )}
               </div>
             )}
 

@@ -61,6 +61,20 @@ async function markConnectedOk(clientId: string) {
   }
 }
 
+export async function markCalendarCallSuccess(clientId: string) {
+  try {
+    await supabaseAdmin
+      .from('client_google_calendar')
+      .update({
+        last_successful_calendar_call: new Date().toISOString(),
+        last_error: null,
+      })
+      .eq('client_id', clientId);
+  } catch (e: any) {
+    console.error('[googleCalendarService] Failed to set last_successful_calendar_call:', e?.message);
+  }
+}
+
 function isExpired(expiresAt: string | null | undefined) {
   if (!expiresAt) return true;
   const t = new Date(expiresAt).getTime();
@@ -235,6 +249,8 @@ export async function createCalendarEvent(clientId: string, eventDetails: EventD
     throw new Error(`Google Calendar API Error: ${msg}`);
   }
 
+  await markCalendarCallSuccess(clientId);
+
   console.log(`[googleCalendarService] Event created successfully: ${responseData.htmlLink}`);
   return { success: true, eventLink: responseData.htmlLink };
 }
@@ -242,4 +258,5 @@ export async function createCalendarEvent(clientId: string, eventDetails: EventD
 export const GoogleCalendarService = {
   getAndRefreshTokens,
   createCalendarEvent,
+  markCalendarCallSuccess,
 };

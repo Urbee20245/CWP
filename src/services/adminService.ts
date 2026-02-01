@@ -95,7 +95,7 @@ async function callPublicEdgeFunction(functionName: string, payload: any) {
   try {
     json = JSON.parse(text);
   } catch {
-    // leave as null, handle below
+    // leave as null
   }
 
   if (!res.ok) {
@@ -230,10 +230,15 @@ export const AdminService = {
     if (error) throw error;
     return data;
   },
+
   // AI Agent Settings
-  // Use direct public fetch to avoid Invalid JWT from expired browser sessions
+  // Public read helper (avoids expired JWT issues)
   getAgentSettings: async (clientId: string) => callPublicEdgeFunction('get-agent-settings', { client_id: clientId }),
   saveAgentSettings: async (settings: any) => invokeEdgeFunction('save-agent-settings', settings),
+
+  // Calendar Diagnostics (admin-only)
+  getCalendarDiagnostics: async (clientId: string) => invokeEdgeFunction('get-calendar-diagnostics', { client_id: clientId }),
+  forceCalendarReauth: async (clientId: string) => invokeEdgeFunction('force-calendar-reauth', { client_id: clientId }),
 
   disconnectGoogleCalendar: async (clientId: string) => {
     const { error } = await supabase
