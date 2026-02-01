@@ -15,6 +15,7 @@ import CreateInvoiceForm from '../components/CreateInvoiceForm'; // NEW IMPORT
 import { format } from 'date-fns';
 import { ensureArray } from '../utils/dataNormalization'; // Import normalization utility
 import { useAuth } from '../hooks/useAuth';
+import AdminClientLeadsPanel from '../components/AdminClientLeadsPanel';
 
 interface ProjectSummary {
   id: string;
@@ -241,7 +242,7 @@ const AdminClientDetail: React.FC = () => {
     setAdminNotes(mergedClient.notes || '');
     setIsLoading(false);
   }, [id]);
-  
+
   const fetchProducts = async () => {
     const { data, error } = await supabase
       .from('billing_products')
@@ -299,7 +300,7 @@ const AdminClientDetail: React.FC = () => {
             });
             
         if (logError) console.error('Error logging service action:', logError);
-        
+
         alert(`Client service status updated to ${newStatus}! Notification sent.`);
         setServiceActionNote('');
         fetchClientData();
@@ -928,7 +929,7 @@ const AdminClientDetail: React.FC = () => {
                             <button
                                 onClick={handleDisconnectCalendar}
                                 disabled={isProcessing}
-                                className="flex-1 mt-2 py-2 bg-amber-500 text-white rounded-lg text-sm font-semibold hover:bg-amber-600 transition-colors disabled:opacity-50 flex items-center justify-center gap-2"
+                                className="flex-shrink-0 px-3 py-1 bg-white text-emerald-600 rounded-lg text-xs font-semibold hover:bg-emerald-100 transition-colors disabled:opacity-50 flex items-center justify-center gap-2"
                             >
                                 {isProcessing ? <Loader2 className="w-4 h-4 animate-spin" /> : <X className="w-4 h-4" />}
                                 Disconnect
@@ -936,7 +937,7 @@ const AdminClientDetail: React.FC = () => {
                             <button
                                 onClick={handleResetCalendar}
                                 disabled={isProcessing}
-                                className="flex-1 mt-2 py-2 bg-red-500 text-white rounded-lg text-sm font-semibold hover:bg-red-600 transition-colors disabled:opacity-50 flex items-center justify-center gap-2"
+                                className="flex-shrink-0 px-3 py-1 bg-red-500 text-white rounded-lg text-xs font-semibold hover:bg-red-600 transition-colors disabled:opacity-50 flex items-center justify-center gap-2"
                             >
                                 {isProcessing ? <Loader2 className="w-4 h-4 animate-spin" /> : <Trash2 className="w-4 h-4" />}
                                 Reset
@@ -974,6 +975,13 @@ const AdminClientDetail: React.FC = () => {
                     {isServiceUpdating ? 'Saving...' : 'Save Notes'}
                 </button>
             </div>
+            
+            {/* Admin-only Leads API Management */}
+            {client && (
+              <div className="bg-white p-6 rounded-xl shadow-lg border border-slate-100">
+                <AdminClientLeadsPanel clientId={client.id} />
+              </div>
+            )}
           </div>
           
           <div className="lg:col-span-2 space-y-8">
@@ -985,7 +993,7 @@ const AdminClientDetail: React.FC = () => {
                     </h2>
                     
                     <form onSubmit={handleCreateReminder} className="space-y-3 mb-6 p-4 bg-slate-50 rounded-lg border border-slate-200">
-                        <h3 className="font-bold text-sm text-slate-900">Set New Reminder</h3>
+                        <h3 className="font-bold text-slate-900">Set New Reminder</h3>
                         <textarea
                             value={newReminderNote}
                             onChange={(e) => setNewReminderNote(e.target.value)}
@@ -1026,7 +1034,7 @@ const AdminClientDetail: React.FC = () => {
                             client.reminders.map(reminder => (
                                 <div key={reminder.id} className={`p-3 rounded-lg border flex justify-between items-center ${reminder.is_completed ? 'bg-emerald-50 border-emerald-200 opacity-70' : 'bg-red-50 border-red-200'}`}>
                                     <div className="flex-1 min-w-0 pr-4">
-                                        <p className={`font-bold text-sm ${reminder.is_completed ? 'text-emerald-800 line-through' : 'text-red-800'}`}>{reminder.note}</p>
+                                        <p className={`font-bold text-slate-900 ${reminder.is_completed ? 'line-through' : ''}`}>{reminder.note}</p>
                                         <p className="text-xs text-slate-600 mt-1">
                                             Due: {format(new Date(reminder.reminder_date), 'MMM dd, yyyy')} | Set by: {reminder.profiles?.full_name || 'Admin'}
                                         </p>
@@ -1110,7 +1118,7 @@ const AdminClientDetail: React.FC = () => {
                         <Link 
                           key={project.id} 
                           to={`/admin/projects/${project.id}`}
-                          className="block p-4 border border-slate-200 rounded-lg hover:bg-slate-50 transition-colors"
+                          className="block p-4 border border-slate-300 rounded-lg hover:bg-slate-100 transition-colors"
                         >
                           <div className="flex justify-between items-center mb-2">
                             <h3 className="font-bold text-slate-900">{project.title}</h3>
@@ -1223,89 +1231,6 @@ const AdminClientDetail: React.FC = () => {
                     
                     <div className="bg-white p-6 rounded-xl shadow-lg border border-slate-100">
                         <h2 className="text-xl font-bold mb-4 flex items-center gap-2 text-slate-900 border-b border-slate-100 pb-4">
-                            <DollarSign className="w-5 h-5 text-blue-600" /> Collect Deposit
-                        </h2>
-                        <form onSubmit={handleCollectDeposit} className="space-y-4">
-                            <div>
-                                <label className="block text-sm font-medium text-slate-700 mb-1">Deposit Amount (USD) *</label>
-                                <div className="relative">
-                                    <span className="absolute left-3 top-2.5 text-slate-500 text-sm">$</span>
-                                    <input
-                                        type="number"
-                                        value={depositAmount}
-                                        onChange={(e) => setDepositAmount(parseFloat(e.target.value) || '')}
-                                        className="w-full pl-6 pr-2 py-2 border border-slate-300 rounded-lg text-sm"
-                                        required
-                                        min="0.01"
-                                        step="0.01"
-                                        disabled={isProcessing}
-                                    />
-                                </div>
-                            </div>
-                            <div>
-                                <label className="block text-sm font-medium text-slate-700 mb-1">Description (Optional)</label>
-                                <input
-                                    type="text"
-                                    value={depositDescription}
-                                    onChange={(e) => setDepositDescription(e.target.value)}
-                                    placeholder="e.g., Project Kickoff Fee"
-                                    className="w-full p-2 border border-slate-300 rounded-lg text-sm"
-                                    disabled={isProcessing}
-                                />
-                            </div>
-                            <div className="flex items-center gap-2">
-                                <input
-                                    id="apply-future"
-                                    type="checkbox"
-                                    checked={applyDepositToFuture}
-                                    onChange={(e) => setApplyDepositToFuture(e.target.checked)}
-                                    className="w-4 h-4 text-indigo-600 border-slate-300 rounded focus:ring-indigo-500"
-                                    disabled={isProcessing}
-                                />
-                                <label htmlFor="apply-future" className="text-sm font-medium text-slate-700">
-                                    Apply as credit to future invoice
-                                </label>
-                            </div>
-                            <button 
-                                type="submit"
-                                disabled={isProcessing || !depositAmount}
-                                className="w-full py-2 bg-blue-600 text-white rounded-lg text-sm font-semibold hover:bg-blue-700 transition-colors disabled:opacity-50 flex items-center justify-center gap-2"
-                            >
-                                {isProcessing ? <Loader2 className="w-4 h-4 animate-spin" /> : <DollarSign className="w-4 h-4" />}
-                                Collect Deposit
-                            </button>
-                        </form>
-                    </div>
-                </div>
-
-                <div className="lg:col-span-2 space-y-8">
-                    
-                    {totalUnappliedCredit > 0 && (
-                        <div className="bg-emerald-50 p-4 rounded-xl border border-emerald-200">
-                            <h3 className="text-lg font-bold text-emerald-800 flex items-center gap-2">
-                                <CheckCircle2 className="w-5 h-5" /> Total Credit Available
-                            </h3>
-                            <p className="text-2xl font-bold text-emerald-600 mt-1">
-                                ${totalUnappliedCredit.toFixed(2)} USD
-                            </p>
-                            <p className="text-sm text-emerald-700 mt-2">
-                                This credit will be automatically applied to your next project invoice.
-                            </p>
-                        </div>
-                    )}
-                    
-                    {client && (
-                        <CreateInvoiceForm
-                            clientId={client.id}
-                            oneTimeProducts={oneTimeProducts}
-                            onInvoiceCreated={fetchClientData}
-                            isProcessing={isProcessing}
-                            setIsProcessing={setIsProcessing}
-                        />
-                    )}
-                    
-                    <div className="bg-white p-6 rounded-xl shadow-lg border border-slate-100">
-                        <h2 className="text-xl font-bold mb-4 flex items-center gap-2 text-slate-900 border-b border-slate-100 pb-4">
                             <Percent className="w-5 h-5 text-purple-600" /> Apply Discount to Invoice
                         </h2>
                         <form onSubmit={handleApplyDiscount} className="space-y-4">
@@ -1329,7 +1254,7 @@ const AdminClientDetail: React.FC = () => {
                                     <option value="">-- Select Invoice --</option>
                                     {openInvoices.map(invoice => (
                                         <option key={invoice.id} value={invoice.id}>
-                                            {invoice.status.toUpperCase()} - ${((invoice.amount_due || 0) / 100).toFixed(2)} (ID: {invoice.id.substring(0, 8)})
+                                            {invoice.status.toUpperCase()} - ${(invoice.amount_due || 0) / 100} (ID: {invoice.id.substring(0, 8)})
                                         </option>
                                     ))}
                                 </select>
@@ -1387,16 +1312,31 @@ const AdminClientDetail: React.FC = () => {
                         {client.deposits && client.deposits.length > 0 ? (
                           client.deposits.sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime()).map(deposit => (
                             <div key={deposit.id} className="flex flex-col md:flex-row justify-between items-start md:items-center text-sm p-3 bg-slate-50 rounded-lg border border-slate-100">
-                              <div className="flex-1 min-w-0 flex items-center gap-3">
-                                  <span className="font-medium text-slate-900">${(deposit.amount_cents / 100).toFixed(2)} USD</span>
-                                  <span className={`px-2 py-0.5 rounded-full text-xs font-semibold ${getStatusColor(deposit.status)}`}>
-                                    {deposit.status}
-                                  </span>
-                                  {deposit.applied_to_invoice_id && (
-                                      <span className={`px-2 py-0.5 rounded-full text-xs font-semibold ${getStatusColor('applied')}`}>
-                                        Applied
+                              <div className="flex-1 min-w-0">
+                                  <div className="flex items-center gap-2 mb-1">
+                                      <span className="font-medium text-slate-900">${(deposit.amount_cents / 100).toFixed(2)} USD</span>
+                                      <span className={`px-2 py-0.5 rounded-full text-xs font-semibold ${getStatusColor(deposit.status)}`}>
+                                        {deposit.status}
                                       </span>
-                                  )}
+                                      {deposit.applied_to_invoice_id && (
+                                          <span className={`px-2 py-0.5 rounded-full text-xs font-semibold ${getStatusColor('applied')}`}>
+                                              Applied
+                                          </span>
+                                      )}
+                                  </div>
+                                  <div className="flex items-center gap-2 text-xs text-slate-500">
+                                      <span>Created: {format(new Date(deposit.created_at), 'MMM dd, yyyy')}</span>
+                                      {deposit.stripe_invoice_id && (
+                                          <a 
+                                            href={`https://dashboard.stripe.com/invoices/${deposit.stripe_invoice_id}`} 
+                                            target="_blank" 
+                                            rel="noopener noreferrer" 
+                                            className="text-indigo-600 hover:underline flex items-center gap-1"
+                                          >
+                                              View Invoice <ExternalLink className="w-3 h-3" />
+                                          </a>
+                                      )}
+                                  </div>
                               </div>
                               <div className="flex items-center gap-2 mt-2 md:mt-0 flex-shrink-0">
                                   {deposit.status === 'pending' && (
@@ -1416,7 +1356,7 @@ const AdminClientDetail: React.FC = () => {
                                         rel="noopener noreferrer" 
                                         className="text-indigo-600 hover:underline flex items-center gap-1"
                                       >
-                                        View Invoice <ExternalLink className="w-3 h-3" />
+                                        <ExternalLink className="w-4 h-4" />
                                       </a>
                                   )}
                               </div>
@@ -1449,7 +1389,8 @@ const AdminClientDetail: React.FC = () => {
                                       )}
                                       {invoice.discounts && invoice.discounts.length > 0 && (
                                           <span className="px-2 py-0.5 rounded-full text-xs font-semibold bg-purple-100 text-purple-800 flex items-center gap-1">
-                                              <Percent className="w-3 h-3" /> Discount Applied
+                                              <Percent className="w-3 h-3" />
+                                              Discount Applied
                                           </span>
                                       )}
                                   </div>
@@ -1457,7 +1398,8 @@ const AdminClientDetail: React.FC = () => {
                                       <span>Created: {format(new Date(invoice.created_at), 'MMM dd, yyyy')}</span>
                                       {invoice.last_reminder_sent_at && (
                                           <span className="flex items-center gap-1">
-                                              • <Bell className="w-3 h-3 text-amber-500" /> Last Reminder: {format(new Date(invoice.last_reminder_sent_at), 'MMM dd')}
+                                              • <Bell className="w-3 h-3 text-amber-500" />
+                                              Last Reminder: {format(new Date(invoice.last_reminder_sent_at), 'MMM dd')}
                                           </span>
                                       )}
                                   </div>
