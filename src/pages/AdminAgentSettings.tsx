@@ -872,7 +872,7 @@ const AdminAgentSettings: React.FC = () => {
                     ) : (
                       <div className="space-y-3">
                         <div className="flex flex-wrap items-center gap-2">
-                          {googleBadges.map((b) => (
+                          {calendarBadges.map((b) => (
                             <span key={b.label} className={`px-2 py-0.5 text-xs rounded border ${b.cls}`}>{b.label}</span>
                           ))}
                           {calBadges.map((b) => (

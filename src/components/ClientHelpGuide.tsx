@@ -206,7 +206,7 @@ const ClientHelpGuide: React.FC<ClientHelpGuideProps> = ({ filter }) => {
                         <li>In Twilio Console, go to Messaging &rarr; Regulatory Compliance &rarr; A2P 10DLC.</li>
                         <li>Create a Business Profile using your legal business information.</li>
                         <li>Create a Messaging Campaign describing your use case.</li>
-                        <li>Provide an example message such as: “Hi {'{{Name}}'}, your appointment is confirmed for {'{{Date}}'} at {'{{Time}}'}. Reply STOP to opt out.”</li>
+                        <li>Provide an example message such as: "Hi {'{{Name}}'}, your appointment is confirmed for {'{{Date}}'} at {'{{Time}}'}. Reply STOP to opt out."</li>
                     </ul>
 
                     <h4 className="font-bold text-slate-900">PART E — Approval Timeline</h4>
@@ -221,6 +221,71 @@ const ClientHelpGuide: React.FC<ClientHelpGuideProps> = ({ filter }) => {
                 </div>
             ),
             keywords: 'twilio setup a2p 10dlc phone number voice sms billing purchase regulatory compliance credentials sid auth token',
+        },
+        
+        // NEW: Cal.com Integration Guide
+        {
+            id: 'calcom-integration',
+            title: 'Cal.com: Connect & Event Type ID',
+            icon: <Calendar className="w-5 h-5 text-indigo-600" />,
+            content: (
+                <div className="space-y-6 text-sm text-slate-700">
+                    <h4 className="font-bold text-slate-900">What does this integration do?</h4>
+                    <p>Connecting Cal.com lets your AI assistant check availability and book meetings directly into your Cal.com account.</p>
+
+                    <h4 className="font-bold text-slate-900">How to Connect Cal.com</h4>
+                    <ol className="list-decimal list-inside ml-4 space-y-2">
+                        <li>Go to <Link to="/client/settings" className="text-indigo-600 hover:underline font-semibold">Settings</Link>.</li>
+                        <li>Find the "Cal.com Integration" section.</li>
+                        <li>Click "Connect Cal.com" and complete the secure authorization flow.</li>
+                    </ol>
+
+                    <h4 className="font-bold text-slate-900">Event Type ID (Required)</h4>
+                    <p>After connecting, set your Default Event Type ID so bookings use the right meeting template:</p>
+                    <ul className="list-disc list-inside ml-4 space-y-1">
+                        <li>Open your event type in Cal.com and copy its numeric ID (from URL or settings).</li>
+                        <li>Paste it into the "Default Event Type ID" field in <Link to="/client/settings" className="text-indigo-600 hover:underline">Settings</Link>.</li>
+                    </ul>
+
+                    <div className="p-3 bg-amber-50 border border-amber-200 rounded-lg text-amber-800">
+                        <p className="font-bold">Heads up:</p>
+                        <p>If Cal.com shows "needs re-authorization," just click "Reconnect Cal.com" in Settings to refresh access.</p>
+                    </div>
+                </div>
+            ),
+            keywords: 'cal cal.com integration connect event type id booking availability',
+        },
+
+        // NEW: Appointment Fees & Payments
+        {
+            id: 'appointment-fees',
+            title: 'Appointment Fees & Payments',
+            icon: <DollarSign className="w-5 h-5 text-emerald-600" />,
+            content: (
+                <div className="space-y-6 text-sm text-slate-700">
+                    <h4 className="font-bold text-slate-900">When are fees required?</h4>
+                    <p>Some appointment types may include a booking fee. If a fee applies, you'll see the price before confirming the meeting.</p>
+
+                    <h4 className="font-bold text-slate-900">How payment works</h4>
+                    <ul className="list-disc list-inside ml-4 space-y-1">
+                        <li>Fees are processed securely via Stripe.</li>
+                        <li>You'll receive a hosted invoice or payment link to complete checkout.</li>
+                        <li>A receipt is automatically emailed after successful payment.</li>
+                    </ul>
+
+                    <h4 className="font-bold text-slate-900">Where to view invoices</h4>
+                    <p>Open <Link to="/client/billing" className="text-emerald-600 hover:underline font-semibold">Client Billing</Link> to view paid and outstanding invoices.</p>
+
+                    <div className="p-3 bg-slate-50 border border-slate-200 rounded-lg">
+                        <p className="font-bold text-slate-900">Tips</p>
+                        <ul className="list-disc list-inside ml-4 space-y-1">
+                            <li>If you need to cancel or reschedule a paid booking, contact your Project Manager.</li>
+                            <li>For troubleshooting payment links or receipts, check your email spam folder first.</li>
+                        </ul>
+                    </div>
+                </div>
+            ),
+            keywords: 'appointments fees payment stripe invoice billing paid booking',
         },
     ], []);
 
