@@ -13,6 +13,8 @@ const corsHeaders = {
   'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
 }
 
+const SUPPORT_EMAIL = 'support@customwebsiteplus.com';
+
 serve(async (req) => {
   if (req.method === 'OPTIONS') {
     return new Response('ok', { headers: corsHeaders })
@@ -89,10 +91,8 @@ serve(async (req) => {
       });
 
     if (dbError) {
-      console.error('❌ ERROR saving incoming email to DB:', dbError.message);
-      // Log the error but continue to send the email notification.
-    } else {
-      console.log('✅ Incoming email saved to database.');
+      console.error('[submit-contact-form] Error saving incoming email to DB:', dbError.message);
+      // Log the error but continue to send emails.
     }
     
     // --- Google Calendar Event Creation ---
@@ -119,9 +119,7 @@ serve(async (req) => {
                     const dateTimeString = `${preferredDate} ${preferredTime}`;
                     const parsedDate = parse(dateTimeString, 'yyyy-MM-dd h:mm a', new Date());
                     
-                    if (isNaN(parsedDate.getTime())) {
-                        console.error('❌ Calendar: Invalid date/time format.');
-                    } else {
+                    if (!isNaN(parsedDate.getTime())) {
                         const startTimeISO = formatISO(parsedDate);
                         const endTimeISO = formatISO(addMinutes(parsedDate, 30));
                         
@@ -134,16 +132,17 @@ serve(async (req) => {
                         };
                         
                         await GoogleCalendarService.createCalendarEvent(targetClientId, eventDetails);
-                        console.log('✅ Google Calendar event created successfully.');
+                    } else {
+                        console.error('[submit-contact-form] Calendar: Invalid date/time format.');
                     }
                 }
             }
         } catch (e) {
-            console.error('❌ Calendar Integration Failed:', e);
+            console.error('[submit-contact-form] Calendar Integration Failed:', e);
         }
     }
 
-    const htmlContent = `
+    const internalHtml = `
         <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
           <h2 style="color: #0EA5E9;">New ${formType} Submission</h2>
           <div style="background: #f9fafb; padding: 20px; border-radius: 8px; margin: 20px 0;">
@@ -174,21 +173,73 @@ serve(async (req) => {
         </div>
     `;
 
-    // Send all inquiries to Support (like the "send message" form behavior)
+    // 1) Email Support (internal notification)
     await sendPublicFormEmail(
-        'support@customwebsiteplus.com',
+        SUPPORT_EMAIL,
         subject,
-        htmlContent,
+        internalHtml,
         email
     );
 
+    // 2) Email the submitter (confirmation)
+    const isConsultation = formType === 'Consultation Request';
+    const clientSubject = isConsultation
+      ? 'We received your consultation request — Custom Websites Plus'
+      : 'We received your message — Custom Websites Plus';
+
+    const whenLine = preferredDate && preferredTime
+      ? `<p style="margin: 0;"><strong>Preferred time:</strong> ${preferredDate} at ${preferredTime} ET</p>`
+      : '';
+
+    const altWhenLine = alternateDate && alternateTime
+      ? `<p style="margin: 0;"><strong>Alternate time:</strong> ${alternateDate} at ${alternateTime} ET</p>`
+      : '';
+
+    const clientHtml = `
+      <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
+        <h2 style="color: #0EA5E9; margin-bottom: 8px;">Thanks, ${fullName} — we received your ${isConsultation ? 'consultation request' : 'message'}.</h2>
+        <p style="color:#334155; margin-top: 0;">This is a confirmation email with the details you submitted.</p>
+
+        <div style="background:#f9fafb; border: 1px solid #e5e7eb; padding: 16px; border-radius: 10px;">
+          ${businessName ? `<p style="margin: 0 0 8px 0;"><strong>Business:</strong> ${businessName}</p>` : ''}
+          ${whenLine}
+          ${altWhenLine}
+          <p style="margin: 8px 0 0 0;"><strong>Phone:</strong> ${phone || 'Not provided'}</p>
+          ${websiteUrl ? `<p style="margin: 8px 0 0 0;"><strong>Website:</strong> ${websiteUrl}</p>` : ''}
+        </div>
+
+        <div style="margin-top: 16px; background: white; padding: 16px; border-left: 4px solid #0EA5E9;">
+          <p style="margin: 0 0 6px 0;"><strong>Your message:</strong></p>
+          <p style="margin: 0; white-space: pre-wrap; color:#334155;">${message}</p>
+          ${projectDescription && projectDescription !== message ? `<hr style="border:none;border-top:1px solid #e5e7eb;margin:16px 0" /><p style="margin:0 0 6px 0;"><strong>Project description:</strong></p><p style="margin:0; white-space: pre-wrap; color:#334155;">${projectDescription}</p>` : ''}
+        </div>
+
+        <div style="margin-top: 18px; color:#64748b; font-size: 14px;">
+          <p style="margin:0;">Next steps:</p>
+          <ul style="margin: 8px 0 0 18px; padding: 0;">
+            <li>We will review your details.</li>
+            <li>${isConsultation ? 'We will confirm your consultation time.' : 'We will reply as soon as possible (usually within 24 hours).'}</li>
+            <li>If needed, we will follow up for any missing info.</li>
+          </ul>
+          <p style="margin-top: 12px;">If you need to add details, just reply to this email.</p>
+        </div>
+      </div>
+    `;
+
+    await sendPublicFormEmail(
+      email,
+      clientSubject,
+      clientHtml,
+      SUPPORT_EMAIL
+    );
+
     return new Response(
-      JSON.stringify({ success: true, message: 'Email sent successfully' }),
+      JSON.stringify({ success: true, message: 'Emails sent successfully' }),
       { status: 200, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
     )
 
   } catch (err: any) {
-    console.error('❌ ERROR IN CONTACT FORM FUNCTION:', err.message)
+    console.error('[submit-contact-form] ERROR:', err.message)
     
     return new Response(
       JSON.stringify({ 
