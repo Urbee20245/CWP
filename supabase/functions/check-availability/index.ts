@@ -66,6 +66,14 @@ serve(async (req) => {
       .eq('is_active', true)
       .maybeSingle();
 
+    if (agentSettings && agentSettings.can_check_availability === false) {
+      return jsonResponse({
+        result: 'Availability checking is not enabled right now. Please leave your contact information and someone will reach out to schedule.',
+      });
+    }
+
+    const calendarProvider: 'none' | 'cal' | 'google' = (agentSettings?.calendar_provider || 'none');
+
     const meetingDuration = agentSettings?.default_meeting_duration || 30;
     const bufferMinutes = agentSettings?.booking_buffer_minutes ?? 0;
     const maxAdvanceDays = agentSettings?.max_advance_booking_days || 60;
@@ -77,15 +85,6 @@ serve(async (req) => {
       "5": { "start": "09:00", "end": "17:00" },
     };
     const timezone = agentSettings?.timezone || 'America/New_York';
-
-    // Prefer Cal.com when connected; fall back to Google.
-    const { data: calConn } = await supabaseAdmin
-      .from('client_cal_calendar')
-      .select('connection_status, refresh_token_present, default_event_type_id')
-      .eq('client_id', clientId)
-      .maybeSingle();
-
-    const calUsable = !!(calConn && calConn.connection_status === 'connected' && calConn.refresh_token_present === true && calConn.default_event_type_id);
 
     const requestedDate = args.date || null;
     const daysAhead = Math.min(args.days_ahead || 3, maxAdvanceDays);
@@ -112,52 +111,72 @@ serve(async (req) => {
 
     let availableSlots: { date: string; time: string; datetime: string }[] = [];
 
-    if (calUsable) {
-      // Cal.com: ask Cal for available slots for the connected event type.
-      try {
-        const slots = await CalCalendarService.getAvailableSlots(
-          clientId,
-          String(calConn.default_event_type_id),
-          timeMin.toISOString(),
-          timeMax.toISOString(),
-          timezone,
-        );
-
-        // Cal slots format can vary; normalize to first 10 ISO times.
-        const flattened: string[] = [];
-        if (Array.isArray(slots)) {
-          for (const s of slots) {
-            if (typeof s === 'string') flattened.push(s);
-            else if (s?.start) flattened.push(String(s.start));
-          }
-        }
-
-        availableSlots = flattened.slice(0, 10).map((iso) => {
-          const d = new Date(iso);
-          const dateStr = d.toLocaleDateString('en-US', {
-            weekday: 'long',
-            month: 'long',
-            day: 'numeric',
-            timeZone: timezone,
-          });
-          const timeStr = d.toLocaleTimeString('en-US', {
-            hour: 'numeric',
-            minute: '2-digit',
-            timeZone: timezone,
-          });
-          return { date: dateStr, time: timeStr, datetime: d.toISOString() };
-        });
-      } catch (e: any) {
-        console.error('[check-availability] Cal.com slots lookup failed, falling back to Google:', e?.message);
-      }
+    if (calendarProvider === 'none') {
+      return jsonResponse({
+        result: 'Calendar booking has not been configured yet. Please leave your contact information and someone will reach out to schedule.',
+      });
     }
 
-    if (!availableSlots.length) {
+    if (calendarProvider === 'cal') {
+      const { data: calConn } = await supabaseAdmin
+        .from('client_cal_calendar')
+        .select('connection_status, refresh_token_present, default_event_type_id')
+        .eq('client_id', clientId)
+        .maybeSingle();
+
+      const calUsable = !!(
+        calConn &&
+        calConn.connection_status === 'connected' &&
+        calConn.refresh_token_present === true &&
+        calConn.default_event_type_id &&
+        String(calConn.default_event_type_id).trim()
+      );
+
+      if (!calUsable) {
+        return jsonResponse({
+          result: 'Cal.com is selected for booking, but it is not connected (or missing an Event Type). Please connect Cal.com in settings and try again.',
+        });
+      }
+
+      const slots = await CalCalendarService.getAvailableSlots(
+        clientId,
+        String(calConn.default_event_type_id),
+        timeMin.toISOString(),
+        timeMax.toISOString(),
+        timezone,
+      );
+
+      const flattened: string[] = [];
+      if (Array.isArray(slots)) {
+        for (const s of slots) {
+          if (typeof s === 'string') flattened.push(s);
+          else if (s?.start) flattened.push(String(s.start));
+        }
+      }
+
+      availableSlots = flattened.slice(0, 10).map((iso) => {
+        const d = new Date(iso);
+        const dateStr = d.toLocaleDateString('en-US', {
+          weekday: 'long',
+          month: 'long',
+          day: 'numeric',
+          timeZone: timezone,
+        });
+        const timeStr = d.toLocaleTimeString('en-US', {
+          hour: 'numeric',
+          minute: '2-digit',
+          timeZone: timezone,
+        });
+        return { date: dateStr, time: timeStr, datetime: d.toISOString() };
+      });
+    }
+
+    if (calendarProvider === 'google') {
       const tokenData = await GoogleCalendarService.getAndRefreshTokens(clientId);
 
       if (!tokenData) {
         return jsonResponse({
-          result: 'Calendar is not currently connected. Please leave your contact information and someone will reach out to schedule.',
+          result: 'Google Calendar is selected for booking, but it is not connected. Please connect Google Calendar in settings and try again.',
         });
       }
 
@@ -292,7 +311,7 @@ serve(async (req) => {
         retell_call_id: callId,
         external_id: callId,
         request_payload: { agent_id: agentId, args },
-        response_payload: { slots_found: availableSlots.length, provider: calUsable ? 'cal' : 'google' },
+        response_payload: { slots_found: availableSlots.length, provider: calendarProvider },
         status: 'completed',
         duration_ms: Date.now() - startTime,
       });

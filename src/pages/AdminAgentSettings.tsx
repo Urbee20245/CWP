@@ -53,6 +53,7 @@ interface AgentSettings {
   business_hours: Record<string, { start: string; end: string }>;
   timezone: string;
   is_active: boolean;
+  calendar_provider?: 'none' | 'cal' | 'google';
 }
 
 interface WebhookEvent {
@@ -67,6 +68,7 @@ interface WebhookEvent {
 }
 
 interface IntegrationStatus {
+  calendar_provider?: 'none' | 'cal' | 'google';
   cal_com: {
     connected: boolean;
     default_event_type_id?: string | null;
@@ -124,6 +126,7 @@ const DEFAULT_SETTINGS: Omit<AgentSettings, 'client_id'> = {
   },
   timezone: 'America/New_York',
   is_active: true,
+  calendar_provider: 'none',
 };
 
 const DAY_NAMES: Record<string, string> = {
@@ -276,6 +279,7 @@ const AdminAgentSettings: React.FC = () => {
         ]);
 
         setIntegrations({
+          calendar_provider: (merged.calendar_provider || 'none') as any,
           cal_com: calRow
             ? {
                 connected: calRow.connection_status === 'connected',
@@ -360,10 +364,8 @@ const AdminAgentSettings: React.FC = () => {
     if (!confirm('Force Google Calendar re-authorization for this client?')) return;
 
     try {
-      // 1) Mark needs_reauth + clear stored tokens (server-side)
       await AdminService.forceCalendarReauth(selectedClientId);
 
-      // 2) Immediately re-run OAuth using the existing init+callback flow
       const returnTo = `${window.location.origin}/admin/agent-settings?client_id=${encodeURIComponent(selectedClientId)}&calendar_diag=1`;
       const { auth_url } = await supabase.functions.invoke('google-oauth-init', {
         body: { client_id: selectedClientId, return_to: returnTo },
@@ -373,8 +375,6 @@ const AdminAgentSettings: React.FC = () => {
       });
 
       if (!auth_url) throw new Error('Failed to start Google OAuth.');
-
-      // Redirect to Google OAuth (no new UI inside app)
       window.location.href = auth_url;
     } catch (e: any) {
       showFeedback('error', e?.message || 'Failed to force re-auth');
@@ -515,6 +515,7 @@ const AdminAgentSettings: React.FC = () => {
         business_hours: settings.business_hours,
         timezone: settings.timezone,
         is_active: settings.is_active,
+        calendar_provider: settings.calendar_provider || 'none',
       };
 
       const { error: upsertErr } = await supabase.from('ai_agent_settings').upsert(payload, { onConflict: 'client_id' });
@@ -625,13 +626,13 @@ const AdminAgentSettings: React.FC = () => {
     const defs = [
       {
         name: "check-availability",
-        description: "Check availability via Cal.com (preferred) with a fallback to Google Calendar.",
+        description: "Check availability using the client-selected provider (Cal.com OR Google).",
         method: "POST",
         url: `${base}/check-availability`
       },
       {
         name: "book-appointment",
-        description: "Book a meeting via Cal.com (preferred) with a fallback to Google Calendar.",
+        description: "Book a meeting using the client-selected provider (Cal.com OR Google).",
         method: "POST",
         url: `${base}/book-meeting`
       },
@@ -680,12 +681,18 @@ const AdminAgentSettings: React.FC = () => {
                   Integration Status
                 </h2>
 
+                <div className="mb-4 p-3 rounded-lg border border-slate-200 bg-slate-50">
+                  <p className="text-xs text-slate-500">Selected booking provider</p>
+                  <p className="text-sm font-mono text-slate-900">{integrations.calendar_provider || settings.calendar_provider || 'none'}</p>
+                  <p className="text-[11px] text-slate-500 mt-1">No fallback: the AI uses only this provider.</p>
+                </div>
+
                 <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
                   {/* Cal.com */}
                   <div className={`p-3 rounded-lg border ${integrations.cal_com.connected ? 'border-green-200 bg-green-50' : 'border-amber-200 bg-amber-50'}`}>
                     <div className="flex items-center gap-2">
                       <Calendar className={`w-4 h-4 ${integrations.cal_com.connected ? 'text-green-600' : 'text-amber-600'}`} />
-                      <span className="text-sm font-medium">Cal.com (Preferred)</span>
+                      <span className="text-sm font-medium">Cal.com</span>
                     </div>
                     <p className="text-xs mt-1 text-slate-600">
                       {integrations.cal_com.connected
@@ -705,7 +712,7 @@ const AdminAgentSettings: React.FC = () => {
                   <div className={`p-3 rounded-lg border ${integrations.google_calendar.connected ? 'border-green-200 bg-green-50' : 'border-amber-200 bg-amber-50'}`}>
                     <div className="flex items-center gap-2">
                       <Calendar className={`w-4 h-4 ${integrations.google_calendar.connected ? 'text-green-600' : 'text-amber-600'}`} />
-                      <span className="text-sm font-medium">Google Calendar (Fallback)</span>
+                      <span className="text-sm font-medium">Google Calendar</span>
                     </div>
                     <p className="text-xs mt-1 text-slate-600">
                       {integrations.google_calendar.connected
@@ -748,7 +755,7 @@ const AdminAgentSettings: React.FC = () => {
                       Save
                     </button>
                   </div>
-                  <p className="text-[11px] text-slate-500 mt-2">Required for the AI agent to check availability and book via Cal.com.</p>
+                  <p className="text-[11px] text-slate-500 mt-2">Required if the client selects Cal.com as their provider.</p>
                 </div>
 
                 <div className="mt-4 flex justify-end">
@@ -929,6 +936,21 @@ const AdminAgentSettings: React.FC = () => {
                   <label className="block text-xs font-medium text-slate-600 mb-1">Agent Name</label>
                   <input type="text" value={settings.agent_name} onChange={(e) => updateSetting('agent_name', e.target.value)} className="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm focus:ring-2 focus:ring-indigo-500" />
                 </div>
+
+                <div>
+                  <label className="block text-xs font-medium text-slate-600 mb-1">Calendar Provider (no fallback)</label>
+                  <select
+                    value={settings.calendar_provider || 'none'}
+                    onChange={(e) => updateSetting('calendar_provider', e.target.value as any)}
+                    className="w-full md:w-72 px-3 py-2 border border-slate-300 rounded-lg text-sm"
+                  >
+                    <option value="none">Not configured</option>
+                    <option value="cal">Cal.com</option>
+                    <option value="google">Google Calendar</option>
+                  </select>
+                  <p className="text-[11px] text-slate-500 mt-1">The agent will use only the selected provider.</p>
+                </div>
+
                 <div>
                   <div className="flex items-center justify-between mb-1">
                     <label className="block text-xs font-medium text-slate-600">System Prompt</label>
@@ -936,7 +958,7 @@ const AdminAgentSettings: React.FC = () => {
                       <Wand2 className="w-3 h-3" /> {showAssistant ? 'Close Assistant' : 'AI Prompt Assistant'}
                     </button>
                   </div>
-                  
+
                   {showAssistant && (
                     <div className="mb-4 p-4 rounded-lg border border-indigo-200 bg-indigo-50 space-y-4 animate-in fade-in slide-in-from-top-2">
                       <div className="flex items-center justify-between">
@@ -944,7 +966,7 @@ const AdminAgentSettings: React.FC = () => {
                         <button onClick={() => setShowAssistant(false)} className="text-slate-400 hover:text-slate-600"><X className="w-4 h-4" /></button>
                       </div>
                       <p className="text-xs text-indigo-700">Provide context about this client's business and we'll generate a tailored system prompt. The more detail you provide, the better the result.</p>
-                      
+
                       <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
                         <div>
                           <label className="block text-[10px] font-bold text-indigo-800 uppercase mb-1">Industry / Business Type</label>
@@ -968,12 +990,12 @@ const AdminAgentSettings: React.FC = () => {
                           <input type="text" value={businessPhone} onChange={(e) => setBusinessPhone(e.target.value)} className="w-full px-3 py-2 border border-indigo-200 rounded-lg text-sm" placeholder="e.g. (404) 555-1234" />
                         </div>
                       </div>
-                      
+
                       <div>
                         <label className="block text-[10px] font-bold text-indigo-800 uppercase mb-1">Services Offered</label>
                         <input type="text" value={servicesOffered} onChange={(e) => setServicesOffered(e.target.value)} className="w-full px-3 py-2 border border-indigo-200 rounded-lg text-sm" placeholder="e.g. Emergency repairs, installations, maintenance plans, free estimates" />
                       </div>
-                      
+
                       <div>
                         <label className="block text-[10px] font-bold text-indigo-800 uppercase mb-1">Special Instructions (optional)</label>
                         <textarea value={specialInstructions} onChange={(e) => setSpecialInstructions(e.target.value)} rows={2} className="w-full px-3 py-2 border border-indigo-200 rounded-lg text-sm" placeholder="e.g. Always ask for the caller's name and phone. Never quote prices over the phone." />
@@ -998,6 +1020,7 @@ const AdminAgentSettings: React.FC = () => {
                   <textarea value={settings.system_prompt} onChange={(e) => updateSetting('system_prompt', e.target.value)} rows={10} className="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm focus:ring-2 focus:ring-indigo-500" placeholder="Instructions for how the agent should behave..." />
                   <p className="text-[10px] text-slate-400 mt-1">This prompt is used in Retell agent configuration. Include business details, services, pricing, and behavioral guidelines.</p>
                 </div>
+
                 <div>
                   <label className="block text-xs font-medium text-slate-600 mb-1">Greeting Message</label>
                   <input type="text" value={settings.greeting_message} onChange={(e) => updateSetting('greeting_message', e.target.value)} className="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm focus:ring-2 focus:ring-indigo-500" placeholder="e.g. Hi, thank you for calling! How can I help you today?" />
@@ -1009,8 +1032,8 @@ const AdminAgentSettings: React.FC = () => {
               <h2 className="text-sm font-semibold text-slate-700 mb-4 flex items-center gap-2"><Zap className="w-4 h-4 text-indigo-500" /> Agent Capabilities</h2>
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                 {[
-                  { key: 'can_check_availability' as const, label: 'Check Availability', desc: 'Uses Cal.com (preferred) with fallback to Google' },
-                  { key: 'can_book_meetings' as const, label: 'Book Meetings', desc: 'Books via Cal.com (preferred) with fallback to Google' },
+                  { key: 'can_check_availability' as const, label: 'Check Availability', desc: 'Uses the selected provider (Cal.com OR Google)' },
+                  { key: 'can_book_meetings' as const, label: 'Book Meetings', desc: 'Books using the selected provider (Cal.com OR Google)' },
                   { key: 'can_transfer_calls' as const, label: 'Transfer Calls', desc: 'Transfer to a live agent (requires Retell config)' },
                   { key: 'can_send_sms' as const, label: 'Send SMS', desc: 'Send text confirmations (requires Twilio)' },
                 ].map(cap => (
@@ -1025,6 +1048,7 @@ const AdminAgentSettings: React.FC = () => {
               </div>
             </div>
 
+            {/* ADDED BACK: Booking Configuration */}
             <div className="bg-white rounded-xl border border-slate-200 p-6 mb-6">
               <h2 className="text-sm font-semibold text-slate-700 mb-4 flex items-center gap-2"><Calendar className="w-4 h-4 text-indigo-500" /> Booking Configuration</h2>
               <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-4">
@@ -1058,6 +1082,22 @@ const AdminAgentSettings: React.FC = () => {
                   {TIMEZONE_OPTIONS.map(tz => <option key={tz} value={tz}>{tz}</option>)}
                 </select>
               </div>
+            </div>
+
+            <div className="bg-white rounded-xl border border-slate-200 p-6 mb-6">
+              <h2 className="text-sm font-semibold text-slate-700 mb-3 flex items-center gap-2">
+                <Globe className="w-4 h-4 text-indigo-500" />
+                Retell Custom Functions (copy into Retell)
+              </h2>
+              <p className="text-xs text-slate-600 mb-2">
+                Paste this into Retell's Custom Functions to enable live availability checks and booking.
+              </p>
+              <textarea
+                readOnly
+                value={functionsJson}
+                className="w-full font-mono text-xs p-3 border border-slate-300 rounded-lg bg-slate-50"
+                rows={8}
+              />
             </div>
 
             <div className="bg-white rounded-xl border border-slate-200 p-6 mb-6">
@@ -1112,22 +1152,6 @@ const AdminAgentSettings: React.FC = () => {
                   ))}
                 </div>
               )}
-            </div>
-
-            <div className="bg-white rounded-xl border border-slate-200 p-6 mb-6">
-              <h2 className="text-sm font-semibold text-slate-700 mb-3 flex items-center gap-2">
-                <Globe className="w-4 h-4 text-indigo-500" />
-                Retell Custom Functions (copy into Retell)
-              </h2>
-              <p className="text-xs text-slate-600 mb-2">
-                Paste this into Retell's Custom Functions to enable live availability checks and booking via Cal.com (preferred) with Google fallback.
-              </p>
-              <textarea
-                readOnly
-                value={functionsJson}
-                className="w-full font-mono text-xs p-3 border border-slate-300 rounded-lg bg-slate-50"
-                rows={8}
-              />
             </div>
 
             <div className="bg-white rounded-xl border border-slate-200 p-6 mb-6">

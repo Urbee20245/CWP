@@ -8,6 +8,7 @@ import { Settings, ArrowRight, Loader2, Phone, Zap, Info, AlertTriangle, Clock, 
 import ClientTwilioIntegration from '../components/ClientTwilioIntegration';
 import ClientCalendarIntegration from '../components/ClientCalendarIntegration';
 import ClientCalComIntegration from '../components/ClientCalComIntegration';
+import ClientCalendarProviderSelector from '../components/ClientCalendarProviderSelector';
 import ClientLeadsStatus from '../components/ClientLeadsStatus';
 import { Link } from 'react-router-dom';
 
@@ -135,12 +136,17 @@ const ClientSettings: React.FC = () => {
 
           {/* OPTION 2: Integrations Panel */}
           <div className="space-y-6">
-            {/* Cal.com (preferred) */}
+            {/* Booking provider selection (either/or, no fallback) */}
+            <div className="bg-white rounded-2xl shadow-lg border border-slate-200 overflow-hidden group p-8">
+              {clientId && <ClientCalendarProviderSelector clientId={clientId} />}
+            </div>
+
+            {/* Cal.com */}
             <div className="bg-white rounded-2xl shadow-lg border border-slate-200 overflow-hidden group p-8">
               {clientId && <ClientCalComIntegration clientId={clientId} />}
             </div>
 
-            {/* Google Calendar (legacy / optional) */}
+            {/* Google Calendar */}
             <div className="bg-white rounded-2xl shadow-lg border border-slate-200 overflow-hidden group p-8">
               {clientId && <ClientCalendarIntegration clientId={clientId} />}
             </div>

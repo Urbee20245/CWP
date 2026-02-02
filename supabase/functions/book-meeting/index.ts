@@ -81,9 +81,17 @@ serve(async (req) => {
       .eq('is_active', true)
       .maybeSingle();
 
-    if (agentSettings && !agentSettings.can_book_meetings) {
+    if (agentSettings && agentSettings.can_book_meetings === false) {
       return jsonResponse({
         result: 'Booking is not available at this time. Let me take your information and someone will reach out.',
+      });
+    }
+
+    const calendarProvider: 'none' | 'cal' | 'google' = (agentSettings?.calendar_provider || 'none');
+
+    if (calendarProvider === 'none') {
+      return jsonResponse({
+        result: 'Calendar booking has not been configured yet. Please leave your contact information and someone will reach out to schedule.',
       });
     }
 
@@ -105,94 +113,116 @@ serve(async (req) => {
 
     const endTime = new Date(appointmentTime.getTime() + meetingDuration * 60 * 1000);
 
-    // Prefer Cal.com booking when connected; fall back to Google Calendar event creation.
-    const { data: calConn } = await supabaseAdmin
-      .from('client_cal_calendar')
-      .select('connection_status, refresh_token_present, default_event_type_id')
-      .eq('client_id', clientId)
-      .maybeSingle();
-
-    const calUsable = !!(calConn && calConn.connection_status === 'connected' && calConn.refresh_token_present === true && calConn.default_event_type_id);
-
     let calBookingId: string | null = null;
     let googleEventId: string | null = null;
 
-    if (calUsable) {
-      try {
-        const attendeeEmail = callerEmail || `unknown-${Date.now()}@example.com`;
-        const booking = await CalCalendarService.createCalBooking(clientId, {
-          eventTypeId: String(calConn.default_event_type_id),
-          start: appointmentTime.toISOString(),
-          attendee: {
-            name: callerName,
-            email: attendeeEmail,
-            timeZone: timezone,
-          },
-          metadata: {
-            source: 'retell_ai',
-            retell_call_id: callId,
-            caller_phone: callerPhone,
-            meeting_type: meetingType,
-            notes: meetingNotes,
-          },
-        });
+    if (calendarProvider === 'cal') {
+      const { data: calConn } = await supabaseAdmin
+        .from('client_cal_calendar')
+        .select('connection_status, refresh_token_present, default_event_type_id')
+        .eq('client_id', clientId)
+        .maybeSingle();
 
-        calBookingId = booking.bookingId ? String(booking.bookingId) : null;
-      } catch (e: any) {
-        console.error('[book-meeting] Cal.com booking failed, falling back to Google:', e?.message);
+      const calUsable = !!(
+        calConn &&
+        calConn.connection_status === 'connected' &&
+        calConn.refresh_token_present === true &&
+        calConn.default_event_type_id &&
+        String(calConn.default_event_type_id).trim()
+      );
+
+      if (!calUsable) {
+        return jsonResponse({
+          result: 'Cal.com is selected for booking, but it is not connected (or missing an Event Type). Please connect Cal.com in settings and try again.',
+        });
+      }
+
+      const attendeeEmail = callerEmail || `unknown-${Date.now()}@example.com`;
+      const booking = await CalCalendarService.createCalBooking(clientId, {
+        eventTypeId: String(calConn.default_event_type_id),
+        start: appointmentTime.toISOString(),
+        attendee: {
+          name: callerName,
+          email: attendeeEmail,
+          timeZone: timezone,
+        },
+        metadata: {
+          source: 'retell_ai',
+          retell_call_id: callId,
+          caller_phone: callerPhone,
+          meeting_type: meetingType,
+          notes: meetingNotes,
+        },
+      });
+
+      calBookingId = booking.bookingId ? String(booking.bookingId) : null;
+
+      if (!calBookingId) {
+        return jsonResponse({
+          result: 'I was unable to confirm the booking with Cal.com. Please try again or leave your contact information.',
+        });
       }
     }
 
-    if (!calBookingId) {
+    if (calendarProvider === 'google') {
       const tokenData = await GoogleCalendarService.getAndRefreshTokens(clientId);
 
-      if (tokenData) {
-        const freeBusyResponse = await fetch('https://www.googleapis.com/calendar/v3/freeBusy', {
-          method: 'POST',
-          headers: {
-            'Authorization': `Bearer ${tokenData.accessToken}`,
-            'Content-Type': 'application/json',
-          },
-          body: JSON.stringify({
-            timeMin: appointmentTime.toISOString(),
-            timeMax: endTime.toISOString(),
-            timeZone: timezone,
-            items: [{ id: tokenData.calendarId || 'primary' }],
-          }),
+      if (!tokenData) {
+        return jsonResponse({
+          result: 'Google Calendar is selected for booking, but it is not connected. Please connect Google Calendar in settings and try again.',
         });
-
-        const freeBusyData = await freeBusyResponse.json();
-
-        if (!freeBusyResponse.ok) {
-          console.error('[book-meeting] Free/busy API error:', freeBusyData);
-
-          if (freeBusyResponse.status === 401 || freeBusyResponse.status === 403) {
-            const reason = freeBusyData?.error?.errors?.[0]?.reason || freeBusyData?.error?.status || 'calendar_api_auth_error';
-            const message = freeBusyData?.error?.message || 'Calendar API authorization failed.';
-            await supabaseAdmin
-              .from('client_google_calendar')
-              .update({
-                connection_status: 'needs_reauth',
-                reauth_reason: reason,
-                last_error: message,
-              })
-              .eq('client_id', clientId);
-          }
-          // Continue without calendar check
-        } else {
-          await GoogleCalendarService.markCalendarCallSuccess(clientId);
-
-          const calendarId = tokenData.calendarId || 'primary';
-          const busyPeriods = freeBusyData.calendars?.[calendarId]?.busy || [];
-
-          if (busyPeriods.length > 0) {
-            return jsonResponse({
-              result: 'It looks like that time slot was just taken. Would you like to check availability again for another time?',
-            });
-          }
-        }
       }
 
+      // Free/busy check for exact slot
+      const freeBusyResponse = await fetch('https://www.googleapis.com/calendar/v3/freeBusy', {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${tokenData.accessToken}`,
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          timeMin: appointmentTime.toISOString(),
+          timeMax: endTime.toISOString(),
+          timeZone: timezone,
+          items: [{ id: tokenData.calendarId || 'primary' }],
+        }),
+      });
+
+      const freeBusyData = await freeBusyResponse.json();
+
+      if (!freeBusyResponse.ok) {
+        console.error('[book-meeting] Free/busy API error:', freeBusyData);
+
+        if (freeBusyResponse.status === 401 || freeBusyResponse.status === 403) {
+          const reason = freeBusyData?.error?.errors?.[0]?.reason || freeBusyData?.error?.status || 'calendar_api_auth_error';
+          const message = freeBusyData?.error?.message || 'Calendar API authorization failed.';
+          await supabaseAdmin
+            .from('client_google_calendar')
+            .update({
+              connection_status: 'needs_reauth',
+              reauth_reason: reason,
+              last_error: message,
+            })
+            .eq('client_id', clientId);
+        }
+
+        return jsonResponse({
+          result: 'I am having trouble booking right now. Can I take your information and have someone confirm the appointment with you?',
+        });
+      }
+
+      await GoogleCalendarService.markCalendarCallSuccess(clientId);
+
+      const calendarId = tokenData.calendarId || 'primary';
+      const busyPeriods = freeBusyData.calendars?.[calendarId]?.busy || [];
+
+      if (busyPeriods.length > 0) {
+        return jsonResponse({
+          result: 'It looks like that time slot was just taken. Would you like to check availability again for another time?',
+        });
+      }
+
+      // Also check internal appointments
       const { data: conflictingAppts } = await supabaseAdmin
         .from('appointments')
         .select('id')
@@ -208,34 +238,35 @@ serve(async (req) => {
         });
       }
 
-      if (tokenData) {
-        try {
-          const eventResult = await GoogleCalendarService.createCalendarEvent(clientId, {
-            title: `Meeting with ${callerName}`,
-            description: [
-              `Booked by AI Agent via phone call`,
-              `Caller: ${callerName}`,
-              callerPhone ? `Phone: ${callerPhone}` : '',
-              callerEmail ? `Email: ${callerEmail}` : '',
-              meetingNotes ? `Notes: ${meetingNotes}` : '',
-              `Type: ${meetingType}`,
-              callId ? `Retell Call ID: ${callId}` : '',
-            ].filter(Boolean).join('\n'),
-            startTime: appointmentTime.toISOString(),
-            endTime: endTime.toISOString(),
-            attendeeEmail: callerEmail || undefined,
-            timeZone: timezone,
-          });
+      try {
+        const eventResult = await GoogleCalendarService.createCalendarEvent(clientId, {
+          title: `Meeting with ${callerName}`,
+          description: [
+            `Booked by AI Agent via phone call`,
+            `Caller: ${callerName}`,
+            callerPhone ? `Phone: ${callerPhone}` : '',
+            callerEmail ? `Email: ${callerEmail}` : '',
+            meetingNotes ? `Notes: ${meetingNotes}` : '',
+            `Type: ${meetingType}`,
+            callId ? `Retell Call ID: ${callId}` : '',
+          ].filter(Boolean).join('\n'),
+          startTime: appointmentTime.toISOString(),
+          endTime: endTime.toISOString(),
+          attendeeEmail: callerEmail || undefined,
+          timeZone: timezone,
+        });
 
-          if (eventResult?.eventLink) {
-            const eventIdMatch = eventResult.eventLink.match(/eid=([^&]+)/);
-            googleEventId = eventIdMatch ? eventIdMatch[1] : null;
-          }
-
-          console.log(`[book-meeting] Calendar event created: ${eventResult.eventLink}`);
-        } catch (calError: any) {
-          console.error('[book-meeting] Calendar event creation failed:', calError.message);
+        if (eventResult?.eventLink) {
+          const eventIdMatch = eventResult.eventLink.match(/eid=([^&]+)/);
+          googleEventId = eventIdMatch ? eventIdMatch[1] : null;
         }
+
+        console.log(`[book-meeting] Calendar event created: ${eventResult.eventLink}`);
+      } catch (calError: any) {
+        console.error('[book-meeting] Calendar event creation failed:', calError.message);
+        return jsonResponse({
+          result: 'I was unable to confirm the booking with Google Calendar. Please try again or leave your contact information.',
+        });
       }
     }
 
@@ -287,7 +318,7 @@ serve(async (req) => {
           appointment_id: appointment.id,
           google_event_id: googleEventId,
           cal_booking_id: calBookingId,
-          provider: calBookingId ? 'cal' : 'google',
+          provider: calendarProvider,
           datetime: appointmentTime.toISOString(),
         },
         status: 'completed',

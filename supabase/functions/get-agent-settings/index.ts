@@ -94,6 +94,7 @@ serve(async (req) => {
             settings: settings || null,
             recent_events: recentEvents || [],
             integrations: {
+                calendar_provider: settings?.calendar_provider || 'none',
                 cal_com: calStatus ? {
                     connected: calConnected,
                     default_event_type_id: calStatus.default_event_type_id,
