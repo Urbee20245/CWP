@@ -35,6 +35,8 @@
     <changefreq>monthly</changefreq>
     <priority>0.7</priority>
   </url>
+
+  <!-- Legal pages (both SPA routes and static HTML are linked in the site) -->
   <url>
     <loc>https://customwebsitesplus.com/privacy-policy</loc>
     <changefreq>yearly</changefreq>
@@ -44,5 +46,15 @@
     <loc>https://customwebsitesplus.com/terms-and-conditions</loc>
     <changefreq>yearly</changefreq>
     <priority>0.5</priority>
+  </url>
+  <url>
+    <loc>https://customwebsitesplus.com/privacy.html</loc>
+    <changefreq>yearly</changefreq>
+    <priority>0.4</priority>
+  </url>
+  <url>
+    <loc>https://customwebsitesplus.com/terms.html</loc>
+    <changefreq>yearly</changefreq>
+    <priority>0.4</priority>
   </url>
 </urlset>
