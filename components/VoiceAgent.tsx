@@ -62,7 +62,7 @@ const VoiceAgent: React.FC = () => {
 
           COMPANY INFO:
           - Name: Custom Websites Plus (CWP)
-          - Phone: (844) 213-0694
+          - Phone: (470) 264-6256
           - Email: hello@customwebsitesplus.com
           - Service Area: Walton County, Gwinnett County, and Metro Atlanta area.
           - Core Services: Custom Website Rebuilds, Local SEO Foundation, Performance Optimization, AI Voice Agents (Add-on).
@@ -195,7 +195,6 @@ const VoiceAgent: React.FC = () => {
 
       source.connect(processor);
       processor.connect(processorRef.current.context.destination); // Connect to destination
-      
     } catch (err: any) {
       console.error("Voice Connection Failed:", err);
       setConfigError(err.message || "Connection failed");

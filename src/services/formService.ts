@@ -10,7 +10,7 @@ const invokeEdgeFunction = async (functionName: string, payload: any) => {
     throw new Error(error.message || `Edge Function Timeout or Network Error: Failed to call ${functionName}`);
   }
   
-  if (data.error) {
+  if (data?.error) {
     console.error(`Edge function ${functionName} returned error:`, data.error);
     throw new Error(data.error);
   }
@@ -29,8 +29,11 @@ export const FormService = {
     
     submitConsultationForm: async (formData: any) => {
         console.log('🚀 Calling submit-contact-form function with:', formData);
+        // IMPORTANT: submit-contact-form expects a `message` field.
+        // The consultation form uses `projectDescription`, so we map it through.
         return invokeEdgeFunction('submit-contact-form', {
             ...formData,
+            message: formData?.message || formData?.projectDescription || '',
             formType: 'Consultation Request',
         });
     }

@@ -632,9 +632,9 @@ const ServicesPage: React.FC = () => {
           </div>
 
           <div className="flex flex-col sm:flex-row items-center justify-center gap-6 text-white/90">
-            <a href="tel:8442130694" className="flex items-center gap-2 hover:text-white transition-colors">
+            <a href="tel:4702646256" className="flex items-center gap-2 hover:text-white transition-colors">
               <Phone className="w-5 h-5" />
-              <span className="font-semibold">(844) 213-0694</span>
+              <span className="font-semibold">(470) 264-6256</span>
             </a>
             <span className="hidden sm:inline">•</span>
             <a href="mailto:hello@customwebsitesplus.com" className="flex items-center gap-2 hover:text-white transition-colors">

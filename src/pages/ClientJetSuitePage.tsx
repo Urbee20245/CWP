@@ -323,7 +323,7 @@ const ClientJetSuitePage: React.FC = () => {
                             Ready to Access All 20 Growth Tools?
                         </h2>
                         <p className="text-xl text-slate-300 mb-10">
-                            Start your 7-day free trial now. Join 360+ local businesses growing with JetSuite.
+                            Join 360+ local businesses growing with JetSuite.
                         </p>
                         
                         <a
@@ -332,9 +332,9 @@ const ClientJetSuitePage: React.FC = () => {
                             rel="noopener noreferrer"
                             className="inline-flex items-center gap-2 px-8 py-4 rounded-xl bg-white text-slate-900 font-bold text-lg hover:shadow-xl hover:shadow-white/20 transition-all duration-300 hover:scale-105"
                         >
-                            Start 7-Day Free Trial
+                            <ExternalLink className="w-5 h-5" />
+                            Visit JetSuite Platform
                         </a>
-                        <p className="text-xs text-slate-400 mt-3">Credit card required. No charge during trial period. Cancel anytime.</p>
                     </div>
                 </section>
 

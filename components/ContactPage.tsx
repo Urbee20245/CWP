@@ -18,7 +18,7 @@ import ReCAPTCHA from 'react-google-recaptcha';
 import { FormService } from '../src/services/formService'; // Import FormService
 
 // NOTE: This key must be set in .env.local or Vercel environment variables
-const RECAPTCHA_SITE_KEY = import.meta.env.VITE_RECAPTCHA_SITE_KEY;
+const RECAPTCHA_SITE_KEY = (import.meta as any).env.VITE_RECAPTCHA_SITE_KEY;
 
 interface FormData {
   fullName: string;
@@ -195,7 +195,6 @@ const ContactPage: React.FC = () => {
     setSubmissionError(null);
     
     if (!validateForm()) {
-      // Scroll to first error
       const firstError = Object.keys(errors)[0];
       const element = document.querySelector(`[name="${firstError}"]`);
       element?.scrollIntoView({ behavior: 'smooth', block: 'center' });
@@ -821,9 +820,9 @@ const ContactPage: React.FC = () => {
                 <h3 className="text-xl font-bold mb-6">Contact Information</h3>
                 <ul className="space-y-4">
                   <li>
-                    <a href="tel:8442130694" className="flex items-center gap-3 hover:text-indigo-400 transition-colors">
+                    <a href="tel:4702646256" className="flex items-center gap-3 hover:text-indigo-400 transition-colors">
                       <Phone className="w-5 h-5" />
-                      <span className="font-semibold">(844) 213-0694</span>
+                      <span className="font-semibold">(470) 264-6256</span>
                     </a>
                   </li>
                   <li>
