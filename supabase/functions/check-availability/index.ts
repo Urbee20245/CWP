@@ -1,6 +1,7 @@
 import { serve } from "https://deno.land/std@0.190.0/http/server.ts";
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2.45.0';
 import { GoogleCalendarService } from '../_shared/googleCalendarService.ts';
+import { CalCalendarService } from '../_shared/calCalendarService.ts';
 import { handleCors, jsonResponse } from '../_shared/utils.ts';
 
 /**
@@ -77,13 +78,14 @@ serve(async (req) => {
     };
     const timezone = agentSettings?.timezone || 'America/New_York';
 
-    const tokenData = await GoogleCalendarService.getAndRefreshTokens(clientId);
+    // Prefer Cal.com when connected; fall back to Google.
+    const { data: calConn } = await supabaseAdmin
+      .from('client_cal_calendar')
+      .select('connection_status, refresh_token_present, default_event_type_id')
+      .eq('client_id', clientId)
+      .maybeSingle();
 
-    if (!tokenData) {
-      return jsonResponse({
-        result: 'Calendar is not currently connected. Please leave your contact information and someone will reach out to schedule.',
-      });
-    }
+    const calUsable = !!(calConn && calConn.connection_status === 'connected' && calConn.refresh_token_present === true && calConn.default_event_type_id);
 
     const requestedDate = args.date || null;
     const daysAhead = Math.min(args.days_ahead || 3, maxAdvanceDays);
@@ -108,125 +110,175 @@ serve(async (req) => {
     timeMax.setDate(timeMax.getDate() + daysAhead);
     timeMax.setHours(23, 59, 59, 999);
 
-    const freeBusyUrl = 'https://www.googleapis.com/calendar/v3/freeBusy';
-    const freeBusyResponse = await fetch(freeBusyUrl, {
-      method: 'POST',
-      headers: {
-        'Authorization': `Bearer ${tokenData.accessToken}`,
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify({
-        timeMin: timeMin.toISOString(),
-        timeMax: timeMax.toISOString(),
-        timeZone: timezone,
-        items: [{ id: tokenData.calendarId || 'primary' }],
-      }),
-    });
+    let availableSlots: { date: string; time: string; datetime: string }[] = [];
 
-    const freeBusyData = await freeBusyResponse.json();
+    if (calUsable) {
+      // Cal.com: ask Cal for available slots for the connected event type.
+      try {
+        const slots = await CalCalendarService.getAvailableSlots(
+          clientId,
+          String(calConn.default_event_type_id),
+          timeMin.toISOString(),
+          timeMax.toISOString(),
+          timezone,
+        );
 
-    if (!freeBusyResponse.ok) {
-      console.error('[check-availability] Free/busy API error:', freeBusyData);
+        // Cal slots format can vary; normalize to first 10 ISO times.
+        const flattened: string[] = [];
+        if (Array.isArray(slots)) {
+          for (const s of slots) {
+            if (typeof s === 'string') flattened.push(s);
+            else if (s?.start) flattened.push(String(s.start));
+          }
+        }
 
-      if (freeBusyResponse.status === 401 || freeBusyResponse.status === 403) {
-        const reason = freeBusyData?.error?.errors?.[0]?.reason || freeBusyData?.error?.status || 'calendar_api_auth_error';
-        const message = freeBusyData?.error?.message || 'Calendar API authorization failed.';
-        await supabaseAdmin
-          .from('client_google_calendar')
-          .update({
-            connection_status: 'needs_reauth',
-            reauth_reason: reason,
-            last_error: message,
-          })
-          .eq('client_id', clientId);
-      }
-
-      return jsonResponse({
-        result: 'I am having trouble checking the calendar right now. Can I take your number and have someone call you back?',
-      });
-    }
-
-    // Mark success for diagnostics
-    await GoogleCalendarService.markCalendarCallSuccess(clientId);
-
-    const calendarId = tokenData.calendarId || 'primary';
-    const busyPeriods = freeBusyData.calendars?.[calendarId]?.busy || [];
-
-    const { data: existingAppts } = await supabaseAdmin
-      .from('appointments')
-      .select('appointment_time, duration_minutes')
-      .eq('client_id', clientId)
-      .eq('status', 'scheduled')
-      .gte('appointment_time', timeMin.toISOString())
-      .lte('appointment_time', timeMax.toISOString());
-
-    const allBusyPeriods = [
-      ...busyPeriods.map((b: any) => ({ start: new Date(b.start), end: new Date(b.end) })),
-      ...(existingAppts || []).map((a: any) => ({
-        start: new Date(a.appointment_time),
-        end: new Date(new Date(a.appointment_time).getTime() + (a.duration_minutes || 30) * 60 * 1000),
-      })),
-    ];
-
-    const availableSlots: { date: string; time: string; datetime: string }[] = [];
-
-    for (let dayOffset = 0; dayOffset < daysAhead && availableSlots.length < 10; dayOffset++) {
-      const checkDate = new Date(timeMin);
-      checkDate.setDate(timeMin.getDate() + dayOffset);
-      checkDate.setHours(0, 0, 0, 0);
-
-      const dayOfWeek = checkDate.getDay().toString();
-      const dayHours = businessHours[dayOfWeek];
-      if (!dayHours) continue;
-
-      const [startHour, startMin] = dayHours.start.split(':').map(Number);
-      const [endHour, endMin] = dayHours.end.split(':').map(Number);
-
-      const dayStart = new Date(checkDate);
-      dayStart.setHours(startHour, startMin, 0, 0);
-
-      const dayEnd = new Date(checkDate);
-      dayEnd.setHours(endHour, endMin, 0, 0);
-
-      let slotStart = new Date(dayStart);
-      if (slotStart < now) {
-        const msSinceDay = now.getTime() - dayStart.getTime();
-        const slotMs = (meetingDuration + bufferMinutes) * 60 * 1000;
-        const slotsElapsed = Math.ceil(msSinceDay / slotMs);
-        slotStart = new Date(dayStart.getTime() + slotsElapsed * slotMs);
-      }
-
-      while (slotStart.getTime() + meetingDuration * 60 * 1000 <= dayEnd.getTime()) {
-        const slotEnd = new Date(slotStart.getTime() + meetingDuration * 60 * 1000);
-
-        const hasConflict = allBusyPeriods.some((busy: { start: Date; end: Date }) => {
-          const busyStart = busy.start instanceof Date ? busy.start : new Date(busy.start);
-          const busyEnd = busy.end instanceof Date ? busy.end : new Date(busy.end);
-          return slotStart < busyEnd && slotEnd > busyStart;
-        });
-
-        if (!hasConflict) {
-          const dateStr = slotStart.toLocaleDateString('en-US', {
+        availableSlots = flattened.slice(0, 10).map((iso) => {
+          const d = new Date(iso);
+          const dateStr = d.toLocaleDateString('en-US', {
             weekday: 'long',
             month: 'long',
             day: 'numeric',
             timeZone: timezone,
           });
-          const timeStr = slotStart.toLocaleTimeString('en-US', {
+          const timeStr = d.toLocaleTimeString('en-US', {
             hour: 'numeric',
             minute: '2-digit',
             timeZone: timezone,
           });
+          return { date: dateStr, time: timeStr, datetime: d.toISOString() };
+        });
+      } catch (e: any) {
+        console.error('[check-availability] Cal.com slots lookup failed, falling back to Google:', e?.message);
+      }
+    }
 
-          availableSlots.push({
-            date: dateStr,
-            time: timeStr,
-            datetime: slotStart.toISOString(),
-          });
+    if (!availableSlots.length) {
+      const tokenData = await GoogleCalendarService.getAndRefreshTokens(clientId);
+
+      if (!tokenData) {
+        return jsonResponse({
+          result: 'Calendar is not currently connected. Please leave your contact information and someone will reach out to schedule.',
+        });
+      }
+
+      const freeBusyUrl = 'https://www.googleapis.com/calendar/v3/freeBusy';
+      const freeBusyResponse = await fetch(freeBusyUrl, {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${tokenData.accessToken}`,
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          timeMin: timeMin.toISOString(),
+          timeMax: timeMax.toISOString(),
+          timeZone: timezone,
+          items: [{ id: tokenData.calendarId || 'primary' }],
+        }),
+      });
+
+      const freeBusyData = await freeBusyResponse.json();
+
+      if (!freeBusyResponse.ok) {
+        console.error('[check-availability] Free/busy API error:', freeBusyData);
+
+        if (freeBusyResponse.status === 401 || freeBusyResponse.status === 403) {
+          const reason = freeBusyData?.error?.errors?.[0]?.reason || freeBusyData?.error?.status || 'calendar_api_auth_error';
+          const message = freeBusyData?.error?.message || 'Calendar API authorization failed.';
+          await supabaseAdmin
+            .from('client_google_calendar')
+            .update({
+              connection_status: 'needs_reauth',
+              reauth_reason: reason,
+              last_error: message,
+            })
+            .eq('client_id', clientId);
         }
 
-        slotStart = new Date(slotStart.getTime() + (meetingDuration + bufferMinutes) * 60 * 1000);
-        if (availableSlots.length >= 10) break;
+        return jsonResponse({
+          result: 'I am having trouble checking the calendar right now. Can I take your number and have someone call you back?',
+        });
+      }
+
+      // Mark success for diagnostics
+      await GoogleCalendarService.markCalendarCallSuccess(clientId);
+
+      const calendarId = tokenData.calendarId || 'primary';
+      const busyPeriods = freeBusyData.calendars?.[calendarId]?.busy || [];
+
+      const { data: existingAppts } = await supabaseAdmin
+        .from('appointments')
+        .select('appointment_time, duration_minutes')
+        .eq('client_id', clientId)
+        .eq('status', 'scheduled')
+        .gte('appointment_time', timeMin.toISOString())
+        .lte('appointment_time', timeMax.toISOString());
+
+      const allBusyPeriods = [
+        ...busyPeriods.map((b: any) => ({ start: new Date(b.start), end: new Date(b.end) })),
+        ...(existingAppts || []).map((a: any) => ({
+          start: new Date(a.appointment_time),
+          end: new Date(new Date(a.appointment_time).getTime() + (a.duration_minutes || 30) * 60 * 1000),
+        })),
+      ];
+
+      for (let dayOffset = 0; dayOffset < daysAhead && availableSlots.length < 10; dayOffset++) {
+        const checkDate = new Date(timeMin);
+        checkDate.setDate(timeMin.getDate() + dayOffset);
+        checkDate.setHours(0, 0, 0, 0);
+
+        const dayOfWeek = checkDate.getDay().toString();
+        const dayHours = businessHours[dayOfWeek];
+        if (!dayHours) continue;
+
+        const [startHour, startMin] = dayHours.start.split(':').map(Number);
+        const [endHour, endMin] = dayHours.end.split(':').map(Number);
+
+        const dayStart = new Date(checkDate);
+        dayStart.setHours(startHour, startMin, 0, 0);
+
+        const dayEnd = new Date(checkDate);
+        dayEnd.setHours(endHour, endMin, 0, 0);
+
+        let slotStart = new Date(dayStart);
+        if (slotStart < now) {
+          const msSinceDay = now.getTime() - dayStart.getTime();
+          const slotMs = (meetingDuration + bufferMinutes) * 60 * 1000;
+          const slotsElapsed = Math.ceil(msSinceDay / slotMs);
+          slotStart = new Date(dayStart.getTime() + slotsElapsed * slotMs);
+        }
+
+        while (slotStart.getTime() + meetingDuration * 60 * 1000 <= dayEnd.getTime()) {
+          const slotEnd = new Date(slotStart.getTime() + meetingDuration * 60 * 1000);
+
+          const hasConflict = allBusyPeriods.some((busy: { start: Date; end: Date }) => {
+            const busyStart = busy.start instanceof Date ? busy.start : new Date(busy.start);
+            const busyEnd = busy.end instanceof Date ? busy.end : new Date(busy.end);
+            return slotStart < busyEnd && slotEnd > busyStart;
+          });
+
+          if (!hasConflict) {
+            const dateStr = slotStart.toLocaleDateString('en-US', {
+              weekday: 'long',
+              month: 'long',
+              day: 'numeric',
+              timeZone: timezone,
+            });
+            const timeStr = slotStart.toLocaleTimeString('en-US', {
+              hour: 'numeric',
+              minute: '2-digit',
+              timeZone: timezone,
+            });
+
+            availableSlots.push({
+              date: dateStr,
+              time: timeStr,
+              datetime: slotStart.toISOString(),
+            });
+          }
+
+          slotStart = new Date(slotStart.getTime() + (meetingDuration + bufferMinutes) * 60 * 1000);
+          if (availableSlots.length >= 10) break;
+        }
       }
     }
 
@@ -240,7 +292,7 @@ serve(async (req) => {
         retell_call_id: callId,
         external_id: callId,
         request_payload: { agent_id: agentId, args },
-        response_payload: { slots_found: availableSlots.length },
+        response_payload: { slots_found: availableSlots.length, provider: calUsable ? 'cal' : 'google' },
         status: 'completed',
         duration_ms: Date.now() - startTime,
       });

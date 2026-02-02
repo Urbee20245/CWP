@@ -153,5 +153,41 @@ export const ClientIntegrationService = {
 
     if (error) throw error;
     return { success: true };
-  }
+  },
+
+  // --- Cal.com Integration (Preferred) ---
+
+  initCalComAuth: async (clientId: string, returnTo?: string) => {
+    return invokeEdgeFunction('cal-oauth-init', { client_id: clientId, return_to: returnTo || null });
+  },
+
+  getCalComStatus: async (clientId: string) => {
+    const { data, error } = await supabase
+      .from('client_cal_calendar')
+      .select('connection_status, updated_at, refresh_token_present, reauth_reason, last_error, default_event_type_id')
+      .eq('client_id', clientId)
+      .maybeSingle();
+
+    if (error) throw error;
+    return data;
+  },
+
+  disconnectCalCom: async (clientId: string) => {
+    const { error } = await supabase
+      .from('client_cal_calendar')
+      .update({
+        connection_status: 'disconnected',
+        cal_access_token: '',
+        cal_refresh_token: '',
+        refresh_token_present: false,
+        access_token_expires_at: null,
+        reauth_reason: null,
+        last_error: null,
+        last_synced_at: new Date().toISOString(),
+      })
+      .eq('client_id', clientId);
+
+    if (error) throw error;
+    return { success: true };
+  },
 };

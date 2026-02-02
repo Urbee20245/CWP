@@ -53,21 +53,33 @@ serve(async (req) => {
             console.error('[get-agent-settings] Events fetch failed:', eventsError);
         }
 
-        // Check Google Calendar connection status
-        // Guardrail: "connected" is only true if refresh_token_present is true.
+        // Google Calendar connection status
         const { data: calendarStatus } = await supabaseAdmin
             .from('client_google_calendar')
             .select('connection_status, calendar_id, last_synced_at, refresh_token_present, reauth_reason, last_error')
             .eq('client_id', client_id)
             .maybeSingle();
 
-        const calendarConnected = !!(
+        const googleCalendarConnected = !!(
             calendarStatus &&
             calendarStatus.connection_status === 'connected' &&
             calendarStatus.refresh_token_present === true
         );
 
-        // Check voice integration status
+        // Cal.com connection status
+        const { data: calStatus } = await supabaseAdmin
+            .from('client_cal_calendar')
+            .select('connection_status, last_synced_at, refresh_token_present, reauth_reason, last_error, default_event_type_id')
+            .eq('client_id', client_id)
+            .maybeSingle();
+
+        const calConnected = !!(
+            calStatus &&
+            calStatus.connection_status === 'connected' &&
+            calStatus.refresh_token_present === true
+        );
+
+        // Voice integration status
         const { data: voiceStatus } = await supabaseAdmin
             .from('client_voice_integrations')
             .select('retell_agent_id, voice_status, phone_number')
@@ -82,8 +94,16 @@ serve(async (req) => {
             settings: settings || null,
             recent_events: recentEvents || [],
             integrations: {
+                cal_com: calStatus ? {
+                    connected: calConnected,
+                    default_event_type_id: calStatus.default_event_type_id,
+                    last_synced: calStatus.last_synced_at,
+                    status: calStatus.connection_status,
+                    reauth_reason: calStatus.reauth_reason,
+                    last_error: calStatus.last_error,
+                } : { connected: false, status: 'disconnected' },
                 google_calendar: calendarStatus ? {
-                    connected: calendarConnected,
+                    connected: googleCalendarConnected,
                     calendar_id: calendarStatus.calendar_id,
                     last_synced: calendarStatus.last_synced_at,
                     status: calendarStatus.connection_status,
