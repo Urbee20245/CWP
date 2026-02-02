@@ -86,9 +86,19 @@ const Login: React.FC = () => {
     }
     setResetLoading(true);
     try {
-      const { error } = await supabase.auth.resetPasswordForEmail(resetEmail, { redirectTo: resetRedirect });
+      // Use server-generated recovery link + Resend email to avoid Supabase SMTP errors.
+      const { data, error } = await supabase.functions.invoke("send-password-reset", {
+        body: { email: resetEmail, redirect_to: resetRedirect },
+      });
+
       if (error) throw error;
-      setResetMessage({ type: "success", text: "Password reset email sent. Please check your inbox." });
+      const parsed = typeof data === "string" ? JSON.parse(data) : data;
+      if (parsed?.error) throw new Error(parsed.error);
+
+      setResetMessage({
+        type: "success",
+        text: "If an account exists for that email, a password reset link has been sent.",
+      });
     } catch (err: any) {
       setResetMessage({ type: "error", text: err?.message || "Failed to send reset email." });
     } finally {
@@ -131,11 +141,7 @@ const Login: React.FC = () => {
             ← Return to homepage
           </a>
           <a href="/">
-            <img
-              src="/CWPlogolight.png"
-              alt="Custom Websites Plus"
-              className="h-8 w-auto"
-            />
+            <img src="/CWPlogolight.png" alt="Custom Websites Plus" className="h-8 w-auto" />
           </a>
         </div>
       </div>
@@ -244,9 +250,7 @@ const Login: React.FC = () => {
                       {resetLoading ? "Sending..." : "Send reset link"}
                     </button>
                   </form>
-                  <p className="text-[11px] text-slate-500 mt-2">
-                    We'll email you a secure link to reset your password.
-                  </p>
+                  <p className="text-[11px] text-slate-500 mt-2">We'll email you a secure link to reset your password.</p>
                 </div>
               )}
             </div>
