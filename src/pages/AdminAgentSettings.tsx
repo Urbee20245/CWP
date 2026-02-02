@@ -626,13 +626,13 @@ const AdminAgentSettings: React.FC = () => {
     const defs = [
       {
         name: "check-availability",
-        description: "Check availability using the client-selected provider (Cal.com OR Google).",
+        description: "Check availability using the client's selected booking provider (Cal AI / Cal.com OR Google Calendar).",
         method: "POST",
         url: `${base}/check-availability`
       },
       {
-        name: "book-appointment",
-        description: "Book a meeting using the client-selected provider (Cal.com OR Google).",
+        name: "book-meeting",
+        description: "Book a meeting using the client's selected booking provider (Cal AI / Cal.com OR Google Calendar).",
         method: "POST",
         url: `${base}/book-meeting`
       },
@@ -687,7 +687,7 @@ const AdminAgentSettings: React.FC = () => {
                   <p className="text-[11px] text-slate-500 mt-1">No fallback: the AI uses only this provider.</p>
                 </div>
 
-                <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
                   {/* Cal.com */}
                   <div className={`p-3 rounded-lg border ${integrations.cal_com.connected ? 'border-green-200 bg-green-50' : 'border-amber-200 bg-amber-50'}`}>
                     <div className="flex items-center gap-2">
@@ -704,6 +704,26 @@ const AdminAgentSettings: React.FC = () => {
                             : 'Not connected')}
                     </p>
                     {!integrations.cal_com.connected && integrations.cal_com.last_error && (
+                      <p className="text-[11px] mt-1 text-slate-500">Last error: {integrations.cal_com.last_error}</p>
+                    )}
+                  </div>
+
+                  {/* Cal AI */}
+                  <div className={`p-3 rounded-lg border ${(integrations.calendar_provider || settings.calendar_provider) === 'cal' && integrations.cal_com.connected && integrations.cal_com.default_event_type_id ? 'border-green-200 bg-green-50' : 'border-amber-200 bg-amber-50'}`}>
+                    <div className="flex items-center gap-2">
+                      <Calendar className={`w-4 h-4 ${(integrations.calendar_provider || settings.calendar_provider) === 'cal' && integrations.cal_com.connected && integrations.cal_com.default_event_type_id ? 'text-green-600' : 'text-amber-600'}`} />
+                      <span className="text-sm font-medium">Cal AI</span>
+                    </div>
+                    <p className="text-xs mt-1 text-slate-600">
+                      {(integrations.calendar_provider || settings.calendar_provider) !== 'cal'
+                        ? 'Not selected'
+                        : (integrations.cal_com.connected
+                            ? (integrations.cal_com.default_event_type_id
+                                ? 'Enabled'
+                                : 'Connected (missing Event Type ID)')
+                            : 'Not connected')}
+                    </p>
+                    {(integrations.calendar_provider || settings.calendar_provider) === 'cal' && !integrations.cal_com.connected && integrations.cal_com.last_error && (
                       <p className="text-[11px] mt-1 text-slate-500">Last error: {integrations.cal_com.last_error}</p>
                     )}
                   </div>
@@ -755,7 +775,7 @@ const AdminAgentSettings: React.FC = () => {
                       Save
                     </button>
                   </div>
-                  <p className="text-[11px] text-slate-500 mt-2">Required if the client selects Cal.com as their provider.</p>
+                  <p className="text-[11px] text-slate-500 mt-2">Required if the client selects Cal.com / Cal AI as their provider.</p>
                 </div>
 
                 <div className="mt-4 flex justify-end">
@@ -945,7 +965,7 @@ const AdminAgentSettings: React.FC = () => {
                     className="w-full md:w-72 px-3 py-2 border border-slate-300 rounded-lg text-sm"
                   >
                     <option value="none">Not configured</option>
-                    <option value="cal">Cal.com</option>
+                    <option value="cal">Cal.com / Cal AI</option>
                     <option value="google">Google Calendar</option>
                   </select>
                   <p className="text-[11px] text-slate-500 mt-1">The agent will use only the selected provider.</p>
@@ -1032,8 +1052,8 @@ const AdminAgentSettings: React.FC = () => {
               <h2 className="text-sm font-semibold text-slate-700 mb-4 flex items-center gap-2"><Zap className="w-4 h-4 text-indigo-500" /> Agent Capabilities</h2>
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                 {[
-                  { key: 'can_check_availability' as const, label: 'Check Availability', desc: 'Uses the selected provider (Cal.com OR Google)' },
-                  { key: 'can_book_meetings' as const, label: 'Book Meetings', desc: 'Books using the selected provider (Cal.com OR Google)' },
+                  { key: 'can_check_availability' as const, label: 'Check Availability', desc: 'Uses the selected provider (Cal AI / Cal.com OR Google)' },
+                  { key: 'can_book_meetings' as const, label: 'Book Meetings', desc: 'Books using the selected provider (Cal AI / Cal.com OR Google)' },
                   { key: 'can_transfer_calls' as const, label: 'Transfer Calls', desc: 'Transfer to a live agent (requires Retell config)' },
                   { key: 'can_send_sms' as const, label: 'Send SMS', desc: 'Send text confirmations (requires Twilio)' },
                 ].map(cap => (

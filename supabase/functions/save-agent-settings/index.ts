@@ -42,6 +42,7 @@ serve(async (req) => {
             'webhook_check_availability', 'webhook_book_meeting',
             'webhook_call_started', 'webhook_call_ended',
             'is_active',
+            'calendar_provider',
         ];
 
         for (const field of allowedFields) {
