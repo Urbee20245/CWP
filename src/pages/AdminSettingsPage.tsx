@@ -106,7 +106,7 @@ const AdminSettingsPage: React.FC = () => {
           {/* Cal.com OAuth (Cal AI) */}
           <div className="lg:col-span-1 bg-white p-6 rounded-xl shadow-lg border border-slate-100">
             <h2 className="text-xl font-bold text-slate-900 mb-4 flex items-center gap-2 border-b border-slate-100 pb-4">
-              <Calendar className="w-5 h-5 text-emerald-600" /> Cal.com OAuth (Cal AI)
+              <Calendar className="w-5 h-5 text-emerald-600" /> Cal.com OAuth
             </h2>
 
             <p className="text-slate-600 mb-4 text-sm">

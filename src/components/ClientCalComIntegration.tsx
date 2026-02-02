@@ -273,7 +273,7 @@ const ClientCalComIntegration: React.FC<Props> = ({ clientId }) => {
               <Info className="w-4 h-4 mt-0.5" />
               <div>
                 <p className="font-semibold">Recommended</p>
-                <p className="text-xs mt-1">Cal.com is our preferred booking provider for Retell AI automation.</p>
+                <p className="text-xs mt-1">Cal.com is our preferred booking provider.</p>
               </div>
             </div>
           )}

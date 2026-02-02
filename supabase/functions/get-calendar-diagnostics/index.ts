@@ -52,8 +52,8 @@ serve(async (req) => {
     const clientId = body?.client_id;
     if (!clientId) return errorResponse('Missing required field: client_id', 400);
 
-    // Calendar row
-    const { data: cal } = await supabaseAdmin
+    // Google Calendar row
+    const { data: gc } = await supabaseAdmin
       .from('client_google_calendar')
       .select(
         'connection_status, refresh_token_present, access_token_expires_at, calendar_id, last_successful_calendar_call, last_error, reauth_reason'
@@ -61,7 +61,16 @@ serve(async (req) => {
       .eq('client_id', clientId)
       .maybeSingle();
 
-    // Retell/voice linkage (for quick context)
+    // Cal.com Calendar row
+    const { data: cal } = await supabaseAdmin
+      .from('client_cal_calendar')
+      .select(
+        'connection_status, refresh_token_present, access_token_expires_at, default_event_type_id, last_successful_calendar_call, last_error, reauth_reason'
+      )
+      .eq('client_id', clientId)
+      .maybeSingle();
+
+    // Retell/voice linkage (context)
     const [{ data: agentSettings }, { data: voice }] = await Promise.all([
       supabaseAdmin
         .from('ai_agent_settings')
@@ -75,18 +84,24 @@ serve(async (req) => {
         .maybeSingle(),
     ]);
 
-    const connection_status = cal?.connection_status || 'disconnected';
-    const refresh_token_present = cal?.refresh_token_present === true;
-
     return jsonResponse({
       client_id: clientId,
       retell_agent_id: agentSettings?.retell_agent_id || voice?.retell_agent_id || null,
       retell_voice_status: voice?.voice_status || null,
       google_calendar: {
-        connection_status,
-        refresh_token_present,
+        connection_status: gc?.connection_status || 'disconnected',
+        refresh_token_present: gc?.refresh_token_present === true,
+        access_token_expires_at: gc?.access_token_expires_at || null,
+        calendar_id: gc?.calendar_id || 'primary',
+        last_successful_calendar_call: gc?.last_successful_calendar_call || null,
+        last_error: gc?.last_error || null,
+        reauth_reason: gc?.reauth_reason || null,
+      },
+      cal_com: {
+        connection_status: cal?.connection_status || 'disconnected',
+        refresh_token_present: cal?.refresh_token_present === true,
         access_token_expires_at: cal?.access_token_expires_at || null,
-        calendar_id: cal?.calendar_id || 'primary',
+        default_event_type_id: cal?.default_event_type_id || null,
         last_successful_calendar_call: cal?.last_successful_calendar_call || null,
         last_error: cal?.last_error || null,
         reauth_reason: cal?.reauth_reason || null,

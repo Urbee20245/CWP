@@ -101,6 +101,16 @@ interface CalendarDiagnostics {
     last_error: string | null;
     reauth_reason: string | null;
   };
+  // ADDED: Cal.com diagnostics
+  cal_com: {
+    connection_status: string;
+    refresh_token_present: boolean;
+    access_token_expires_at: string | null;
+    default_event_type_id: string | null;
+    last_successful_calendar_call: string | null;
+    last_error: string | null;
+    reauth_reason: string | null;
+  };
 }
 
 const SUPABASE_FUNCTIONS_BASE = 'https://nvgumhlewbqynrhlkqhx.supabase.co/functions/v1';
@@ -429,11 +439,30 @@ const AdminAgentSettings: React.FC = () => {
     const needsReauth = gc.refresh_token_present === false || gc.connection_status === 'needs_reauth';
     const hasError = !!gc.last_error;
 
-    if (usable) badges.push({ label: 'Connected', cls: 'bg-emerald-100 text-emerald-800 border-emerald-200' });
-    if (needsReauth) badges.push({ label: 'Needs Re-Authorization', cls: 'bg-amber-100 text-amber-800 border-amber-200' });
-    if (hasError) badges.push({ label: 'Error', cls: 'bg-red-100 text-red-800 border-red-200' });
+    if (usable) badges.push({ label: 'Google: Connected', cls: 'bg-emerald-100 text-emerald-800 border-emerald-200' });
+    if (needsReauth) badges.push({ label: 'Google: Needs Re-Authorization', cls: 'bg-amber-100 text-amber-800 border-amber-200' });
+    if (hasError) badges.push({ label: 'Google: Error', cls: 'bg-red-100 text-red-800 border-red-200' });
 
-    if (badges.length === 0) badges.push({ label: 'Not Connected', cls: 'bg-slate-100 text-slate-700 border-slate-200' });
+    if (badges.length === 0) badges.push({ label: 'Google: Not Connected', cls: 'bg-slate-100 text-slate-700 border-slate-200' });
+    return badges;
+  }, [calendarDiag]);
+
+  const calBadges = useMemo(() => {
+    if (!calendarDiag) return [] as { label: string; cls: string }[];
+    const cal = calendarDiag.cal_com;
+    const badges: { label: string; cls: string }[] = [];
+
+    const usable = cal.connection_status === 'connected' && cal.refresh_token_present === true && !!(cal.default_event_type_id && cal.default_event_type_id.trim());
+    const needsReauth = cal.refresh_token_present === false || cal.connection_status === 'needs_reauth';
+    const missingEventType = cal.connection_status === 'connected' && (!cal.default_event_type_id || !cal.default_event_type_id.trim());
+    const hasError = !!cal.last_error;
+
+    if (usable) badges.push({ label: 'Cal.com: Connected', cls: 'bg-emerald-100 text-emerald-800 border-emerald-200' });
+    if (missingEventType) badges.push({ label: 'Cal.com: Missing Event Type', cls: 'bg-amber-100 text-amber-800 border-amber-200' });
+    if (needsReauth) badges.push({ label: 'Cal.com: Needs Re-Authorization', cls: 'bg-amber-100 text-amber-800 border-amber-200' });
+    if (hasError) badges.push({ label: 'Cal.com: Error', cls: 'bg-red-100 text-red-800 border-red-200' });
+
+    if (badges.length === 0) badges.push({ label: 'Cal.com: Not Connected', cls: 'bg-slate-100 text-slate-700 border-slate-200' });
     return badges;
   }, [calendarDiag]);
 
@@ -626,13 +655,13 @@ const AdminAgentSettings: React.FC = () => {
     const defs = [
       {
         name: "check-availability",
-        description: "Check availability using the client's selected booking provider (Cal AI / Cal.com OR Google Calendar).",
+        description: "Check availability using the client's selected booking provider (Cal.com OR Google Calendar).",
         method: "POST",
         url: `${base}/check-availability`
       },
       {
         name: "book-meeting",
-        description: "Book a meeting using the client's selected booking provider (Cal AI / Cal.com OR Google Calendar).",
+        description: "Book a meeting using the client's selected booking provider (Cal.com OR Google Calendar).",
         method: "POST",
         url: `${base}/book-meeting`
       },
@@ -692,7 +721,7 @@ const AdminAgentSettings: React.FC = () => {
                   <div className={`p-3 rounded-lg border ${integrations.cal_com.connected ? 'border-green-200 bg-green-50' : 'border-amber-200 bg-amber-50'}`}>
                     <div className="flex items-center gap-2">
                       <Calendar className={`w-4 h-4 ${integrations.cal_com.connected ? 'text-green-600' : 'text-amber-600'}`} />
-                      <span className="text-sm font-medium">Cal.com</span>
+                      <span className="text-sm font-medium">Cal.com (Selected)</span>
                     </div>
                     <p className="text-xs mt-1 text-slate-600">
                       {integrations.cal_com.connected
@@ -708,11 +737,11 @@ const AdminAgentSettings: React.FC = () => {
                     )}
                   </div>
 
-                  {/* Cal AI */}
+                  {/* Cal.com */}
                   <div className={`p-3 rounded-lg border ${(integrations.calendar_provider || settings.calendar_provider) === 'cal' && integrations.cal_com.connected && integrations.cal_com.default_event_type_id ? 'border-green-200 bg-green-50' : 'border-amber-200 bg-amber-50'}`}>
                     <div className="flex items-center gap-2">
                       <Calendar className={`w-4 h-4 ${(integrations.calendar_provider || settings.calendar_provider) === 'cal' && integrations.cal_com.connected && integrations.cal_com.default_event_type_id ? 'text-green-600' : 'text-amber-600'}`} />
-                      <span className="text-sm font-medium">Cal AI</span>
+                      <span className="text-sm font-medium">Cal.com (Selected)</span>
                     </div>
                     <p className="text-xs mt-1 text-slate-600">
                       {(integrations.calendar_provider || settings.calendar_provider) !== 'cal'
@@ -775,7 +804,7 @@ const AdminAgentSettings: React.FC = () => {
                       Save
                     </button>
                   </div>
-                  <p className="text-[11px] text-slate-500 mt-2">Required if the client selects Cal.com / Cal AI as their provider.</p>
+                  <p className="text-[11px] text-slate-500 mt-2">Required if the client selects Cal.com as their provider.</p>
                 </div>
 
                 <div className="mt-4 flex justify-end">
@@ -799,7 +828,7 @@ const AdminAgentSettings: React.FC = () => {
                   className="w-full flex items-center justify-between text-sm font-semibold text-slate-700"
                 >
                   <span className="flex items-center gap-2">
-                    <Wrench className="w-4 h-4 text-indigo-500" /> Calendar Diagnostics (Google)
+                    <Wrench className="w-4 h-4 text-indigo-500" /> Calendar Diagnostics
                   </span>
                   {showCalendarDiagnostics ? <ChevronUp className="w-4 h-4" /> : <ChevronDown className="w-4 h-4" />}
                 </button>
@@ -843,22 +872,26 @@ const AdminAgentSettings: React.FC = () => {
                     ) : (
                       <div className="space-y-3">
                         <div className="flex flex-wrap items-center gap-2">
-                          {calendarBadges.map((b) => (
+                          {googleBadges.map((b) => (
+                            <span key={b.label} className={`px-2 py-0.5 text-xs rounded border ${b.cls}`}>{b.label}</span>
+                          ))}
+                          {calBadges.map((b) => (
                             <span key={b.label} className={`px-2 py-0.5 text-xs rounded border ${b.cls}`}>{b.label}</span>
                           ))}
                         </div>
 
                         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                          {/* Google diagnostics */}
                           <div className="p-3 rounded-lg border border-slate-200 bg-slate-50">
-                            <p className="text-xs text-slate-500">connection_status</p>
+                            <p className="text-xs text-slate-500">Google: connection_status</p>
                             <p className="text-sm font-mono text-slate-900">{calendarDiag.google_calendar.connection_status}</p>
                           </div>
                           <div className="p-3 rounded-lg border border-slate-200 bg-slate-50">
-                            <p className="text-xs text-slate-500">refresh_token_present</p>
+                            <p className="text-xs text-slate-500">Google: refresh_token_present</p>
                             <p className="text-sm font-mono text-slate-900">{String(calendarDiag.google_calendar.refresh_token_present)}</p>
                           </div>
                           <div className="p-3 rounded-lg border border-slate-200 bg-slate-50">
-                            <p className="text-xs text-slate-500">access_token_expires_at</p>
+                            <p className="text-xs text-slate-500">Google: access_token_expires_at</p>
                             <p className="text-sm text-slate-900">
                               {calendarDiag.google_calendar.access_token_expires_at
                                 ? `${formatTs(calendarDiag.google_calendar.access_token_expires_at)} (${formatExpires(calendarDiag.google_calendar.access_token_expires_at)})`
@@ -866,25 +899,54 @@ const AdminAgentSettings: React.FC = () => {
                             </p>
                           </div>
                           <div className="p-3 rounded-lg border border-slate-200 bg-slate-50">
-                            <p className="text-xs text-slate-500">calendar_id</p>
+                            <p className="text-xs text-slate-500">Google: calendar_id</p>
                             <p className="text-sm font-mono text-slate-900">{calendarDiag.google_calendar.calendar_id || 'primary'}</p>
                           </div>
                           <div className="p-3 rounded-lg border border-slate-200 bg-slate-50">
-                            <p className="text-xs text-slate-500">last_successful_calendar_call</p>
+                            <p className="text-xs text-slate-500">Google: last_successful_calendar_call</p>
                             <p className="text-sm text-slate-900">{formatTs(calendarDiag.google_calendar.last_successful_calendar_call)}</p>
                           </div>
                           <div className="p-3 rounded-lg border border-slate-200 bg-slate-50">
-                            <p className="text-xs text-slate-500">last_error</p>
+                            <p className="text-xs text-slate-500">Google: last_error</p>
                             <p className="text-sm text-slate-900">{calendarDiag.google_calendar.last_error || '—'}</p>
                           </div>
                           <div className="p-3 rounded-lg border border-slate-200 bg-slate-50">
-                            <p className="text-xs text-slate-500">reauth_reason</p>
+                            <p className="text-xs text-slate-500">Google: reauth_reason</p>
                             <p className="text-sm text-slate-900">{calendarDiag.google_calendar.reauth_reason || '—'}</p>
                           </div>
+
+                          {/* Cal.com diagnostics */}
                           <div className="p-3 rounded-lg border border-slate-200 bg-slate-50">
-                            <p className="text-xs text-slate-500">Retell agent / voice</p>
-                            <p className="text-sm font-mono text-slate-900">{calendarDiag.retell_agent_id || '—'}</p>
-                            <p className="text-xs text-slate-500 mt-1">{calendarDiag.retell_voice_status || '—'}</p>
+                            <p className="text-xs text-slate-500">Cal.com: connection_status</p>
+                            <p className="text-sm font-mono text-slate-900">{calendarDiag.cal_com.connection_status}</p>
+                          </div>
+                          <div className="p-3 rounded-lg border border-slate-200 bg-slate-50">
+                            <p className="text-xs text-slate-500">Cal.com: refresh_token_present</p>
+                            <p className="text-sm font-mono text-slate-900">{String(calendarDiag.cal_com.refresh_token_present)}</p>
+                          </div>
+                          <div className="p-3 rounded-lg border border-slate-200 bg-slate-50">
+                            <p className="text-xs text-slate-500">Cal.com: access_token_expires_at</p>
+                            <p className="text-sm text-slate-900">
+                              {calendarDiag.cal_com.access_token_expires_at
+                                ? `${formatTs(calendarDiag.cal_com.access_token_expires_at)} (${formatExpires(calendarDiag.cal_com.access_token_expires_at)})`
+                                : '—'}
+                            </p>
+                          </div>
+                          <div className="p-3 rounded-lg border border-slate-200 bg-slate-50">
+                            <p className="text-xs text-slate-500">Cal.com: default_event_type_id</p>
+                            <p className="text-sm font-mono text-slate-900">{calendarDiag.cal_com.default_event_type_id || '—'}</p>
+                          </div>
+                          <div className="p-3 rounded-lg border border-slate-200 bg-slate-50">
+                            <p className="text-xs text-slate-500">Cal.com: last_successful_calendar_call</p>
+                            <p className="text-sm text-slate-900">{formatTs(calendarDiag.cal_com.last_successful_calendar_call)}</p>
+                          </div>
+                          <div className="p-3 rounded-lg border border-slate-200 bg-slate-50">
+                            <p className="text-xs text-slate-500">Cal.com: last_error</p>
+                            <p className="text-sm text-slate-900">{calendarDiag.cal_com.last_error || '—'}</p>
+                          </div>
+                          <div className="p-3 rounded-lg border border-slate-200 bg-slate-50">
+                            <p className="text-xs text-slate-500">Cal.com: reauth_reason</p>
+                            <p className="text-sm text-slate-900">{calendarDiag.cal_com.reauth_reason || '—'}</p>
                           </div>
                         </div>
                       </div>
@@ -965,7 +1027,7 @@ const AdminAgentSettings: React.FC = () => {
                     className="w-full md:w-72 px-3 py-2 border border-slate-300 rounded-lg text-sm"
                   >
                     <option value="none">Not configured</option>
-                    <option value="cal">Cal.com / Cal AI</option>
+                    <option value="cal">Cal.com</option>
                     <option value="google">Google Calendar</option>
                   </select>
                   <p className="text-[11px] text-slate-500 mt-1">The agent will use only the selected provider.</p>
