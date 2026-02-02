@@ -172,6 +172,19 @@ export const ClientIntegrationService = {
     return data;
   },
 
+  setCalComDefaultEventTypeId: async (clientId: string, eventTypeId: string | null) => {
+    const clean = typeof eventTypeId === 'string' ? eventTypeId.trim() : '';
+    const { error } = await supabase
+      .from('client_cal_calendar')
+      .update({
+        default_event_type_id: clean.length ? clean : null,
+      })
+      .eq('client_id', clientId);
+
+    if (error) throw error;
+    return { success: true };
+  },
+
   disconnectCalCom: async (clientId: string) => {
     const { error } = await supabase
       .from('client_cal_calendar')

@@ -67,6 +67,14 @@ interface WebhookEvent {
 }
 
 interface IntegrationStatus {
+  cal_com: {
+    connected: boolean;
+    default_event_type_id?: string | null;
+    last_synced?: string;
+    status?: string;
+    reauth_reason?: string | null;
+    last_error?: string | null;
+  };
   google_calendar: {
     connected: boolean;
     calendar_id?: string;
@@ -139,7 +147,7 @@ const AdminAgentSettings: React.FC = () => {
   const [webhookEvents, setWebhookEvents] = useState<WebhookEvent[]>([]);
   const [integrations, setIntegrations] = useState<IntegrationStatus | null>(null);
 
-  // Calendar Diagnostics
+  // Calendar Diagnostics (Google-specific)
   const [showCalendarDiagnostics, setShowCalendarDiagnostics] = useState(false);
   const [calendarDiag, setCalendarDiag] = useState<CalendarDiagnostics | null>(null);
   const [calendarDiagLoading, setCalendarDiagLoading] = useState(false);
@@ -172,6 +180,10 @@ const AdminAgentSettings: React.FC = () => {
 
   // Add retrieving state for integration status
   const [isRetrieving, setIsRetrieving] = useState(false);
+
+  // Cal.com event type helper
+  const [calEventTypeDraft, setCalEventTypeDraft] = useState('');
+  const [isSavingCalEventType, setIsSavingCalEventType] = useState(false);
 
   const showFeedback = (type: 'success' | 'error' | 'info', text: string) => {
     setFeedback({ type, text });
@@ -243,11 +255,17 @@ const AdminAgentSettings: React.FC = () => {
 
       if (edge?.integrations) {
         setIntegrations(edge.integrations);
+        setCalEventTypeDraft(edge.integrations?.cal_com?.default_event_type_id || '');
       } else {
-        const [{ data: calendarRow }, { data: voiceRow }] = await Promise.all([
+        const [{ data: calendarRow }, { data: calRow }, { data: voiceRow }] = await Promise.all([
           supabase
             .from('client_google_calendar')
             .select('connection_status, calendar_id, last_synced_at, status, reauth_reason, last_error')
+            .eq('client_id', clientId)
+            .maybeSingle(),
+          supabase
+            .from('client_cal_calendar')
+            .select('connection_status, default_event_type_id, last_synced_at, reauth_reason, last_error')
             .eq('client_id', clientId)
             .maybeSingle(),
           supabase
@@ -258,6 +276,16 @@ const AdminAgentSettings: React.FC = () => {
         ]);
 
         setIntegrations({
+          cal_com: calRow
+            ? {
+                connected: calRow.connection_status === 'connected',
+                default_event_type_id: calRow.default_event_type_id,
+                last_synced: calRow.last_synced_at,
+                status: calRow.connection_status,
+                reauth_reason: calRow.reauth_reason,
+                last_error: calRow.last_error,
+              }
+            : { connected: false },
           google_calendar: calendarRow
             ? {
                 connected: calendarRow.connection_status === 'connected',
@@ -277,6 +305,8 @@ const AdminAgentSettings: React.FC = () => {
               }
             : { configured: false },
         });
+
+        setCalEventTypeDraft(calRow?.default_event_type_id || '');
       }
     } catch (err: any) {
       console.error('[AdminAgentSettings] Failed to fetch settings:', err.message);
@@ -293,6 +323,7 @@ const AdminAgentSettings: React.FC = () => {
       const edge = await AdminService.getAgentSettings(selectedClientId);
       if (edge?.integrations) {
         setIntegrations(edge.integrations);
+        setCalEventTypeDraft(edge.integrations?.cal_com?.default_event_type_id || '');
         showFeedback('success', 'Integration status retrieved from server.');
       } else {
         await fetchSettings(selectedClientId);
@@ -351,6 +382,27 @@ const AdminAgentSettings: React.FC = () => {
     }
   };
 
+  const saveCalEventTypeId = async () => {
+    if (!selectedClientId) return;
+    setIsSavingCalEventType(true);
+    try {
+      const clean = calEventTypeDraft.trim();
+      const { error } = await supabase
+        .from('client_cal_calendar')
+        .update({ default_event_type_id: clean.length ? clean : null })
+        .eq('client_id', selectedClientId);
+
+      if (error) throw error;
+
+      showFeedback('success', 'Cal.com Event Type ID saved.');
+      await fetchSettings(selectedClientId);
+    } catch (e: any) {
+      showFeedback('error', e?.message || 'Failed to save Cal.com Event Type ID');
+    } finally {
+      setIsSavingCalEventType(false);
+    }
+  };
+
   useEffect(() => {
     if (selectedClientId) {
       fetchSettings(selectedClientId);
@@ -364,6 +416,7 @@ const AdminAgentSettings: React.FC = () => {
       setWebhookEvents([]);
       setIntegrations(null);
       setCalendarDiag(null);
+      setCalEventTypeDraft('');
     }
   }, [selectedClientId, fetchSettings, showCalendarDiagnostics, isAdmin, fetchCalendarDiagnostics]);
 
@@ -572,13 +625,13 @@ const AdminAgentSettings: React.FC = () => {
     const defs = [
       {
         name: "check-availability",
-        description: "Check Google Calendar availability before booking.",
+        description: "Check availability via Cal.com (preferred) with a fallback to Google Calendar.",
         method: "POST",
         url: `${base}/check-availability`
       },
       {
         name: "book-appointment",
-        description: "Book a meeting on Google Calendar after user confirms.",
+        description: "Book a meeting via Cal.com (preferred) with a fallback to Google Calendar.",
         method: "POST",
         url: `${base}/book-meeting`
       },
@@ -626,11 +679,33 @@ const AdminAgentSettings: React.FC = () => {
                   <Shield className="w-4 h-4 text-indigo-500" />
                   Integration Status
                 </h2>
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+
+                <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                  {/* Cal.com */}
+                  <div className={`p-3 rounded-lg border ${integrations.cal_com.connected ? 'border-green-200 bg-green-50' : 'border-amber-200 bg-amber-50'}`}>
+                    <div className="flex items-center gap-2">
+                      <Calendar className={`w-4 h-4 ${integrations.cal_com.connected ? 'text-green-600' : 'text-amber-600'}`} />
+                      <span className="text-sm font-medium">Cal.com (Preferred)</span>
+                    </div>
+                    <p className="text-xs mt-1 text-slate-600">
+                      {integrations.cal_com.connected
+                        ? (integrations.cal_com.default_event_type_id
+                            ? `Connected (EventType: ${integrations.cal_com.default_event_type_id})`
+                            : 'Connected (missing Event Type ID)')
+                        : (integrations.cal_com.status === 'needs_reauth'
+                            ? 'Needs re-authorization'
+                            : 'Not connected')}
+                    </p>
+                    {!integrations.cal_com.connected && integrations.cal_com.last_error && (
+                      <p className="text-[11px] mt-1 text-slate-500">Last error: {integrations.cal_com.last_error}</p>
+                    )}
+                  </div>
+
+                  {/* Google Calendar */}
                   <div className={`p-3 rounded-lg border ${integrations.google_calendar.connected ? 'border-green-200 bg-green-50' : 'border-amber-200 bg-amber-50'}`}>
                     <div className="flex items-center gap-2">
                       <Calendar className={`w-4 h-4 ${integrations.google_calendar.connected ? 'text-green-600' : 'text-amber-600'}`} />
-                      <span className="text-sm font-medium">Google Calendar</span>
+                      <span className="text-sm font-medium">Google Calendar (Fallback)</span>
                     </div>
                     <p className="text-xs mt-1 text-slate-600">
                       {integrations.google_calendar.connected
@@ -640,11 +715,11 @@ const AdminAgentSettings: React.FC = () => {
                             : 'Not connected')}
                     </p>
                     {!integrations.google_calendar.connected && integrations.google_calendar.last_error && (
-                      <p className="text-[11px] mt-1 text-slate-500">
-                        Last error: {integrations.google_calendar.last_error}
-                      </p>
+                      <p className="text-[11px] mt-1 text-slate-500">Last error: {integrations.google_calendar.last_error}</p>
                     )}
                   </div>
+
+                  {/* Retell */}
                   <div className={`p-3 rounded-lg border ${integrations.retell.configured ? 'border-green-200 bg-green-50' : 'border-amber-200 bg-amber-50'}`}>
                     <div className="flex items-center gap-2">
                       <Phone className={`w-4 h-4 ${integrations.retell.configured ? 'text-green-600' : 'text-amber-600'}`} />
@@ -653,6 +728,29 @@ const AdminAgentSettings: React.FC = () => {
                     <p className="text-xs mt-1 text-slate-600">{integrations.retell.configured ? `Agent: ${integrations.retell.agent_id} | ${integrations.retell.voice_status || 'inactive'}` : 'No agent configured yet'}</p>
                   </div>
                 </div>
+
+                {/* Cal.com Event Type ID quick-edit */}
+                <div className="mt-4 p-4 rounded-lg border border-slate-200 bg-slate-50">
+                  <p className="text-xs font-semibold text-slate-700 mb-2">Cal.com Default Event Type ID</p>
+                  <div className="flex flex-col sm:flex-row sm:items-center gap-2">
+                    <input
+                      value={calEventTypeDraft}
+                      onChange={(e) => setCalEventTypeDraft(e.target.value)}
+                      placeholder="e.g. 123456"
+                      className="flex-1 px-3 py-2 border border-slate-300 rounded-lg text-sm font-mono"
+                    />
+                    <button
+                      onClick={saveCalEventTypeId}
+                      disabled={isSavingCalEventType || !selectedClientId}
+                      className="inline-flex items-center justify-center gap-2 px-3 py-2 bg-indigo-600 text-white rounded-lg text-sm font-semibold hover:bg-indigo-700 disabled:opacity-50"
+                    >
+                      {isSavingCalEventType ? <Loader2 className="w-4 h-4 animate-spin" /> : <Save className="w-4 h-4" />}
+                      Save
+                    </button>
+                  </div>
+                  <p className="text-[11px] text-slate-500 mt-2">Required for the AI agent to check availability and book via Cal.com.</p>
+                </div>
+
                 <div className="mt-4 flex justify-end">
                   <button
                     onClick={handleRetrieveIntegrations}
@@ -674,7 +772,7 @@ const AdminAgentSettings: React.FC = () => {
                   className="w-full flex items-center justify-between text-sm font-semibold text-slate-700"
                 >
                   <span className="flex items-center gap-2">
-                    <Wrench className="w-4 h-4 text-indigo-500" /> Calendar Diagnostics
+                    <Wrench className="w-4 h-4 text-indigo-500" /> Calendar Diagnostics (Google)
                   </span>
                   {showCalendarDiagnostics ? <ChevronUp className="w-4 h-4" /> : <ChevronDown className="w-4 h-4" />}
                 </button>
@@ -911,8 +1009,8 @@ const AdminAgentSettings: React.FC = () => {
               <h2 className="text-sm font-semibold text-slate-700 mb-4 flex items-center gap-2"><Zap className="w-4 h-4 text-indigo-500" /> Agent Capabilities</h2>
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                 {[
-                  { key: 'can_check_availability' as const, label: 'Check Calendar Availability', desc: 'Query Google Calendar free/busy slots' },
-                  { key: 'can_book_meetings' as const, label: 'Book Meetings', desc: 'Create appointments on Google Calendar' },
+                  { key: 'can_check_availability' as const, label: 'Check Availability', desc: 'Uses Cal.com (preferred) with fallback to Google' },
+                  { key: 'can_book_meetings' as const, label: 'Book Meetings', desc: 'Books via Cal.com (preferred) with fallback to Google' },
                   { key: 'can_transfer_calls' as const, label: 'Transfer Calls', desc: 'Transfer to a live agent (requires Retell config)' },
                   { key: 'can_send_sms' as const, label: 'Send SMS', desc: 'Send text confirmations (requires Twilio)' },
                 ].map(cap => (
@@ -1022,7 +1120,7 @@ const AdminAgentSettings: React.FC = () => {
                 Retell Custom Functions (copy into Retell)
               </h2>
               <p className="text-xs text-slate-600 mb-2">
-                Paste this into Retell's Custom Functions to enable live availability checks and booking via your connected Google Calendar.
+                Paste this into Retell's Custom Functions to enable live availability checks and booking via Cal.com (preferred) with Google fallback.
               </p>
               <textarea
                 readOnly
