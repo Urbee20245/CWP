@@ -102,13 +102,25 @@ const ClientCalComIntegration: React.FC<Props> = ({ clientId }) => {
     const params = new URLSearchParams(window.location.search);
     const provider = params.get('provider');
     const oauthStatus = params.get('status');
+    const oauthError = params.get('error');
+    const missingSecrets = params.get('missing');
 
     if (provider === 'cal') {
       if (oauthStatus === 'success') {
         setNotice('Cal.com authorized successfully. Booking via Cal.com is now enabled.');
       } else if (oauthStatus === 'needs_reauth') {
         setNotice('Cal.com authorized, but we still need one-time re-authorization to enable full access.');
+      } else if (oauthError === 'server_configuration_error' && missingSecrets) {
+        const missingList = missingSecrets.split(',').join(', ');
+        setError(`Server configuration error: The following secrets are missing in Supabase: ${missingList}. Please contact support.`);
       }
+      // Clean up URL params after processing
+      params.delete('provider');
+      params.delete('status');
+      params.delete('error');
+      params.delete('missing');
+      const newUrl = `${window.location.pathname}${params.toString() ? '?' + params.toString() : ''}`;
+      window.history.replaceState({}, document.title, newUrl);
     }
   }, []);
 

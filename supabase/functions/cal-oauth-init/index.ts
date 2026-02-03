@@ -70,6 +70,7 @@ serve(async (req) => {
     const authUrl = `https://app.cal.com/auth/oauth2/authorize?` + new URLSearchParams({
       client_id: CAL_CLIENT_ID,
       redirect_uri: redirectUri,
+      response_type: 'code',
       state: stateToken,
     }).toString();
 
