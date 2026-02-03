@@ -46,8 +46,10 @@ const CalendarSlotPicker: React.FC<CalendarSlotPickerProps> = ({
     setFetchError(null);
 
     try {
+      // IMPORTANT: Pass an object body (supabase-js will JSON encode it).
+      // The edge function supports reading both query params and POST body.
       const { data, error } = await supabase.functions.invoke('get-consultation-slots', {
-        body: JSON.stringify({ days: 14, timezone: 'America/New_York' }),
+        body: { days: 14, timezone: 'America/New_York' },
       });
 
       if (error) {
