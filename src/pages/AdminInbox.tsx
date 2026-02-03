@@ -87,6 +87,23 @@ const AdminInbox: React.FC = () => {
         }
     };
 
+    const handleDelete = async (emailId: string, isIncoming: boolean) => {
+        if (!window.confirm('Are you sure you want to permanently delete this email?')) return;
+
+        const table = isIncoming ? 'incoming_emails' : 'email_logs';
+        const { error } = await supabase
+            .from(table)
+            .delete()
+            .eq('id', emailId);
+
+        if (error) {
+            alert(`Failed to delete email: ${error.message}`);
+        } else {
+            setSelectedEmail(null);
+            fetchData();
+        }
+    };
+
     const EmailListItem: React.FC<{ email: IncomingEmail | SentEmail }> = ({ email }) => {
         const isIncoming = 'from_name' in email;
         const isSelected = selectedEmail?.id === email.id;
@@ -120,12 +137,15 @@ const AdminInbox: React.FC = () => {
                     <button onClick={() => setSelectedEmail(null)} className="flex items-center gap-2 text-sm font-medium text-indigo-600 hover:text-indigo-800">
                         <ArrowLeft className="w-4 h-4" /> Back to List
                     </button>
-                    {isIncoming && (
-                        <div className="flex gap-2">
-                            <button onClick={() => handleStatusChange(email.id, 'unread')} title="Mark as Unread" className="p-2 text-slate-500 hover:bg-slate-100 rounded-full"><EyeOff className="w-4 h-4" /></button>
-                            <button onClick={() => handleStatusChange(email.id, 'archived')} title="Archive" className="p-2 text-slate-500 hover:bg-slate-100 rounded-full"><Archive className="w-4 h-4" /></button>
-                        </div>
-                    )}
+                    <div className="flex gap-2">
+                        {isIncoming && (
+                            <>
+                                <button onClick={() => handleStatusChange(email.id, 'unread')} title="Mark as Unread" className="p-2 text-slate-500 hover:bg-slate-100 rounded-full"><EyeOff className="w-4 h-4" /></button>
+                                <button onClick={() => handleStatusChange(email.id, 'archived')} title="Archive" className="p-2 text-slate-500 hover:bg-slate-100 rounded-full"><Archive className="w-4 h-4" /></button>
+                            </>
+                        )}
+                        <button onClick={() => handleDelete(email.id, isIncoming)} title="Delete" className="p-2 text-red-500 hover:bg-red-50 rounded-full"><Trash2 className="w-4 h-4" /></button>
+                    </div>
                 </div>
                 <h2 className="text-xl font-bold text-slate-900 mb-2">{email.subject}</h2>
                 <div className="flex justify-between items-center mb-4 text-sm">
