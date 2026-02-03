@@ -5,8 +5,9 @@ export const config = {
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts"
 import { sendPublicFormEmail } from '../_shared/publicEmailService.ts';
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2.45.0';
-import { GoogleCalendarService } from '../_shared/googleCalendarService.ts'; // Import the new service
-import { parse, formatISO, addMinutes } from 'https://esm.sh/date-fns@3.6.0'; // Import date-fns
+import { GoogleCalendarService } from '../_shared/googleCalendarService.ts';
+import { CalCalendarService } from '../_shared/calCalendarService.ts';
+import { parse, formatISO, addMinutes } from 'https://esm.sh/date-fns@3.6.0';
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
@@ -42,6 +43,7 @@ serve(async (req) => {
       alternateTime,
       referralSource,
       decisionMaker,
+      selectedSlotDatetime,
     } = body
 
     if (!fullName || !email || !message) {
@@ -95,8 +97,9 @@ serve(async (req) => {
       // Log the error but continue to send emails.
     }
     
-    // --- Google Calendar Event Creation ---
-    if (formType === 'Consultation Request' && preferredDate && preferredTime) {
+    // --- Calendar Booking Creation ---
+    let calendarBookingCreated = false;
+    if (formType === 'Consultation Request') {
         try {
             const { data: adminProfile } = await supabaseAdmin
                 .from('profiles')
@@ -104,7 +107,7 @@ serve(async (req) => {
                 .eq('role', 'admin')
                 .limit(1)
                 .single();
-                
+
             if (adminProfile) {
                 const { data: adminClient } = await supabaseAdmin
                     .from('clients')
@@ -112,39 +115,94 @@ serve(async (req) => {
                     .eq('owner_profile_id', adminProfile.id)
                     .limit(1)
                     .single();
-                    
+
                 if (adminClient) {
                     const targetClientId = adminClient.id;
-                    
-                    const dateTimeString = `${preferredDate} ${preferredTime}`;
-                    const parsedDate = parse(dateTimeString, 'yyyy-MM-dd h:mm a', new Date());
-                    
-                    if (!isNaN(parsedDate.getTime())) {
-                        const startTimeISO = formatISO(parsedDate);
-                        const endTimeISO = formatISO(addMinutes(parsedDate, 30));
-                        
-                        const eventDetails = {
-                            title: `NEW CONSULTATION: ${businessName || fullName}`,
-                            startTime: startTimeISO,
-                            endTime: endTimeISO,
-                            description: detailsText,
-                            attendeeEmail: email,
-                        };
-                        
-                        await GoogleCalendarService.createCalendarEvent(targetClientId, eventDetails);
-                    } else {
-                        console.error('[submit-contact-form] Calendar: Invalid date/time format.');
+
+                    // Check if we have a Cal.com selected slot (from the slot picker)
+                    if (selectedSlotDatetime) {
+                        console.log('[submit-contact-form] Creating Cal.com booking for selected slot:', selectedSlotDatetime);
+
+                        // Check Cal.com connection
+                        const { data: calConn } = await supabaseAdmin
+                            .from('client_cal_calendar')
+                            .select('connection_status, refresh_token_present, default_event_type_id')
+                            .eq('client_id', targetClientId)
+                            .maybeSingle();
+
+                        const calUsable = !!(
+                            calConn &&
+                            calConn.connection_status === 'connected' &&
+                            calConn.refresh_token_present === true &&
+                            calConn.default_event_type_id &&
+                            String(calConn.default_event_type_id).trim()
+                        );
+
+                        if (calUsable) {
+                            try {
+                                await CalCalendarService.createCalBooking(targetClientId, {
+                                    eventTypeId: String(calConn.default_event_type_id),
+                                    start: selectedSlotDatetime,
+                                    attendee: {
+                                        name: fullName,
+                                        email: email,
+                                        timeZone: 'America/New_York',
+                                    },
+                                    metadata: {
+                                        businessName: businessName || '',
+                                        phone: phone || '',
+                                        source: 'consultation_form',
+                                        projectDescription: projectDescription || '',
+                                    },
+                                });
+                                calendarBookingCreated = true;
+                                console.log('[submit-contact-form] Cal.com booking created successfully');
+                            } catch (calError: any) {
+                                console.error('[submit-contact-form] Cal.com booking failed:', calError.message);
+                                // Continue without failing the form submission
+                            }
+                        } else {
+                            console.warn('[submit-contact-form] Cal.com not usable, skipping booking creation');
+                        }
+                    }
+                    // Fallback: Use Google Calendar if no Cal.com slot and preferredDate/Time provided
+                    else if (preferredDate && preferredTime) {
+                        const dateTimeString = `${preferredDate} ${preferredTime}`;
+                        const parsedDate = parse(dateTimeString, 'yyyy-MM-dd h:mm a', new Date());
+
+                        if (!isNaN(parsedDate.getTime())) {
+                            const startTimeISO = formatISO(parsedDate);
+                            const endTimeISO = formatISO(addMinutes(parsedDate, 30));
+
+                            const eventDetails = {
+                                title: `NEW CONSULTATION: ${businessName || fullName}`,
+                                startTime: startTimeISO,
+                                endTime: endTimeISO,
+                                description: detailsText,
+                                attendeeEmail: email,
+                            };
+
+                            await GoogleCalendarService.createCalendarEvent(targetClientId, eventDetails);
+                            calendarBookingCreated = true;
+                        } else {
+                            console.error('[submit-contact-form] Calendar: Invalid date/time format.');
+                        }
                     }
                 }
             }
-        } catch (e) {
-            console.error('[submit-contact-form] Calendar Integration Failed:', e);
+        } catch (e: any) {
+            console.error('[submit-contact-form] Calendar Integration Failed:', e.message || e);
         }
     }
+
+    const calendarStatusBadge = calendarBookingCreated
+      ? `<p style="background: #10b981; color: white; padding: 8px 12px; border-radius: 6px; display: inline-block; margin-bottom: 16px;">Calendar Booking Confirmed</p>`
+      : (formType === 'Consultation Request' ? `<p style="background: #f59e0b; color: white; padding: 8px 12px; border-radius: 6px; display: inline-block; margin-bottom: 16px;">Manual Calendar Confirmation Needed</p>` : '');
 
     const internalHtml = `
         <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
           <h2 style="color: #0EA5E9;">New ${formType} Submission</h2>
+          ${calendarStatusBadge}
           <div style="background: #f9fafb; padding: 20px; border-radius: 8px; margin: 20px 0;">
             <p><strong style="color: #374151;">Name:</strong> ${fullName}</p>
             <p><strong style="color: #374151;">Email:</strong> <a href="mailto:${email}" style="color: #0EA5E9;">${email}</a></p>
@@ -157,7 +215,7 @@ serve(async (req) => {
             ${timeline ? `<p><strong style="color: #374151;">Timeline:</strong> ${timeline}</p>` : ''}
             ${referralSource ? `<p><strong style="color: #374151;">Referral Source:</strong> ${referralSource}</p>` : ''}
             ${decisionMaker ? `<p><strong style="color: #374151;">Decision Maker:</strong> ${decisionMaker}</p>` : ''}
-            ${preferredDate && preferredTime ? `<p><strong style="color: #374151;">Preferred Time:</strong> ${preferredDate} at ${preferredTime} ET</p>` : ''}
+            ${preferredDate && preferredTime ? `<p><strong style="color: #374151;">Scheduled Time:</strong> ${preferredDate} at ${preferredTime} ET ${calendarBookingCreated ? '(Confirmed)' : ''}</p>` : ''}
             ${alternateDate && alternateTime ? `<p><strong style="color: #374151;">Alternate Time:</strong> ${alternateDate} at ${alternateTime} ET</p>` : ''}
           </div>
           <div style="background: white; padding: 20px; border-left: 4px solid #0EA5E9; margin: 20px 0;">
@@ -183,22 +241,45 @@ serve(async (req) => {
 
     // 2) Email the submitter (confirmation)
     const isConsultation = formType === 'Consultation Request';
-    const clientSubject = isConsultation
-      ? 'We received your consultation request — Custom Websites Plus'
-      : 'We received your message — Custom Websites Plus';
+    const clientSubject = isConsultation && calendarBookingCreated
+      ? 'Your consultation is confirmed — Custom Websites Plus'
+      : isConsultation
+        ? 'We received your consultation request — Custom Websites Plus'
+        : 'We received your message — Custom Websites Plus';
 
-    const whenLine = preferredDate && preferredTime
-      ? `<p style="margin: 0;"><strong>Preferred time:</strong> ${preferredDate} at ${preferredTime} ET</p>`
+    const confirmedBadge = calendarBookingCreated
+      ? `<div style="background: #10b981; color: white; padding: 12px 16px; border-radius: 8px; margin-bottom: 16px; text-align: center;">
+           <strong>Your consultation is confirmed!</strong>
+         </div>`
       : '';
 
-    const altWhenLine = alternateDate && alternateTime
+    const whenLine = preferredDate && preferredTime
+      ? `<p style="margin: 0;"><strong>${calendarBookingCreated ? 'Confirmed time:' : 'Preferred time:'}</strong> ${preferredDate} at ${preferredTime} ET</p>`
+      : '';
+
+    const altWhenLine = alternateDate && alternateTime && !calendarBookingCreated
       ? `<p style="margin: 0;"><strong>Alternate time:</strong> ${alternateDate} at ${alternateTime} ET</p>`
       : '';
 
+    const nextStepsContent = calendarBookingCreated
+      ? `<p style="margin:0;">What happens next:</p>
+         <ul style="margin: 8px 0 0 18px; padding: 0;">
+           <li>You should receive a calendar invite shortly.</li>
+           <li>We will call you at the scheduled time.</li>
+           <li>If you need to reschedule, reply to this email.</li>
+         </ul>`
+      : `<p style="margin:0;">Next steps:</p>
+         <ul style="margin: 8px 0 0 18px; padding: 0;">
+           <li>We will review your details.</li>
+           <li>${isConsultation ? 'We will confirm your consultation time.' : 'We will reply as soon as possible (usually within 24 hours).'}</li>
+           <li>If needed, we will follow up for any missing info.</li>
+         </ul>`;
+
     const clientHtml = `
       <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
-        <h2 style="color: #0EA5E9; margin-bottom: 8px;">Thanks, ${fullName} — we received your ${isConsultation ? 'consultation request' : 'message'}.</h2>
-        <p style="color:#334155; margin-top: 0;">This is a confirmation email with the details you submitted.</p>
+        <h2 style="color: #0EA5E9; margin-bottom: 8px;">Thanks, ${fullName}!</h2>
+        ${confirmedBadge}
+        <p style="color:#334155; margin-top: 0;">${calendarBookingCreated ? 'Your consultation has been scheduled. Here are the details:' : 'This is a confirmation email with the details you submitted.'}</p>
 
         <div style="background:#f9fafb; border: 1px solid #e5e7eb; padding: 16px; border-radius: 10px;">
           ${businessName ? `<p style="margin: 0 0 8px 0;"><strong>Business:</strong> ${businessName}</p>` : ''}
@@ -215,13 +296,8 @@ serve(async (req) => {
         </div>
 
         <div style="margin-top: 18px; color:#64748b; font-size: 14px;">
-          <p style="margin:0;">Next steps:</p>
-          <ul style="margin: 8px 0 0 18px; padding: 0;">
-            <li>We will review your details.</li>
-            <li>${isConsultation ? 'We will confirm your consultation time.' : 'We will reply as soon as possible (usually within 24 hours).'}</li>
-            <li>If needed, we will follow up for any missing info.</li>
-          </ul>
-          <p style="margin-top: 12px;">If you need to add details, just reply to this email.</p>
+          ${nextStepsContent}
+          <p style="margin-top: 12px;">If you need to add details or reschedule, just reply to this email.</p>
         </div>
       </div>
     `;
