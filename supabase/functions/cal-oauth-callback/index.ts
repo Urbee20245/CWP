@@ -93,16 +93,17 @@ serve(async (req) => {
       .maybeSingle();
 
     // Exchange authorization code for tokens
+    // Cal.com expects application/x-www-form-urlencoded format for token exchange
     const tokenResponse = await fetch('https://app.cal.com/api/auth/oauth/token', {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
+      headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+      body: new URLSearchParams({
         code,
-        client_id: CAL_CLIENT_ID,
-        client_secret: CAL_CLIENT_SECRET,
+        client_id: CAL_CLIENT_ID!,
+        client_secret: CAL_CLIENT_SECRET!,
         redirect_uri: redirectUri,
         grant_type: 'authorization_code',
-      }),
+      }).toString(),
     });
 
     const tokenData = await tokenResponse.json();
