@@ -7,6 +7,12 @@ import { Link } from 'react-router-dom';
 import { useAuth } from '../hooks/useAuth';
 import { supabase } from '../integrations/supabase/client';
 import ClientCalComIntegration from '../components/ClientCalComIntegration';
+import { ClientIntegrationService } from '../services/clientIntegrationService';
+
+interface CalStatus {
+  connection_status: 'connected' | 'disconnected' | 'needs_reauth';
+  refresh_token_present?: boolean;
+}
 
 const SUPABASE_PROJECT_ID = "nvgumhlewbqynrhlkqhx";
 const SUPABASE_SECRETS_URL = `https://supabase.com/dashboard/project/${SUPABASE_PROJECT_ID}/functions/secrets`;
@@ -16,6 +22,21 @@ const AdminSettingsPage: React.FC = () => {
   const { profile } = useAuth();
   const [adminClientId, setAdminClientId] = useState<string | null>(null);
   const [isLoadingClient, setIsLoadingClient] = useState(true);
+  const [calStatus, setCalStatus] = useState<CalStatus | null>(null);
+  const [isLoadingCalStatus, setIsLoadingCalStatus] = useState(true);
+
+  const fetchCalStatus = useCallback(async (clientId: string) => {
+    setIsLoadingCalStatus(true);
+    try {
+      const status = await ClientIntegrationService.getCalComStatus(clientId);
+      setCalStatus(status as CalStatus | null);
+    } catch (err) {
+      console.error('Failed to fetch Cal.com status:', err);
+      setCalStatus(null);
+    } finally {
+      setIsLoadingCalStatus(false);
+    }
+  }, []);
 
   const fetchAdminClient = useCallback(async () => {
     if (!profile) return;
@@ -31,6 +52,7 @@ const AdminSettingsPage: React.FC = () => {
 
       if (clientData) {
         setAdminClientId(clientData.id);
+        fetchCalStatus(clientData.id);
       } else {
         // Auto-create a client record for the admin
         console.log('[AdminSettingsPage] No client record found, creating one for admin...');
@@ -49,6 +71,7 @@ const AdminSettingsPage: React.FC = () => {
         } else if (newClient) {
           console.log('[AdminSettingsPage] Admin client created:', newClient.id);
           setAdminClientId(newClient.id);
+          fetchCalStatus(newClient.id);
         }
       }
     } catch (err) {
@@ -56,7 +79,7 @@ const AdminSettingsPage: React.FC = () => {
     } finally {
       setIsLoadingClient(false);
     }
-  }, [profile]);
+  }, [profile, fetchCalStatus]);
 
   useEffect(() => {
     if (profile) fetchAdminClient();
@@ -156,9 +179,33 @@ const AdminSettingsPage: React.FC = () => {
 
           {/* Cal.com OAuth (Cal AI) - Connection + Setup */}
           <div className="lg:col-span-2 bg-white p-6 rounded-xl shadow-lg border border-slate-100">
-            <h2 className="text-xl font-bold text-slate-900 mb-4 flex items-center gap-2 border-b border-slate-100 pb-4">
-              <Calendar className="w-5 h-5 text-emerald-600" /> Cal.com Integration
-            </h2>
+            <div className="flex items-center justify-between mb-4 border-b border-slate-100 pb-4">
+              <h2 className="text-xl font-bold text-slate-900 flex items-center gap-2">
+                <Calendar className="w-5 h-5 text-emerald-600" /> Cal.com Integration
+              </h2>
+              {/* Connection Status Badge */}
+              {isLoadingCalStatus ? (
+                <div className="flex items-center gap-2 px-3 py-1.5 bg-slate-100 rounded-full">
+                  <Loader2 className="w-4 h-4 animate-spin text-slate-500" />
+                  <span className="text-sm font-medium text-slate-600">Checking...</span>
+                </div>
+              ) : calStatus?.connection_status === 'connected' && calStatus?.refresh_token_present ? (
+                <div className="flex items-center gap-2 px-3 py-1.5 bg-emerald-100 rounded-full border border-emerald-200">
+                  <CheckCircle2 className="w-4 h-4 text-emerald-600" />
+                  <span className="text-sm font-bold text-emerald-700">Connected</span>
+                </div>
+              ) : calStatus?.connection_status === 'needs_reauth' || (calStatus?.connection_status === 'connected' && !calStatus?.refresh_token_present) ? (
+                <div className="flex items-center gap-2 px-3 py-1.5 bg-amber-100 rounded-full border border-amber-200">
+                  <AlertTriangle className="w-4 h-4 text-amber-600" />
+                  <span className="text-sm font-bold text-amber-700">Needs Reconnection</span>
+                </div>
+              ) : (
+                <div className="flex items-center gap-2 px-3 py-1.5 bg-slate-100 rounded-full border border-slate-200">
+                  <Calendar className="w-4 h-4 text-slate-500" />
+                  <span className="text-sm font-medium text-slate-600">Not Connected</span>
+                </div>
+              )}
+            </div>
 
             <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
               {/* Left: Connect Cal.com */}
@@ -169,7 +216,11 @@ const AdminSettingsPage: React.FC = () => {
                     <Loader2 className="w-6 h-6 animate-spin text-indigo-600" />
                   </div>
                 ) : adminClientId ? (
-                  <ClientCalComIntegration clientId={adminClientId} isAdminView={true} />
+                  <ClientCalComIntegration
+                    clientId={adminClientId}
+                    isAdminView={true}
+                    onStatusChange={() => fetchCalStatus(adminClientId)}
+                  />
                 ) : (
                   <div className="p-4 bg-amber-50 border border-amber-200 rounded-xl">
                     <p className="text-amber-800 text-sm">
