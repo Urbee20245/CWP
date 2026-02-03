@@ -1,10 +1,10 @@
 import React, { useState, useRef } from 'react';
 import { Link } from 'react-router-dom';
 import { useSEO } from '../src/hooks/useSEO';
-import { 
-  CheckCircle2, 
-  Phone, 
-  Mail, 
+import {
+  CheckCircle2,
+  Phone,
+  Mail,
   Clock,
   FileText,
   Lightbulb,
@@ -15,7 +15,8 @@ import {
   Loader2
 } from 'lucide-react';
 import ReCAPTCHA from 'react-google-recaptcha';
-import { FormService } from '../src/services/formService'; // Import FormService
+import { FormService } from '../src/services/formService';
+import CalendarSlotPicker from './CalendarSlotPicker';
 
 // NOTE: This key must be set in .env.local or Vercel environment variables
 const RECAPTCHA_SITE_KEY = (import.meta as any).env.VITE_RECAPTCHA_SITE_KEY;
@@ -37,6 +38,13 @@ interface FormData {
   alternateTime: string;
   referralSource: string;
   decisionMaker: string;
+  selectedSlotDatetime: string;
+}
+
+interface SelectedSlot {
+  datetime: string;
+  date: string;
+  time: string;
 }
 
 interface FormErrors {
@@ -65,8 +73,11 @@ const ContactPage: React.FC = () => {
     alternateDate: '',
     alternateTime: '',
     referralSource: '',
-    decisionMaker: ''
+    decisionMaker: '',
+    selectedSlotDatetime: ''
   });
+
+  const [selectedSlot, setSelectedSlot] = useState<SelectedSlot | null>(null);
 
   const [errors, setErrors] = useState<FormErrors>({});
   const [isSubmitting, setIsSubmitting] = useState(false);
@@ -108,17 +119,6 @@ const ContactPage: React.FC = () => {
     'Other'
   ];
 
-  const timeSlots = [
-    '9:00 AM', '9:30 AM', '10:00 AM', '10:30 AM', '11:00 AM', '11:30 AM',
-    '12:00 PM', '12:30 PM', '1:00 PM', '1:30 PM', '2:00 PM', '2:30 PM',
-    '3:00 PM', '3:30 PM', '4:00 PM', '4:30 PM', '5:00 PM', '5:30 PM', '6:00 PM'
-  ];
-
-  const saturdayTimeSlots = [
-    '10:00 AM', '10:30 AM', '11:00 AM', '11:30 AM',
-    '12:00 PM', '12:30 PM', '1:00 PM', '1:30 PM',
-    '2:00 PM', '2:30 PM', '3:00 PM', '3:30 PM', '4:00 PM'
-  ];
 
   const validateEmail = (email: string) => {
     const re = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
@@ -154,8 +154,7 @@ const ContactPage: React.FC = () => {
     } else if (formData.projectDescription.trim().length < 50) {
       newErrors.projectDescription = 'Please provide at least 50 characters describing your project';
     }
-    if (!formData.preferredDate) newErrors.preferredDate = 'Please select a preferred consultation date';
-    if (!formData.preferredTime) newErrors.preferredTime = 'Please select a preferred time';
+    if (!selectedSlot) newErrors.selectedSlot = 'Please select a consultation time';
     if (!formData.referralSource) newErrors.referralSource = 'Please tell us how you heard about us';
     if (!formData.decisionMaker) newErrors.decisionMaker = 'Please indicate your decision-making authority';
 
@@ -187,6 +186,28 @@ const ContactPage: React.FC = () => {
     });
     if (errors.services) {
       setErrors(prev => ({ ...prev, services: '' }));
+    }
+  };
+
+  const handleSlotSelect = (slot: SelectedSlot | null) => {
+    setSelectedSlot(slot);
+    if (slot) {
+      setFormData(prev => ({
+        ...prev,
+        preferredDate: slot.date,
+        preferredTime: slot.time,
+        selectedSlotDatetime: slot.datetime
+      }));
+      if (errors.selectedSlot) {
+        setErrors(prev => ({ ...prev, selectedSlot: '' }));
+      }
+    } else {
+      setFormData(prev => ({
+        ...prev,
+        preferredDate: '',
+        preferredTime: '',
+        selectedSlotDatetime: ''
+      }));
     }
   };
 
@@ -576,103 +597,15 @@ const ContactPage: React.FC = () => {
                   3. Schedule Consultation
                 </h3>
                 <p className="text-sm text-slate-600 mb-6 bg-blue-50 border border-blue-200 rounded-xl p-4">
-                  <strong>Business Hours:</strong> Monday-Friday: 9:00 AM - 6:00 PM ET | Saturday: 10:00 AM - 4:00 PM ET | Sunday: Closed
-                  <br />
-                  <em>All times shown in Eastern Time (ET)</em>
+                  Select an available time slot for your consultation. All times shown in Eastern Time (ET).
                 </p>
 
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                  <div>
-                    <label className="block text-sm font-bold text-slate-700 mb-2">
-                      Preferred Date <span className="text-red-500">*</span>
-                    </label>
-                    <input
-                      type="date"
-                      name="preferredDate"
-                      value={formData.preferredDate}
-                      onChange={handleInputChange}
-                      min={new Date().toISOString().split('T')[0]}
-                      className={`w-full px-4 py-3 border ${errors.preferredDate ? 'border-red-500' : 'border-slate-300'} rounded-xl focus:border-indigo-500 focus:ring-2 focus:ring-indigo-200 outline-none transition-all`}
-                      disabled={isSubmitting}
-                    />
-                    {errors.preferredDate && (
-                      <p className="mt-2 text-sm text-red-600 flex items-center gap-1">
-                        <AlertCircle className="w-4 h-4" /> {errors.preferredDate}
-                      </p>
-                    )}
-                  </div>
-
-                  <div>
-                    <label className="block text-sm font-bold text-slate-700 mb-2">
-                      Preferred Time <span className="text-red-500">*</span>
-                    </label>
-                    <select
-                      name="preferredTime"
-                      value={formData.preferredTime}
-                      onChange={handleInputChange}
-                      className={`w-full px-4 py-3 border ${errors.preferredTime ? 'border-red-500' : 'border-slate-300'} rounded-xl focus:border-indigo-500 focus:ring-2 focus:ring-indigo-200 outline-none transition-all`}
-                      disabled={isSubmitting}
-                    >
-                      <option value="">Select time...</option>
-                      <optgroup label="Weekday Hours (Mon-Fri)">
-                        {timeSlots.map(time => (
-                          <option key={time} value={time}>{time} ET</option>
-                        ))}
-                      </optgroup>
-                      <optgroup label="Saturday Hours">
-                        {saturdayTimeSlots.map(time => (
-                          <option key={time} value={time}>{time} ET</option>
-                        ))}
-                      </optgroup>
-                    </select>
-                    {errors.preferredTime && (
-                      <p className="mt-2 text-sm text-red-600 flex items-center gap-1">
-                        <AlertCircle className="w-4 h-4" /> {errors.preferredTime}
-                      </p>
-                    )}
-                  </div>
-
-                  <div>
-                    <label className="block text-sm font-bold text-slate-700 mb-2">
-                      Alternate Date (Optional)
-                    </label>
-                    <input
-                      type="date"
-                      name="alternateDate"
-                      value={formData.alternateDate}
-                      onChange={handleInputChange}
-                      min={new Date().toISOString().split('T')[0]}
-                      className="w-full px-4 py-3 border border-slate-300 rounded-xl focus:border-indigo-500 focus:ring-2 focus:ring-indigo-200 outline-none transition-all"
-                      disabled={isSubmitting}
-                    />
-                    <p className="mt-2 text-xs text-slate-500">Backup option if first choice unavailable</p>
-                  </div>
-
-                  <div>
-                    <label className="block text-sm font-bold text-slate-700 mb-2">
-                      Alternate Time (Optional)
-                    </label>
-                    <select
-                      name="alternateTime"
-                      value={formData.alternateTime}
-                      onChange={handleInputChange}
-                      className="w-full px-4 py-3 border border-slate-300 rounded-xl focus:border-indigo-500 focus:ring-2 focus:ring-indigo-200 outline-none transition-all"
-                      disabled={isSubmitting}
-                    >
-                      <option value="">Select time...</option>
-                      <optgroup label="Weekday Hours (Mon-Fri)">
-                        {timeSlots.map(time => (
-                          <option key={time} value={time}>{time} ET</option>
-                        ))}
-                      </optgroup>
-                      <optgroup label="Saturday Hours">
-                        {saturdayTimeSlots.map(time => (
-                          <option key={time} value={time}>{time} ET</option>
-                        ))}
-                      </optgroup>
-                    </select>
-                  </div>
-                </div>
+                <CalendarSlotPicker
+                  onSlotSelect={handleSlotSelect}
+                  selectedSlot={selectedSlot}
+                  disabled={isSubmitting}
+                  error={errors.selectedSlot}
+                />
               </div>
 
               {/* Qualifying Questions */}
