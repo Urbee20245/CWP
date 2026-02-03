@@ -1,15 +1,46 @@
 "use client";
 
-import React from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import AdminLayout from '../components/AdminLayout';
-import { Settings, MessageSquare, Shield, ExternalLink, CheckCircle2, AlertTriangle, Mail, DollarSign, Zap, Users, Bot, Calendar } from 'lucide-react';
+import { Settings, MessageSquare, Shield, ExternalLink, CheckCircle2, AlertTriangle, Mail, DollarSign, Zap, Users, Bot, Calendar, Loader2 } from 'lucide-react';
 import { Link } from 'react-router-dom';
+import { useAuth } from '../hooks/useAuth';
+import { supabase } from '../integrations/supabase/client';
+import ClientCalComIntegration from '../components/ClientCalComIntegration';
 
 const SUPABASE_PROJECT_ID = "nvgumhlewbqynrhlkqhx";
 const SUPABASE_SECRETS_URL = `https://supabase.com/dashboard/project/${SUPABASE_PROJECT_ID}/functions/secrets`;
 const CAL_OAUTH_REDIRECT_URI = `https://${SUPABASE_PROJECT_ID}.supabase.co/functions/v1/cal-oauth-callback`;
 
 const AdminSettingsPage: React.FC = () => {
+  const { profile } = useAuth();
+  const [adminClientId, setAdminClientId] = useState<string | null>(null);
+  const [isLoadingClient, setIsLoadingClient] = useState(true);
+
+  const fetchAdminClient = useCallback(async () => {
+    if (!profile) return;
+    setIsLoadingClient(true);
+
+    try {
+      const { data: clientData } = await supabase
+        .from('clients')
+        .select('id')
+        .eq('owner_profile_id', profile.id)
+        .maybeSingle();
+
+      if (clientData) {
+        setAdminClientId(clientData.id);
+      }
+    } catch (err) {
+      console.error('Failed to fetch admin client:', err);
+    } finally {
+      setIsLoadingClient(false);
+    }
+  }, [profile]);
+
+  useEffect(() => {
+    if (profile) fetchAdminClient();
+  }, [profile, fetchAdminClient]);
   
   return (
     <AdminLayout>
@@ -103,43 +134,62 @@ const AdminSettingsPage: React.FC = () => {
             </a>
           </div>
 
-          {/* Cal.com OAuth (Cal AI) */}
-          <div className="lg:col-span-1 bg-white p-6 rounded-xl shadow-lg border border-slate-100">
+          {/* Cal.com OAuth (Cal AI) - Connection + Setup */}
+          <div className="lg:col-span-2 bg-white p-6 rounded-xl shadow-lg border border-slate-100">
             <h2 className="text-xl font-bold text-slate-900 mb-4 flex items-center gap-2 border-b border-slate-100 pb-4">
-              <Calendar className="w-5 h-5 text-emerald-600" /> Cal.com OAuth
+              <Calendar className="w-5 h-5 text-emerald-600" /> Cal.com Integration
             </h2>
 
-            <p className="text-slate-600 mb-4 text-sm">
-              Enables Cal.com-based booking and availability for the AI agent.
-            </p>
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+              {/* Left: Connect Cal.com */}
+              <div>
+                <h3 className="font-bold text-slate-800 mb-3">Connect Your Cal.com Account</h3>
+                {isLoadingClient ? (
+                  <div className="flex items-center justify-center h-32">
+                    <Loader2 className="w-6 h-6 animate-spin text-indigo-600" />
+                  </div>
+                ) : adminClientId ? (
+                  <ClientCalComIntegration clientId={adminClientId} />
+                ) : (
+                  <div className="p-4 bg-amber-50 border border-amber-200 rounded-xl">
+                    <p className="text-amber-800 text-sm">
+                      <AlertTriangle className="w-4 h-4 inline mr-2" />
+                      No client record found for your admin account. Please create one first.
+                    </p>
+                  </div>
+                )}
+              </div>
 
-            <div className="p-4 bg-emerald-50 border border-emerald-200 rounded-xl mb-4">
-              <h3 className="font-bold text-emerald-800 mb-2 flex items-center gap-2">
-                <CheckCircle2 className="w-5 h-5" /> Required Supabase Secrets
-              </h3>
-              <ul className="space-y-2 text-sm text-emerald-800">
-                <li><code className="font-mono text-xs bg-emerald-200 px-1 rounded">CAL_CLIENT_ID</code></li>
-                <li><code className="font-mono text-xs bg-emerald-200 px-1 rounded">CAL_CLIENT_SECRET</code></li>
-                <li className="text-emerald-700">
-                  Optional: <code className="font-mono text-xs bg-emerald-200 px-1 rounded">CLIENT_REDIRECT_URL</code> (where users return after OAuth)
-                </li>
-              </ul>
+              {/* Right: Setup Instructions */}
+              <div className="space-y-4">
+                <h3 className="font-bold text-slate-800 mb-3">Setup Instructions</h3>
+
+                <div className="p-4 bg-emerald-50 border border-emerald-200 rounded-xl">
+                  <h4 className="font-bold text-emerald-800 mb-2 flex items-center gap-2">
+                    <CheckCircle2 className="w-4 h-4" /> Required Supabase Secrets
+                  </h4>
+                  <ul className="space-y-1 text-sm text-emerald-800">
+                    <li><code className="font-mono text-xs bg-emerald-200 px-1 rounded">CAL_CLIENT_ID</code></li>
+                    <li><code className="font-mono text-xs bg-emerald-200 px-1 rounded">CAL_CLIENT_SECRET</code></li>
+                  </ul>
+                </div>
+
+                <div className="p-4 bg-slate-50 border border-slate-200 rounded-xl">
+                  <p className="text-xs font-semibold text-slate-700 mb-2">OAuth Redirect URI (set in Cal.com)</p>
+                  <code className="block font-mono text-[11px] text-slate-800 break-all">{CAL_OAUTH_REDIRECT_URI}</code>
+                </div>
+
+                <a
+                  href={SUPABASE_SECRETS_URL}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="inline-flex items-center gap-2 px-4 py-2 bg-emerald-600 text-white rounded-lg text-sm font-semibold hover:bg-emerald-700 transition-colors"
+                >
+                  Go to Supabase Secrets
+                  <ExternalLink className="w-4 h-4" />
+                </a>
+              </div>
             </div>
-
-            <div className="p-4 bg-slate-50 border border-slate-200 rounded-xl mb-4">
-              <p className="text-xs font-semibold text-slate-700 mb-2">OAuth Redirect URI (set this in Cal.com)</p>
-              <code className="block font-mono text-[11px] text-slate-800 break-all">{CAL_OAUTH_REDIRECT_URI}</code>
-            </div>
-
-            <a
-              href={SUPABASE_SECRETS_URL}
-              target="_blank"
-              rel="noopener noreferrer"
-              className="inline-flex items-center gap-2 px-4 py-2 bg-emerald-600 text-white rounded-lg text-sm font-semibold hover:bg-emerald-700 transition-colors"
-            >
-              Go to Supabase Secrets
-              <ExternalLink className="w-4 h-4" />
-            </a>
           </div>
           
           {/* Integration Card: Twilio SMS */}
