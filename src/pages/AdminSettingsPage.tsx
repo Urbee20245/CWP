@@ -169,7 +169,7 @@ const AdminSettingsPage: React.FC = () => {
                     <Loader2 className="w-6 h-6 animate-spin text-indigo-600" />
                   </div>
                 ) : adminClientId ? (
-                  <ClientCalComIntegration clientId={adminClientId} />
+                  <ClientCalComIntegration clientId={adminClientId} isAdminView={true} />
                 ) : (
                   <div className="p-4 bg-amber-50 border border-amber-200 rounded-xl">
                     <p className="text-amber-800 text-sm">

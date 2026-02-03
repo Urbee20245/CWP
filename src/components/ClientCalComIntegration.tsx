@@ -129,7 +129,10 @@ const ClientCalComIntegration: React.FC<Props> = ({ clientId }) => {
     setError(null);
     setNotice(null);
     try {
-      const returnTo = `${window.location.origin}/client/settings`;
+      const isAdminPage = window.location.pathname.includes('/admin/');
+      const returnTo = isAdminPage
+        ? `${window.location.origin}/admin/settings`
+        : `${window.location.origin}/client/settings`;
       const result = await ClientIntegrationService.initCalComAuth(clientId, returnTo);
       window.location.href = result.auth_url;
     } catch (e: any) {
