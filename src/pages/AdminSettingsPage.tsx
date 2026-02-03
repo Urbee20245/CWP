@@ -39,7 +39,6 @@ const AdminSettingsPage: React.FC = () => {
           .insert({
             owner_profile_id: profile.id,
             business_name: 'Custom Websites Plus',
-            contact_email: profile.email || 'admin@customwebsitesplus.com',
             status: 'active',
           })
           .select('id')
