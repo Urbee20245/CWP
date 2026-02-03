@@ -22,6 +22,7 @@ const AdminSettingsPage: React.FC = () => {
     setIsLoadingClient(true);
 
     try {
+      // First try to find existing client record
       const { data: clientData } = await supabase
         .from('clients')
         .select('id')
@@ -30,6 +31,26 @@ const AdminSettingsPage: React.FC = () => {
 
       if (clientData) {
         setAdminClientId(clientData.id);
+      } else {
+        // Auto-create a client record for the admin
+        console.log('[AdminSettingsPage] No client record found, creating one for admin...');
+        const { data: newClient, error: createError } = await supabase
+          .from('clients')
+          .insert({
+            owner_profile_id: profile.id,
+            business_name: 'Custom Websites Plus',
+            contact_email: profile.email || 'admin@customwebsitesplus.com',
+            status: 'active',
+          })
+          .select('id')
+          .single();
+
+        if (createError) {
+          console.error('Failed to create admin client:', createError);
+        } else if (newClient) {
+          console.log('[AdminSettingsPage] Admin client created:', newClient.id);
+          setAdminClientId(newClient.id);
+        }
       }
     } catch (err) {
       console.error('Failed to fetch admin client:', err);
