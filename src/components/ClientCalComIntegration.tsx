@@ -7,6 +7,7 @@ import { format } from 'date-fns';
 
 interface Props {
   clientId: string;
+  isAdminView?: boolean;
 }
 
 interface CalStatus {
@@ -30,7 +31,7 @@ const isLikelyTransientInitialError = (message: string) => {
   );
 };
 
-const ClientCalComIntegration: React.FC<Props> = ({ clientId }) => {
+const ClientCalComIntegration: React.FC<Props> = ({ clientId, isAdminView = false }) => {
   const [status, setStatus] = useState<CalStatus | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [isProcessing, setIsProcessing] = useState(false);
@@ -129,8 +130,7 @@ const ClientCalComIntegration: React.FC<Props> = ({ clientId }) => {
     setError(null);
     setNotice(null);
     try {
-      const isAdminPage = window.location.pathname.includes('/admin/');
-      const returnTo = isAdminPage
+      const returnTo = isAdminView
         ? `${window.location.origin}/admin/settings`
         : `${window.location.origin}/client/settings`;
       const result = await ClientIntegrationService.initCalComAuth(clientId, returnTo);
