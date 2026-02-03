@@ -12,7 +12,7 @@ interface ReminderSummary {
     id: string;
     note: string;
     reminder_date: string;
-    clients: { business_name: string };
+    clients: { id: string; business_name: string };
 }
 
 interface RecentMessage {
@@ -69,7 +69,7 @@ const AdminDashboard: React.FC = () => {
         .from('client_reminders')
         .select(`
             id, note, reminder_date,
-            clients (business_name)
+            clients (id, business_name)
         `)
         .eq('is_completed', false)
         .order('reminder_date', { ascending: true })
@@ -188,9 +188,9 @@ const AdminDashboard: React.FC = () => {
                             reminders.map(reminder => {
                                 const isOverdue = isPast(new Date(reminder.reminder_date));
                                 return (
-                                    <Link 
-                                        key={reminder.id} 
-                                        to={`/admin/clients/${reminder.clients.business_name}?tab=reminders`} // Placeholder link to client detail
+                                    <Link
+                                        key={reminder.id}
+                                        to={`/admin/clients/${reminder.clients.id}?tab=reminders`}
                                         className={`p-3 rounded-lg border flex justify-between items-center transition-colors ${isOverdue ? 'bg-red-50 border-red-200 hover:bg-red-100' : 'bg-slate-50 border-slate-200 hover:bg-indigo-50'}`}
                                     >
                                         <div className="flex-1 min-w-0 pr-4">
