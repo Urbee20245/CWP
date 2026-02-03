@@ -1,3 +1,7 @@
+export const config = {
+  auth: false,
+};
+
 import { serve } from "https://deno.land/std@0.190.0/http/server.ts";
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2.45.0';
 import { CalCalendarService } from '../_shared/calCalendarService.ts';
@@ -129,10 +133,8 @@ serve(async (req) => {
         const d = new Date(isoTime);
         if (isNaN(d.getTime())) continue;
 
-        // Format date as YYYY-MM-DD for grouping
         const dateKey = d.toISOString().split('T')[0];
 
-        // Format date for display
         const dateFormatted = d.toLocaleDateString('en-US', {
           weekday: 'long',
           month: 'long',
@@ -140,7 +142,6 @@ serve(async (req) => {
           timeZone: timezone,
         });
 
-        // Format time for display
         const timeFormatted = d.toLocaleTimeString('en-US', {
           hour: 'numeric',
           minute: '2-digit',
@@ -155,7 +156,6 @@ serve(async (req) => {
         });
       }
     } else if (typeof slots === 'object' && slots !== null) {
-      // Handle object format: { "2024-01-15": [{time: "..."}] }
       for (const [dateKey, daySlots] of Object.entries(slots)) {
         if (!Array.isArray(daySlots)) continue;
 
@@ -207,3 +207,4 @@ serve(async (req) => {
     }, 200);
   }
 });
+
