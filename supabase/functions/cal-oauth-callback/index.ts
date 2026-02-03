@@ -18,6 +18,16 @@ function appendParams(url: string, params: Record<string, string>) {
   return u.toString();
 }
 
+function configErrorRedirect(missing: string[]) {
+  const dest = appendParams(CLIENT_REDIRECT_URL, {
+    provider: 'cal',
+    status: 'error',
+    error: 'server_configuration_error',
+    missing: missing.join(','),
+  });
+  return Response.redirect(dest, 303);
+}
+
 serve(async (req) => {
   if (req.method === 'OPTIONS') {
     return new Response(null, { headers: corsHeaders });
@@ -37,9 +47,16 @@ serve(async (req) => {
       console.error('[cal-oauth-callback] Missing code or state.');
       return new Response('OAuth failed: Missing authorization code or state.', { status: 400, headers: corsHeaders });
     }
-    if (!CAL_CLIENT_ID || !CAL_CLIENT_SECRET || !SUPABASE_URL) {
-      console.error('[cal-oauth-callback] Missing Cal.com or Supabase configuration.');
-      return new Response('Server configuration error.', { status: 500, headers: corsHeaders });
+
+    const missing: string[] = [];
+    if (!CAL_CLIENT_ID) missing.push('CAL_CLIENT_ID');
+    if (!CAL_CLIENT_SECRET) missing.push('CAL_CLIENT_SECRET');
+    if (!SUPABASE_URL) missing.push('SUPABASE_URL');
+
+    if (missing.length > 0) {
+      console.error('[cal-oauth-callback] Missing configuration secrets.', { missing });
+      // Redirect back to the client settings page so the UI can display a helpful message.
+      return configErrorRedirect(missing);
     }
 
     // Resolve client_id + return_to from one-time state token
