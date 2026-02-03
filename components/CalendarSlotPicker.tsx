@@ -16,6 +16,8 @@ interface CalendarSlotPickerProps {
   error?: string;
 }
 
+const DIRECT_BOOKING_URL = 'https://cal.com/customwebsitesplus/jetsuite-discovery';
+
 const CalendarSlotPicker: React.FC<CalendarSlotPickerProps> = ({
   onSlotSelect,
   selectedSlot,
@@ -114,7 +116,16 @@ const CalendarSlotPicker: React.FC<CalendarSlotPickerProps> = ({
           <div className="flex-1">
             <p className="text-amber-800 font-medium">{fetchError}</p>
             <p className="text-amber-700 text-sm mt-1">
-              You can still submit your preferred times below and we'll confirm availability.
+              If this keeps happening, you can book directly here:{' '}
+              <a
+                href={DIRECT_BOOKING_URL}
+                target="_blank"
+                rel="noreferrer"
+                className="text-indigo-700 underline font-semibold"
+              >
+                Schedule on Cal.com
+              </a>
+              .
             </p>
             <button
               type="button"
@@ -138,7 +149,16 @@ const CalendarSlotPicker: React.FC<CalendarSlotPickerProps> = ({
           <div>
             <p className="text-slate-700 font-medium">No available times in the next 2 weeks</p>
             <p className="text-slate-600 text-sm mt-1">
-              Please call us at <a href="tel:+14044271-4451" className="text-indigo-600 hover:underline">(404) 427-1451</a> to schedule your consultation.
+              You can book directly here:{' '}
+              <a
+                href={DIRECT_BOOKING_URL}
+                target="_blank"
+                rel="noreferrer"
+                className="text-indigo-600 hover:underline font-semibold"
+              >
+                https://cal.com/customwebsitesplus/jetsuite-discovery
+              </a>
+              .
             </p>
           </div>
         </div>
