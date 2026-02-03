@@ -8,6 +8,7 @@ import { format } from 'date-fns';
 interface Props {
   clientId: string;
   isAdminView?: boolean;
+  onStatusChange?: () => void;
 }
 
 interface CalStatus {
@@ -31,7 +32,7 @@ const isLikelyTransientInitialError = (message: string) => {
   );
 };
 
-const ClientCalComIntegration: React.FC<Props> = ({ clientId, isAdminView = false }) => {
+const ClientCalComIntegration: React.FC<Props> = ({ clientId, isAdminView = false, onStatusChange }) => {
   const [status, setStatus] = useState<CalStatus | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [isProcessing, setIsProcessing] = useState(false);
@@ -109,8 +110,11 @@ const ClientCalComIntegration: React.FC<Props> = ({ clientId, isAdminView = fals
     if (provider === 'cal') {
       if (oauthStatus === 'success') {
         setNotice('Cal.com authorized successfully. Booking via Cal.com is now enabled.');
+        // Notify parent that status changed
+        onStatusChange?.();
       } else if (oauthStatus === 'needs_reauth') {
         setNotice('Cal.com authorized, but we still need one-time re-authorization to enable full access.');
+        onStatusChange?.();
       } else if (oauthError === 'server_configuration_error' && missingSecrets) {
         const missingList = missingSecrets.split(',').join(', ');
         setError(`Server configuration error: The following secrets are missing in Supabase: ${missingList}. Please contact support.`);
@@ -123,7 +127,7 @@ const ClientCalComIntegration: React.FC<Props> = ({ clientId, isAdminView = fals
       const newUrl = `${window.location.pathname}${params.toString() ? '?' + params.toString() : ''}`;
       window.history.replaceState({}, document.title, newUrl);
     }
-  }, []);
+  }, [onStatusChange]);
 
   const handleConnect = async () => {
     setIsProcessing(true);
@@ -150,6 +154,8 @@ const ClientCalComIntegration: React.FC<Props> = ({ clientId, isAdminView = fals
       await fetchStatus();
       setNotice(null);
       setIsProcessing(false);
+      // Notify parent that status changed
+      onStatusChange?.();
     } catch (e: any) {
       setError(e.message || 'Failed to disconnect Cal.com.');
       setIsProcessing(false);
@@ -184,15 +190,55 @@ const ClientCalComIntegration: React.FC<Props> = ({ clientId, isAdminView = fals
     return current === next;
   }, [eventTypeIdDraft, isConnected, isSavingEventType, status?.default_event_type_id]);
 
+  // Connection status badge component
+  const ConnectionStatusBadge = () => {
+    if (isLoading) {
+      return (
+        <div className="flex items-center gap-2 px-3 py-1.5 bg-slate-100 rounded-full">
+          <Loader2 className="w-4 h-4 animate-spin text-slate-500" />
+          <span className="text-sm font-medium text-slate-600">Checking...</span>
+        </div>
+      );
+    }
+
+    if (isConnected) {
+      return (
+        <div className="flex items-center gap-2 px-3 py-1.5 bg-emerald-100 rounded-full border border-emerald-200">
+          <CheckCircle2 className="w-4 h-4 text-emerald-600" />
+          <span className="text-sm font-bold text-emerald-700">Connected</span>
+        </div>
+      );
+    }
+
+    if (needsReauth) {
+      return (
+        <div className="flex items-center gap-2 px-3 py-1.5 bg-amber-100 rounded-full border border-amber-200">
+          <AlertTriangle className="w-4 h-4 text-amber-600" />
+          <span className="text-sm font-bold text-amber-700">Needs Reconnection</span>
+        </div>
+      );
+    }
+
+    return (
+      <div className="flex items-center gap-2 px-3 py-1.5 bg-slate-100 rounded-full border border-slate-200">
+        <Calendar className="w-4 h-4 text-slate-500" />
+        <span className="text-sm font-medium text-slate-600">Not Connected</span>
+      </div>
+    );
+  };
+
   if (isLoading) {
     return <div className="flex justify-center items-center h-20"><Loader2 className="w-6 h-6 animate-spin text-indigo-600" /></div>;
   }
 
   return (
     <div className="space-y-4">
-      <h2 className="text-xl font-bold text-slate-900 flex items-center gap-2 border-b border-slate-100 pb-4">
-        <Calendar className="w-5 h-5 text-indigo-600" /> Cal.com Integration
-      </h2>
+      <div className="flex items-center justify-between border-b border-slate-100 pb-4">
+        <h2 className="text-xl font-bold text-slate-900 flex items-center gap-2">
+          <Calendar className="w-5 h-5 text-indigo-600" /> Cal.com Integration
+        </h2>
+        <ConnectionStatusBadge />
+      </div>
 
       {notice && (
         <div className="p-3 bg-emerald-100 border border-emerald-300 text-emerald-800 rounded-lg text-sm flex items-center gap-2">
