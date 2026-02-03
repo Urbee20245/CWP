@@ -1,3 +1,7 @@
+export const config = {
+  auth: false,
+};
+
 import { serve } from "https://deno.land/std@0.190.0/http/server.ts";
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2.45.0';
 import { CalCalendarService } from '../_shared/calCalendarService.ts';
@@ -19,6 +23,14 @@ function jsonResponse(data: any, status = 200) {
   });
 }
 
+async function safeReadJson(req: Request): Promise<any | null> {
+  try {
+    return await req.json();
+  } catch {
+    return null;
+  }
+}
+
 serve(async (req) => {
   // Handle CORS preflight
   if (req.method === 'OPTIONS') {
@@ -33,43 +45,88 @@ serve(async (req) => {
   try {
     // Parse query params for date range (optional)
     const url = new URL(req.url);
-    const daysAhead = Math.min(parseInt(url.searchParams.get('days') || '14'), 30);
-    const timezone = url.searchParams.get('timezone') || 'America/New_York';
+    const body = await safeReadJson(req);
 
-    // Find the admin profile
+    const daysParam = url.searchParams.get('days') ?? body?.days;
+    const tzParam = url.searchParams.get('timezone') ?? body?.timezone;
+
+    const daysAhead = Math.min(parseInt(String(daysParam ?? '14')), 30);
+    const timezone = String(tzParam ?? 'America/New_York');
+
+    // Determine which Cal.com config to use.
+    // Primary: the "admin" profile's linked client (owner_profile_id)
+    // Fallback: any connected Cal.com client (most recently updated)
+
+    let clientId: string | null = null;
+
     const { data: adminProfile, error: adminError } = await supabaseAdmin
       .from('profiles')
       .select('id')
       .eq('role', 'admin')
       .limit(1)
-      .single();
+      .maybeSingle();
 
-    if (adminError || !adminProfile) {
-      console.error('[get-consultation-slots] Admin profile not found:', adminError);
-      return jsonResponse({ error: 'Configuration error', slots: [] }, 500);
+    if (adminError) {
+      console.error('[get-consultation-slots] Failed to query admin profile:', adminError);
     }
 
-    // Find the admin's client record
-    const { data: adminClient, error: clientError } = await supabaseAdmin
-      .from('clients')
-      .select('id')
-      .eq('owner_profile_id', adminProfile.id)
-      .limit(1)
-      .single();
+    if (adminProfile?.id) {
+      const { data: adminClient, error: clientError } = await supabaseAdmin
+        .from('clients')
+        .select('id')
+        .eq('owner_profile_id', adminProfile.id)
+        .limit(1)
+        .maybeSingle();
 
-    if (clientError || !adminClient) {
-      console.error('[get-consultation-slots] Admin client not found:', clientError);
-      return jsonResponse({ error: 'Configuration error', slots: [] }, 500);
+      if (clientError) {
+        console.error('[get-consultation-slots] Failed to query admin client:', clientError);
+      }
+
+      if (adminClient?.id) {
+        clientId = adminClient.id;
+      }
     }
 
-    const clientId = adminClient.id;
+    if (!clientId) {
+      console.warn('[get-consultation-slots] No admin-linked client found. Falling back to any connected Cal.com client.');
+      const { data: fallbackCal, error: fallbackErr } = await supabaseAdmin
+        .from('client_cal_calendar')
+        .select('client_id, default_event_type_id')
+        .eq('connection_status', 'connected')
+        .eq('refresh_token_present', true)
+        .not('default_event_type_id', 'is', null)
+        .order('updated_at', { ascending: false })
+        .limit(1)
+        .maybeSingle();
+
+      if (fallbackErr) {
+        console.error('[get-consultation-slots] Failed to query fallback Cal.com config:', fallbackErr);
+      }
+
+      if (fallbackCal?.client_id) {
+        clientId = fallbackCal.client_id;
+      }
+    }
+
+    if (!clientId) {
+      console.error('[get-consultation-slots] No suitable Cal.com configuration found.');
+      return jsonResponse({
+        success: true,
+        slots: [],
+        message: 'Online scheduling is temporarily unavailable. Please call us to schedule.',
+      });
+    }
 
     // Check Cal.com connection
-    const { data: calConn } = await supabaseAdmin
+    const { data: calConn, error: calErr } = await supabaseAdmin
       .from('client_cal_calendar')
       .select('connection_status, refresh_token_present, default_event_type_id')
       .eq('client_id', clientId)
       .maybeSingle();
+
+    if (calErr) {
+      console.error('[get-consultation-slots] Failed to read Cal.com connection:', calErr);
+    }
 
     const calUsable = !!(
       calConn &&
@@ -80,12 +137,18 @@ serve(async (req) => {
     );
 
     if (!calUsable) {
-      console.error('[get-consultation-slots] Cal.com not configured for admin');
+      console.error('[get-consultation-slots] Cal.com not configured (or needs re-auth) for selected client:', {
+        clientId,
+        connection_status: calConn?.connection_status,
+        refresh_token_present: calConn?.refresh_token_present,
+        default_event_type_id: calConn?.default_event_type_id,
+      });
+
       return jsonResponse({
-        error: 'Calendar not configured',
+        success: true,
         slots: [],
-        message: 'Online scheduling is temporarily unavailable. Please call us to schedule.'
-      }, 200);
+        message: 'Online scheduling is temporarily unavailable. Please call us to schedule.',
+      });
     }
 
     // Calculate time range
@@ -129,10 +192,8 @@ serve(async (req) => {
         const d = new Date(isoTime);
         if (isNaN(d.getTime())) continue;
 
-        // Format date as YYYY-MM-DD for grouping
         const dateKey = d.toISOString().split('T')[0];
 
-        // Format date for display
         const dateFormatted = d.toLocaleDateString('en-US', {
           weekday: 'long',
           month: 'long',
@@ -140,7 +201,6 @@ serve(async (req) => {
           timeZone: timezone,
         });
 
-        // Format time for display
         const timeFormatted = d.toLocaleTimeString('en-US', {
           hour: 'numeric',
           minute: '2-digit',
@@ -155,7 +215,6 @@ serve(async (req) => {
         });
       }
     } else if (typeof slots === 'object' && slots !== null) {
-      // Handle object format: { "2024-01-15": [{time: "..."}] }
       for (const [dateKey, daySlots] of Object.entries(slots)) {
         if (!Array.isArray(daySlots)) continue;
 
@@ -201,9 +260,9 @@ serve(async (req) => {
   } catch (error: any) {
     console.error('[get-consultation-slots] Error:', error.message);
     return jsonResponse({
-      error: 'Failed to fetch available times',
+      success: true,
       slots: [],
-      message: 'Online scheduling is temporarily unavailable. Please call us to schedule.'
-    }, 200);
+      message: 'Online scheduling is temporarily unavailable. Please call us to schedule.',
+    });
   }
 });
