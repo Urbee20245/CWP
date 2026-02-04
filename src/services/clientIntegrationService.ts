@@ -41,7 +41,14 @@ async function extractEdgeFunctionErrorMessage(error: any, parsedBody: any) {
 }
 
 const invokeEdgeFunction = async (functionName: string, payload: any) => {
-  // Explicitly get session to ensure auth header is fresh
+  const callFn = async (accessToken: string) => {
+    return supabase.functions.invoke(functionName, {
+      headers: { 'Authorization': `Bearer ${accessToken}` },
+      body: payload,
+    });
+  };
+
+  // Get session — supabase-js should auto-refresh if the access token is expired
   const { data: { session }, error: sessionError } = await supabase.auth.getSession();
   if (sessionError) {
     throw new Error(`Could not get user session: ${sessionError.message}`);
@@ -50,12 +57,30 @@ const invokeEdgeFunction = async (functionName: string, payload: any) => {
     throw new Error('User not authenticated. Please log in.');
   }
 
-  const { data, error } = await supabase.functions.invoke(functionName, {
-    headers: {
-      'Authorization': `Bearer ${session.access_token}`,
-    },
-    body: payload,
-  });
+  let { data, error } = await callFn(session.access_token);
+
+  // If the call failed due to an expired/invalid JWT, refresh the session
+  // and retry once. getSession() can return a stale cached token in some
+  // edge cases (clock skew, long-idle tabs, race conditions).
+  if (error) {
+    let errMsg = '';
+    try {
+      const p = typeof data === 'string' ? JSON.parse(data) : data;
+      errMsg = await extractEdgeFunctionErrorMessage(error, p);
+    } catch {
+      errMsg = error.message || '';
+    }
+
+    if (/invalid jwt|jwt expired|token.*expired/i.test(errMsg)) {
+      console.warn(`[clientIntegrationService] JWT stale for ${functionName}, refreshing session…`);
+      const { data: { session: refreshed } } = await supabase.auth.refreshSession();
+      if (refreshed) {
+        ({ data, error } = await callFn(refreshed.access_token));
+      } else {
+        throw new Error('Session expired. Please log in again.');
+      }
+    }
+  }
 
   // Parse data regardless of error — on non-2xx, the SDK sets error but
   // we may still have a useful JSON body.
