@@ -50,9 +50,22 @@ async function extractEdgeFunctionErrorMessage(error: any, parsedBody: any) {
 }
 
 const invokeEdgeFunction = async (functionName: string, payload: any, options?: { headers?: Record<string, string> }) => {
+  // Explicitly get session to ensure auth header is fresh
+  const { data: { session }, error: sessionError } = await supabase.auth.getSession();
+  if (sessionError) {
+    throw new Error(`Could not get user session: ${sessionError.message}`);
+  }
+  if (!session) {
+    // This should not happen in admin context, but as a safeguard
+    throw new Error('Admin user not authenticated.');
+  }
+
   const { data, error } = await supabase.functions.invoke(functionName, {
     body: payload,
-    headers: options?.headers,
+    headers: {
+      ...options?.headers,
+      'Authorization': `Bearer ${session.access_token}`,
+    },
   });
 
   let parsed: any = null;

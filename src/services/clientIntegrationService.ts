@@ -41,7 +41,19 @@ async function extractEdgeFunctionErrorMessage(error: any, parsedBody: any) {
 }
 
 const invokeEdgeFunction = async (functionName: string, payload: any) => {
+  // Explicitly get session to ensure auth header is fresh
+  const { data: { session }, error: sessionError } = await supabase.auth.getSession();
+  if (sessionError) {
+    throw new Error(`Could not get user session: ${sessionError.message}`);
+  }
+  if (!session) {
+    throw new Error('User not authenticated. Please log in.');
+  }
+
   const { data, error } = await supabase.functions.invoke(functionName, {
+    headers: {
+      'Authorization': `Bearer ${session.access_token}`,
+    },
     body: payload,
   });
 
