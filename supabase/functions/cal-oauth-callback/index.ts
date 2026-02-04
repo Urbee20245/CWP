@@ -94,56 +94,87 @@ serve(async (req) => {
       .maybeSingle();
 
     // Exchange authorization code for tokens
-    // Try app.cal.com first (matches the authorize domain), then fall back to api.cal.com
-    const tokenEndpoints = [
-      'https://app.cal.com/api/auth/oauth/token',
-      'https://api.cal.com/oauth/token',
-    ];
+    // Cal.com requires HTTP Basic Auth (RFC 6749 Section 2.3.1)
+    const basicAuth = btoa(`${CAL_CLIENT_ID}:${CAL_CLIENT_SECRET}`);
 
-    const tokenBody = {
-      code,
-      client_id: CAL_CLIENT_ID,
-      client_secret: CAL_CLIENT_SECRET,
-      redirect_uri: redirectUri,
-      grant_type: 'authorization_code',
-    };
+    // Try multiple endpoint + auth combinations
+    const attempts = [
+      {
+        // app.cal.com with Basic Auth
+        url: 'https://app.cal.com/api/auth/oauth/token',
+        headers: {
+          'Content-Type': 'application/x-www-form-urlencoded',
+          'Authorization': `Basic ${basicAuth}`,
+        },
+        body: new URLSearchParams({
+          code,
+          grant_type: 'authorization_code',
+          redirect_uri: redirectUri,
+        }).toString(),
+      },
+      {
+        // app.cal.com with credentials in JSON body (legacy)
+        url: 'https://app.cal.com/api/auth/oauth/token',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          code,
+          client_id: CAL_CLIENT_ID,
+          client_secret: CAL_CLIENT_SECRET,
+          redirect_uri: redirectUri,
+          grant_type: 'authorization_code',
+        }),
+      },
+      {
+        // api.cal.com with Basic Auth
+        url: 'https://api.cal.com/oauth/token',
+        headers: {
+          'Content-Type': 'application/x-www-form-urlencoded',
+          'Authorization': `Basic ${basicAuth}`,
+        },
+        body: new URLSearchParams({
+          code,
+          grant_type: 'authorization_code',
+          redirect_uri: redirectUri,
+        }).toString(),
+      },
+    ];
 
     let tokenData: any = null;
     let lastError: string | null = null;
 
-    for (const endpoint of tokenEndpoints) {
-      console.log(`[cal-oauth-callback] Trying token endpoint: ${endpoint}`);
+    for (const attempt of attempts) {
+      console.log(`[cal-oauth-callback] Trying: ${attempt.url} auth=${attempt.headers['Authorization'] ? 'Basic' : 'body'}`);
       try {
-        const tokenResponse = await fetch(endpoint, {
+        const tokenResponse = await fetch(attempt.url, {
           method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify(tokenBody),
+          headers: attempt.headers,
+          body: attempt.body,
         });
 
         const responseText = await tokenResponse.text();
-        console.log(`[cal-oauth-callback] ${endpoint} status=${tokenResponse.status} body=${responseText}`);
+        console.log(`[cal-oauth-callback] ${attempt.url} status=${tokenResponse.status} body=${responseText.substring(0, 500)}`);
 
         try {
           tokenData = JSON.parse(responseText);
         } catch {
-          console.error(`[cal-oauth-callback] Non-JSON response from ${endpoint}`);
+          console.error(`[cal-oauth-callback] Non-JSON response from ${attempt.url}`);
           lastError = `Non-JSON response (status ${tokenResponse.status})`;
           continue;
         }
 
-        if (tokenData.error) {
-          lastError = tokenData.error_description || tokenData.error;
-          console.error(`[cal-oauth-callback] ${endpoint} returned error: ${lastError}`);
+        if (tokenData.error || tokenData.code === 401 || tokenData.message) {
+          lastError = tokenData.error_description || tokenData.error || tokenData.message;
+          console.error(`[cal-oauth-callback] ${attempt.url} returned error: ${lastError}`);
           tokenData = null;
           continue;
         }
 
-        // Success - break out of loop
-        console.log(`[cal-oauth-callback] Token exchange succeeded via ${endpoint}`);
+        // Success
+        console.log(`[cal-oauth-callback] Token exchange succeeded via ${attempt.url}`);
         break;
       } catch (fetchErr: any) {
         lastError = fetchErr.message;
-        console.error(`[cal-oauth-callback] Fetch to ${endpoint} failed: ${lastError}`);
+        console.error(`[cal-oauth-callback] Fetch to ${attempt.url} failed: ${lastError}`);
         continue;
       }
     }
