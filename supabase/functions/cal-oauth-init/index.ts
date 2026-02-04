@@ -67,11 +67,13 @@ serve(async (req) => {
       return errorResponse('Failed to start OAuth. Please try again.', 500);
     }
 
+    const scope = 'READ_AVAILABILITY WRITE_BOOKINGS offline_access';
+
     const authUrl = `https://app.cal.com/auth/oauth2/authorize?` + new URLSearchParams({
       client_id: CAL_CLIENT_ID,
       redirect_uri: redirectUri,
       response_type: 'code',
-      scope: 'offline_access', // Request refresh token
+      scope: scope,
       prompt: 'consent', // Ensure consent screen is shown
       state: stateToken,
     }).toString();
