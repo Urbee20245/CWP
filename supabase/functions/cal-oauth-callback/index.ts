@@ -84,6 +84,7 @@ serve(async (req) => {
 
     const redirectUri = `${SUPABASE_URL}/functions/v1/cal-oauth-callback`;
     console.log(`[cal-oauth-callback] Received code for client ${clientId}. Exchanging tokens.`);
+    console.log(`[cal-oauth-callback] redirect_uri=${redirectUri}`);
 
     // Load existing connection (if any)
     const { data: existingConn } = await supabaseAdmin
@@ -93,24 +94,64 @@ serve(async (req) => {
       .maybeSingle();
 
     // Exchange authorization code for tokens
-    // Cal.com expects application/x-www-form-urlencoded format for token exchange
-    const tokenResponse = await fetch('https://app.cal.com/api/auth/oauth/token', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
-      body: new URLSearchParams({
-        code,
-        client_id: CAL_CLIENT_ID!,
-        client_secret: CAL_CLIENT_SECRET!,
-        redirect_uri: redirectUri,
-        grant_type: 'authorization_code',
-      }).toString(),
-    });
+    // Try app.cal.com first (matches the authorize domain), then fall back to api.cal.com
+    const tokenEndpoints = [
+      'https://app.cal.com/api/auth/oauth/token',
+      'https://api.cal.com/oauth/token',
+    ];
 
-    const tokenData = await tokenResponse.json();
+    const tokenBody = {
+      code,
+      client_id: CAL_CLIENT_ID,
+      client_secret: CAL_CLIENT_SECRET,
+      redirect_uri: redirectUri,
+      grant_type: 'authorization_code',
+    };
 
-    if (tokenData.error) {
-      console.error('[cal-oauth-callback] Token exchange failed:', tokenData.error_description || tokenData.error);
-      return new Response(`Token exchange failed: ${tokenData.error_description || tokenData.error}`, { status: 400, headers: corsHeaders });
+    let tokenData: any = null;
+    let lastError: string | null = null;
+
+    for (const endpoint of tokenEndpoints) {
+      console.log(`[cal-oauth-callback] Trying token endpoint: ${endpoint}`);
+      try {
+        const tokenResponse = await fetch(endpoint, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(tokenBody),
+        });
+
+        const responseText = await tokenResponse.text();
+        console.log(`[cal-oauth-callback] ${endpoint} status=${tokenResponse.status} body=${responseText}`);
+
+        try {
+          tokenData = JSON.parse(responseText);
+        } catch {
+          console.error(`[cal-oauth-callback] Non-JSON response from ${endpoint}`);
+          lastError = `Non-JSON response (status ${tokenResponse.status})`;
+          continue;
+        }
+
+        if (tokenData.error) {
+          lastError = tokenData.error_description || tokenData.error;
+          console.error(`[cal-oauth-callback] ${endpoint} returned error: ${lastError}`);
+          tokenData = null;
+          continue;
+        }
+
+        // Success - break out of loop
+        console.log(`[cal-oauth-callback] Token exchange succeeded via ${endpoint}`);
+        break;
+      } catch (fetchErr: any) {
+        lastError = fetchErr.message;
+        console.error(`[cal-oauth-callback] Fetch to ${endpoint} failed: ${lastError}`);
+        continue;
+      }
+    }
+
+    if (!tokenData) {
+      const errMsg = `Token exchange failed on all endpoints: ${lastError}`;
+      console.error(`[cal-oauth-callback] ${errMsg}`);
+      return new Response(errMsg, { status: 400, headers: corsHeaders });
     }
 
     const accessToken: string | undefined = tokenData.access_token;
