@@ -67,14 +67,17 @@ serve(async (req) => {
       return errorResponse('Failed to start OAuth. Please try again.', 500);
     }
 
-    const scope = 'READ_AVAILABILITY WRITE_BOOKINGS offline_access';
+    // Cal.com's authorize-view splits scopes by comma (not space) and validates
+    // each against the Prisma AccessScope enum. Valid values: READ_BOOKING, READ_PROFILE.
+    // Write permissions (bookings, availability) are configured on the OAuth client itself.
+    const scope = 'READ_BOOKING,READ_PROFILE';
 
     const authUrl = `https://app.cal.com/auth/oauth2/authorize?` + new URLSearchParams({
       client_id: CAL_CLIENT_ID,
       redirect_uri: redirectUri,
       response_type: 'code',
       scope: scope,
-      prompt: 'consent', // Ensure consent screen is shown
+      prompt: 'consent',
       state: stateToken,
     }).toString();
 
