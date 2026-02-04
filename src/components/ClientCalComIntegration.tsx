@@ -137,9 +137,15 @@ const ClientCalComIntegration: React.FC<Props> = ({ clientId, isAdminView = fals
       const returnTo = isAdminView
         ? `${window.location.origin}/admin/settings`
         : `${window.location.origin}/client/settings`;
+      console.log('[CalComIntegration] Initiating OAuth for client', clientId);
       const result = await ClientIntegrationService.initCalComAuth(clientId, returnTo);
+      console.log('[CalComIntegration] initCalComAuth result:', result);
+      if (!result || typeof result.auth_url !== 'string' || !result.auth_url.startsWith('http')) {
+        throw new Error('Unexpected response from server — no auth URL returned.');
+      }
       window.location.href = result.auth_url;
     } catch (e: any) {
+      console.error('[CalComIntegration] handleConnect error:', e);
       setError(e.message || 'Failed to initiate Cal.com OAuth.');
       setIsProcessing(false);
     }
