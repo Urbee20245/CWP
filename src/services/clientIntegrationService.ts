@@ -41,64 +41,94 @@ async function extractEdgeFunctionErrorMessage(error: any, parsedBody: any) {
 }
 
 const invokeEdgeFunction = async (functionName: string, payload: any) => {
-  const callFn = async (accessToken: string) => {
+  /**
+   * Always invoke with an explicit access token.
+   * Never rely on implicit Supabase auth injection.
+   */
+  const invokeWithToken = async (accessToken: string) => {
     return supabase.functions.invoke(functionName, {
-      headers: { 'Authorization': `Bearer ${accessToken}` },
       body: payload,
+      headers: {
+        Authorization: `Bearer ${accessToken}`,
+      },
     });
   };
 
-  // Get session — supabase-js should auto-refresh if the access token is expired
-  const { data: { session }, error: sessionError } = await supabase.auth.getSession();
+  // 1️⃣ Get current session
+  const {
+    data: { session },
+    error: sessionError,
+  } = await supabase.auth.getSession();
+
   if (sessionError) {
     throw new Error(`Could not get user session: ${sessionError.message}`);
   }
-  if (!session) {
+
+  if (!session?.access_token) {
     throw new Error('User not authenticated. Please log in.');
   }
 
-  let { data, error } = await callFn(session.access_token);
+  // 2️⃣ First attempt
+  let result = await invokeWithToken(session.access_token);
 
-  // If the call failed due to an expired/invalid JWT, refresh the session
-  // and retry once. getSession() can return a stale cached token in some
-  // edge cases (clock skew, long-idle tabs, race conditions).
-  if (error) {
+  // 3️⃣ If JWT-related failure, refresh + retry ONCE
+  if (result.error) {
     let errMsg = '';
     try {
-      const p = typeof data === 'string' ? JSON.parse(data) : data;
-      errMsg = await extractEdgeFunctionErrorMessage(error, p);
+      const parsed = typeof result.data === 'string'
+        ? JSON.parse(result.data)
+        : result.data;
+      errMsg = await extractEdgeFunctionErrorMessage(result.error, parsed);
     } catch {
-      errMsg = error.message || '';
+      errMsg = result.error.message || '';
     }
 
     if (/invalid jwt|jwt expired|token.*expired/i.test(errMsg)) {
-      console.warn(`[clientIntegrationService] JWT stale for ${functionName}, refreshing session…`);
-      const { data: { session: refreshed } } = await supabase.auth.refreshSession();
-      if (refreshed) {
-        ({ data, error } = await callFn(refreshed.access_token));
-      } else {
+      console.warn(
+        `[clientIntegrationService] JWT stale for ${functionName}, refreshing session…`
+      );
+
+      await supabase.auth.refreshSession();
+
+      // 🔑 CRITICAL FIX:
+      // Re-fetch the session AFTER refresh and rebuild headers
+      const {
+        data: { session: refreshed },
+      } = await supabase.auth.getSession();
+
+      if (!refreshed?.access_token) {
         throw new Error('Session expired. Please log in again.');
       }
+
+      result = await invokeWithToken(refreshed.access_token);
     }
   }
 
-  // Parse data regardless of error — on non-2xx, the SDK sets error but
-  // we may still have a useful JSON body.
+  // 4️⃣ Parse response body (even on non-2xx)
   let parsed: any = null;
   try {
-    parsed = typeof data === 'string' ? JSON.parse(data) : data;
+    parsed = typeof result.data === 'string'
+      ? JSON.parse(result.data)
+      : result.data;
   } catch {
-    // data wasn't valid JSON — ignore
+    // ignore
   }
 
-  if (error) {
-    const message = await extractEdgeFunctionErrorMessage(error, parsed);
-    console.error(`[clientIntegrationService] Error invoking ${functionName}:`, message);
+  // 5️⃣ Final error handling
+  if (result.error) {
+    const message = await extractEdgeFunctionErrorMessage(result.error, parsed);
+    console.error(
+      `[clientIntegrationService] Error invoking ${functionName}:`,
+      message
+    );
     throw new Error(message);
   }
 
   if (parsed?.error) {
-    console.error(`[clientIntegrationService] Edge function ${functionName} returned error:`, parsed.error);
+    console.error(
+      `[clientIntegrationService] Edge function ${functionName} returned error:`,
+      parsed.error
+    );
     throw new Error(parsed.error);
   }
 
@@ -106,19 +136,23 @@ const invokeEdgeFunction = async (functionName: string, payload: any) => {
 };
 
 export const ClientIntegrationService = {
-
   // --- Twilio Integration ---
 
   getTwilioConfig: async (clientId: string) => {
     return invokeEdgeFunction('get-twilio-config', { client_id: clientId });
   },
 
-  saveTwilioCredentials: async (clientId: string, accountSid: string, authToken: string, phoneNumber: string) => {
+  saveTwilioCredentials: async (
+    clientId: string,
+    accountSid: string,
+    authToken: string,
+    phoneNumber: string
+  ) => {
     return invokeEdgeFunction('save-twilio-credentials', {
-        client_id: clientId,
-        account_sid: accountSid,
-        auth_token: authToken,
-        phone_number: phoneNumber
+      client_id: clientId,
+      account_sid: accountSid,
+      auth_token: authToken,
+      phone_number: phoneNumber,
     });
   },
 
@@ -128,7 +162,10 @@ export const ClientIntegrationService = {
 
   // --- Twilio Connect ---
 
-  completeTwilioConnect: async (clientId: string, twilioAccountSid: string) => {
+  completeTwilioConnect: async (
+    clientId: string,
+    twilioAccountSid: string
+  ) => {
     return invokeEdgeFunction('twilio-connect-complete', {
       client_id: clientId,
       twilio_account_sid: twilioAccountSid,
@@ -136,7 +173,9 @@ export const ClientIntegrationService = {
   },
 
   getTwilioPhoneNumbers: async (clientId: string) => {
-    return invokeEdgeFunction('get-twilio-phone-numbers', { client_id: clientId });
+    return invokeEdgeFunction('get-twilio-phone-numbers', {
+      client_id: clientId,
+    });
   },
 
   selectTwilioPhoneNumber: async (clientId: string, phoneNumber: string) => {
@@ -149,10 +188,13 @@ export const ClientIntegrationService = {
 
   // --- A2P Registration ---
 
-  submitA2PRegistration: async (clientId: string, a2pRegistrationData: any) => {
+  submitA2PRegistration: async (
+    clientId: string,
+    a2pRegistrationData: any
+  ) => {
     return invokeEdgeFunction('submit-a2p-registration', {
-        client_id: clientId,
-        a2p_registration_data: a2pRegistrationData,
+      client_id: clientId,
+      a2p_registration_data: a2pRegistrationData,
     });
   },
 
@@ -164,44 +206,10 @@ export const ClientIntegrationService = {
 
   getGoogleCalendarStatus: async (clientId: string) => {
     const { data, error } = await supabase
-        .from('client_google_calendar')
-        .select('connection_status, calendar_id, updated_at, refresh_token_present, reauth_reason, last_error')
-        .eq('client_id', clientId)
-        .maybeSingle();
-
-    if (error) throw error;
-    return data;
-  },
-
-  disconnectGoogleCalendar: async (clientId: string) => {
-    const { error } = await supabase
-        .from('client_google_calendar')
-        .update({
-            connection_status: 'disconnected',
-            google_access_token: '',
-            google_refresh_token: '',
-            refresh_token_present: false,
-            access_token_expires_at: null,
-            reauth_reason: null,
-            last_error: null,
-            last_synced_at: new Date().toISOString()
-        })
-        .eq('client_id', clientId);
-
-    if (error) throw error;
-    return { success: true };
-  },
-
-  // --- Cal.com Integration (Preferred) ---
-
-  initCalComAuth: async (clientId: string, returnTo?: string) => {
-    return invokeEdgeFunction('cal-oauth-init', { client_id: clientId, return_to: returnTo || null });
-  },
-
-  getCalComStatus: async (clientId: string) => {
-    const { data, error } = await supabase
-      .from('client_cal_calendar')
-      .select('connection_status, updated_at, refresh_token_present, reauth_reason, last_error, default_event_type_id')
+      .from('client_google_calendar')
+      .select(
+        'connection_status, calendar_id, updated_at, refresh_token_present, reauth_reason, last_error'
+      )
       .eq('client_id', clientId)
       .maybeSingle();
 
@@ -209,7 +217,51 @@ export const ClientIntegrationService = {
     return data;
   },
 
-  setCalComDefaultEventTypeId: async (clientId: string, eventTypeId: string | null) => {
+  disconnectGoogleCalendar: async (clientId: string) => {
+    const { error } = await supabase
+      .from('client_google_calendar')
+      .update({
+        connection_status: 'disconnected',
+        google_access_token: '',
+        google_refresh_token: '',
+        refresh_token_present: false,
+        access_token_expires_at: null,
+        reauth_reason: null,
+        last_error: null,
+        last_synced_at: new Date().toISOString(),
+      })
+      .eq('client_id', clientId);
+
+    if (error) throw error;
+    return { success: true };
+  },
+
+  // --- Cal.com Integration ---
+
+  initCalComAuth: async (clientId: string, returnTo?: string) => {
+    return invokeEdgeFunction('cal-oauth-init', {
+      client_id: clientId,
+      return_to: returnTo || null,
+    });
+  },
+
+  getCalComStatus: async (clientId: string) => {
+    const { data, error } = await supabase
+      .from('client_cal_calendar')
+      .select(
+        'connection_status, updated_at, refresh_token_present, reauth_reason, last_error, default_event_type_id'
+      )
+      .eq('client_id', clientId)
+      .maybeSingle();
+
+    if (error) throw error;
+    return data;
+  },
+
+  setCalComDefaultEventTypeId: async (
+    clientId: string,
+    eventTypeId: string | null
+  ) => {
     const clean = typeof eventTypeId === 'string' ? eventTypeId.trim() : '';
     const { error } = await supabase
       .from('client_cal_calendar')
