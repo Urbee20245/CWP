@@ -1,3 +1,7 @@
+// Disable Supabase gateway JWT verification — the function validates the
+// user's JWT itself via supabaseAdmin.auth.getUser(token) below.
+export const config = { auth: false };
+
 import { serve } from "https://deno.land/std@0.190.0/http/server.ts";
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2.45.0';
 import { handleCors, jsonResponse, errorResponse } from '../_shared/utils.ts';
