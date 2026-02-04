@@ -71,6 +71,8 @@ serve(async (req) => {
       client_id: CAL_CLIENT_ID,
       redirect_uri: redirectUri,
       response_type: 'code',
+      scope: 'offline_access', // Request refresh token
+      prompt: 'consent', // Ensure consent screen is shown
       state: stateToken,
     }).toString();
 
