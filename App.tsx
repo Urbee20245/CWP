@@ -48,6 +48,7 @@ import AdminUserManagement from './src/pages/AdminUserManagement';
 import AdminInbox from './src/pages/AdminInbox';
 import ClientHelpPage from './src/pages/ClientHelpPage';
 import ClientMessagingCompliance from './src/pages/ClientMessagingCompliance';
+import AdminA2PAutomation from './src/pages/AdminA2PAutomation';
 import ClientSettings from './src/pages/ClientSettings'; // NEW IMPORT
 import ClientLeads from './src/pages/ClientLeads';
 import TwilioConnectCallback from './src/pages/TwilioConnectCallback';
@@ -100,6 +101,7 @@ const AppContent: React.FC = () => {
           <Route path="ai-email" element={<AdminEmailGenerator />} />
           <Route path="email-draft" element={<AdminEmailDraft />} />
           <Route path="addons/catalog" element={<AdminAddonCatalog />} />
+          <Route path="a2p-automation" element={<AdminA2PAutomation />} />
         </Route>
 
         <Route path="/client/*" element={<ProtectedRoute allowedRoles={['client']} />}>
