@@ -1,7 +1,7 @@
 "use client";
 
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { Calendar, Loader2, CheckCircle2, AlertTriangle, ExternalLink, X, Info, Save, Key } from 'lucide-react';
+import { Calendar, Loader2, CheckCircle2, AlertTriangle, ExternalLink, X, Info, Save, Key, Link2 } from 'lucide-react';
 import { ClientIntegrationService } from '../services/clientIntegrationService';
 import { format } from 'date-fns';
 
@@ -19,6 +19,7 @@ interface CalStatus {
   last_error?: string | null;
   default_event_type_id?: string | null;
   auth_method?: 'oauth' | 'api_key';
+  cal_booking_link?: string | null;
 }
 
 const sleep = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
@@ -42,6 +43,9 @@ const ClientCalComIntegration: React.FC<Props> = ({ clientId, isAdminView = fals
 
   const [eventTypeIdDraft, setEventTypeIdDraft] = useState('');
   const [isSavingEventType, setIsSavingEventType] = useState(false);
+
+  const [bookingLinkDraft, setBookingLinkDraft] = useState('');
+  const [isSavingBookingLink, setIsSavingBookingLink] = useState(false);
 
   const [connectionMethod, setConnectionMethod] = useState<'oauth' | 'api_key'>('oauth');
   const [apiKeyInput, setApiKeyInput] = useState('');
@@ -103,6 +107,10 @@ const ClientCalComIntegration: React.FC<Props> = ({ clientId, isAdminView = fals
   useEffect(() => {
     setEventTypeIdDraft(status?.default_event_type_id || '');
   }, [status?.default_event_type_id]);
+
+  useEffect(() => {
+    setBookingLinkDraft(status?.cal_booking_link || '');
+  }, [status?.cal_booking_link]);
 
   // Detect success flag after returning from OAuth
   useEffect(() => {
@@ -210,6 +218,21 @@ const ClientCalComIntegration: React.FC<Props> = ({ clientId, isAdminView = fals
     }
   };
 
+  const saveBookingLink = async () => {
+    setIsSavingBookingLink(true);
+    setError(null);
+    setNotice(null);
+    try {
+      await ClientIntegrationService.setCalComBookingLink(clientId, bookingLinkDraft);
+      await fetchStatus();
+      setNotice('Booking link saved. Clients will now see your Cal.com calendar on the appointments page.');
+    } catch (e: any) {
+      setError(e?.message || 'Failed to save booking link.');
+    } finally {
+      setIsSavingBookingLink(false);
+    }
+  };
+
   const isConnected = status?.connection_status === 'connected' && (
     status?.auth_method === 'api_key' || status?.refresh_token_present === true
   );
@@ -228,6 +251,14 @@ const ClientCalComIntegration: React.FC<Props> = ({ clientId, isAdminView = fals
     if (isSavingEventType) return true;
     return current === next;
   }, [eventTypeIdDraft, isConnected, isSavingEventType, status?.default_event_type_id]);
+
+  const bookingLinkSaveDisabled = useMemo(() => {
+    const current = (status?.cal_booking_link || '').trim();
+    const next = bookingLinkDraft.trim();
+    if (!isConnected) return true;
+    if (isSavingBookingLink) return true;
+    return current === next;
+  }, [bookingLinkDraft, isConnected, isSavingBookingLink, status?.cal_booking_link]);
 
   if (isLoading) {
     return <div className="flex justify-center items-center h-20"><Loader2 className="w-6 h-6 animate-spin text-indigo-600" /></div>;
@@ -299,6 +330,45 @@ const ClientCalComIntegration: React.FC<Props> = ({ clientId, isAdminView = fals
               <p className="text-[11px] text-slate-600 mt-2">
                 Used for both availability checks and booking.
               </p>
+            )}
+          </div>
+
+          <div className="p-3 bg-white/60 rounded-lg border border-emerald-200">
+            <p className="text-xs font-semibold text-slate-700 mb-2 flex items-center gap-1">
+              <Link2 className="w-3 h-3" /> Public Booking Link
+            </p>
+            <div className="flex flex-col sm:flex-row sm:items-center gap-2">
+              <input
+                value={bookingLinkDraft}
+                onChange={(e) => setBookingLinkDraft(e.target.value)}
+                placeholder="e.g. username/30min or https://cal.com/username/30min"
+                className="flex-1 px-3 py-2 border border-slate-300 rounded-lg text-sm"
+              />
+              <button
+                onClick={saveBookingLink}
+                disabled={bookingLinkSaveDisabled}
+                className="inline-flex items-center justify-center gap-2 px-3 py-2 bg-indigo-600 text-white rounded-lg text-sm font-semibold hover:bg-indigo-700 disabled:opacity-50"
+              >
+                {isSavingBookingLink ? <Loader2 className="w-4 h-4 animate-spin" /> : <Save className="w-4 h-4" />}
+                Save
+              </button>
+            </div>
+            <p className="text-[11px] text-slate-600 mt-2">
+              Enter your Cal.com booking page URL. This will be shown to clients on the Appointments page so they can book directly with you.
+            </p>
+            {status?.cal_booking_link && (
+              <div className="mt-2 p-2 bg-indigo-50 border border-indigo-200 rounded text-xs text-indigo-800 flex items-center gap-2">
+                <CheckCircle2 className="w-3 h-3" />
+                <span>Clients will see your Cal.com calendar at: </span>
+                <a
+                  href={`https://cal.com/${status.cal_booking_link}`}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="font-semibold underline hover:text-indigo-600"
+                >
+                  cal.com/{status.cal_booking_link}
+                </a>
+              </div>
             )}
           </div>
 

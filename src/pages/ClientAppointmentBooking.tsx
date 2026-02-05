@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState, useEffect, useCallback, useMemo } from 'react';
+import React, { useState, useEffect, useCallback, useMemo, useRef } from 'react';
 import ClientLayout from '../components/ClientLayout';
 import { supabase } from '../integrations/supabase/client';
 import {
@@ -14,6 +14,8 @@ import {
   Video,
   X,
   DollarSign,
+  Calendar,
+  ExternalLink,
 } from 'lucide-react';
 import {
   format,
@@ -32,6 +34,13 @@ import {
   addMonths,
 } from 'date-fns';
 import { useAuth } from '../hooks/useAuth';
+
+// Declare Cal as a global for the Cal.com embed
+declare global {
+  interface Window {
+    Cal?: any;
+  }
+}
 
 interface Availability {
   id: string;
@@ -66,6 +75,11 @@ const ClientAppointmentBooking: React.FC = () => {
   const [isBooking, setIsBooking] = useState(false);
   const [bookingSuccess, setBookingSuccess] = useState<string | null>(null);
   const [bookingError, setBookingError] = useState<string | null>(null);
+
+  // Cal.com embed state
+  const [calBookingLink, setCalBookingLink] = useState<string | null>(null);
+  const [calEmbedLoaded, setCalEmbedLoaded] = useState(false);
+  const calContainerRef = useRef<HTMLDivElement>(null);
 
   // Pricing state
   const [isFreeEligibleThisMonth, setIsFreeEligibleThisMonth] = useState(false);
@@ -153,12 +167,108 @@ const ClientAppointmentBooking: React.FC = () => {
       setBookingMode(eligible ? 'free' : 'paid');
     }
 
+    // 5) Check for Cal.com booking link (for admin's calendar)
+    // We need to get the admin's Cal.com config to show their calendar to clients
+    const { data: calData } = await supabase
+      .from('client_cal_calendar')
+      .select('cal_booking_link, connection_status')
+      .eq('connection_status', 'connected')
+      .not('cal_booking_link', 'is', null)
+      .limit(1)
+      .maybeSingle();
+
+    if (calData?.cal_booking_link) {
+      setCalBookingLink(calData.cal_booking_link);
+    }
+
     setIsLoading(false);
   }, [profile]);
 
   useEffect(() => {
     fetchClientData();
   }, [fetchClientData]);
+
+  // Load Cal.com embed when booking link is available
+  useEffect(() => {
+    if (!calBookingLink || calEmbedLoaded) return;
+
+    // Load Cal.com embed script
+    const loadCalEmbed = () => {
+      // Check if script is already loaded
+      if (window.Cal) {
+        initializeCalEmbed();
+        return;
+      }
+
+      const script = document.createElement('script');
+      script.src = 'https://app.cal.com/embed/embed.js';
+      script.async = true;
+      script.onload = () => {
+        initializeCalEmbed();
+      };
+      document.body.appendChild(script);
+    };
+
+    const initializeCalEmbed = () => {
+      if (!window.Cal || !calContainerRef.current) return;
+
+      // Initialize Cal.com
+      (function (C: any, A: string, L: string) {
+        const p = function (a: any, ar: any) {
+          a.q.push(ar);
+        };
+        const d = C.document;
+        C.Cal =
+          C.Cal ||
+          function () {
+            const cal = C.Cal;
+            const ar = arguments;
+            if (!cal.loaded) {
+              cal.ns = {};
+              cal.q = cal.q || [];
+              p(cal, ar);
+              return;
+            }
+            if (ar[0] === L) {
+              const api = function () {
+                p(api, arguments);
+              };
+              const namespace = ar[1];
+              api.q = api.q || [];
+              if (typeof namespace === "string") {
+                cal.ns[namespace] = cal.ns[namespace] || api;
+                p(cal.ns[namespace], ar);
+                p(cal, ["initNamespace", namespace]);
+              } else p(cal, ar);
+              return;
+            }
+            p(cal, ar);
+          };
+      })(window, "https://app.cal.com/embed/embed.js", "init");
+
+      window.Cal("init", { origin: "https://cal.com" });
+
+      // Create inline embed
+      window.Cal("inline", {
+        elementOrSelector: calContainerRef.current,
+        calLink: calBookingLink,
+        config: {
+          layout: "month_view",
+        },
+      });
+
+      window.Cal("ui", {
+        theme: "light",
+        styles: { branding: { brandColor: "#4f46e5" } },
+        hideEventTypeDetails: false,
+        layout: "month_view",
+      });
+
+      setCalEmbedLoaded(true);
+    };
+
+    loadCalEmbed();
+  }, [calBookingLink, calEmbedLoaded]);
 
   const generateTimeSlots = (day: Date) => {
     const dayOfWeek = getDay(day);
@@ -515,101 +625,149 @@ const ClientAppointmentBooking: React.FC = () => {
 
           {/* Right Column: Booking Calendar */}
           <div className="lg:col-span-2 space-y-6">
-            <div className="bg-white p-6 rounded-xl shadow-lg border border-slate-100">
-              <h2 className="text-xl font-bold text-slate-900 mb-4 flex items-center gap-2 border-b border-slate-100 pb-4">
-                <CalendarCheck className="w-5 h-5 text-emerald-600" /> Select Available Slot
-              </h2>
+            {calBookingLink ? (
+              /* Cal.com Embed Calendar */
+              <div className="bg-white p-6 rounded-xl shadow-lg border border-slate-100">
+                <h2 className="text-xl font-bold text-slate-900 mb-4 flex items-center gap-2 border-b border-slate-100 pb-4">
+                  <Calendar className="w-5 h-5 text-indigo-600" /> Book an Appointment
+                </h2>
 
-              {/* Pricing / Mode selector */}
-              <div className="mb-4 p-4 bg-slate-50 border border-slate-200 rounded-xl">
-                <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-3">
-                  <div>
-                    <p className="text-sm font-bold text-slate-900">Monthly policy</p>
-                    <p className="text-xs text-slate-600">
-                      First appointment each month is FREE ({FREE_DURATION_MINUTES} minutes). After that, calls are $50 per 30 minutes.
-                    </p>
-                  </div>
-
-                  <div className="flex flex-col sm:flex-row gap-2">
-                    <button
-                      type="button"
-                      onClick={() => setBookingMode('free')}
-                      disabled={!isFreeEligibleThisMonth}
-                      className={`px-4 py-2 rounded-lg text-sm font-semibold border transition-colors disabled:opacity-50 ${
-                        bookingMode === 'free'
-                          ? 'bg-emerald-600 text-white border-emerald-600'
-                          : 'bg-white text-slate-700 border-slate-300 hover:bg-slate-50'
-                      }`}
-                    >
-                      Free ({FREE_DURATION_MINUTES} min)
-                    </button>
-
-                    <button
-                      type="button"
-                      onClick={() => setBookingMode('paid')}
-                      className={`px-4 py-2 rounded-lg text-sm font-semibold border transition-colors ${
-                        bookingMode === 'paid'
-                          ? 'bg-indigo-600 text-white border-indigo-600'
-                          : 'bg-white text-slate-700 border-slate-300 hover:bg-slate-50'
-                      }`}
-                    >
-                      Paid
-                    </button>
-                  </div>
+                <div className="mb-4 p-3 bg-indigo-50 border border-indigo-200 rounded-lg">
+                  <p className="text-sm text-indigo-800">
+                    Select a time slot below to book directly. You'll receive a confirmation email with meeting details.
+                  </p>
                 </div>
 
-                {bookingMode === 'paid' && (
-                  <div className="mt-4 flex flex-col sm:flex-row sm:items-center gap-3">
-                    <div className="text-sm font-semibold text-slate-700">Duration</div>
-                    <select
-                      value={paidDuration}
-                      onChange={(e) => setPaidDuration(parseInt(e.target.value, 10))}
-                      className="p-2 border border-slate-300 rounded-lg text-sm"
-                    >
-                      {durationOptions.map((d) => (
-                        <option key={d} value={d}>
-                          {d} minutes — ${((d / PAID_BLOCK_MINUTES) * 50).toFixed(0)}
-                        </option>
-                      ))}
-                    </select>
-                    <div className="text-xs text-slate-500">An invoice opens after you confirm the time.</div>
-                  </div>
-                )}
-
-                {!isFreeEligibleThisMonth && (
-                  <div className="mt-3 text-xs text-slate-600">
-                    Your free monthly appointment has already been used.
-                  </div>
-                )}
-              </div>
-
-              {/* Week Navigation */}
-              <div className="flex justify-between items-center mb-4">
-                <button onClick={handlePreviousWeek} className="text-indigo-600 hover:text-indigo-800 font-semibold text-sm">
-                  ← Prev Week
-                </button>
-                <span className="font-bold text-slate-900">
-                  {format(currentWeekStart, 'MMM d')} - {format(endOfWeek(currentWeekStart, { weekStartsOn: 1 }), 'MMM d, yyyy')}
-                </span>
-                <button onClick={handleNextWeek} className="text-indigo-600 hover:text-indigo-800 font-semibold text-sm">
-                  Next Week →
-                </button>
-              </div>
-
-              {availability.length === 0 ? (
-                <div className="p-8 text-center bg-slate-50 rounded-lg">
-                  <AlertTriangle className="w-6 h-6 text-amber-500 mx-auto mb-3" />
-                  <p className="text-slate-600">Admin availability has not been set yet. Please check back later.</p>
+                {/* Cal.com Embed Container */}
+                <div
+                  ref={calContainerRef}
+                  className="cal-embed-container min-h-[600px] w-full"
+                  style={{ minHeight: '600px' }}
+                >
+                  {!calEmbedLoaded && (
+                    <div className="flex items-center justify-center h-96">
+                      <div className="text-center">
+                        <Loader2 className="w-8 h-8 animate-spin text-indigo-600 mx-auto mb-3" />
+                        <p className="text-slate-600">Loading calendar...</p>
+                      </div>
+                    </div>
+                  )}
                 </div>
-              ) : (
-                renderWeeklySchedule()
-              )}
-            </div>
+
+                {/* Fallback link */}
+                <div className="mt-4 pt-4 border-t border-slate-100">
+                  <p className="text-xs text-slate-500 flex items-center gap-2">
+                    <ExternalLink className="w-3 h-3" />
+                    Having trouble?
+                    <a
+                      href={`https://cal.com/${calBookingLink}`}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="text-indigo-600 hover:underline font-semibold"
+                    >
+                      Open booking page in new tab
+                    </a>
+                  </p>
+                </div>
+              </div>
+            ) : (
+              /* Legacy Custom Calendar */
+              <div className="bg-white p-6 rounded-xl shadow-lg border border-slate-100">
+                <h2 className="text-xl font-bold text-slate-900 mb-4 flex items-center gap-2 border-b border-slate-100 pb-4">
+                  <CalendarCheck className="w-5 h-5 text-emerald-600" /> Select Available Slot
+                </h2>
+
+                {/* Pricing / Mode selector */}
+                <div className="mb-4 p-4 bg-slate-50 border border-slate-200 rounded-xl">
+                  <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-3">
+                    <div>
+                      <p className="text-sm font-bold text-slate-900">Monthly policy</p>
+                      <p className="text-xs text-slate-600">
+                        First appointment each month is FREE ({FREE_DURATION_MINUTES} minutes). After that, calls are $50 per 30 minutes.
+                      </p>
+                    </div>
+
+                    <div className="flex flex-col sm:flex-row gap-2">
+                      <button
+                        type="button"
+                        onClick={() => setBookingMode('free')}
+                        disabled={!isFreeEligibleThisMonth}
+                        className={`px-4 py-2 rounded-lg text-sm font-semibold border transition-colors disabled:opacity-50 ${
+                          bookingMode === 'free'
+                            ? 'bg-emerald-600 text-white border-emerald-600'
+                            : 'bg-white text-slate-700 border-slate-300 hover:bg-slate-50'
+                        }`}
+                      >
+                        Free ({FREE_DURATION_MINUTES} min)
+                      </button>
+
+                      <button
+                        type="button"
+                        onClick={() => setBookingMode('paid')}
+                        className={`px-4 py-2 rounded-lg text-sm font-semibold border transition-colors ${
+                          bookingMode === 'paid'
+                            ? 'bg-indigo-600 text-white border-indigo-600'
+                            : 'bg-white text-slate-700 border-slate-300 hover:bg-slate-50'
+                        }`}
+                      >
+                        Paid
+                      </button>
+                    </div>
+                  </div>
+
+                  {bookingMode === 'paid' && (
+                    <div className="mt-4 flex flex-col sm:flex-row sm:items-center gap-3">
+                      <div className="text-sm font-semibold text-slate-700">Duration</div>
+                      <select
+                        value={paidDuration}
+                        onChange={(e) => setPaidDuration(parseInt(e.target.value, 10))}
+                        className="p-2 border border-slate-300 rounded-lg text-sm"
+                      >
+                        {durationOptions.map((d) => (
+                          <option key={d} value={d}>
+                            {d} minutes — ${((d / PAID_BLOCK_MINUTES) * 50).toFixed(0)}
+                          </option>
+                        ))}
+                      </select>
+                      <div className="text-xs text-slate-500">An invoice opens after you confirm the time.</div>
+                    </div>
+                  )}
+
+                  {!isFreeEligibleThisMonth && (
+                    <div className="mt-3 text-xs text-slate-600">
+                      Your free monthly appointment has already been used.
+                    </div>
+                  )}
+                </div>
+
+                {/* Week Navigation */}
+                <div className="flex justify-between items-center mb-4">
+                  <button onClick={handlePreviousWeek} className="text-indigo-600 hover:text-indigo-800 font-semibold text-sm">
+                    ← Prev Week
+                  </button>
+                  <span className="font-bold text-slate-900">
+                    {format(currentWeekStart, 'MMM d')} - {format(endOfWeek(currentWeekStart, { weekStartsOn: 1 }), 'MMM d, yyyy')}
+                  </span>
+                  <button onClick={handleNextWeek} className="text-indigo-600 hover:text-indigo-800 font-semibold text-sm">
+                    Next Week →
+                  </button>
+                </div>
+
+                {availability.length === 0 ? (
+                  <div className="p-8 text-center bg-slate-50 rounded-lg">
+                    <AlertTriangle className="w-6 h-6 text-amber-500 mx-auto mb-3" />
+                    <p className="text-slate-600">Admin availability has not been set yet. Please check back later.</p>
+                  </div>
+                ) : (
+                  renderWeeklySchedule()
+                )}
+              </div>
+            )}
           </div>
         </div>
       </div>
 
-      {renderBookingModal()}
+      {!calBookingLink && renderBookingModal()}
     </ClientLayout>
   );
 };
