@@ -248,7 +248,7 @@ export const ClientIntegrationService = {
     const { data, error } = await supabase
       .from('client_cal_calendar')
       .select(
-        'connection_status, updated_at, refresh_token_present, reauth_reason, last_error, default_event_type_id, auth_method'
+        'connection_status, updated_at, refresh_token_present, reauth_reason, last_error, default_event_type_id, auth_method, cal_booking_link'
       )
       .eq('client_id', clientId)
       .maybeSingle();
@@ -266,6 +266,32 @@ export const ClientIntegrationService = {
       .from('client_cal_calendar')
       .update({
         default_event_type_id: clean.length ? clean : null,
+      })
+      .eq('client_id', clientId);
+
+    if (error) throw error;
+    return { success: true };
+  },
+
+  setCalComBookingLink: async (
+    clientId: string,
+    bookingLink: string | null
+  ) => {
+    // Normalize the booking link - extract just the path if a full URL is provided
+    let clean = typeof bookingLink === 'string' ? bookingLink.trim() : '';
+    if (clean) {
+      // Remove common prefixes to get just the path (e.g., "username/30min")
+      clean = clean
+        .replace(/^https?:\/\/(app\.)?cal\.com\//i, '')
+        .replace(/^cal\.com\//i, '')
+        .replace(/^\//, '')
+        .replace(/\/$/, '');
+    }
+
+    const { error } = await supabase
+      .from('client_cal_calendar')
+      .update({
+        cal_booking_link: clean.length ? clean : null,
       })
       .eq('client_id', clientId);
 
