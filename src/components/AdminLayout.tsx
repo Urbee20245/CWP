@@ -3,7 +3,7 @@
 import React, { useState } from 'react';
 import { useAuth } from '../hooks/useAuth';
 import { Link, useLocation } from 'react-router-dom';
-import { Users, Briefcase, DollarSign, LogOut, Bot, BarChart3, Settings, FileText, Mail as MailIcon, Zap, CalendarCheck, Menu, X, User, Phone, Cpu, ChevronRight } from 'lucide-react';
+import { Users, Briefcase, DollarSign, LogOut, Bot, BarChart3, Settings, FileText, Mail as MailIcon, Zap, CalendarCheck, Menu, X, User, Phone, Cpu, ChevronRight, ShieldCheck } from 'lucide-react';
 
 interface AdminLayoutProps {
   children: React.ReactNode;
@@ -34,6 +34,7 @@ const AdminLayout: React.FC<AdminLayoutProps> = ({ children }) => {
       items: [
         { name: 'AI Voice', href: '/admin/voice', icon: Phone },
         { name: 'Agent Settings', href: '/admin/agent-settings', icon: Cpu },
+        { name: 'A2P Automation', href: '/admin/a2p-automation', icon: ShieldCheck },
         { name: 'AI Docs', href: '/admin/ai-docs', icon: FileText },
         { name: 'AI Email', href: '/admin/ai-email', icon: MailIcon },
       ],
