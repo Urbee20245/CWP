@@ -1,5 +1,5 @@
 import React, { useState, useMemo } from 'react';
-import { MessageSquare, FileText, CalendarCheck, Zap, ArrowRight, CheckCircle2, Bot, Phone, ChevronDown, ChevronUp, DollarSign, ExternalLink, Calendar, AlertTriangle } from 'lucide-react';
+import { MessageSquare, FileText, CalendarCheck, Zap, ArrowRight, CheckCircle2, Bot, Phone, ChevronDown, ChevronUp, DollarSign, ExternalLink, Calendar, AlertTriangle, Key } from 'lucide-react';
 import { Link } from 'react-router-dom';
 
 interface HelpItem {
@@ -231,29 +231,120 @@ const ClientHelpGuide: React.FC<ClientHelpGuideProps> = ({ filter }) => {
             content: (
                 <div className="space-y-6 text-sm text-slate-700">
                     <h4 className="font-bold text-slate-900">What does this integration do?</h4>
-                    <p>Connecting Cal.com lets your AI assistant check availability and book meetings directly into your Cal.com account.</p>
+                    <p>Connecting Cal.com lets your AI assistant (including Retell AI voice agents) check availability and book meetings directly into your Cal.com account. You can connect using either OAuth (automatic) or an API Key (manual).</p>
 
-                    <h4 className="font-bold text-slate-900">How to Connect Cal.com</h4>
+                    <div className="p-3 bg-indigo-50 border border-indigo-200 rounded-lg text-indigo-800">
+                        <p className="font-bold flex items-center gap-2"><Key className="w-4 h-4" /> Two Connection Methods</p>
+                        <ul className="list-disc list-inside ml-4 mt-2 space-y-1">
+                            <li><strong>OAuth (Recommended):</strong> Click "Connect Cal.com" for automatic setup with token refresh.</li>
+                            <li><strong>API Key:</strong> Manual setup ideal for Retell AI and other third-party integrations.</li>
+                        </ul>
+                    </div>
+
+                    <h4 className="font-bold text-slate-900">Option 1: Connect via OAuth</h4>
                     <ol className="list-decimal list-inside ml-4 space-y-2">
                         <li>Go to <Link to="/client/settings" className="text-indigo-600 hover:underline font-semibold">Settings</Link>.</li>
                         <li>Find the "Cal.com Integration" section.</li>
                         <li>Click "Connect Cal.com" and complete the secure authorization flow.</li>
                     </ol>
 
-                    <h4 className="font-bold text-slate-900">Event Type ID (Required)</h4>
-                    <p>After connecting, set your Default Event Type ID so bookings use the right meeting template:</p>
-                    <ul className="list-disc list-inside ml-4 space-y-1">
-                        <li>Open your event type in Cal.com and copy its numeric ID (from URL or settings).</li>
-                        <li>Paste it into the "Default Event Type ID" field in <Link to="/client/settings" className="text-indigo-600 hover:underline">Settings</Link>.</li>
-                    </ul>
+                    <h4 className="font-bold text-slate-900">Option 2: Connect via API Key</h4>
+                    <p>Use this method for Retell AI integration or when OAuth isn't available:</p>
+
+                    <div className="ml-4 space-y-4 mt-3">
+                        <div>
+                            <p className="font-semibold text-slate-800">Step 1: Log into Cal.com</p>
+                            <p className="ml-4 mt-1">Go to <a href="https://app.cal.com" target="_blank" rel="noopener noreferrer" className="text-indigo-600 hover:underline">app.cal.com</a> and sign in to your account.</p>
+                        </div>
+
+                        <div>
+                            <p className="font-semibold text-slate-800">Step 2: Navigate to API Keys</p>
+                            <ul className="list-disc list-inside ml-4 mt-1 space-y-1">
+                                <li>Click on your <strong>Profile Picture</strong> (top-right corner).</li>
+                                <li>Select <strong>"Settings"</strong> from the dropdown menu.</li>
+                                <li>In the left sidebar, scroll down and click <strong>"API Keys"</strong> (under the Developer section).</li>
+                            </ul>
+                        </div>
+
+                        <div>
+                            <p className="font-semibold text-slate-800">Step 3: Create a New API Key</p>
+                            <ul className="list-disc list-inside ml-4 mt-1 space-y-1">
+                                <li>Click the <strong>"+ New"</strong> button.</li>
+                                <li>Give your key a descriptive name (e.g., "CWP Integration" or "Retell AI").</li>
+                                <li>Optionally set an expiration date (or leave blank for no expiration).</li>
+                                <li>Click <strong>"Create"</strong>.</li>
+                            </ul>
+                        </div>
+
+                        <div>
+                            <p className="font-semibold text-slate-800">Step 4: Copy Your API Key</p>
+                            <div className="p-3 bg-amber-50 border border-amber-200 rounded-lg text-amber-800 mt-2">
+                                <p className="font-bold">Important:</p>
+                                <p>Copy the API key immediately! It will only be shown once. If you lose it, you'll need to create a new one.</p>
+                            </div>
+                        </div>
+
+                        <div>
+                            <p className="font-semibold text-slate-800">Step 5: Enter the API Key in CWP</p>
+                            <ul className="list-disc list-inside ml-4 mt-1 space-y-1">
+                                <li>Go to <Link to="/client/settings" className="text-indigo-600 hover:underline font-semibold">Settings</Link> in your CWP dashboard.</li>
+                                <li>Find the "Cal.com Integration" section.</li>
+                                <li>Click <strong>"Use API Key Instead"</strong>.</li>
+                                <li>Paste your API key into the input field.</li>
+                                <li>Click <strong>"Validate & Save"</strong> to confirm the connection.</li>
+                            </ul>
+                        </div>
+                    </div>
+
+                    <h4 className="font-bold text-slate-900 flex items-center gap-2">
+                        <span>Finding Your Event Type ID</span>
+                    </h4>
+                    <p>The Event Type ID tells the system which meeting type to use when booking appointments. This is required for both OAuth and API Key connections.</p>
+
+                    <div className="ml-4 space-y-4 mt-3">
+                        <div>
+                            <p className="font-semibold text-slate-800">Step 1: Go to Event Types</p>
+                            <p className="ml-4 mt-1">In Cal.com, click <strong>"Event Types"</strong> in the left sidebar to see all your meeting types.</p>
+                        </div>
+
+                        <div>
+                            <p className="font-semibold text-slate-800">Step 2: Select Your Event Type</p>
+                            <p className="ml-4 mt-1">Click on the event type you want to use for AI-booked appointments (e.g., "15 Minute Meeting" or "Consultation Call").</p>
+                        </div>
+
+                        <div>
+                            <p className="font-semibold text-slate-800">Step 3: Find the Event Type ID</p>
+                            <p className="ml-4 mt-1">Look at your browser's URL bar. The URL will look like:</p>
+                            <code className="block bg-slate-100 p-2 rounded mt-2 text-xs">https://app.cal.com/event-types/<strong className="text-indigo-600">123456</strong>?tabName=setup</code>
+                            <p className="ml-4 mt-2">The number after <code>/event-types/</code> is your <strong>Event Type ID</strong> (in this example: <strong>123456</strong>).</p>
+                        </div>
+
+                        <div>
+                            <p className="font-semibold text-slate-800">Step 4: Save the Event Type ID</p>
+                            <ul className="list-disc list-inside ml-4 mt-1 space-y-1">
+                                <li>Copy the numeric ID from the URL.</li>
+                                <li>In CWP <Link to="/client/settings" className="text-indigo-600 hover:underline">Settings</Link>, paste it into the <strong>"Default Event Type ID"</strong> field.</li>
+                                <li>Click <strong>"Save"</strong> to confirm.</li>
+                            </ul>
+                        </div>
+                    </div>
+
+                    <div className="p-3 bg-emerald-50 border border-emerald-200 rounded-lg text-emerald-800">
+                        <p className="font-bold">For Retell AI & Other Integrations:</p>
+                        <p className="mt-1">Once you have your API Key and Event Type ID saved in CWP, your Retell AI voice agent will automatically use these credentials to check availability and book appointments on your behalf. No additional configuration is needed in Retell—everything is managed through your CWP settings.</p>
+                    </div>
 
                     <div className="p-3 bg-amber-50 border border-amber-200 rounded-lg text-amber-800">
-                        <p className="font-bold">Heads up:</p>
-                        <p>If Cal.com shows "needs re-authorization," just click "Reconnect Cal.com" in Settings to refresh access.</p>
+                        <p className="font-bold">Troubleshooting:</p>
+                        <ul className="list-disc list-inside ml-4 mt-1 space-y-1">
+                            <li>If Cal.com shows "needs re-authorization," click "Reconnect Cal.com" in Settings.</li>
+                            <li>If API Key validation fails, ensure you copied the full key without extra spaces.</li>
+                            <li>If bookings fail, verify your Event Type ID is correct and the event type is active.</li>
+                        </ul>
                     </div>
                 </div>
             ),
-            keywords: 'cal cal.com integration connect event type id booking availability',
+            keywords: 'cal cal.com integration connect event type id booking availability api key retell ai oauth',
         },
 
         // NEW: Appointment Fees & Payments
