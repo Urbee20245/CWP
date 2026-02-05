@@ -65,7 +65,7 @@ serve(async (req) => {
     const { data: cal } = await supabaseAdmin
       .from('client_cal_calendar')
       .select(
-        'connection_status, refresh_token_present, access_token_expires_at, default_event_type_id, last_successful_calendar_call, last_error, reauth_reason'
+        'connection_status, refresh_token_present, access_token_expires_at, default_event_type_id, last_successful_calendar_call, last_error, reauth_reason, auth_method'
       )
       .eq('client_id', clientId)
       .maybeSingle();
@@ -105,6 +105,7 @@ serve(async (req) => {
         last_successful_calendar_call: cal?.last_successful_calendar_call || null,
         last_error: cal?.last_error || null,
         reauth_reason: cal?.reauth_reason || null,
+        auth_method: cal?.auth_method || 'oauth',
       },
     });
   } catch (e: any) {

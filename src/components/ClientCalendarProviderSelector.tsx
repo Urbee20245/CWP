@@ -39,7 +39,7 @@ const ClientCalendarProviderSelector: React.FC<Props> = ({ clientId }) => {
           .maybeSingle(),
         supabase
           .from('client_cal_calendar')
-          .select('connection_status, refresh_token_present, default_event_type_id')
+          .select('connection_status, refresh_token_present, default_event_type_id, auth_method')
           .eq('client_id', clientId)
           .maybeSingle(),
         supabase
@@ -61,7 +61,7 @@ const ClientCalendarProviderSelector: React.FC<Props> = ({ clientId }) => {
         !!(
           calRow &&
           calRow.connection_status === 'connected' &&
-          calRow.refresh_token_present === true &&
+          (calRow.auth_method === 'api_key' || calRow.refresh_token_present === true) &&
           calRow.default_event_type_id &&
           String(calRow.default_event_type_id).trim()
         )

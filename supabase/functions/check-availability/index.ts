@@ -120,14 +120,14 @@ serve(async (req) => {
     if (calendarProvider === 'cal') {
       const { data: calConn } = await supabaseAdmin
         .from('client_cal_calendar')
-        .select('connection_status, refresh_token_present, default_event_type_id')
+        .select('connection_status, refresh_token_present, default_event_type_id, auth_method')
         .eq('client_id', clientId)
         .maybeSingle();
 
       const calUsable = !!(
         calConn &&
         calConn.connection_status === 'connected' &&
-        calConn.refresh_token_present === true &&
+        (calConn.auth_method === 'api_key' || calConn.refresh_token_present === true) &&
         calConn.default_event_type_id &&
         String(calConn.default_event_type_id).trim()
       );
