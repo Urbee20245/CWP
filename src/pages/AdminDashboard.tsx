@@ -3,10 +3,10 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import { Link } from 'react-router-dom';
 import { supabase } from '../integrations/supabase/client';
-import { Users, Briefcase, DollarSign, Loader2, ArrowRight, Zap, MessageSquare, Bell, Clock, TrendingUp } from 'lucide-react';
+import { Users, Briefcase, DollarSign, Loader2, ArrowRight, Zap, MessageSquare, Bell, Clock, TrendingUp, CalendarCheck, Phone, Video, User } from 'lucide-react';
 import AdminLayout from '../components/AdminLayout';
 import HelpPopover from '../components/HelpPopover';
-import { format, isPast } from 'date-fns';
+import { format, isPast, parseISO } from 'date-fns';
 
 interface ReminderSummary {
     id: string;
@@ -32,10 +32,25 @@ interface RecentMessage {
     };
 }
 
+interface UpcomingAppointment {
+    id: string;
+    appointment_time: string;
+    duration_minutes: number;
+    appointment_type: 'phone' | 'video' | 'in_person';
+    status: string;
+    billing_type: string | null;
+    price_cents: number | null;
+    clients: {
+        id: string;
+        business_name: string;
+    };
+}
+
 const AdminDashboard: React.FC = () => {
   const [stats, setStats] = useState({ totalClients: 0, activeProjects: 0, totalRevenue: 0, pendingAddonRequests: 0 });
   const [reminders, setReminders] = useState<ReminderSummary[]>([]);
   const [recentMessages, setRecentMessages] = useState<RecentMessage[]>([]);
+  const [upcomingAppointments, setUpcomingAppointments] = useState<UpcomingAppointment[]>([]);
   const [isLoading, setIsLoading] = useState(true);
 
   const fetchData = useCallback(async () => {
@@ -98,6 +113,25 @@ const AdminDashboard: React.FC = () => {
         console.error('Error fetching recent messages:', messagesError);
     } else {
         setRecentMessages(messagesData as RecentMessage[] || []);
+    }
+
+    // Fetch upcoming appointments
+    const now = new Date().toISOString();
+    const { data: appointmentsData, error: appointmentsError } = await supabase
+        .from('appointments')
+        .select(`
+            id, appointment_time, duration_minutes, appointment_type, status, billing_type, price_cents,
+            clients (id, business_name)
+        `)
+        .gte('appointment_time', now)
+        .eq('status', 'scheduled')
+        .order('appointment_time', { ascending: true })
+        .limit(5);
+
+    if (appointmentsError) {
+        console.error('Error fetching upcoming appointments:', appointmentsError);
+    } else {
+        setUpcomingAppointments(appointmentsData as UpcomingAppointment[] || []);
     }
 
     let totalRevenue = 0;
@@ -191,6 +225,76 @@ const AdminDashboard: React.FC = () => {
                 <p className="text-2xl font-bold text-slate-900">{stats.pendingAddonRequests}</p>
                 <p className="text-sm text-slate-500">Add-on Requests</p>
               </Link>
+            </div>
+
+            {/* Upcoming Appointments */}
+            <div className="bg-white rounded-xl border border-slate-200 overflow-hidden">
+              <div className="px-5 py-4 border-b border-slate-100 flex items-center justify-between">
+                <div className="flex items-center gap-2">
+                  <CalendarCheck className="w-4 h-4 text-indigo-500" />
+                  <h2 className="font-semibold text-slate-900">Upcoming Appointments</h2>
+                </div>
+                {upcomingAppointments.length > 0 && (
+                  <span className="px-2 py-0.5 bg-indigo-100 text-indigo-700 text-xs font-medium rounded-full">
+                    {upcomingAppointments.length} scheduled
+                  </span>
+                )}
+              </div>
+              <div className="p-4">
+                {upcomingAppointments.length > 0 ? (
+                  <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-5 gap-3">
+                    {upcomingAppointments.map(appointment => {
+                      const appointmentDate = parseISO(appointment.appointment_time);
+                      const isFree = appointment.billing_type === 'free_monthly' || appointment.price_cents === 0;
+
+                      return (
+                        <Link
+                          key={appointment.id}
+                          to={`/admin/clients/${appointment.clients.id}`}
+                          className="block p-4 rounded-lg border border-indigo-200 bg-indigo-50 hover:bg-indigo-100 transition-all"
+                        >
+                          <div className="flex items-center gap-2 mb-2">
+                            {appointment.appointment_type === 'phone' ? (
+                              <Phone className="w-4 h-4 text-emerald-600" />
+                            ) : appointment.appointment_type === 'video' ? (
+                              <Video className="w-4 h-4 text-blue-600" />
+                            ) : (
+                              <User className="w-4 h-4 text-purple-600" />
+                            )}
+                            <span className="text-xs font-medium text-slate-600 capitalize">
+                              {appointment.appointment_type.replace('_', ' ')}
+                            </span>
+                          </div>
+                          <p className="font-semibold text-sm text-slate-900 truncate">
+                            {appointment.clients.business_name}
+                          </p>
+                          <p className="text-lg font-bold text-indigo-700 mt-1">
+                            {format(appointmentDate, 'MMM d, h:mm a')}
+                          </p>
+                          <div className="flex items-center justify-between mt-2">
+                            <span className="text-xs text-slate-500">
+                              {appointment.duration_minutes} min
+                            </span>
+                            <span className={`text-xs font-semibold px-2 py-0.5 rounded-full ${
+                              isFree
+                                ? 'bg-emerald-100 text-emerald-700'
+                                : 'bg-amber-100 text-amber-700'
+                            }`}>
+                              {isFree ? 'FREE' : `$${((appointment.price_cents || 0) / 100).toFixed(0)}`}
+                            </span>
+                          </div>
+                        </Link>
+                      );
+                    })}
+                  </div>
+                ) : (
+                  <div className="py-8 text-center">
+                    <CalendarCheck className="w-10 h-10 text-slate-200 mx-auto mb-2" />
+                    <p className="text-sm text-slate-400">No upcoming appointments</p>
+                    <p className="text-xs text-slate-400 mt-1">Appointments booked by clients will appear here</p>
+                  </div>
+                )}
+              </div>
             </div>
 
             {/* Activity Section - 3 equal columns */}
