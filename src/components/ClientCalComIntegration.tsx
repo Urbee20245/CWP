@@ -1,7 +1,7 @@
 "use client";
 
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { Calendar, Loader2, CheckCircle2, AlertTriangle, ExternalLink, X, Info, Save } from 'lucide-react';
+import { Calendar, Loader2, CheckCircle2, AlertTriangle, ExternalLink, X, Info, Save, Key } from 'lucide-react';
 import { ClientIntegrationService } from '../services/clientIntegrationService';
 import { format } from 'date-fns';
 
@@ -18,6 +18,7 @@ interface CalStatus {
   reauth_reason?: string | null;
   last_error?: string | null;
   default_event_type_id?: string | null;
+  auth_method?: 'oauth' | 'api_key';
 }
 
 const sleep = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
@@ -41,6 +42,10 @@ const ClientCalComIntegration: React.FC<Props> = ({ clientId, isAdminView = fals
 
   const [eventTypeIdDraft, setEventTypeIdDraft] = useState('');
   const [isSavingEventType, setIsSavingEventType] = useState(false);
+
+  const [connectionMethod, setConnectionMethod] = useState<'oauth' | 'api_key'>('oauth');
+  const [apiKeyInput, setApiKeyInput] = useState('');
+  const [isValidatingApiKey, setIsValidatingApiKey] = useState(false);
 
   const initialFetchRef = useRef(true);
   const requestIdRef = useRef(0);
@@ -117,8 +122,12 @@ const ClientCalComIntegration: React.FC<Props> = ({ clientId, isAdminView = fals
       } else if (oauthError === 'server_configuration_error' && missingSecrets) {
         const missingList = missingSecrets.split(',').join(', ');
         setError(`Server configuration error: The following secrets are missing in Supabase: ${missingList}. Please contact support.`);
+      } else if (oauthError === 'token_exchange_failed') {
+        setError('Cal.com token exchange failed. Please verify CAL_CLIENT_ID and CAL_CLIENT_SECRET are correct in Supabase Secrets, and that the redirect URI matches exactly.');
+      } else if (oauthStatus === 'error' && oauthError) {
+        setError(`Cal.com connection failed: ${oauthError.replace(/_/g, ' ')}. Please try again or check the Supabase Edge Function logs.`);
       }
-      
+
       // Clean up URL params after processing
       params.delete('provider');
       params.delete('status');
@@ -148,6 +157,25 @@ const ClientCalComIntegration: React.FC<Props> = ({ clientId, isAdminView = fals
       console.error('[CalComIntegration] handleConnect error:', e);
       setError(e.message || 'Failed to initiate Cal.com OAuth.');
       setIsProcessing(false);
+    }
+  };
+
+  const handleSaveApiKey = async () => {
+    const trimmed = apiKeyInput.trim();
+    if (!trimmed) return;
+    setIsValidatingApiKey(true);
+    setError(null);
+    setNotice(null);
+    try {
+      await ClientIntegrationService.saveCalComApiKey(clientId, trimmed);
+      setApiKeyInput('');
+      setNotice('Cal.com API key validated and saved successfully.');
+      await fetchStatus();
+      onStatusChange?.();
+    } catch (e: any) {
+      setError(e.message || 'Failed to validate and save API key.');
+    } finally {
+      setIsValidatingApiKey(false);
     }
   };
 
@@ -182,8 +210,14 @@ const ClientCalComIntegration: React.FC<Props> = ({ clientId, isAdminView = fals
     }
   };
 
-  const isConnected = status?.connection_status === 'connected' && status?.refresh_token_present === true;
-  const needsReauth = status?.connection_status === 'needs_reauth' || (status?.connection_status === 'connected' && status?.refresh_token_present === false);
+  const isConnected = status?.connection_status === 'connected' && (
+    status?.auth_method === 'api_key' || status?.refresh_token_present === true
+  );
+  const needsReauth = status?.connection_status === 'needs_reauth' || (
+    status?.connection_status === 'connected' &&
+    status?.auth_method !== 'api_key' &&
+    status?.refresh_token_present === false
+  );
 
   const needsEventType = isConnected && !(status?.default_event_type_id && status.default_event_type_id.trim());
 
@@ -224,6 +258,11 @@ const ClientCalComIntegration: React.FC<Props> = ({ clientId, isAdminView = fals
           <div className="flex items-center gap-2">
             <CheckCircle2 className="w-5 h-5 text-emerald-600" />
             <p className="font-bold text-emerald-800">Cal.com Connected</p>
+            {status?.auth_method === 'api_key' && (
+              <span className="px-2 py-0.5 bg-blue-100 text-blue-700 text-xs font-semibold rounded-full flex items-center gap-1">
+                <Key className="w-3 h-3" /> API Key
+              </span>
+            )}
           </div>
 
           <p className="text-sm text-emerald-700">This is the preferred booking provider for your AI agent.</p>
@@ -252,7 +291,7 @@ const ClientCalComIntegration: React.FC<Props> = ({ clientId, isAdminView = fals
                 <div>
                   <p className="font-semibold">Required to book calls</p>
                   <p className="mt-0.5">
-                    Find this inside Cal.com by opening your event type → URL or settings, then copy its numeric ID.
+                    Find this inside Cal.com by opening your event type &rarr; URL or settings, then copy its numeric ID.
                   </p>
                 </div>
               </div>
@@ -283,18 +322,20 @@ const ClientCalComIntegration: React.FC<Props> = ({ clientId, isAdminView = fals
             <p className="font-bold text-slate-700">{needsReauth ? 'Needs Re-Authorization' : 'Not Connected'}</p>
           </div>
 
-          {needsReauth ? (
+          {needsReauth && (
             <div className="p-3 bg-amber-50 border border-amber-200 rounded-lg text-sm text-amber-800 flex items-start gap-2">
               <Info className="w-4 h-4 mt-0.5" />
               <div>
                 <p className="font-semibold">One-time fix required</p>
-                <p className="text-xs mt-1">Please reconnect Cal.com so we can securely store a refresh token.</p>
+                <p className="text-xs mt-1">Please reconnect Cal.com so we can securely store a refresh token, or use an API key instead.</p>
                 {status?.last_error && (
                   <p className="text-xs mt-1"><span className="font-semibold">Last error:</span> {status.last_error}</p>
                 )}
               </div>
             </div>
-          ) : (
+          )}
+
+          {!needsReauth && (
             <div className="p-3 bg-amber-50 border border-amber-200 rounded-lg text-sm text-amber-800 flex items-start gap-2">
               <Info className="w-4 h-4 mt-0.5" />
               <div>
@@ -305,14 +346,71 @@ const ClientCalComIntegration: React.FC<Props> = ({ clientId, isAdminView = fals
           )}
 
           <p className="text-sm text-slate-600">Connect your Cal.com account so the AI agent can check availability and book meetings.</p>
-          <button
-            onClick={handleConnect}
-            disabled={isProcessing}
-            className="w-full py-3 bg-indigo-600 text-white rounded-lg font-semibold hover:bg-indigo-700 transition-colors disabled:opacity-50 flex items-center justify-center gap-2"
-          >
-            {isProcessing ? <Loader2 className="w-5 h-5 animate-spin" /> : <ExternalLink className="w-5 h-5" />}
-            {needsReauth ? 'Reconnect Cal.com' : 'Connect Cal.com'}
-          </button>
+
+          {/* Connection method tabs */}
+          <div className="flex gap-2">
+            <button
+              onClick={() => setConnectionMethod('oauth')}
+              className={`px-3 py-1.5 rounded-lg text-sm font-semibold transition-colors ${
+                connectionMethod === 'oauth'
+                  ? 'bg-indigo-600 text-white'
+                  : 'bg-slate-200 text-slate-700 hover:bg-slate-300'
+              }`}
+            >
+              OAuth
+            </button>
+            <button
+              onClick={() => setConnectionMethod('api_key')}
+              className={`px-3 py-1.5 rounded-lg text-sm font-semibold transition-colors ${
+                connectionMethod === 'api_key'
+                  ? 'bg-indigo-600 text-white'
+                  : 'bg-slate-200 text-slate-700 hover:bg-slate-300'
+              }`}
+            >
+              API Key
+            </button>
+          </div>
+
+          {connectionMethod === 'oauth' ? (
+            <button
+              onClick={handleConnect}
+              disabled={isProcessing}
+              className="w-full py-3 bg-indigo-600 text-white rounded-lg font-semibold hover:bg-indigo-700 transition-colors disabled:opacity-50 flex items-center justify-center gap-2"
+            >
+              {isProcessing ? <Loader2 className="w-5 h-5 animate-spin" /> : <ExternalLink className="w-5 h-5" />}
+              {needsReauth ? 'Reconnect Cal.com' : 'Connect Cal.com'}
+            </button>
+          ) : (
+            <div className="space-y-3">
+              <div className="p-3 bg-blue-50 border border-blue-200 rounded-lg text-sm text-blue-800 flex items-start gap-2">
+                <Key className="w-4 h-4 mt-0.5" />
+                <div>
+                  <p className="font-semibold">Using a Cal.com API Key</p>
+                  <p className="text-xs mt-1">
+                    Go to Cal.com Settings &rarr; Developer &rarr; API Keys and create a new key. Paste it below.
+                    The key will be validated before saving.
+                  </p>
+                </div>
+              </div>
+              <div className="flex flex-col sm:flex-row gap-2">
+                <input
+                  type="password"
+                  value={apiKeyInput}
+                  onChange={(e) => setApiKeyInput(e.target.value)}
+                  placeholder="cal_live_..."
+                  className="flex-1 px-3 py-2 border border-slate-300 rounded-lg text-sm font-mono"
+                />
+                <button
+                  onClick={handleSaveApiKey}
+                  disabled={isValidatingApiKey || !apiKeyInput.trim()}
+                  className="px-4 py-2 bg-indigo-600 text-white rounded-lg text-sm font-semibold hover:bg-indigo-700 disabled:opacity-50 flex items-center justify-center gap-2"
+                >
+                  {isValidatingApiKey ? <Loader2 className="w-4 h-4 animate-spin" /> : <CheckCircle2 className="w-4 h-4" />}
+                  Validate & Save
+                </button>
+              </div>
+            </div>
+          )}
         </div>
       )}
     </div>

@@ -110,6 +110,7 @@ interface CalendarDiagnostics {
     last_successful_calendar_call: string | null;
     last_error: string | null;
     reauth_reason: string | null;
+    auth_method: 'oauth' | 'api_key';
   };
 }
 
@@ -452,12 +453,13 @@ const AdminAgentSettings: React.FC = () => {
     const cal = calendarDiag.cal_com;
     const badges: { label: string; cls: string }[] = [];
 
-    const usable = cal.connection_status === 'connected' && cal.refresh_token_present === true && !!(cal.default_event_type_id && cal.default_event_type_id.trim());
-    const needsReauth = cal.refresh_token_present === false || cal.connection_status === 'needs_reauth';
+    const isApiKey = cal.auth_method === 'api_key';
+    const usable = cal.connection_status === 'connected' && (isApiKey || cal.refresh_token_present === true) && !!(cal.default_event_type_id && cal.default_event_type_id.trim());
+    const needsReauth = (!isApiKey && cal.refresh_token_present === false) || cal.connection_status === 'needs_reauth';
     const missingEventType = cal.connection_status === 'connected' && (!cal.default_event_type_id || !cal.default_event_type_id.trim());
     const hasError = !!cal.last_error;
 
-    if (usable) badges.push({ label: 'Cal.com: Connected', cls: 'bg-emerald-100 text-emerald-800 border-emerald-200' });
+    if (usable) badges.push({ label: `Cal.com: Connected${isApiKey ? ' (API Key)' : ''}`, cls: 'bg-emerald-100 text-emerald-800 border-emerald-200' });
     if (missingEventType) badges.push({ label: 'Cal.com: Missing Event Type', cls: 'bg-amber-100 text-amber-800 border-amber-200' });
     if (needsReauth) badges.push({ label: 'Cal.com: Needs Re-Authorization', cls: 'bg-amber-100 text-amber-800 border-amber-200' });
     if (hasError) badges.push({ label: 'Cal.com: Error', cls: 'bg-red-100 text-red-800 border-red-200' });
@@ -919,6 +921,10 @@ const AdminAgentSettings: React.FC = () => {
                           <div className="p-3 rounded-lg border border-slate-200 bg-slate-50">
                             <p className="text-xs text-slate-500">Cal.com: connection_status</p>
                             <p className="text-sm font-mono text-slate-900">{calendarDiag.cal_com.connection_status}</p>
+                          </div>
+                          <div className="p-3 rounded-lg border border-slate-200 bg-slate-50">
+                            <p className="text-xs text-slate-500">Cal.com: auth_method</p>
+                            <p className="text-sm font-mono text-slate-900">{calendarDiag.cal_com.auth_method}</p>
                           </div>
                           <div className="p-3 rounded-lg border border-slate-200 bg-slate-50">
                             <p className="text-xs text-slate-500">Cal.com: refresh_token_present</p>

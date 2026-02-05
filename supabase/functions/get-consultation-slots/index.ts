@@ -93,7 +93,7 @@ serve(async (req) => {
         .from('client_cal_calendar')
         .select('client_id, default_event_type_id')
         .eq('connection_status', 'connected')
-        .eq('refresh_token_present', true)
+        .or('refresh_token_present.eq.true,auth_method.eq.api_key')
         .not('default_event_type_id', 'is', null)
         .order('updated_at', { ascending: false })
         .limit(1)
@@ -120,7 +120,7 @@ serve(async (req) => {
     // Check Cal.com connection
     const { data: calConn, error: calErr } = await supabaseAdmin
       .from('client_cal_calendar')
-      .select('connection_status, refresh_token_present, default_event_type_id')
+      .select('connection_status, refresh_token_present, default_event_type_id, auth_method')
       .eq('client_id', clientId)
       .maybeSingle();
 
@@ -131,7 +131,7 @@ serve(async (req) => {
     const calUsable = !!(
       calConn &&
       calConn.connection_status === 'connected' &&
-      calConn.refresh_token_present === true &&
+      (calConn.auth_method === 'api_key' || calConn.refresh_token_present === true) &&
       calConn.default_event_type_id &&
       String(calConn.default_event_type_id).trim()
     );

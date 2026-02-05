@@ -69,14 +69,14 @@ serve(async (req) => {
         // Cal.com connection status
         const { data: calStatus } = await supabaseAdmin
             .from('client_cal_calendar')
-            .select('connection_status, last_synced_at, refresh_token_present, reauth_reason, last_error, default_event_type_id')
+            .select('connection_status, last_synced_at, refresh_token_present, reauth_reason, last_error, default_event_type_id, auth_method')
             .eq('client_id', client_id)
             .maybeSingle();
 
         const calConnected = !!(
             calStatus &&
             calStatus.connection_status === 'connected' &&
-            calStatus.refresh_token_present === true
+            (calStatus.auth_method === 'api_key' || calStatus.refresh_token_present === true)
         );
 
         // Voice integration status

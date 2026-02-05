@@ -88,19 +88,18 @@ const invokeEdgeFunction = async (functionName: string, payload: any) => {
         `[clientIntegrationService] JWT stale for ${functionName}, refreshing session…`
       );
 
-      await supabase.auth.refreshSession();
+      const { data: refreshData, error: refreshError } =
+        await supabase.auth.refreshSession();
 
-      // 🔑 CRITICAL FIX:
-      // Re-fetch the session AFTER refresh and rebuild headers
-      const {
-        data: { session: refreshed },
-      } = await supabase.auth.getSession();
-
-      if (!refreshed?.access_token) {
+      if (refreshError || !refreshData?.session?.access_token) {
+        console.error(
+          `[clientIntegrationService] Session refresh failed for ${functionName}:`,
+          refreshError?.message || 'no session returned'
+        );
         throw new Error('Session expired. Please log in again.');
       }
 
-      result = await invokeWithToken(refreshed.access_token);
+      result = await invokeWithToken(refreshData.session.access_token);
     }
   }
 
@@ -249,7 +248,7 @@ export const ClientIntegrationService = {
     const { data, error } = await supabase
       .from('client_cal_calendar')
       .select(
-        'connection_status, updated_at, refresh_token_present, reauth_reason, last_error, default_event_type_id'
+        'connection_status, updated_at, refresh_token_present, reauth_reason, last_error, default_event_type_id, auth_method'
       )
       .eq('client_id', clientId)
       .maybeSingle();
@@ -283,6 +282,7 @@ export const ClientIntegrationService = {
         cal_refresh_token: '',
         refresh_token_present: false,
         access_token_expires_at: null,
+        auth_method: 'oauth',
         reauth_reason: null,
         last_error: null,
         last_synced_at: new Date().toISOString(),
@@ -291,5 +291,12 @@ export const ClientIntegrationService = {
 
     if (error) throw error;
     return { success: true };
+  },
+
+  saveCalComApiKey: async (clientId: string, apiKey: string) => {
+    return invokeEdgeFunction('save-cal-api-key', {
+      client_id: clientId,
+      api_key: apiKey,
+    });
   },
 };

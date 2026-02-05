@@ -5,7 +5,7 @@ const CAL_CLIENT_ID = Deno.env.get('CAL_CLIENT_ID');
 const CAL_CLIENT_SECRET = Deno.env.get('CAL_CLIENT_SECRET');
 
 if (!CAL_CLIENT_ID || !CAL_CLIENT_SECRET) {
-  console.error("[calCalendarService] CRITICAL: Cal.com secrets are missing.");
+  console.warn("[calCalendarService] Cal.com OAuth secrets are missing. OAuth connections will not work, but API key connections will.");
 }
 
 // Initialize Supabase Admin client for privileged DB access
@@ -48,7 +48,7 @@ async function markNeedsReauth(clientId: string, reason: string, message?: strin
   }
 }
 
-async function markConnectedOk(clientId: string) {
+async function markConnectedOk(clientId: string, isApiKey: boolean = false) {
   try {
     await supabaseAdmin
       .from('client_cal_calendar')
@@ -56,7 +56,7 @@ async function markConnectedOk(clientId: string) {
         connection_status: 'connected',
         reauth_reason: null,
         last_error: null,
-        refresh_token_present: true,
+        ...(isApiKey ? {} : { refresh_token_present: true }),
       })
       .eq('client_id', clientId);
   } catch (e: any) {
@@ -88,16 +88,15 @@ function isExpired(expiresAt: string | null | undefined) {
 
 /**
  * Fetches and decrypts tokens, refreshing the access token if necessary.
+ * Supports both OAuth and API key auth methods.
  * Safety rules:
- * - If refresh token is missing, do NOT attempt calendar access. Mark needs_reauth.
- * - If refresh token exists, refresh access token silently when expired.
+ * - API key: decrypt and return directly (no refresh needed, no OAuth secrets required).
+ * - OAuth: If refresh token is missing, mark needs_reauth. If expired, refresh silently.
  */
 async function getAndRefreshTokens(clientId: string): Promise<TokenData | null> {
-  if (!CAL_CLIENT_ID || !CAL_CLIENT_SECRET) return null;
-
   const { data: config, error: fetchError } = await supabaseAdmin
     .from('client_cal_calendar')
-    .select('cal_access_token, cal_refresh_token, cal_user_id, default_event_type_id, connection_status, refresh_token_present, access_token_expires_at')
+    .select('cal_access_token, cal_refresh_token, cal_user_id, default_event_type_id, connection_status, refresh_token_present, access_token_expires_at, auth_method')
     .eq('client_id', clientId)
     .maybeSingle();
 
@@ -108,6 +107,37 @@ async function getAndRefreshTokens(clientId: string): Promise<TokenData | null> 
 
   if (config.connection_status !== 'connected') {
     console.log(`[calCalendarService] Calendar not connected for client ${clientId} (status=${config.connection_status})`);
+    return null;
+  }
+
+  // --- API Key path: no refresh needed, no OAuth secrets required ---
+  if (config.auth_method === 'api_key') {
+    const accessTokenCipher = config.cal_access_token || '';
+    if (!accessTokenCipher.trim()) {
+      console.warn(`[calCalendarService] API key row has empty cal_access_token for client ${clientId}. Marking needs_reauth.`);
+      await markNeedsReauth(clientId, 'missing_api_key', 'API key is missing or empty.');
+      return null;
+    }
+    let accessToken = '';
+    try {
+      accessToken = await decryptSecret(accessTokenCipher);
+    } catch (e: any) {
+      console.error('[calCalendarService] API key decrypt failed:', e?.message);
+      await markNeedsReauth(clientId, 'decrypt_failed', 'Failed to decrypt API key.');
+      return null;
+    }
+    await markConnectedOk(clientId, true);
+    return {
+      accessToken,
+      refreshToken: '',
+      calUserId: config.cal_user_id || null,
+      defaultEventTypeId: config.default_event_type_id || null,
+    };
+  }
+
+  // --- OAuth path: requires CAL_CLIENT_ID and CAL_CLIENT_SECRET ---
+  if (!CAL_CLIENT_ID || !CAL_CLIENT_SECRET) {
+    console.error(`[calCalendarService] CAL_CLIENT_ID or CAL_CLIENT_SECRET missing for OAuth client ${clientId}.`);
     return null;
   }
 
@@ -137,7 +167,7 @@ async function getAndRefreshTokens(clientId: string): Promise<TokenData | null> 
 
     const refreshResponse = await fetch('https://app.cal.com/api/auth/oauth/refreshToken', {
       method: 'POST',
-      headers: { 
+      headers: {
         'Content-Type': 'application/json',
         'Authorization': `Bearer ${refreshToken}`,
       },
@@ -164,7 +194,7 @@ async function getAndRefreshTokens(clientId: string): Promise<TokenData | null> 
 
     const newEncryptedAccessToken = await encryptSecret(newAccessToken);
     const newEncryptedRefreshToken = newRefreshToken ? await encryptSecret(newRefreshToken) : refreshTokenCipher;
-    
+
     const nowIso = new Date().toISOString();
     const expiresAt = typeof expiresIn === 'number' && expiresIn > 0
       ? new Date(Date.now() + expiresIn * 1000).toISOString()

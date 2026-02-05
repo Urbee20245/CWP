@@ -12,6 +12,7 @@ import { ClientIntegrationService } from '../services/clientIntegrationService';
 interface CalStatus {
   connection_status: 'connected' | 'disconnected' | 'needs_reauth';
   refresh_token_present?: boolean;
+  auth_method?: 'oauth' | 'api_key';
 }
 
 const SUPABASE_PROJECT_ID = "nvgumhlewbqynrhlkqhx";
@@ -189,12 +190,12 @@ const AdminSettingsPage: React.FC = () => {
                   <Loader2 className="w-4 h-4 animate-spin text-slate-500" />
                   <span className="text-sm font-medium text-slate-600">Checking...</span>
                 </div>
-              ) : calStatus?.connection_status === 'connected' && calStatus?.refresh_token_present ? (
+              ) : calStatus?.connection_status === 'connected' && (calStatus?.auth_method === 'api_key' || calStatus?.refresh_token_present) ? (
                 <div className="flex items-center gap-2 px-3 py-1.5 bg-emerald-100 rounded-full border border-emerald-200">
                   <CheckCircle2 className="w-4 h-4 text-emerald-600" />
-                  <span className="text-sm font-bold text-emerald-700">Connected</span>
+                  <span className="text-sm font-bold text-emerald-700">Connected{calStatus?.auth_method === 'api_key' ? ' (API Key)' : ''}</span>
                 </div>
-              ) : calStatus?.connection_status === 'needs_reauth' || (calStatus?.connection_status === 'connected' && !calStatus?.refresh_token_present) ? (
+              ) : calStatus?.connection_status === 'needs_reauth' || (calStatus?.connection_status === 'connected' && calStatus?.auth_method !== 'api_key' && !calStatus?.refresh_token_present) ? (
                 <div className="flex items-center gap-2 px-3 py-1.5 bg-amber-100 rounded-full border border-amber-200">
                   <AlertTriangle className="w-4 h-4 text-amber-600" />
                   <span className="text-sm font-bold text-amber-700">Needs Reconnection</span>
