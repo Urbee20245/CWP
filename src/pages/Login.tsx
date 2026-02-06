@@ -83,7 +83,7 @@ const Login: React.FC = () => {
     }
   };
 
-  const handleSendReset = async (e: React.FormEvent) => {
+    const handleSendReset = async (e: React.FormEvent) => {
     e.preventDefault();
     setResetMessage(null);
     if (!resetEmail || !/\S+@\S+\.\S+/.test(resetEmail)) {
@@ -92,21 +92,34 @@ const Login: React.FC = () => {
     }
     setResetLoading(true);
     try {
-      // Use server-generated recovery link + Resend email to avoid Supabase SMTP errors.
+      // First try the Edge Function
       const { data, error } = await supabase.functions.invoke("send-password-reset", {
         body: { email: resetEmail, redirect_to: resetRedirect },
       });
 
-      if (error) throw error;
-      const parsed = typeof data === "string" ? JSON.parse(data) : data;
-      if (parsed?.error) throw new Error(parsed.error);
+      if (error) {
+        console.error("Edge Function error:", error);
+        // Fallback to direct Supabase password reset
+        const { error: supabaseError } = await supabase.auth.resetPasswordForEmail(resetEmail, {
+          redirectTo: resetRedirect,
+        });
+        
+        if (supabaseError) throw supabaseError;
+      } else {
+        const parsed = typeof data === "string" ? JSON.parse(data) : data;
+        if (parsed?.error) throw new Error(parsed.error);
+      }
 
       setResetMessage({
         type: "success",
         text: "If an account exists for that email, a password reset link has been sent.",
       });
     } catch (err: any) {
-      setResetMessage({ type: "error", text: err?.message || "Failed to send reset email." });
+      console.error("Password reset error:", err);
+      setResetMessage({ 
+        type: "error", 
+        text: err?.message || "Failed to send reset email. Please try again later." 
+      });
     } finally {
       setResetLoading(false);
     }
@@ -138,7 +151,7 @@ const Login: React.FC = () => {
     }
   };
 
-  const handleSendMagicLink = async (e: React.FormEvent) => {
+    const handleSendMagicLink = async (e: React.FormEvent) => {
     e.preventDefault();
     setMagicLinkMessage(null);
     if (!magicLinkEmail || !/\S+@\S+\.\S+/.test(magicLinkEmail)) {
@@ -148,21 +161,37 @@ const Login: React.FC = () => {
     
     setMagicLinkLoading(true);
     try {
-      // Use server-generated magic link for better control
+      // First try the Edge Function
       const { data, error } = await supabase.functions.invoke("send-magic-link", {
         body: { email: magicLinkEmail },
       });
       
-      if (error) throw error;
-      const parsed = typeof data === "string" ? JSON.parse(data) : data;
-      if (parsed?.error) throw new Error(parsed.error);
+      if (error) {
+        console.error("Edge Function error:", error);
+        // Fallback to direct Supabase magic link
+        const { error: supabaseError } = await supabase.auth.signInWithOtp({
+          email: magicLinkEmail,
+          options: {
+            emailRedirectTo: `${window.location.origin}/back-office`,
+          },
+        });
+        
+        if (supabaseError) throw supabaseError;
+      } else {
+        const parsed = typeof data === "string" ? JSON.parse(data) : data;
+        if (parsed?.error) throw new Error(parsed.error);
+      }
       
       setMagicLinkMessage({
         type: "success",
         text: "Magic link sent! Check your email for a login link.",
       });
     } catch (err: any) {
-      setMagicLinkMessage({ type: "error", text: err?.message || "Failed to send magic link." });
+      console.error("Magic link error:", err);
+      setMagicLinkMessage({ 
+        type: "error", 
+        text: err?.message || "Failed to send magic link. Please try again or use password login." 
+      });
     } finally {
       setMagicLinkLoading(false);
     }
