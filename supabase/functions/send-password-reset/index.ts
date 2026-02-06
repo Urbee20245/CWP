@@ -24,13 +24,25 @@ serve(async (req) => {
     Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!
   );
 
+  // Debug logging for environment variables
+  console.log("[send-password-reset] Environment check:", {
+    hasResendKey: !!Deno.env.get("RESEND_API_KEY"),
+    fromEmail: Deno.env.get("SMTP_FROM_EMAIL"),
+    fromName: Deno.env.get("SMTP_FROM_NAME"),
+    supabaseUrl: !!Deno.env.get("SUPABASE_URL"),
+    serviceRoleKey: !!Deno.env.get("SUPABASE_SERVICE_ROLE_KEY"),
+  });
+
   try {
     const body = await req.json();
     const email = (body?.email || "").toString().trim().toLowerCase();
     const redirectTo = (body?.redirect_to || "").toString().trim();
 
+    console.log("[send-password-reset] Request received", { email, redirectTo });
+
     if (!email || !isValidEmail(email)) {
       // Do not reveal whether an email exists; still return success.
+      console.log("[send-password-reset] Invalid email format");
       return jsonResponse({ success: true });
     }
 
@@ -66,7 +78,7 @@ serve(async (req) => {
           </a>
         </div>
 
-        <p style="color:#64748b;font-size:14px;">If you didn’t request this, you can safely ignore this email.</p>
+        <p style="color:#64748b;font-size:14px;">If you didn't request this, you can safely ignore this email.</p>
         <p style="color:#64748b;font-size:12px; word-break: break-all; margin-top: 16px;">
           Or copy/paste this link into your browser:<br />
           ${actionLink}
@@ -76,10 +88,30 @@ serve(async (req) => {
 
     try {
       await sendPublicFormEmail(email, subject, html, "support@customwebsiteplus.com");
-      console.log("[send-password-reset] recovery email sent", { email });
-    } catch (e: any) {
-      console.error("[send-password-reset] sendPublicFormEmail failed", { message: e?.message });
-      // Still return success to avoid enumeration
+      console.log("[send-password-reset] recovery email sent via Resend", { email });
+    } catch (resendError: any) {
+      console.error("[send-password-reset] Resend failed, trying Supabase SMTP fallback", {
+        message: resendError?.message
+      });
+
+      // Fallback to Supabase's built-in reset email
+      try {
+        const { error: supabaseError } = await supabaseAdmin.auth.resetPasswordForEmail(email, {
+          redirectTo: redirectTo || undefined,
+        });
+
+        if (supabaseError) {
+          console.error("[send-password-reset] Supabase SMTP fallback also failed", {
+            message: supabaseError.message
+          });
+        } else {
+          console.log("[send-password-reset] recovery email sent via Supabase SMTP", { email });
+        }
+      } catch (fallbackError: any) {
+        console.error("[send-password-reset] All email methods failed", {
+          message: fallbackError?.message
+        });
+      }
     }
 
     return jsonResponse({ success: true });
@@ -89,3 +121,4 @@ serve(async (req) => {
     return jsonResponse({ success: true });
   }
 });
+

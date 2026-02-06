@@ -2,7 +2,7 @@
 
 import React, { useEffect, useMemo, useState } from "react";
 import { supabase } from "../integrations/supabase/client";
-import { Loader2, Mail, Lock, CheckCircle2, AlertTriangle, X } from "lucide-react";
+import { Loader2, Mail, Lock, CheckCircle2, AlertTriangle, X, Sparkles } from "lucide-react";
 import { useLocation, useNavigate } from "react-router-dom";
 
 const getResetRedirect = () => {
@@ -29,12 +29,18 @@ const Login: React.FC = () => {
   const [resetLoading, setResetLoading] = useState(false);
   const [resetMessage, setResetMessage] = useState<{ type: "success" | "error"; text: string } | null>(null);
 
-  // Recovery (update password) UI
+    // Recovery (update password) UI
   const [isRecoveryMode, setIsRecoveryMode] = useState(false);
   const [newPassword, setNewPassword] = useState("");
   const [confirmPassword, setConfirmPassword] = useState("");
   const [updatingPassword, setUpdatingPassword] = useState(false);
   const [updateMessage, setUpdateMessage] = useState<{ type: "success" | "error"; text: string } | null>(null);
+
+  // Magic link UI
+  const [showMagicLink, setShowMagicLink] = useState(false);
+  const [magicLinkEmail, setMagicLinkEmail] = useState("");
+  const [magicLinkLoading, setMagicLinkLoading] = useState(false);
+  const [magicLinkMessage, setMagicLinkMessage] = useState<{ type: "success" | "error"; text: string } | null>(null);
 
   // Reset link redirect (computed safely on mount)
   const [resetRedirect, setResetRedirect] = useState<string>(getResetRedirect());
@@ -106,7 +112,7 @@ const Login: React.FC = () => {
     }
   };
 
-  const handleUpdatePassword = async (e: React.FormEvent) => {
+    const handleUpdatePassword = async (e: React.FormEvent) => {
     e.preventDefault();
     setUpdateMessage(null);
     if (!newPassword || newPassword.length < 6) {
@@ -129,6 +135,36 @@ const Login: React.FC = () => {
       setUpdateMessage({ type: "error", text: err?.message || "Failed to update password." });
     } finally {
       setUpdatingPassword(false);
+    }
+  };
+
+  const handleSendMagicLink = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setMagicLinkMessage(null);
+    if (!magicLinkEmail || !/\S+@\S+\.\S+/.test(magicLinkEmail)) {
+      setMagicLinkMessage({ type: "error", text: "Please enter a valid email address." });
+      return;
+    }
+    
+    setMagicLinkLoading(true);
+    try {
+      // Use server-generated magic link for better control
+      const { data, error } = await supabase.functions.invoke("send-magic-link", {
+        body: { email: magicLinkEmail },
+      });
+      
+      if (error) throw error;
+      const parsed = typeof data === "string" ? JSON.parse(data) : data;
+      if (parsed?.error) throw new Error(parsed.error);
+      
+      setMagicLinkMessage({
+        type: "success",
+        text: "Magic link sent! Check your email for a login link.",
+      });
+    } catch (err: any) {
+      setMagicLinkMessage({ type: "error", text: err?.message || "Failed to send magic link." });
+    } finally {
+      setMagicLinkLoading(false);
     }
   };
 
@@ -250,7 +286,68 @@ const Login: React.FC = () => {
                       {resetLoading ? "Sending..." : "Send reset link"}
                     </button>
                   </form>
-                  <p className="text-[11px] text-slate-500 mt-2">We'll email you a secure link to reset your password.</p>
+                                    <p className="text-[11px] text-slate-500 mt-2">We'll email you a secure link to reset your password.</p>
+                </div>
+              )}
+            </div>
+
+            {/* Magic link login */}
+            <div className="mt-4">
+              {!showMagicLink ? (
+                <button
+                  onClick={() => setShowMagicLink(true)}
+                  className="text-sm text-purple-600 hover:text-purple-700 font-medium"
+                >
+                  Prefer a magic link? Sign in without password
+                </button>
+              ) : (
+                <div className="mt-3 p-3 border border-slate-200 rounded-lg bg-slate-50">
+                  <div className="flex items-center justify-between mb-2">
+                    <p className="text-sm font-semibold text-slate-800 flex items-center gap-2">
+                      <Mail className="w-4 h-4 text-purple-600" /> Magic Link Login
+                    </p>
+                    <button onClick={() => setShowMagicLink(false)} className="text-slate-400 hover:text-slate-600">
+                      <X className="w-4 h-4" />
+                    </button>
+                  </div>
+                  {magicLinkMessage && (
+                    <div className={`mb-2 p-2 text-sm rounded border ${
+                      magicLinkMessage.type === "success" 
+                        ? "bg-emerald-50 text-emerald-800 border-emerald-200" 
+                        : "bg-red-50 text-red-800 border-red-200"
+                    }`}>
+                      {magicLinkMessage.type === "success" ? (
+                        <span className="inline-flex items-center gap-2">
+                          <CheckCircle2 className="w-4 h-4" /> {magicLinkMessage.text}
+                        </span>
+                      ) : (
+                        <span className="inline-flex items-center gap-2">
+                          <AlertTriangle className="w-4 h-4" /> {magicLinkMessage.text}
+                        </span>
+                      )}
+                    </div>
+                  )}
+                  <form onSubmit={handleSendMagicLink} className="space-y-3">
+                    <div>
+                      <label className="block text-xs font-medium text-slate-600 mb-1">Email address</label>
+                      <input
+                        type="email"
+                        value={magicLinkEmail}
+                        onChange={(e) => setMagicLinkEmail(e.target.value)}
+                        placeholder="you@company.com"
+                        className="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm focus:ring-2 focus:ring-purple-500"
+                      />
+                    </div>
+                    <button
+                      type="submit"
+                      disabled={magicLinkLoading}
+                      className="w-full inline-flex items-center justify-center gap-2 px-4 py-2 bg-purple-600 text-white text-sm font-semibold rounded-lg hover:bg-purple-700 disabled:opacity-50"
+                    >
+                      {magicLinkLoading ? <Loader2 className="w-4 h-4 animate-spin" /> : <Mail className="w-4 h-4" />}
+                      {magicLinkLoading ? "Sending..." : "Send Magic Link"}
+                    </button>
+                  </form>
+                  <p className="text-[11px] text-slate-500 mt-2">We'll email you a secure link to sign in instantly.</p>
                 </div>
               )}
             </div>
