@@ -87,7 +87,7 @@ serve(async (req) => {
     `;
 
     try {
-      await sendPublicFormEmail(email, subject, html, "support@customwebsiteplus.com");
+      await sendPublicFormEmail(email, subject, html, "support@customwebsitesplus.com");
       console.log("[send-password-reset] recovery email sent via Resend", { email });
     } catch (resendError: any) {
       console.error("[send-password-reset] Resend failed, trying Supabase SMTP fallback", {

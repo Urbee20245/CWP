@@ -84,7 +84,7 @@ serve(async (req) => {
     `;
 
     try {
-      await sendPublicFormEmail(email, subject, html, "support@customwebsiteplus.com");
+      await sendPublicFormEmail(email, subject, html, "support@customwebsitesplus.com");
       console.log("[send-magic-link] magic link email sent via Resend", { email });
     } catch (e: any) {
       console.error("[send-magic-link] Resend failed, using Supabase fallback", { message: e?.message });
