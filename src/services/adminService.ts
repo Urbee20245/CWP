@@ -273,11 +273,11 @@ export const AdminService = {
   // Retell Call Scheduling
   // Trigger a Retell AI call immediately or schedule for later
   triggerRetellCall: async (params: {
-    client_id: string;
+    client_id: string | null; // Optional - null for ad-hoc calls to non-clients
     prospect_name: string;
     prospect_phone: string;
     retell_agent_id: string;
-    from_phone_number?: string;
+    from_phone_number?: string; // Required if client_id is null
     scheduled_time?: string; // ISO timestamp - if provided, schedules the call
     trigger_immediately?: boolean; // If true, calls immediately
     admin_notes?: string;
