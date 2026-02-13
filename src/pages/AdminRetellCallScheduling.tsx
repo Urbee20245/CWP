@@ -72,6 +72,12 @@ const AdminRetellCallScheduling: React.FC = () => {
   const [eventName, setEventName] = useState('');
   const [directContext, setDirectContext] = useState('');
 
+  // Retell agents and phone numbers state
+  const [retellAgents, setRetellAgents] = useState<any[]>([]);
+  const [retellPhoneNumbers, setRetellPhoneNumbers] = useState<any[]>([]);
+  const [isLoadingAgents, setIsLoadingAgents] = useState(false);
+  const [isLoadingPhones, setIsLoadingPhones] = useState(false);
+
   const showFeedback = (type: 'success' | 'error' | 'info', text: string, durationMs = 8000) => {
     setFeedbackMessage({ type, text });
     setTimeout(() => setFeedbackMessage(null), durationMs);
@@ -125,11 +131,42 @@ const AdminRetellCallScheduling: React.FC = () => {
     }
   }, [filterStatus]);
 
+  const fetchRetellAgents = useCallback(async () => {
+    setIsLoadingAgents(true);
+    try {
+      const result = await AdminService.getRetellAgents();
+      setRetellAgents(result.agents || []);
+    } catch (error: any) {
+      console.error('Failed to fetch Retell agents:', error);
+      showFeedback('error', 'Failed to fetch Retell agents: ' + error.message);
+    } finally {
+      setIsLoadingAgents(false);
+    }
+  }, []);
+
+  const fetchRetellPhoneNumbers = useCallback(async () => {
+    setIsLoadingPhones(true);
+    try {
+      const result = await AdminService.getRetellPhoneNumbers();
+      setRetellPhoneNumbers(result.phone_numbers || []);
+    } catch (error: any) {
+      console.error('Failed to fetch Retell phone numbers:', error);
+      showFeedback('error', 'Failed to fetch Retell phone numbers: ' + error.message);
+    } finally {
+      setIsLoadingPhones(false);
+    }
+  }, []);
+
   const loadData = useCallback(async () => {
     setIsLoading(true);
-    await Promise.all([fetchClients(), fetchScheduledCalls()]);
+    await Promise.all([
+      fetchClients(),
+      fetchScheduledCalls(),
+      fetchRetellAgents(),
+      fetchRetellPhoneNumbers(),
+    ]);
     setIsLoading(false);
-  }, [fetchClients, fetchScheduledCalls]);
+  }, [fetchClients, fetchScheduledCalls, fetchRetellAgents, fetchRetellPhoneNumbers]);
 
   useEffect(() => {
     loadData();
@@ -461,36 +498,56 @@ const AdminRetellCallScheduling: React.FC = () => {
                   </div>
                 ) : (
                   <>
-                    {/* Manual Agent ID */}
+                    {/* Retell Agent Dropdown */}
                     <div>
                       <label className="block text-sm font-medium text-gray-700 mb-1">
-                        Retell Agent ID <span className="text-red-500">*</span>
+                        Retell Agent <span className="text-red-500">*</span>
                       </label>
-                      <input
-                        type="text"
+                      <select
                         value={manualAgentId}
                         onChange={(e) => setManualAgentId(e.target.value)}
-                        placeholder="agent_..."
                         className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500"
                         required={inputMode === 'manual'}
-                      />
-                      <p className="mt-1 text-xs text-gray-500">From your Retell AI dashboard</p>
+                        disabled={isLoadingAgents}
+                      >
+                        <option value="">
+                          {isLoadingAgents ? 'Loading agents...' : 'Select an agent...'}
+                        </option>
+                        {retellAgents.map((agent) => (
+                          <option key={agent.agent_id} value={agent.agent_id}>
+                            {agent.agent_name || agent.agent_id}
+                          </option>
+                        ))}
+                      </select>
+                      {!isLoadingAgents && retellAgents.length === 0 && (
+                        <p className="mt-1 text-xs text-amber-600">No agents found</p>
+                      )}
                     </div>
 
-                    {/* Manual From Phone */}
+                    {/* From Phone Number Dropdown */}
                     <div>
                       <label className="block text-sm font-medium text-gray-700 mb-1">
                         From Phone Number <span className="text-red-500">*</span>
                       </label>
-                      <input
-                        type="tel"
+                      <select
                         value={manualFromPhone}
                         onChange={(e) => setManualFromPhone(e.target.value)}
-                        placeholder="+12345678900"
                         className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500"
                         required={inputMode === 'manual'}
-                      />
-                      <p className="mt-1 text-xs text-gray-500">Your Retell provisioned phone number</p>
+                        disabled={isLoadingPhones}
+                      >
+                        <option value="">
+                          {isLoadingPhones ? 'Loading phone numbers...' : 'Select a phone number...'}
+                        </option>
+                        {retellPhoneNumbers.map((phone) => (
+                          <option key={phone.phone_number} value={phone.phone_number}>
+                            {phone.phone_number}
+                          </option>
+                        ))}
+                      </select>
+                      {!isLoadingPhones && retellPhoneNumbers.length === 0 && (
+                        <p className="mt-1 text-xs text-amber-600">No phone numbers found</p>
+                      )}
                     </div>
                   </>
                 )}
