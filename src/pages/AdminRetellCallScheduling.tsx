@@ -56,7 +56,10 @@ const AdminRetellCallScheduling: React.FC = () => {
 
   // Form state
   const [showForm, setShowForm] = useState(false);
+  const [inputMode, setInputMode] = useState<'client' | 'manual'>('manual'); // Default to manual mode
   const [selectedClientId, setSelectedClientId] = useState<string>('');
+  const [manualAgentId, setManualAgentId] = useState('');
+  const [manualFromPhone, setManualFromPhone] = useState('');
   const [prospectName, setProspectName] = useState('');
   const [prospectPhone, setProspectPhone] = useState('');
   const [scheduledTime, setScheduledTime] = useState('');
@@ -135,10 +138,24 @@ const AdminRetellCallScheduling: React.FC = () => {
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
 
-    if (!selectedClientId) {
-      showFeedback('error', 'Please select a client');
-      return;
+    // Validate based on input mode
+    if (inputMode === 'client') {
+      if (!selectedClientId) {
+        showFeedback('error', 'Please select a client');
+        return;
+      }
+    } else {
+      // Manual mode validations
+      if (!manualAgentId.trim()) {
+        showFeedback('error', 'Please enter the Retell Agent ID');
+        return;
+      }
+      if (!manualFromPhone.trim()) {
+        showFeedback('error', 'Please enter the From Phone Number');
+        return;
+      }
     }
+
     if (!prospectName.trim()) {
       showFeedback('error', 'Please enter the prospect name');
       return;
@@ -154,33 +171,71 @@ const AdminRetellCallScheduling: React.FC = () => {
 
     // Validate phone number format (basic)
     const phoneRegex = /^\+?[1-9]\d{1,14}$/;
-    const cleanPhone = prospectPhone.replace(/[\s\-\(\)]/g, '');
-    if (!phoneRegex.test(cleanPhone)) {
-      showFeedback('error', 'Please enter a valid phone number with country code (e.g., +1234567890)');
+    const cleanProspectPhone = prospectPhone.replace(/[\s\-\(\)]/g, '');
+    if (!phoneRegex.test(cleanProspectPhone)) {
+      showFeedback('error', 'Please enter a valid prospect phone number with country code (e.g., +1234567890)');
       return;
+    }
+
+    // Validate from phone if in manual mode
+    if (inputMode === 'manual') {
+      const cleanFromPhone = manualFromPhone.replace(/[\s\-\(\)]/g, '');
+      if (!phoneRegex.test(cleanFromPhone)) {
+        showFeedback('error', 'Please enter a valid from phone number with country code (e.g., +1234567890)');
+        return;
+      }
     }
 
     setIsSubmitting(true);
     try {
-      const selectedClient = clients.find(c => c.id === selectedClientId);
-      if (!selectedClient) {
-        throw new Error('Selected client not found');
+      // Check session validity before making the call
+      const { data: { session }, error: sessionError } = await supabase.auth.getSession();
+      if (sessionError || !session) {
+        showFeedback('error', 'Your session has expired. Please refresh the page and log in again.');
+        setIsSubmitting(false);
+        return;
       }
 
-      const params = {
-        client_id: selectedClientId,
-        prospect_name: prospectName.trim(),
-        prospect_phone: cleanPhone,
-        retell_agent_id: selectedClient.retell_agent_id,
-        from_phone_number: selectedClient.phone_number || undefined,
-        scheduled_time: triggerMode === 'scheduled' ? new Date(scheduledTime).toISOString() : undefined,
-        trigger_immediately: triggerMode === 'immediate',
-        admin_notes: adminNotes.trim() || undefined,
-        connection_type: connectionType || undefined,
-        referrer_name: referrerName.trim() || undefined,
-        event_name: eventName.trim() || undefined,
-        direct_context: directContext.trim() || undefined,
-      };
+      let params: any;
+
+      if (inputMode === 'client') {
+        const selectedClient = clients.find(c => c.id === selectedClientId);
+        if (!selectedClient) {
+          throw new Error('Selected client not found');
+        }
+
+        params = {
+          client_id: selectedClientId,
+          prospect_name: prospectName.trim(),
+          prospect_phone: cleanProspectPhone,
+          retell_agent_id: selectedClient.retell_agent_id,
+          from_phone_number: selectedClient.phone_number || undefined,
+          scheduled_time: triggerMode === 'scheduled' ? new Date(scheduledTime).toISOString() : undefined,
+          trigger_immediately: triggerMode === 'immediate',
+          admin_notes: adminNotes.trim() || undefined,
+          connection_type: connectionType || undefined,
+          referrer_name: referrerName.trim() || undefined,
+          event_name: eventName.trim() || undefined,
+          direct_context: directContext.trim() || undefined,
+        };
+      } else {
+        // Manual mode - no client_id required
+        const cleanFromPhone = manualFromPhone.replace(/[\s\-\(\)]/g, '');
+        params = {
+          client_id: null, // No client association
+          prospect_name: prospectName.trim(),
+          prospect_phone: cleanProspectPhone,
+          retell_agent_id: manualAgentId.trim(),
+          from_phone_number: cleanFromPhone,
+          scheduled_time: triggerMode === 'scheduled' ? new Date(scheduledTime).toISOString() : undefined,
+          trigger_immediately: triggerMode === 'immediate',
+          admin_notes: adminNotes.trim() || undefined,
+          connection_type: connectionType || undefined,
+          referrer_name: referrerName.trim() || undefined,
+          event_name: eventName.trim() || undefined,
+          direct_context: directContext.trim() || undefined,
+        };
+      }
 
       const result = await AdminService.triggerRetellCall(params);
 
@@ -193,7 +248,10 @@ const AdminRetellCallScheduling: React.FC = () => {
 
         // Reset form
         setShowForm(false);
+        setInputMode('manual');
         setSelectedClientId('');
+        setManualAgentId('');
+        setManualFromPhone('');
         setProspectName('');
         setProspectPhone('');
         setScheduledTime('');
@@ -209,7 +267,14 @@ const AdminRetellCallScheduling: React.FC = () => {
       }
     } catch (error: any) {
       console.error('Failed to trigger call:', error);
-      showFeedback('error', 'Failed to trigger call: ' + error.message);
+
+      // Better error handling for JWT/auth errors
+      const errorMessage = error.message || 'Unknown error';
+      if (errorMessage.includes('JWT') || errorMessage.includes('Unauthorized') || errorMessage.includes('session')) {
+        showFeedback('error', 'Authentication error. Please refresh the page and log in again.');
+      } else {
+        showFeedback('error', 'Failed to trigger call: ' + errorMessage);
+      }
     } finally {
       setIsSubmitting(false);
     }
@@ -337,31 +402,98 @@ const AdminRetellCallScheduling: React.FC = () => {
           <div className="bg-white shadow-sm rounded-lg border border-gray-200 p-6">
             <h2 className="text-lg font-semibold text-gray-900 mb-4">Schedule New Call</h2>
             <form onSubmit={handleSubmit} className="space-y-4">
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                {/* Client Selection */}
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">
-                    Client <span className="text-red-500">*</span>
+              {/* Input Mode Toggle */}
+              <div className="mb-4 p-4 bg-gray-50 rounded-lg">
+                <label className="block text-sm font-medium text-gray-700 mb-2">
+                  Setup Mode
+                </label>
+                <div className="flex gap-4">
+                  <label className="flex items-center cursor-pointer">
+                    <input
+                      type="radio"
+                      name="inputMode"
+                      value="manual"
+                      checked={inputMode === 'manual'}
+                      onChange={(e) => setInputMode(e.target.value as 'manual')}
+                      className="mr-2"
+                    />
+                    <span className="text-sm">Manual Input (Call Anyone)</span>
                   </label>
-                  <select
-                    value={selectedClientId}
-                    onChange={(e) => setSelectedClientId(e.target.value)}
-                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500"
-                    required
-                  >
-                    <option value="">Select a client...</option>
-                    {clients.map(client => (
-                      <option key={client.id} value={client.id}>
-                        {client.business_name} ({client.phone_number || 'No phone'})
-                      </option>
-                    ))}
-                  </select>
-                  {clients.length === 0 && (
-                    <p className="mt-1 text-sm text-red-600">
-                      No clients with active voice integration found. Please provision voice first.
-                    </p>
-                  )}
+                  <label className="flex items-center cursor-pointer">
+                    <input
+                      type="radio"
+                      name="inputMode"
+                      value="client"
+                      checked={inputMode === 'client'}
+                      onChange={(e) => setInputMode(e.target.value as 'client')}
+                      className="mr-2"
+                    />
+                    <span className="text-sm">Select Existing Client</span>
+                  </label>
                 </div>
+              </div>
+
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                {/* Client Selection OR Manual Input */}
+                {inputMode === 'client' ? (
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">
+                      Client <span className="text-red-500">*</span>
+                    </label>
+                    <select
+                      value={selectedClientId}
+                      onChange={(e) => setSelectedClientId(e.target.value)}
+                      className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500"
+                      required={inputMode === 'client'}
+                    >
+                      <option value="">Select a client...</option>
+                      {clients.map(client => (
+                        <option key={client.id} value={client.id}>
+                          {client.business_name} ({client.phone_number || 'No phone'})
+                        </option>
+                      ))}
+                    </select>
+                    {clients.length === 0 && (
+                      <p className="mt-1 text-sm text-red-600">
+                        No clients with active voice integration found. Use Manual Input instead.
+                      </p>
+                    )}
+                  </div>
+                ) : (
+                  <>
+                    {/* Manual Agent ID */}
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 mb-1">
+                        Retell Agent ID <span className="text-red-500">*</span>
+                      </label>
+                      <input
+                        type="text"
+                        value={manualAgentId}
+                        onChange={(e) => setManualAgentId(e.target.value)}
+                        placeholder="agent_..."
+                        className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500"
+                        required={inputMode === 'manual'}
+                      />
+                      <p className="mt-1 text-xs text-gray-500">From your Retell AI dashboard</p>
+                    </div>
+
+                    {/* Manual From Phone */}
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 mb-1">
+                        From Phone Number <span className="text-red-500">*</span>
+                      </label>
+                      <input
+                        type="tel"
+                        value={manualFromPhone}
+                        onChange={(e) => setManualFromPhone(e.target.value)}
+                        placeholder="+12345678900"
+                        className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500"
+                        required={inputMode === 'manual'}
+                      />
+                      <p className="mt-1 text-xs text-gray-500">Your Retell provisioned phone number</p>
+                    </div>
+                  </>
+                )}
 
                 {/* Trigger Mode */}
                 <div>
@@ -530,7 +662,7 @@ const AdminRetellCallScheduling: React.FC = () => {
                 </button>
                 <button
                   type="submit"
-                  disabled={isSubmitting || clients.length === 0}
+                  disabled={isSubmitting || (inputMode === 'client' && clients.length === 0)}
                   className="inline-flex items-center px-4 py-2 border border-transparent rounded-lg text-sm font-medium text-white bg-indigo-600 hover:bg-indigo-700 disabled:bg-gray-400 disabled:cursor-not-allowed"
                 >
                   {isSubmitting ? (

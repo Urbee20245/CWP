@@ -139,7 +139,7 @@ serve(async (req) => {
     const body = await req.json();
     const {
       scheduled_call_id, // If provided, this is processing a scheduled call
-      client_id,
+      client_id, // Optional - can be null for ad-hoc calls
       prospect_name,
       prospect_phone,
       retell_agent_id,
@@ -155,10 +155,14 @@ serve(async (req) => {
     } = body;
 
     // Validate required fields
-    if (!client_id) return jsonRes({ error: 'Missing client_id' }, 400);
     if (!prospect_name) return jsonRes({ error: 'Missing prospect_name' }, 400);
     if (!prospect_phone) return jsonRes({ error: 'Missing prospect_phone' }, 400);
     if (!retell_agent_id) return jsonRes({ error: 'Missing retell_agent_id' }, 400);
+
+    // For new calls, require either client_id OR from_phone_number
+    if (!scheduled_call_id && !client_id && !from_phone_number) {
+      return jsonRes({ error: 'Must provide either client_id or from_phone_number' }, 400);
+    }
 
     let scheduledCallRecord: any = null;
 
@@ -193,11 +197,12 @@ serve(async (req) => {
     }
     // Case 2: Creating a new call (immediate or scheduled)
     else {
-      console.log('[trigger-retell-call] Creating new call', { trigger_immediately, scheduled_time });
+      console.log('[trigger-retell-call] Creating new call', { trigger_immediately, scheduled_time, client_id });
 
       // Get from_phone_number if not provided
       let fromPhone = from_phone_number;
-      if (!fromPhone) {
+      if (!fromPhone && client_id) {
+        // Only fetch from client if client_id is provided
         const { data: voiceConfig } = await supabaseAdmin
           .from('client_voice_integrations')
           .select('phone_number')
@@ -208,7 +213,7 @@ serve(async (req) => {
       }
 
       if (!fromPhone) {
-        return jsonRes({ error: 'No phone number configured for this client. Please provision a voice number first.' }, 400);
+        return jsonRes({ error: 'No phone number configured. Please provide from_phone_number or select a client with voice integration.' }, 400);
       }
 
       // If not triggering immediately and scheduled_time is provided, create a scheduled call record
@@ -216,7 +221,7 @@ serve(async (req) => {
         const { data: newScheduledCall, error: insertErr } = await supabaseAdmin
           .from('retell_scheduled_calls')
           .insert({
-            client_id,
+            client_id: client_id || null, // Allow null for ad-hoc calls
             created_by: userId,
             prospect_name,
             prospect_phone,
@@ -252,7 +257,7 @@ serve(async (req) => {
       const { data: immediateCall, error: insertErr } = await supabaseAdmin
         .from('retell_scheduled_calls')
         .insert({
-          client_id,
+          client_id: client_id || null, // Allow null for ad-hoc calls
           created_by: userId,
           prospect_name,
           prospect_phone,
