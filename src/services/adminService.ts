@@ -269,4 +269,91 @@ export const AdminService = {
     if (error) throw error;
     return { success: true };
   },
+
+  // Retell Call Scheduling
+  // Trigger a Retell AI call immediately or schedule for later
+  triggerRetellCall: async (params: {
+    client_id: string;
+    prospect_name: string;
+    prospect_phone: string;
+    retell_agent_id: string;
+    from_phone_number?: string;
+    scheduled_time?: string; // ISO timestamp - if provided, schedules the call
+    trigger_immediately?: boolean; // If true, calls immediately
+    admin_notes?: string;
+    call_metadata?: any;
+  }) => {
+    return invokeEdgeFunction('trigger-retell-call', params);
+  },
+
+  // Get all scheduled calls (admin view)
+  getScheduledCalls: async (filters?: { client_id?: string; status?: string }) => {
+    let query = supabase
+      .from('retell_scheduled_calls')
+      .select(`
+        *,
+        clients!retell_scheduled_calls_client_id_fkey(id, business_name, phone),
+        profiles!retell_scheduled_calls_created_by_fkey(id, email, full_name)
+      `)
+      .order('scheduled_time', { ascending: false });
+
+    if (filters?.client_id) {
+      query = query.eq('client_id', filters.client_id);
+    }
+    if (filters?.status) {
+      query = query.eq('status', filters.status);
+    }
+
+    const { data, error } = await query;
+    if (error) throw error;
+    return data;
+  },
+
+  // Get a single scheduled call by ID
+  getScheduledCall: async (scheduledCallId: string) => {
+    const { data, error } = await supabase
+      .from('retell_scheduled_calls')
+      .select(`
+        *,
+        clients!retell_scheduled_calls_client_id_fkey(id, business_name, phone),
+        profiles!retell_scheduled_calls_created_by_fkey(id, email, full_name)
+      `)
+      .eq('id', scheduledCallId)
+      .maybeSingle();
+
+    if (error) throw error;
+    return data;
+  },
+
+  // Cancel a scheduled call
+  cancelScheduledCall: async (scheduledCallId: string) => {
+    const { error } = await supabase
+      .from('retell_scheduled_calls')
+      .update({ status: 'cancelled' })
+      .eq('id', scheduledCallId);
+
+    if (error) throw error;
+    return { success: true };
+  },
+
+  // Update scheduled call notes
+  updateScheduledCallNotes: async (scheduledCallId: string, admin_notes: string) => {
+    const { error } = await supabase
+      .from('retell_scheduled_calls')
+      .update({ admin_notes })
+      .eq('id', scheduledCallId);
+
+    if (error) throw error;
+    return { success: true };
+  },
+
+  // Manually trigger a scheduled call (force it to run now)
+  forceScheduledCall: async (scheduledCallId: string) => {
+    return invokeEdgeFunction('trigger-retell-call', { scheduled_call_id: scheduledCallId });
+  },
+
+  // Process all pending scheduled calls (manual trigger of cron job)
+  processScheduledCalls: async () => {
+    return invokeEdgeFunction('process-scheduled-calls', {});
+  },
 };
