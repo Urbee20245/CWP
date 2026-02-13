@@ -360,4 +360,14 @@ export const AdminService = {
   processScheduledCalls: async () => {
     return invokeEdgeFunction('process-scheduled-calls', {});
   },
+
+  // Get all Retell agents
+  getRetellAgents: async () => {
+    return invokeEdgeFunction('get-retell-agents', {});
+  },
+
+  // Get all Retell phone numbers
+  getRetellPhoneNumbers: async () => {
+    return invokeEdgeFunction('get-retell-phone-numbers', {});
+  },
 };
