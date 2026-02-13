@@ -282,6 +282,10 @@ export const AdminService = {
     trigger_immediately?: boolean; // If true, calls immediately
     admin_notes?: string;
     call_metadata?: any;
+    connection_type?: string; // How admin connected with prospect (referral, event, linkedin, website, direct)
+    referrer_name?: string; // Name of person who referred (for referrals)
+    event_name?: string; // Name of event (for event connections)
+    direct_context?: string; // Brief context (for direct connections)
   }) => {
     return invokeEdgeFunction('trigger-retell-call', params);
   },

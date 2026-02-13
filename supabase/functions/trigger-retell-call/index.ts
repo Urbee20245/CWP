@@ -148,6 +148,10 @@ serve(async (req) => {
       admin_notes,
       call_metadata,
       trigger_immediately = false, // If true, call immediately instead of scheduling
+      connection_type,
+      referrer_name,
+      event_name,
+      direct_context,
     } = body;
 
     // Validate required fields
@@ -222,6 +226,10 @@ serve(async (req) => {
             status: 'pending',
             admin_notes,
             call_metadata: call_metadata || {},
+            connection_type: connection_type || null,
+            referrer_name: referrer_name || null,
+            event_name: event_name || null,
+            direct_context: direct_context || null,
           })
           .select()
           .single();
@@ -255,6 +263,10 @@ serve(async (req) => {
           call_started_at: new Date().toISOString(),
           admin_notes,
           call_metadata: call_metadata || {},
+          connection_type: connection_type || null,
+          referrer_name: referrer_name || null,
+          event_name: event_name || null,
+          direct_context: direct_context || null,
         })
         .select()
         .single();
@@ -289,6 +301,11 @@ serve(async (req) => {
           scheduled_call_id: scheduledCallRecord.id,
           prospect_name: scheduledCallRecord.prospect_name,
           client_id: scheduledCallRecord.client_id,
+          // Connection context variables for agent personalization
+          connectionType: scheduledCallRecord.connection_type || 'direct',
+          referrerName: scheduledCallRecord.referrer_name || '',
+          eventName: scheduledCallRecord.event_name || '',
+          directContext: scheduledCallRecord.direct_context || '',
           ...(scheduledCallRecord.call_metadata || {}),
         },
         apiKey: RETELL_API_KEY,
