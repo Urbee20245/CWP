@@ -31,6 +31,10 @@ interface ScheduledCall {
   call_duration_seconds: number | null;
   error_message: string | null;
   admin_notes: string | null;
+  connection_type: string | null;
+  referrer_name: string | null;
+  event_name: string | null;
+  direct_context: string | null;
   created_at: string;
   clients?: {
     business_name: string;
@@ -58,6 +62,12 @@ const AdminRetellCallScheduling: React.FC = () => {
   const [scheduledTime, setScheduledTime] = useState('');
   const [adminNotes, setAdminNotes] = useState('');
   const [triggerMode, setTriggerMode] = useState<'immediate' | 'scheduled'>('scheduled');
+
+  // Connection context state
+  const [connectionType, setConnectionType] = useState<string>('');
+  const [referrerName, setReferrerName] = useState('');
+  const [eventName, setEventName] = useState('');
+  const [directContext, setDirectContext] = useState('');
 
   const showFeedback = (type: 'success' | 'error' | 'info', text: string, durationMs = 8000) => {
     setFeedbackMessage({ type, text });
@@ -166,6 +176,10 @@ const AdminRetellCallScheduling: React.FC = () => {
         scheduled_time: triggerMode === 'scheduled' ? new Date(scheduledTime).toISOString() : undefined,
         trigger_immediately: triggerMode === 'immediate',
         admin_notes: adminNotes.trim() || undefined,
+        connection_type: connectionType || undefined,
+        referrer_name: referrerName.trim() || undefined,
+        event_name: eventName.trim() || undefined,
+        direct_context: directContext.trim() || undefined,
       };
 
       const result = await AdminService.triggerRetellCall(params);
@@ -185,6 +199,10 @@ const AdminRetellCallScheduling: React.FC = () => {
         setScheduledTime('');
         setAdminNotes('');
         setTriggerMode('scheduled');
+        setConnectionType('');
+        setReferrerName('');
+        setEventName('');
+        setDirectContext('');
 
         // Refresh the list
         await fetchScheduledCalls();
@@ -406,20 +424,99 @@ const AdminRetellCallScheduling: React.FC = () => {
                     />
                   </div>
                 )}
+              </div>
 
-                {/* Admin Notes */}
-                <div className="md:col-span-2">
-                  <label className="block text-sm font-medium text-gray-700 mb-1">
-                    Admin Notes (Optional)
-                  </label>
-                  <textarea
-                    value={adminNotes}
-                    onChange={(e) => setAdminNotes(e.target.value)}
-                    placeholder="Internal notes about this call..."
-                    rows={3}
-                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500"
-                  />
+              {/* Connection Context Section */}
+              <div className="border-t border-gray-200 pt-4 mt-4">
+                <h3 className="text-base font-semibold text-gray-900 mb-3">Connection Context (Optional)</h3>
+                <p className="text-sm text-gray-600 mb-4">
+                  Help the AI personalize the call by specifying how you met the prospect
+                </p>
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  {/* Connection Type */}
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">
+                      How did you connect?
+                    </label>
+                    <select
+                      value={connectionType}
+                      onChange={(e) => setConnectionType(e.target.value)}
+                      className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500"
+                    >
+                      <option value="">Not specified</option>
+                      <option value="referral">Referral</option>
+                      <option value="event">Event / Networking</option>
+                      <option value="linkedin">LinkedIn Connection</option>
+                      <option value="website">Website Form</option>
+                      <option value="direct">Direct Contact</option>
+                      <option value="other">Other</option>
+                    </select>
+                  </div>
+
+                  {/* Conditional fields based on connection type */}
+                  {connectionType === 'referral' && (
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 mb-1">
+                        Referrer Name
+                      </label>
+                      <input
+                        type="text"
+                        value={referrerName}
+                        onChange={(e) => setReferrerName(e.target.value)}
+                        placeholder="e.g., Marcus Johnson"
+                        className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500"
+                      />
+                      <p className="mt-1 text-xs text-gray-500">Who referred this prospect?</p>
+                    </div>
+                  )}
+
+                  {connectionType === 'event' && (
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 mb-1">
+                        Event Name
+                      </label>
+                      <input
+                        type="text"
+                        value={eventName}
+                        onChange={(e) => setEventName(e.target.value)}
+                        placeholder="e.g., Atlanta Business Expo"
+                        className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500"
+                      />
+                      <p className="mt-1 text-xs text-gray-500">Where did you meet?</p>
+                    </div>
+                  )}
+
+                  {connectionType === 'direct' && (
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 mb-1">
+                        Context
+                      </label>
+                      <input
+                        type="text"
+                        value={directContext}
+                        onChange={(e) => setDirectContext(e.target.value)}
+                        placeholder="e.g., Ran into you downtown"
+                        className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500"
+                      />
+                      <p className="mt-1 text-xs text-gray-500">Brief context about the connection</p>
+                    </div>
+                  )}
                 </div>
+              </div>
+
+              {/* Admin Notes */}
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">
+                  Admin Notes (Optional)
+                </label>
+                <textarea
+                  value={adminNotes}
+                  onChange={(e) => setAdminNotes(e.target.value)}
+                  placeholder="Internal notes about this call..."
+                  rows={3}
+                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500"
+                />
+              </div>
               </div>
 
               {/* Form Actions */}
