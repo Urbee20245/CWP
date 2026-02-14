@@ -59,7 +59,6 @@ const AdminRetellCallScheduling: React.FC = () => {
   const [inputMode, setInputMode] = useState<'client' | 'manual'>('manual'); // Default to manual mode
   const [selectedClientId, setSelectedClientId] = useState<string>('');
   const [manualAgentId, setManualAgentId] = useState('');
-  const [manualFromPhone, setManualFromPhone] = useState('');
   const [prospectName, setProspectName] = useState('');
   const [prospectPhone, setProspectPhone] = useState('');
   const [scheduledTime, setScheduledTime] = useState('');
@@ -74,9 +73,11 @@ const AdminRetellCallScheduling: React.FC = () => {
 
   // Retell agents and phone numbers state
   const [retellAgents, setRetellAgents] = useState<any[]>([]);
-  const [retellPhoneNumbers, setRetellPhoneNumbers] = useState<any[]>([]);
   const [isLoadingAgents, setIsLoadingAgents] = useState(false);
-  const [isLoadingPhones, setIsLoadingPhones] = useState(false);
+
+  // Phone numbers state (new implementation)
+  const [phoneNumbers, setPhoneNumbers] = useState<any[]>([]);
+  const [fromPhoneNumber, setFromPhoneNumber] = useState('');
 
   const showFeedback = (type: 'success' | 'error' | 'info', text: string, durationMs = 8000) => {
     setFeedbackMessage({ type, text });
@@ -144,25 +145,29 @@ const AdminRetellCallScheduling: React.FC = () => {
     }
   }, []);
 
-  const fetchRetellPhoneNumbers = useCallback(async () => {
-    setIsLoadingPhones(true);
-    try {
-      const result = await AdminService.getPlatformPhoneNumbers();
-      const phones = result.phone_numbers || [];
-      setRetellPhoneNumbers(phones);
+  // Fetch phone numbers on mount
+  useEffect(() => {
+    const loadPhoneNumbers = async () => {
+      const { data: { session } } = await supabase.auth.getSession();
 
-      // Auto-select the default phone number if available and not already set
-      if (phones.length > 0 && !manualFromPhone) {
-        const defaultPhone = phones.find((p: any) => p.is_default) || phones[0];
-        setManualFromPhone(defaultPhone.phone_number);
+      const response = await fetch(
+        'https://nvgumhlewbqynrhlkqhx.supabase.co/functions/v1/get-platform-phone-numbers',
+        {
+          headers: {
+            'Authorization': `Bearer ${session.access_token}`
+          }
+        }
+      );
+      const result = await response.json();
+
+      if (result.success) {
+        setPhoneNumbers(result.phoneNumbers || []);
+        const defaultPhone = result.phoneNumbers?.find(p => p.is_default);
+        if (defaultPhone) setFromPhoneNumber(defaultPhone.phone_number);
       }
-    } catch (error: any) {
-      console.error('Failed to fetch platform phone numbers:', error);
-      showFeedback('error', 'Failed to fetch platform phone numbers: ' + error.message);
-    } finally {
-      setIsLoadingPhones(false);
-    }
-  }, [manualFromPhone]);
+    };
+    loadPhoneNumbers();
+  }, []);
 
   const loadData = useCallback(async () => {
     setIsLoading(true);
@@ -170,10 +175,9 @@ const AdminRetellCallScheduling: React.FC = () => {
       fetchClients(),
       fetchScheduledCalls(),
       fetchRetellAgents(),
-      fetchRetellPhoneNumbers(),
     ]);
     setIsLoading(false);
-  }, [fetchClients, fetchScheduledCalls, fetchRetellAgents, fetchRetellPhoneNumbers]);
+  }, [fetchClients, fetchScheduledCalls, fetchRetellAgents]);
 
   useEffect(() => {
     loadData();
@@ -194,7 +198,7 @@ const AdminRetellCallScheduling: React.FC = () => {
         showFeedback('error', 'Please enter the Retell Agent ID');
         return;
       }
-      if (!manualFromPhone.trim()) {
+      if (!fromPhoneNumber.trim()) {
         showFeedback('error', 'Please enter the From Phone Number');
         return;
       }
@@ -223,7 +227,7 @@ const AdminRetellCallScheduling: React.FC = () => {
 
     // Validate from phone if in manual mode
     if (inputMode === 'manual') {
-      const cleanFromPhone = manualFromPhone.replace(/[\s\-\(\)]/g, '');
+      const cleanFromPhone = fromPhoneNumber.replace(/[\s\-\(\)]/g, '');
       if (!phoneRegex.test(cleanFromPhone)) {
         showFeedback('error', 'Please enter a valid from phone number with country code (e.g., +1234567890)');
         return;
@@ -264,7 +268,7 @@ const AdminRetellCallScheduling: React.FC = () => {
         };
       } else {
         // Manual mode - no client_id required
-        const cleanFromPhone = manualFromPhone.replace(/[\s\-\(\)]/g, '');
+        const cleanFromPhone = fromPhoneNumber.replace(/[\s\-\(\)]/g, '');
         params = {
           client_id: null, // No client association
           prospect_name: prospectName.trim(),
@@ -295,7 +299,7 @@ const AdminRetellCallScheduling: React.FC = () => {
         setInputMode('manual');
         setSelectedClientId('');
         setManualAgentId('');
-        setManualFromPhone('');
+        // Keep fromPhoneNumber (default stays selected)
         setProspectName('');
         setProspectPhone('');
         setScheduledTime('');
@@ -536,25 +540,14 @@ const AdminRetellCallScheduling: React.FC = () => {
                       <label className="block text-sm font-medium text-gray-700 mb-1">
                         From Phone Number <span className="text-red-500">*</span>
                       </label>
-                      <select
-                        value={manualFromPhone}
-                        onChange={(e) => setManualFromPhone(e.target.value)}
-                        className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500"
-                        required={inputMode === 'manual'}
-                        disabled={isLoadingPhones}
-                      >
-                        <option value="">
-                          {isLoadingPhones ? 'Loading phone numbers...' : 'Select a phone number...'}
-                        </option>
-                        {retellPhoneNumbers.map((phone) => (
-                          <option key={phone.phone_number} value={phone.phone_number}>
-                            {phone.phone_number}
+                      <select value={fromPhoneNumber} onChange={(e) => setFromPhoneNumber(e.target.value)} className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500" required={inputMode === 'manual'}>
+                        <option value="">Select Phone Number</option>
+                        {phoneNumbers.map((phone) => (
+                          <option key={phone.id} value={phone.phone_number}>
+                            {phone.label} - {phone.phone_number}
                           </option>
                         ))}
                       </select>
-                      {!isLoadingPhones && retellPhoneNumbers.length === 0 && (
-                        <p className="mt-1 text-xs text-amber-600">No phone numbers found</p>
-                      )}
                     </div>
                   </>
                 )}
