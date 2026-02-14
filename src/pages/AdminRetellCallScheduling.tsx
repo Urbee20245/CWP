@@ -147,15 +147,22 @@ const AdminRetellCallScheduling: React.FC = () => {
   const fetchRetellPhoneNumbers = useCallback(async () => {
     setIsLoadingPhones(true);
     try {
-      const result = await AdminService.getRetellPhoneNumbers();
-      setRetellPhoneNumbers(result.phone_numbers || []);
+      const result = await AdminService.getPlatformPhoneNumbers();
+      const phones = result.phone_numbers || [];
+      setRetellPhoneNumbers(phones);
+
+      // Auto-select the default phone number if available and not already set
+      if (phones.length > 0 && !manualFromPhone) {
+        const defaultPhone = phones.find((p: any) => p.is_default) || phones[0];
+        setManualFromPhone(defaultPhone.phone_number);
+      }
     } catch (error: any) {
-      console.error('Failed to fetch Retell phone numbers:', error);
-      showFeedback('error', 'Failed to fetch Retell phone numbers: ' + error.message);
+      console.error('Failed to fetch platform phone numbers:', error);
+      showFeedback('error', 'Failed to fetch platform phone numbers: ' + error.message);
     } finally {
       setIsLoadingPhones(false);
     }
-  }, []);
+  }, [manualFromPhone]);
 
   const loadData = useCallback(async () => {
     setIsLoading(true);
