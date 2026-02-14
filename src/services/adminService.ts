@@ -366,8 +366,8 @@ export const AdminService = {
     return invokeEdgeFunction('get-retell-agents', {});
   },
 
-  // Get all Retell phone numbers
-  getRetellPhoneNumbers: async () => {
-    return invokeEdgeFunction('get-retell-phone-numbers', {});
+  // Get platform outbound phone numbers (for admin calling)
+  getPlatformPhoneNumbers: async () => {
+    return invokeEdgeFunction('get-platform-phone-numbers', {});
   },
 };
