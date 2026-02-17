@@ -53,11 +53,14 @@ import AdminA2PAutomation from './src/pages/AdminA2PAutomation';
 import ClientSettings from './src/pages/ClientSettings'; // NEW IMPORT
 import ClientLeads from './src/pages/ClientLeads';
 import TwilioConnectCallback from './src/pages/TwilioConnectCallback';
+import AdminWebsiteBuilder from './src/pages/AdminWebsiteBuilder';
+import ClientWebsite from './src/pages/ClientWebsite';
+import PublicSite from './src/pages/PublicSite';
 
 const AppContent: React.FC = () => {
   const location = useLocation();
   const { isLoading } = useAuth();
-  const isBackOfficeRoute = location.pathname.startsWith('/admin') || location.pathname.startsWith('/client') || location.pathname.startsWith('/back-office') || location.pathname === '/login';
+  const isBackOfficeRoute = location.pathname.startsWith('/admin') || location.pathname.startsWith('/client') || location.pathname.startsWith('/back-office') || location.pathname === '/login' || location.pathname.startsWith('/site/');
   const showGlobalComponents = !isBackOfficeRoute;
 
   if (isLoading) return <GlobalLoading />;
@@ -104,6 +107,7 @@ const AppContent: React.FC = () => {
           <Route path="email-draft" element={<AdminEmailDraft />} />
           <Route path="addons/catalog" element={<AdminAddonCatalog />} />
           <Route path="a2p-automation" element={<AdminA2PAutomation />} />
+          <Route path="website-builder" element={<AdminWebsiteBuilder />} />
         </Route>
 
         <Route path="/client/*" element={<ProtectedRoute allowedRoles={['client']} />}>
@@ -119,8 +123,11 @@ const AppContent: React.FC = () => {
           <Route path="addons" element={<ClientAddons />} />
           <Route path="jetsuite" element={<ClientJetSuitePage />} />
           <Route path="help" element={<ClientHelpPage />} />
+          <Route path="website" element={<ClientWebsite />} />
         </Route>
-        
+
+        <Route path="/site/:slug" element={<PublicSite />} />
+
         <Route path="*" element={<NotFoundPage />} />
       </Routes>
       

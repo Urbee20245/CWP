@@ -370,4 +370,22 @@ export const AdminService = {
   getPlatformPhoneNumbers: async () => {
     return invokeEdgeFunction('get-platform-phone-numbers', {});
   },
+
+  // Website Builder
+  generateWebsite: async (briefData: {
+    client_id: string;
+    business_name: string;
+    industry: string;
+    services_offered: string;
+    location: string;
+    tone: string;
+    primary_color: string;
+    art_direction?: string;
+  }) => invokeEdgeFunction('generate-website', briefData),
+
+  updateWebsitePublish: async (clientId: string, isPublished: boolean) =>
+    invokeEdgeFunction('update-website-publish', { client_id: clientId, is_published: isPublished }),
+
+  saveWebsiteEdits: async (clientId: string, edits: Array<{ field_path: string; new_value: string }>) =>
+    invokeEdgeFunction('save-website-edits', { client_id: clientId, edits }),
 };
