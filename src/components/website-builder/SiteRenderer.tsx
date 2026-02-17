@@ -10,12 +10,16 @@ import ContactCtaSection from './sections/ContactCtaSection';
 import FaqSection from './sections/FaqSection';
 import StatsSection from './sections/StatsSection';
 import GallerySection from './sections/GallerySection';
+import PricingSection from './sections/PricingSection';
+import BlogPreviewSection from './sections/BlogPreviewSection';
 
 interface SiteRendererProps {
   websiteJson: WebsiteJson;
+  currentPageId?: string;
+  siteSlug: string;
 }
 
-type SectionComponent = React.FC<{ content: any; global: any; variant: string }>;
+type SectionComponent = React.FC<{ content: any; global: any; variant: string; siteSlug?: string }>;
 
 const SECTION_MAP: Record<SectionType, SectionComponent> = {
   hero: HeroSection as SectionComponent,
@@ -26,10 +30,19 @@ const SECTION_MAP: Record<SectionType, SectionComponent> = {
   faq: FaqSection as SectionComponent,
   stats: StatsSection as SectionComponent,
   gallery: GallerySection as SectionComponent,
+  pricing_cards: PricingSection as SectionComponent,
+  blog_preview: BlogPreviewSection as SectionComponent,
 };
 
-const SiteRenderer: React.FC<SiteRendererProps> = ({ websiteJson }) => {
-  const { global: g, page_structure } = websiteJson;
+const SiteRenderer: React.FC<SiteRendererProps> = ({
+  websiteJson,
+  currentPageId = 'home',
+  siteSlug,
+}) => {
+  const { global: g, pages } = websiteJson;
+
+  // Find the active page; fall back to first page
+  const activePage = pages.find(p => p.id === currentPageId) || pages[0];
 
   return (
     <div
@@ -41,9 +54,14 @@ const SiteRenderer: React.FC<SiteRendererProps> = ({ websiteJson }) => {
         } as React.CSSProperties
       }
     >
-      <SiteHeader global={g} />
+      <SiteHeader
+        global={g}
+        pages={pages}
+        siteSlug={siteSlug}
+        currentPageId={activePage?.id || 'home'}
+      />
 
-      {page_structure.map((section, i) => {
+      {activePage?.sections.map((section, i) => {
         const Component = SECTION_MAP[section.section_type as SectionType];
         if (!Component) {
           console.warn(`[SiteRenderer] Unknown section_type: ${section.section_type}`);
@@ -55,11 +73,12 @@ const SiteRenderer: React.FC<SiteRendererProps> = ({ websiteJson }) => {
             content={section.content}
             global={g}
             variant={section.variant}
+            siteSlug={siteSlug}
           />
         );
       })}
 
-      <SiteFooter global={g} />
+      <SiteFooter global={g} pages={pages} siteSlug={siteSlug} />
     </div>
   );
 };

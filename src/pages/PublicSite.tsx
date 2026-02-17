@@ -8,11 +8,9 @@ import { Loader2, Globe } from 'lucide-react';
 type Status = 'loading' | 'found' | 'not_found';
 
 const PublicSite: React.FC = () => {
-  const { slug } = useParams<{ slug: string }>();
+  const { slug, page } = useParams<{ slug: string; page?: string }>();
   const [websiteJson, setWebsiteJson] = useState<WebsiteJson | null>(null);
   const [status, setStatus] = useState<Status>('loading');
-  const [seoTitle, setSeoTitle] = useState('');
-  const [seoDesc, setSeoDesc] = useState('');
 
   useEffect(() => {
     if (!slug) { setStatus('not_found'); return; }
@@ -32,22 +30,32 @@ const PublicSite: React.FC = () => {
 
       const json = data.website_json as WebsiteJson;
       setWebsiteJson(json);
-      setSeoTitle(json.seo?.title || data.business_name || '');
-      setSeoDesc(json.seo?.meta_description || '');
       setStatus('found');
     };
 
     fetchSite();
   }, [slug]);
 
-  // Inject SEO tags
+  // Resolve which page to show
+  const currentPageId = (() => {
+    if (!websiteJson) return 'home';
+    if (!page) return 'home'; // root → home
+    const found = websiteJson.pages.find(p => p.slug === page);
+    return found ? found.id : 'home';
+  })();
+
+  // Per-page SEO injection
   useEffect(() => {
-    if (seoTitle) document.title = seoTitle;
+    if (!websiteJson) return;
+    const activePage = websiteJson.pages.find(p => p.id === currentPageId) || websiteJson.pages[0];
+    if (!activePage) return;
+
+    document.title = activePage.seo?.title || websiteJson.global.business_name;
     const metaDesc = document.querySelector('meta[name="description"]');
-    if (metaDesc && seoDesc) {
-      metaDesc.setAttribute('content', seoDesc);
+    if (metaDesc && activePage.seo?.meta_description) {
+      metaDesc.setAttribute('content', activePage.seo.meta_description);
     }
-  }, [seoTitle, seoDesc]);
+  }, [websiteJson, currentPageId]);
 
   if (status === 'loading') {
     return (
@@ -69,7 +77,13 @@ const PublicSite: React.FC = () => {
     );
   }
 
-  return <SiteRenderer websiteJson={websiteJson!} />;
+  return (
+    <SiteRenderer
+      websiteJson={websiteJson!}
+      currentPageId={currentPageId}
+      siteSlug={slug!}
+    />
+  );
 };
 
 export default PublicSite;

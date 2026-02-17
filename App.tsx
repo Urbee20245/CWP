@@ -54,8 +54,11 @@ import ClientSettings from './src/pages/ClientSettings'; // NEW IMPORT
 import ClientLeads from './src/pages/ClientLeads';
 import TwilioConnectCallback from './src/pages/TwilioConnectCallback';
 import AdminWebsiteBuilder from './src/pages/AdminWebsiteBuilder';
+import AdminBlogManager from './src/pages/AdminBlogManager';
 import ClientWebsite from './src/pages/ClientWebsite';
 import PublicSite from './src/pages/PublicSite';
+import BlogListingPage from './src/pages/BlogListingPage';
+import BlogPostPage from './src/pages/BlogPostPage';
 
 const AppContent: React.FC = () => {
   const location = useLocation();
@@ -108,6 +111,7 @@ const AppContent: React.FC = () => {
           <Route path="addons/catalog" element={<AdminAddonCatalog />} />
           <Route path="a2p-automation" element={<AdminA2PAutomation />} />
           <Route path="website-builder" element={<AdminWebsiteBuilder />} />
+          <Route path="blog-manager" element={<AdminBlogManager />} />
         </Route>
 
         <Route path="/client/*" element={<ProtectedRoute allowedRoles={['client']} />}>
@@ -127,6 +131,9 @@ const AppContent: React.FC = () => {
         </Route>
 
         <Route path="/site/:slug" element={<PublicSite />} />
+        <Route path="/site/:slug/blog" element={<BlogListingPage />} />
+        <Route path="/site/:slug/blog/:post" element={<BlogPostPage />} />
+        <Route path="/site/:slug/:page" element={<PublicSite />} />
 
         <Route path="*" element={<NotFoundPage />} />
       </Routes>

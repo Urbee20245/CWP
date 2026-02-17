@@ -381,6 +381,7 @@ export const AdminService = {
     tone: string;
     primary_color: string;
     art_direction?: string;
+    pages_to_generate?: string[];
   }) => invokeEdgeFunction('generate-website', briefData),
 
   updateWebsitePublish: async (clientId: string, isPublished: boolean) =>
@@ -388,4 +389,11 @@ export const AdminService = {
 
   saveWebsiteEdits: async (clientId: string, edits: Array<{ field_path: string; new_value: string }>) =>
     invokeEdgeFunction('save-website-edits', { client_id: clientId, edits }),
+
+  generateBlogPost: async (params: {
+    client_id: string;
+    topic?: string;
+    word_count?: number;
+    author_name?: string;
+  }) => invokeEdgeFunction('generate-blog-post', params),
 };
