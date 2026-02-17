@@ -6,10 +6,14 @@ import {
   Globe, Loader2, AlertTriangle, CheckCircle, Eye, Copy,
   RefreshCw, ToggleLeft, ToggleRight, Wand2, Upload, ImageIcon,
   ChevronDown, ChevronRight, FileText, Check,
+  Calendar, Phone, FileText as FormIcon, Shield, Sparkles, MessageSquare,
 } from 'lucide-react';
 import { supabase } from '../integrations/supabase/client';
 import { AdminService } from '../services/adminService';
-import { WebsiteBrief, GenerationStatus, ALL_PAGE_OPTIONS, PageId } from '../types/website';
+import {
+  WebsiteBrief, GenerationStatus, ALL_PAGE_OPTIONS, PageId,
+  PremiumFeatureId, PREMIUM_FEATURE_OPTIONS, PREMIUM_FEATURE_GROUPS, PremiumFeatureGroup,
+} from '../types/website';
 
 interface Client {
   id: string;
@@ -69,6 +73,9 @@ const AdminWebsiteBuilder: React.FC = () => {
     new Set(['home', 'about', 'services', 'contact'])
   );
 
+  // Premium feature selection
+  const [selectedPremiumFeatures, setSelectedPremiumFeatures] = useState<Set<PremiumFeatureId>>(new Set());
+
   // Load clients
   useEffect(() => {
     const load = async () => {
@@ -108,8 +115,15 @@ const AdminWebsiteBuilder: React.FC = () => {
       if (data.website_json?.pages) {
         setSelectedPages(new Set(data.website_json.pages.map((p: any) => p.id as PageId)));
       }
+      // Restore premium features
+      if (Array.isArray(data.premium_features) && data.premium_features.length > 0) {
+        setSelectedPremiumFeatures(new Set(data.premium_features as PremiumFeatureId[]));
+      } else {
+        setSelectedPremiumFeatures(new Set());
+      }
     } else {
       setBrief(null);
+      setSelectedPremiumFeatures(new Set());
       const client = clients.find(c => c.id === clientId);
       setForm(f => ({ ...f, business_name: client?.business_name || '' }));
     }
@@ -127,6 +141,23 @@ const AdminWebsiteBuilder: React.FC = () => {
       if (next.has(pageId)) { next.delete(pageId); } else { next.add(pageId); }
       return next;
     });
+  };
+
+  const togglePremiumFeature = (featureId: PremiumFeatureId) => {
+    setSelectedPremiumFeatures(prev => {
+      const next = new Set(prev);
+      if (next.has(featureId)) { next.delete(featureId); } else { next.add(featureId); }
+      return next;
+    });
+  };
+
+  const PREMIUM_GROUP_ICONS: Record<PremiumFeatureGroup, React.ReactNode> = {
+    'Calendar':               <Calendar className="w-4 h-4" />,
+    'AI Phone Receptionist':  <Phone className="w-4 h-4" />,
+    'Forms':                  <FormIcon className="w-4 h-4" />,
+    'Legal Pages':            <Shield className="w-4 h-4" />,
+    'AI Functionality':       <Sparkles className="w-4 h-4" />,
+    'Widgets & Chatbots':     <MessageSquare className="w-4 h-4" />,
   };
 
   // Image upload handler
@@ -199,10 +230,28 @@ const AdminWebsiteBuilder: React.FC = () => {
     setIsGenerating(true);
     setError(null);
     try {
+      // Persist premium feature selections to the brief row before/during generation
+      await supabase
+        .from('website_briefs')
+        .upsert(
+          {
+            client_id: selectedClientId,
+            business_name: form.business_name || 'Draft',
+            industry: form.industry || '',
+            services_offered: form.services_offered || '',
+            location: form.location || '',
+            tone: form.tone,
+            primary_color: form.primary_color,
+            premium_features: Array.from(selectedPremiumFeatures),
+          },
+          { onConflict: 'client_id' }
+        );
+
       await AdminService.generateWebsite({
         client_id: selectedClientId,
         ...form,
         pages_to_generate: Array.from(selectedPages),
+        premium_features: Array.from(selectedPremiumFeatures),
       });
       await loadBrief(selectedClientId);
     } catch (err: any) {
@@ -402,6 +451,88 @@ const AdminWebsiteBuilder: React.FC = () => {
               <p className="text-xs text-slate-400 mt-3">
                 {selectedPages.size} page{selectedPages.size !== 1 ? 's' : ''} selected
               </p>
+            </div>
+
+            {/* Premium Features card */}
+            <div className="bg-white rounded-2xl border border-slate-200 shadow-sm p-6">
+              <div className="flex items-center gap-2 mb-1">
+                <Sparkles className="w-5 h-5 text-amber-500" />
+                <h2 className="text-lg font-semibold text-slate-900">Premium Features</h2>
+              </div>
+              <p className="text-xs text-slate-400 mb-5">
+                Select add-ons to enable for this client's website. These are billed separately.
+              </p>
+
+              <div className="space-y-5">
+                {PREMIUM_FEATURE_GROUPS.map(group => {
+                  const featuresInGroup = PREMIUM_FEATURE_OPTIONS.filter(f => f.group === group);
+                  const selectedInGroup = featuresInGroup.filter(f => selectedPremiumFeatures.has(f.id)).length;
+                  return (
+                    <div key={group}>
+                      {/* Group header */}
+                      <div className="flex items-center gap-2 mb-2">
+                        <span className="text-slate-400">{PREMIUM_GROUP_ICONS[group]}</span>
+                        <span className="text-xs font-semibold text-slate-500 uppercase tracking-wider">{group}</span>
+                        {selectedInGroup > 0 && (
+                          <span className="ml-auto text-xs bg-indigo-100 text-indigo-700 font-medium px-2 py-0.5 rounded-full">
+                            {selectedInGroup} on
+                          </span>
+                        )}
+                      </div>
+
+                      {/* Feature checkboxes */}
+                      <div className="space-y-2">
+                        {featuresInGroup.map(feature => {
+                          const isSelected = selectedPremiumFeatures.has(feature.id);
+                          return (
+                            <button
+                              key={feature.id}
+                              type="button"
+                              onClick={() => togglePremiumFeature(feature.id)}
+                              className={`w-full flex items-start gap-3 px-4 py-3 rounded-xl border text-left transition-colors ${
+                                isSelected
+                                  ? 'border-amber-300 bg-amber-50'
+                                  : 'border-slate-200 bg-white hover:bg-slate-50'
+                              }`}
+                            >
+                              <div
+                                className={`w-5 h-5 rounded flex items-center justify-center flex-shrink-0 border-2 mt-0.5 transition-colors ${
+                                  isSelected ? 'bg-amber-500 border-amber-500' : 'border-slate-300 bg-white'
+                                }`}
+                              >
+                                {isSelected && <Check className="w-3 h-3 text-white" />}
+                              </div>
+                              <div className="flex-1 min-w-0">
+                                <div className="flex items-center gap-2 flex-wrap">
+                                  <span className={`text-sm font-medium ${isSelected ? 'text-amber-800' : 'text-slate-700'}`}>
+                                    {feature.name}
+                                  </span>
+                                  {feature.badge && (
+                                    <span className={`text-xs font-medium px-1.5 py-0.5 rounded ${
+                                      feature.badge === 'Popular'
+                                        ? 'bg-rose-100 text-rose-600'
+                                        : 'bg-emerald-100 text-emerald-700'
+                                    }`}>
+                                      {feature.badge}
+                                    </span>
+                                  )}
+                                </div>
+                                <p className="text-xs text-slate-400 mt-0.5 leading-relaxed">{feature.description}</p>
+                              </div>
+                            </button>
+                          );
+                        })}
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+
+              {selectedPremiumFeatures.size > 0 && (
+                <p className="text-xs text-amber-600 font-medium mt-4">
+                  {selectedPremiumFeatures.size} premium feature{selectedPremiumFeatures.size !== 1 ? 's' : ''} enabled
+                </p>
+              )}
             </div>
 
             {/* Assets card */}

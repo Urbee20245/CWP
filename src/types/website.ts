@@ -77,6 +77,7 @@ export interface WebsiteBrief {
   website_json: WebsiteJson | null;
   client_slug: string | null;
   is_published: boolean;
+  premium_features: PremiumFeatureId[];
   created_at: string;
   updated_at: string;
 }
@@ -110,4 +111,140 @@ export const ALL_PAGE_OPTIONS: PageOption[] = [
   { id: 'testimonials', name: 'Testimonials',  slug: 'testimonials',description: 'Reviews & social proof' },
   { id: 'pricing',      name: 'Pricing',       slug: 'pricing',     description: 'Packages & tier cards' },
   { id: 'blog',         name: 'Blog',          slug: 'blog',        description: 'AI-generated articles (premium)' },
+];
+
+// ─── Premium Features ─────────────────────────────────────────────────────────
+
+export type PremiumFeatureId =
+  // Calendar
+  | 'cal_com'
+  | 'google_calendar'
+  // AI Phone
+  | 'ai_phone_inbound'
+  | 'ai_phone_outbound'
+  // Forms
+  | 'contact_forms'
+  // Legal pages
+  | 'legal_privacy_policy'
+  | 'legal_terms_conditions'
+  | 'legal_refund_policy'
+  // AI functionality
+  | 'ai_content_generation'
+  | 'ai_assistant'
+  // Widgets & chatbots
+  | 'chat_widget'
+  | 'ai_chatbot';
+
+export interface PremiumFeatureOption {
+  id: PremiumFeatureId;
+  name: string;
+  description: string;
+  group: PremiumFeatureGroup;
+  badge?: string; // e.g. 'Recommended'
+}
+
+export type PremiumFeatureGroup =
+  | 'Calendar'
+  | 'AI Phone Receptionist'
+  | 'Forms'
+  | 'Legal Pages'
+  | 'AI Functionality'
+  | 'Widgets & Chatbots';
+
+export const PREMIUM_FEATURE_OPTIONS: PremiumFeatureOption[] = [
+  // Calendar
+  {
+    id: 'cal_com',
+    name: 'Cal.com Booking',
+    description: 'Embed a Cal.com booking calendar — clients schedule appointments directly on the site',
+    group: 'Calendar',
+    badge: 'Recommended',
+  },
+  {
+    id: 'google_calendar',
+    name: 'Google Calendar',
+    description: 'Connect Google Calendar for availability display and appointment sync',
+    group: 'Calendar',
+  },
+
+  // AI Phone
+  {
+    id: 'ai_phone_inbound',
+    name: 'AI Receptionist — Inbound',
+    description: 'AI answers inbound calls 24/7, qualifies leads, books appointments, and takes messages',
+    group: 'AI Phone Receptionist',
+    badge: 'Popular',
+  },
+  {
+    id: 'ai_phone_outbound',
+    name: 'AI Receptionist — Outbound',
+    description: 'AI makes outbound follow-up calls to leads, confirms appointments, and re-engages past clients',
+    group: 'AI Phone Receptionist',
+  },
+
+  // Forms
+  {
+    id: 'contact_forms',
+    name: 'Smart Contact Forms',
+    description: 'Conversion-optimised contact & lead capture forms with spam protection and CRM routing',
+    group: 'Forms',
+  },
+
+  // Legal Pages
+  {
+    id: 'legal_privacy_policy',
+    name: 'Privacy Policy',
+    description: 'AI-generated, business-specific privacy policy page — GDPR & CCPA aware',
+    group: 'Legal Pages',
+  },
+  {
+    id: 'legal_terms_conditions',
+    name: 'Terms & Conditions',
+    description: 'AI-generated terms of service tailored to the client\'s industry and services',
+    group: 'Legal Pages',
+  },
+  {
+    id: 'legal_refund_policy',
+    name: 'Refund Policy',
+    description: 'AI-generated refund & cancellation policy page for the client\'s business model',
+    group: 'Legal Pages',
+  },
+
+  // AI Functionality
+  {
+    id: 'ai_content_generation',
+    name: 'AI Content Generation',
+    description: 'Let clients regenerate page copy, blog posts, and marketing content with one click',
+    group: 'AI Functionality',
+  },
+  {
+    id: 'ai_assistant',
+    name: 'AI Business Assistant',
+    description: 'Embedded AI assistant for the client dashboard — answers business questions and drafts emails',
+    group: 'AI Functionality',
+  },
+
+  // Widgets & Chatbots
+  {
+    id: 'chat_widget',
+    name: 'Live Chat Widget',
+    description: 'Real-time chat widget so website visitors can message the business instantly',
+    group: 'Widgets & Chatbots',
+  },
+  {
+    id: 'ai_chatbot',
+    name: 'AI Chatbot',
+    description: 'AI-powered chatbot trained on the client\'s business info — handles FAQs and captures leads automatically',
+    group: 'Widgets & Chatbots',
+    badge: 'Popular',
+  },
+];
+
+export const PREMIUM_FEATURE_GROUPS: PremiumFeatureGroup[] = [
+  'Calendar',
+  'AI Phone Receptionist',
+  'Forms',
+  'Legal Pages',
+  'AI Functionality',
+  'Widgets & Chatbots',
 ];
