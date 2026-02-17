@@ -1,4 +1,4 @@
-// Types for the AI-generated website builder system
+// Types for the AI-generated multi-page website builder system
 
 export interface WebsiteGlobal {
   business_name: string;
@@ -7,6 +7,8 @@ export interface WebsiteGlobal {
   primary_color: string;
   font_heading: string;
   font_body: string;
+  logo_url?: string;
+  hero_image_url?: string;
 }
 
 export interface WebsiteSeo {
@@ -22,11 +24,29 @@ export interface WebsiteSection {
   editable_fields: string[];
 }
 
+export interface WebsitePage {
+  id: PageId;
+  name: string;
+  slug: string; // '' for home, 'about' for about, etc.
+  seo: WebsiteSeo;
+  sections: WebsiteSection[];
+}
+
 export interface WebsiteJson {
   global: WebsiteGlobal;
-  seo: WebsiteSeo;
-  page_structure: WebsiteSection[];
+  pages: WebsitePage[];
 }
+
+export type PageId =
+  | 'home'
+  | 'about'
+  | 'services'
+  | 'contact'
+  | 'gallery'
+  | 'faq'
+  | 'testimonials'
+  | 'pricing'
+  | 'blog';
 
 export type SectionType =
   | 'hero'
@@ -36,7 +56,9 @@ export type SectionType =
   | 'contact_cta'
   | 'faq'
   | 'stats'
-  | 'gallery';
+  | 'gallery'
+  | 'pricing_cards'
+  | 'blog_preview';
 
 export type GenerationStatus = 'draft' | 'generating' | 'complete' | 'error';
 
@@ -68,3 +90,24 @@ export interface WebsiteEdit {
   field_path: string;
   new_value: string;
 }
+
+// Page metadata for the builder UI
+export interface PageOption {
+  id: PageId;
+  name: string;
+  slug: string;
+  description: string;
+  locked?: boolean;
+}
+
+export const ALL_PAGE_OPTIONS: PageOption[] = [
+  { id: 'home',         name: 'Home',         slug: '',            description: 'Hero, services overview, CTA', locked: true },
+  { id: 'about',        name: 'About Us',      slug: 'about',       description: 'Story, team, stats' },
+  { id: 'services',     name: 'Services',      slug: 'services',    description: 'Full services detail & FAQ' },
+  { id: 'contact',      name: 'Contact Us',    slug: 'contact',     description: 'Form, phone, hours, map' },
+  { id: 'gallery',      name: 'Gallery',       slug: 'gallery',     description: 'Photo & project portfolio' },
+  { id: 'faq',          name: 'FAQ',           slug: 'faq',         description: 'Comprehensive Q&A page' },
+  { id: 'testimonials', name: 'Testimonials',  slug: 'testimonials',description: 'Reviews & social proof' },
+  { id: 'pricing',      name: 'Pricing',       slug: 'pricing',     description: 'Packages & tier cards' },
+  { id: 'blog',         name: 'Blog',          slug: 'blog',        description: 'AI-generated articles (premium)' },
+];

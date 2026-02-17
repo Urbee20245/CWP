@@ -3,7 +3,7 @@
 import React, { useState } from 'react';
 import { useAuth } from '../hooks/useAuth';
 import { Link, useLocation } from 'react-router-dom';
-import { Users, Briefcase, DollarSign, LogOut, Bot, BarChart3, Settings, FileText, Mail as MailIcon, Zap, CalendarCheck, Menu, X, User, Phone, Cpu, ChevronRight, ShieldCheck, PhoneCall, Globe } from 'lucide-react';
+import { Users, Briefcase, DollarSign, LogOut, Bot, BarChart3, Settings, FileText, Mail as MailIcon, Zap, CalendarCheck, Menu, X, User, Phone, Cpu, ChevronRight, ShieldCheck, PhoneCall, Globe, BookOpen } from 'lucide-react';
 
 interface AdminLayoutProps {
   children: React.ReactNode;
@@ -36,6 +36,7 @@ const AdminLayout: React.FC<AdminLayoutProps> = ({ children }) => {
         { name: 'Call Scheduling', href: '/admin/call-scheduling', icon: PhoneCall },
         { name: 'Agent Settings', href: '/admin/agent-settings', icon: Cpu },
         { name: 'Website Builder', href: '/admin/website-builder', icon: Globe },
+        { name: 'Blog Manager', href: '/admin/blog-manager', icon: BookOpen },
         { name: 'A2P Automation', href: '/admin/a2p-automation', icon: ShieldCheck },
         { name: 'AI Docs', href: '/admin/ai-docs', icon: FileText },
         { name: 'AI Email', href: '/admin/ai-email', icon: MailIcon },
