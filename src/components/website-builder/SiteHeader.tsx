@@ -7,9 +7,10 @@ interface SiteHeaderProps {
   pages: WebsitePage[];
   siteSlug: string;
   currentPageId: string;
+  customDomain?: boolean;
 }
 
-const SiteHeader: React.FC<SiteHeaderProps> = ({ global: g, pages, siteSlug, currentPageId }) => {
+const SiteHeader: React.FC<SiteHeaderProps> = ({ global: g, pages, siteSlug, currentPageId, customDomain }) => {
   const [mobileOpen, setMobileOpen] = useState(false);
   const [scrolled, setScrolled] = useState(false);
 
@@ -23,6 +24,7 @@ const SiteHeader: React.FC<SiteHeaderProps> = ({ global: g, pages, siteSlug, cur
   useEffect(() => { setMobileOpen(false); }, [currentPageId]);
 
   const getHref = (page: WebsitePage) => {
+    if (customDomain) return page.slug === '' ? '/' : `/${page.slug}`;
     if (page.slug === '') return `/site/${siteSlug}`;
     return `/site/${siteSlug}/${page.slug}`;
   };
@@ -49,7 +51,7 @@ const SiteHeader: React.FC<SiteHeaderProps> = ({ global: g, pages, siteSlug, cur
           <div className="flex items-center justify-between h-16">
             {/* Logo / Business Name */}
             <a
-              href={`/site/${siteSlug}`}
+              href={customDomain ? '/' : `/site/${siteSlug}`}
               className="flex items-center gap-3 min-w-0 flex-shrink-0"
             >
               {g.logo_url ? (

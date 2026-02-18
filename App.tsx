@@ -59,6 +59,18 @@ import ClientWebsite from './src/pages/ClientWebsite';
 import PublicSite from './src/pages/PublicSite';
 import BlogListingPage from './src/pages/BlogListingPage';
 import BlogPostPage from './src/pages/BlogPostPage';
+import CustomDomainSite from './src/pages/CustomDomainSite';
+
+// Returns true when the app is loaded from a client's custom domain
+// (not the main CWP domain, localhost, or a Vercel preview URL)
+function isCustomDomain(): boolean {
+  const h = window.location.hostname;
+  if (h === 'localhost' || h === '127.0.0.1') return false;
+  if (h.endsWith('.vercel.app')) return false;
+  if (h === 'customwebsitesplus.com' || h.endsWith('.customwebsitesplus.com')) return false;
+  if (h === 'jetautomations.ai' || h.endsWith('.jetautomations.ai')) return false;
+  return true;
+}
 
 const AppContent: React.FC = () => {
   const location = useLocation();
@@ -144,14 +156,32 @@ const AppContent: React.FC = () => {
   );
 };
 
-const App: React.FC = () => (
-  <ErrorBoundary>
-    <BrowserRouter>
-      <SessionProvider>
-        <AppContent />
-      </SessionProvider>
-    </BrowserRouter>
-  </ErrorBoundary>
-);
+const App: React.FC = () => {
+  // When accessed from a client's custom domain, render only their site
+  if (isCustomDomain()) {
+    return (
+      <ErrorBoundary>
+        <BrowserRouter>
+          <Routes>
+            <Route path="/blog/:post" element={<CustomDomainSite />} />
+            <Route path="/blog" element={<CustomDomainSite />} />
+            <Route path="/:page" element={<CustomDomainSite />} />
+            <Route path="/" element={<CustomDomainSite />} />
+          </Routes>
+        </BrowserRouter>
+      </ErrorBoundary>
+    );
+  }
+
+  return (
+    <ErrorBoundary>
+      <BrowserRouter>
+        <SessionProvider>
+          <AppContent />
+        </SessionProvider>
+      </BrowserRouter>
+    </ErrorBoundary>
+  );
+};
 
 export default App;

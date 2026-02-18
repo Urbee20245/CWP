@@ -20,22 +20,24 @@ interface BlogPreviewSectionProps {
   global: WebsiteGlobal;
   variant: string;
   siteSlug?: string;
+  customDomain?: boolean;
 }
 
-const BlogPreviewSection: React.FC<BlogPreviewSectionProps> = ({ content, global: g, siteSlug }) => {
+const BlogPreviewSection: React.FC<BlogPreviewSectionProps> = ({ content, global: g, siteSlug, customDomain }) => {
   const [posts, setPosts] = useState<BlogPost[]>([]);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
     const fetchPosts = async () => {
-      if (!siteSlug) { setLoading(false); return; }
+      if (!siteSlug && !customDomain) { setLoading(false); return; }
 
-      // Get client_id from slug
-      const { data: brief } = await supabase
-        .from('website_briefs')
-        .select('client_id')
-        .eq('client_slug', siteSlug)
-        .maybeSingle();
+      // Get client_id — by custom domain hostname or by slug
+      const briefQuery = supabase.from('website_briefs').select('client_id');
+      const { data: brief } = await (
+        customDomain
+          ? briefQuery.eq('custom_domain', window.location.hostname)
+          : briefQuery.eq('client_slug', siteSlug)
+      ).maybeSingle();
 
       if (!brief?.client_id) { setLoading(false); return; }
 
@@ -90,7 +92,7 @@ const BlogPreviewSection: React.FC<BlogPreviewSectionProps> = ({ content, global
             {posts.map(post => (
               <a
                 key={post.id}
-                href={siteSlug ? `/site/${siteSlug}/blog/${post.slug}` : '#'}
+                href={customDomain ? `/blog/${post.slug}` : siteSlug ? `/site/${siteSlug}/blog/${post.slug}` : '#'}
                 className="group bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden hover:shadow-lg transition-shadow"
               >
                 {/* Category badge */}

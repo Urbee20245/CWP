@@ -5,7 +5,7 @@ import AdminLayout from '../components/AdminLayout';
 import {
   Globe, Loader2, AlertTriangle, CheckCircle, Eye, Copy,
   RefreshCw, ToggleLeft, ToggleRight, Wand2, Upload, ImageIcon,
-  ChevronDown, ChevronRight, FileText, Check,
+  ChevronDown, ChevronRight, FileText, Check, Link, Save, Info,
   Calendar, Phone, FileText as FormIcon, Shield, Sparkles, MessageSquare,
 } from 'lucide-react';
 import { supabase } from '../integrations/supabase/client';
@@ -49,6 +49,13 @@ const AdminWebsiteBuilder: React.FC = () => {
   const [error, setError] = useState<string | null>(null);
   const [copied, setCopied] = useState(false);
   const [expandedPages, setExpandedPages] = useState<Record<string, boolean>>({});
+
+  // Custom domain state
+  const [customDomainInput, setCustomDomainInput] = useState('');
+  const [savingDomain, setSavingDomain] = useState(false);
+  const [domainSaved, setDomainSaved] = useState(false);
+  const [domainError, setDomainError] = useState<string | null>(null);
+  const [showDnsInstructions, setShowDnsInstructions] = useState(false);
 
   // Image upload state
   const [uploadingLogo, setUploadingLogo] = useState(false);
@@ -121,9 +128,12 @@ const AdminWebsiteBuilder: React.FC = () => {
       } else {
         setSelectedPremiumFeatures(new Set());
       }
+      // Restore custom domain
+      setCustomDomainInput(data.custom_domain || '');
     } else {
       setBrief(null);
       setSelectedPremiumFeatures(new Set());
+      setCustomDomainInput('');
       const client = clients.find(c => c.id === clientId);
       setForm(f => ({ ...f, business_name: client?.business_name || '' }));
     }
@@ -271,6 +281,23 @@ const AdminWebsiteBuilder: React.FC = () => {
       setError(err.message);
     } finally {
       setIsTogglingPublish(false);
+    }
+  };
+
+  const handleSaveDomain = async () => {
+    if (!selectedClientId) return;
+    setSavingDomain(true);
+    setDomainError(null);
+    setDomainSaved(false);
+    try {
+      await AdminService.saveCustomDomain(selectedClientId, customDomainInput || null);
+      setBrief(prev => prev ? { ...prev, custom_domain: customDomainInput || null } : null);
+      setDomainSaved(true);
+      setTimeout(() => setDomainSaved(false), 3000);
+    } catch (err: any) {
+      setDomainError(err.message || 'Failed to save domain.');
+    } finally {
+      setSavingDomain(false);
     }
   };
 
@@ -747,6 +774,87 @@ const AdminWebsiteBuilder: React.FC = () => {
                     <span><span className="font-medium text-slate-700">Address:</span> {brief!.website_json!.global.address || '—'}</span>
                     {logoUrl && <span className="col-span-2 flex items-center gap-2"><span className="font-medium text-slate-700">Logo:</span> <img src={logoUrl} alt="logo" className="h-6" /></span>}
                   </div>
+                </div>
+
+                {/* Custom Domain card */}
+                <div className="bg-white rounded-2xl border border-slate-200 shadow-sm p-5">
+                  <div className="flex items-center gap-2 mb-1">
+                    <Link className="w-4 h-4 text-indigo-500" />
+                    <h3 className="font-semibold text-slate-900 text-sm uppercase tracking-wide">Custom Domain</h3>
+                  </div>
+                  <p className="text-xs text-slate-400 mb-4">
+                    Connect a domain the client purchased (e.g. Namecheap, Squarespace). Once set, visitors to that domain will see this site.
+                  </p>
+
+                  <div className="flex gap-2 mb-3">
+                    <input
+                      type="text"
+                      className="flex-1 border border-slate-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500 font-mono"
+                      placeholder="www.clientsite.com"
+                      value={customDomainInput}
+                      onChange={e => setCustomDomainInput(e.target.value.trim().toLowerCase())}
+                    />
+                    <button
+                      onClick={handleSaveDomain}
+                      disabled={savingDomain}
+                      className="flex items-center gap-1.5 px-4 py-2 bg-indigo-600 text-white text-sm font-medium rounded-lg hover:bg-indigo-700 disabled:opacity-50 transition-colors"
+                    >
+                      {savingDomain ? (
+                        <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                      ) : domainSaved ? (
+                        <><CheckCircle className="w-3.5 h-3.5" /> Saved</>
+                      ) : (
+                        <><Save className="w-3.5 h-3.5" /> Save</>
+                      )}
+                    </button>
+                  </div>
+
+                  {domainError && (
+                    <p className="text-xs text-red-600 mb-3">{domainError}</p>
+                  )}
+
+                  {brief?.custom_domain && (
+                    <p className="text-xs text-emerald-600 mb-3 flex items-center gap-1">
+                      <CheckCircle className="w-3.5 h-3.5" />
+                      Connected: <span className="font-mono">{brief.custom_domain}</span>
+                    </p>
+                  )}
+
+                  {/* DNS Instructions */}
+                  <button
+                    onClick={() => setShowDnsInstructions(o => !o)}
+                    className="flex items-center gap-1.5 text-xs text-indigo-600 hover:underline"
+                  >
+                    <Info className="w-3.5 h-3.5" />
+                    {showDnsInstructions ? 'Hide' : 'Show'} DNS setup instructions
+                  </button>
+
+                  {showDnsInstructions && (
+                    <div className="mt-3 p-4 bg-slate-50 rounded-xl border border-slate-200 text-xs text-slate-600 space-y-3">
+                      <p className="font-semibold text-slate-700">Client DNS setup (Namecheap, Squarespace, etc.)</p>
+                      <ol className="space-y-2 list-decimal list-inside">
+                        <li>Log in to their domain registrar and go to <strong>DNS settings</strong>.</li>
+                        <li>
+                          Add a <strong>CNAME record</strong>:
+                          <div className="mt-1 font-mono bg-white border border-slate-200 rounded p-2 text-xs">
+                            <div>Host: <strong>www</strong></div>
+                            <div>Value: <strong>cname.vercel-dns.com</strong></div>
+                          </div>
+                        </li>
+                        <li>
+                          For the root domain (<span className="font-mono">@</span>), add an <strong>A record</strong>:
+                          <div className="mt-1 font-mono bg-white border border-slate-200 rounded p-2 text-xs">
+                            <div>Host: <strong>@</strong></div>
+                            <div>Value: <strong>76.76.21.21</strong></div>
+                          </div>
+                        </li>
+                        <li>
+                          In your <strong>Vercel project settings → Domains</strong>, add the client's domain. Vercel will auto-provision SSL.
+                        </li>
+                        <li>DNS changes take up to <strong>24–48 hours</strong> to propagate.</li>
+                      </ol>
+                    </div>
+                  )}
                 </div>
 
                 {/* Pages accordion */}
