@@ -91,15 +91,24 @@ const EditClientDialog: React.FC<EditClientDialogProps> = ({ isOpen, onClose, on
       if (clientError) throw clientError;
 
       // 2. Update Profile Record
-      const { error: profileError } = await supabase
+      const { data: updatedProfile, error: profileError } = await supabase
         .from('profiles')
         .update({
           full_name: fullName,
           role: profileRole,
         })
-        .eq('id', profileId);
+        .eq('id', profileId)
+        .select('id');
 
       if (profileError) throw profileError;
+
+      // If RLS silently blocks the update it returns no error but 0 rows.
+      if (!updatedProfile || updatedProfile.length === 0) {
+        throw new Error(
+          'Profile name could not be saved — a database permission policy is blocking it. ' +
+          'Apply migration 20260218_admin_can_update_profiles.sql in your Supabase dashboard.'
+        );
+      }
 
       alert(`Client ${businessName} updated successfully!`);
       onClientUpdated();
