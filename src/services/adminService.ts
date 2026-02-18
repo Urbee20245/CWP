@@ -382,6 +382,7 @@ export const AdminService = {
     primary_color: string;
     art_direction?: string;
     pages_to_generate?: string[];
+    premium_features?: string[];
   }) => invokeEdgeFunction('generate-website', briefData),
 
   updateWebsitePublish: async (clientId: string, isPublished: boolean) =>
