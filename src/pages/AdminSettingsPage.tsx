@@ -2,7 +2,7 @@
 
 import React, { useState, useEffect, useCallback } from 'react';
 import AdminLayout from '../components/AdminLayout';
-import { Settings, MessageSquare, Shield, ExternalLink, CheckCircle2, AlertTriangle, Mail, DollarSign, Zap, Users, Bot, Calendar, Loader2 } from 'lucide-react';
+import { Settings, MessageSquare, Shield, ExternalLink, CheckCircle2, AlertTriangle, Mail, DollarSign, Zap, Users, Bot, Calendar, Loader2, ShieldCheck, Save, CheckCircle } from 'lucide-react';
 import { Link } from 'react-router-dom';
 import { useAuth } from '../hooks/useAuth';
 import { supabase } from '../integrations/supabase/client';
@@ -25,6 +25,12 @@ const AdminSettingsPage: React.FC = () => {
   const [isLoadingClient, setIsLoadingClient] = useState(true);
   const [calStatus, setCalStatus] = useState<CalStatus | null>(null);
   const [isLoadingCalStatus, setIsLoadingCalStatus] = useState(true);
+
+  // reCAPTCHA settings
+  const [recaptchaSiteKey, setRecaptchaSiteKey] = useState('');
+  const [recaptchaSaved, setRecaptchaSaved] = useState(false);
+  const [recaptchaSaving, setRecaptchaSaving] = useState(false);
+  const [recaptchaError, setRecaptchaError] = useState<string | null>(null);
 
   const fetchCalStatus = useCallback(async (clientId: string) => {
     setIsLoadingCalStatus(true);
@@ -85,7 +91,36 @@ const AdminSettingsPage: React.FC = () => {
   useEffect(() => {
     if (profile) fetchAdminClient();
   }, [profile, fetchAdminClient]);
-  
+
+  useEffect(() => {
+    supabase
+      .from('platform_settings')
+      .select('value')
+      .eq('key', 'recaptcha_site_key')
+      .maybeSingle()
+      .then(({ data }) => {
+        if (data?.value) setRecaptchaSiteKey(data.value);
+      });
+  }, []);
+
+  const handleSaveRecaptcha = async () => {
+    setRecaptchaSaving(true);
+    setRecaptchaError(null);
+    setRecaptchaSaved(false);
+    try {
+      const { error } = await supabase
+        .from('platform_settings')
+        .upsert({ key: 'recaptcha_site_key', value: recaptchaSiteKey }, { onConflict: 'key' });
+      if (error) throw error;
+      setRecaptchaSaved(true);
+      setTimeout(() => setRecaptchaSaved(false), 3000);
+    } catch (err: any) {
+      setRecaptchaError(err.message || 'Failed to save');
+    } finally {
+      setRecaptchaSaving(false);
+    }
+  };
+
   return (
     <AdminLayout>
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-12">
@@ -360,6 +395,78 @@ const AdminSettingsPage: React.FC = () => {
             <div className="p-3 bg-red-50 border border-red-200 rounded-lg">
               <code className="font-mono text-xs text-red-700">SMTP_ENCRYPTION_KEY</code>
               <p className="text-xs text-red-600 mt-2">Used to encrypt/decrypt sensitive client data. Must be 32+ characters.</p>
+            </div>
+          </div>
+
+          {/* Google reCAPTCHA */}
+          <div className="lg:col-span-2 bg-white p-6 rounded-xl shadow-lg border border-slate-100">
+            <h2 className="text-xl font-bold text-slate-900 mb-4 flex items-center gap-2 border-b border-slate-100 pb-4">
+              <ShieldCheck className="w-5 h-5 text-blue-600" /> Google reCAPTCHA
+            </h2>
+            <p className="text-slate-600 mb-6 text-sm">
+              One site key protects all client contact forms across every site you host. Set it once here and it applies automatically.
+            </p>
+
+            <div className="space-y-5">
+              {/* Site Key input */}
+              <div>
+                <label className="block text-sm font-semibold text-slate-700 mb-1">
+                  reCAPTCHA v3 Site Key <span className="text-slate-400 font-normal">(public — saved to database)</span>
+                </label>
+                <div className="flex gap-3">
+                  <input
+                    type="text"
+                    value={recaptchaSiteKey}
+                    onChange={e => setRecaptchaSiteKey(e.target.value)}
+                    placeholder="6Le..."
+                    className="flex-1 px-3 py-2 border border-slate-300 rounded-lg text-sm font-mono focus:outline-none focus:ring-2 focus:ring-blue-500"
+                  />
+                  <button
+                    onClick={handleSaveRecaptcha}
+                    disabled={recaptchaSaving}
+                    className="inline-flex items-center gap-2 px-4 py-2 bg-blue-600 text-white rounded-lg text-sm font-semibold hover:bg-blue-700 disabled:opacity-60 transition-colors"
+                  >
+                    {recaptchaSaving ? (
+                      <Loader2 className="w-4 h-4 animate-spin" />
+                    ) : recaptchaSaved ? (
+                      <CheckCircle className="w-4 h-4" />
+                    ) : (
+                      <Save className="w-4 h-4" />
+                    )}
+                    {recaptchaSaved ? 'Saved!' : 'Save'}
+                  </button>
+                </div>
+                {recaptchaError && (
+                  <p className="mt-2 text-sm text-red-600">{recaptchaError}</p>
+                )}
+              </div>
+
+              {/* Secret Key instructions */}
+              <div className="p-4 bg-blue-50 border border-blue-200 rounded-xl">
+                <h3 className="font-bold text-blue-800 mb-2 flex items-center gap-2">
+                  <AlertTriangle className="w-4 h-4" /> Secret Key (server-side)
+                </h3>
+                <p className="text-sm text-blue-700 mb-3">
+                  Add your reCAPTCHA v3 secret key as a Supabase Edge Function secret. It is used by the <code className="font-mono text-xs bg-blue-200 px-1 rounded">public-contact-form</code> function to verify form submissions server-side.
+                </p>
+                <div className="flex items-center gap-2 mb-3">
+                  <code className="font-mono text-xs bg-blue-200 px-2 py-1 rounded">RECAPTCHA_SECRET_KEY</code>
+                  <span className="text-xs text-blue-600">— your reCAPTCHA v3 secret key</span>
+                </div>
+                <a
+                  href={SUPABASE_SECRETS_URL}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="inline-flex items-center gap-2 px-4 py-2 bg-blue-600 text-white rounded-lg text-sm font-semibold hover:bg-blue-700 transition-colors"
+                >
+                  Go to Supabase Secrets
+                  <ExternalLink className="w-4 h-4" />
+                </a>
+              </div>
+
+              <p className="text-xs text-slate-400">
+                Get your keys at <a href="https://www.google.com/recaptcha/admin" target="_blank" rel="noopener noreferrer" className="text-blue-500 underline">google.com/recaptcha/admin</a>. Select <strong>reCAPTCHA v3</strong> and add all your client domains.
+              </p>
             </div>
           </div>
         </div>

@@ -60,6 +60,7 @@ import PublicSite from './src/pages/PublicSite';
 import BlogListingPage from './src/pages/BlogListingPage';
 import BlogPostPage from './src/pages/BlogPostPage';
 import CustomDomainSite from './src/pages/CustomDomainSite';
+import CustomDomainAdmin from './src/pages/CustomDomainAdmin';
 
 // Returns true when the app is loaded from a client's custom domain
 // (not the main CWP domain, localhost, or a Vercel preview URL)
@@ -163,6 +164,8 @@ const App: React.FC = () => {
       <ErrorBoundary>
         <BrowserRouter>
           <Routes>
+            <Route path="/back-office/*" element={<CustomDomainAdmin />} />
+            <Route path="/back-office" element={<CustomDomainAdmin />} />
             <Route path="/blog/:post" element={<CustomDomainSite />} />
             <Route path="/blog" element={<CustomDomainSite />} />
             <Route path="/:page" element={<CustomDomainSite />} />
