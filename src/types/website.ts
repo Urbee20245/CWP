@@ -54,6 +54,7 @@ export type SectionType =
   | 'about'
   | 'social_proof'
   | 'contact_cta'
+  | 'contact_form'
   | 'faq'
   | 'stats'
   | 'gallery'
@@ -134,7 +135,9 @@ export type PremiumFeatureId =
   | 'ai_assistant'
   // Widgets & chatbots
   | 'chat_widget'
-  | 'ai_chatbot';
+  | 'ai_chatbot'
+  // Client Portal
+  | 'client_back_office';
 
 export interface PremiumFeatureOption {
   id: PremiumFeatureId;
@@ -150,7 +153,8 @@ export type PremiumFeatureGroup =
   | 'Forms'
   | 'Legal Pages'
   | 'AI Functionality'
-  | 'Widgets & Chatbots';
+  | 'Widgets & Chatbots'
+  | 'Client Portal';
 
 export const PREMIUM_FEATURE_OPTIONS: PremiumFeatureOption[] = [
   // Calendar
@@ -239,6 +243,15 @@ export const PREMIUM_FEATURE_OPTIONS: PremiumFeatureOption[] = [
     group: 'Widgets & Chatbots',
     badge: 'Popular',
   },
+
+  // Client Portal
+  {
+    id: 'client_back_office',
+    name: 'Client Back Office',
+    description: 'Private /back-office login on the client\'s own domain — edit site content and view form submissions without touching the main CWP portal',
+    group: 'Client Portal',
+    badge: 'Recommended',
+  },
 ];
 
 export const PREMIUM_FEATURE_GROUPS: PremiumFeatureGroup[] = [
@@ -248,4 +261,5 @@ export const PREMIUM_FEATURE_GROUPS: PremiumFeatureGroup[] = [
   'Legal Pages',
   'AI Functionality',
   'Widgets & Chatbots',
+  'Client Portal',
 ];

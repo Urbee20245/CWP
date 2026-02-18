@@ -12,6 +12,7 @@ import StatsSection from './sections/StatsSection';
 import GallerySection from './sections/GallerySection';
 import PricingSection from './sections/PricingSection';
 import BlogPreviewSection from './sections/BlogPreviewSection';
+import ContactFormSection from './sections/ContactFormSection';
 
 interface SiteRendererProps {
   websiteJson: WebsiteJson;
@@ -28,6 +29,7 @@ const SECTION_MAP: Record<SectionType, SectionComponent> = {
   about: AboutSection as SectionComponent,
   social_proof: SocialProofSection as SectionComponent,
   contact_cta: ContactCtaSection as SectionComponent,
+  contact_form: ContactFormSection as SectionComponent,
   faq: FaqSection as SectionComponent,
   stats: StatsSection as SectionComponent,
   gallery: GallerySection as SectionComponent,

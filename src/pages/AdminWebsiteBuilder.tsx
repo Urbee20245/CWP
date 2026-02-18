@@ -6,7 +6,7 @@ import {
   Globe, Loader2, AlertTriangle, CheckCircle, Eye, Copy, EyeOff, ExternalLink,
   RefreshCw, ToggleLeft, ToggleRight, Wand2, Upload, ImageIcon,
   ChevronDown, ChevronRight, FileText, Check, Link, Save, Info, Key,
-  Calendar, Phone, FileText as FormIcon, Shield, Sparkles, MessageSquare,
+  Calendar, Phone, FileText as FormIcon, Shield, Sparkles, MessageSquare, LayoutDashboard,
 } from 'lucide-react';
 import { supabase } from '../integrations/supabase/client';
 import { AdminService } from '../services/adminService';
@@ -199,6 +199,7 @@ const AdminWebsiteBuilder: React.FC = () => {
     'Legal Pages':            <Shield className="w-4 h-4" />,
     'AI Functionality':       <Sparkles className="w-4 h-4" />,
     'Widgets & Chatbots':     <MessageSquare className="w-4 h-4" />,
+    'Client Portal':          <LayoutDashboard className="w-4 h-4" />,
   };
 
   // Image upload handler
