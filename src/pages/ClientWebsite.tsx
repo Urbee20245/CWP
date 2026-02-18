@@ -8,7 +8,7 @@ import { useAuth } from '../hooks/useAuth';
 import { WebsiteBrief, WebsiteEdit } from '../types/website';
 import {
   Globe, Loader2, Eye, Save, Lock, CheckCircle, AlertTriangle,
-  ExternalLink, ChevronDown, ChevronRight,
+  ExternalLink, ChevronDown, ChevronRight, Key, EyeOff,
 } from 'lucide-react';
 
 function getByPath(obj: any, path: string): any {
@@ -39,6 +39,23 @@ const SECTION_LABELS: Record<string, string> = {
   blog_preview: 'Blog',
 };
 
+interface DomainCreds {
+  id?: string;
+  registrar_name: string;
+  login_url: string;
+  username: string;
+  password: string;
+  notes: string;
+}
+
+const EMPTY_CREDS: DomainCreds = {
+  registrar_name: '',
+  login_url: '',
+  username: '',
+  password: '',
+  notes: '',
+};
+
 const ClientWebsite: React.FC = () => {
   const { profile } = useAuth();
   const [clientId, setClientId] = useState<string | null>(null);
@@ -49,6 +66,12 @@ const ClientWebsite: React.FC = () => {
   const [saveError, setSaveError] = useState<string | null>(null);
   const [expandedPages, setExpandedPages] = useState<Record<string, boolean>>({});
   const [edits, setEdits] = useState<Record<string, string>>({});
+
+  // Domain credentials
+  const [creds, setCreds] = useState<DomainCreds>(EMPTY_CREDS);
+  const [savingCreds, setSavingCreds] = useState(false);
+  const [credsSaved, setCredsSaved] = useState(false);
+  const [credsError, setCredsError] = useState<string | null>(null);
 
   useEffect(() => {
     if (!profile?.id) return;
@@ -67,6 +90,24 @@ const ClientWebsite: React.FC = () => {
         .select('*')
         .eq('client_id', clientData.id)
         .maybeSingle();
+
+      // Load domain credentials
+      const { data: credsData } = await supabase
+        .from('client_domain_credentials')
+        .select('*')
+        .eq('client_id', clientData.id)
+        .maybeSingle();
+
+      if (credsData) {
+        setCreds({
+          id: credsData.id,
+          registrar_name: credsData.registrar_name,
+          login_url: credsData.login_url,
+          username: credsData.username,
+          password: credsData.password,
+          notes: credsData.notes,
+        });
+      }
 
       if (briefData) {
         setBrief(briefData as WebsiteBrief);
@@ -113,6 +154,33 @@ const ClientWebsite: React.FC = () => {
       setSaveError(err.message || 'Failed to save. Please try again.');
     } finally {
       setSaving(false);
+    }
+  };
+
+  const handleSaveCreds = async () => {
+    if (!clientId) return;
+    setSavingCreds(true);
+    setCredsError(null);
+    setCredsSaved(false);
+    try {
+      const payload = {
+        client_id: clientId,
+        registrar_name: creds.registrar_name,
+        login_url: creds.login_url,
+        username: creds.username,
+        password: creds.password,
+        notes: creds.notes,
+      };
+      const { error } = await supabase
+        .from('client_domain_credentials')
+        .upsert(payload, { onConflict: 'client_id' });
+      if (error) throw error;
+      setCredsSaved(true);
+      setTimeout(() => setCredsSaved(false), 3000);
+    } catch (err: any) {
+      setCredsError(err.message || 'Failed to save.');
+    } finally {
+      setSavingCreds(false);
     }
   };
 
@@ -276,6 +344,90 @@ const ClientWebsite: React.FC = () => {
             </div>
           </>
         ) : null}
+
+        {/* Domain registrar credentials — always visible once client_id is known */}
+        {clientId && (
+          <div className="mt-8 bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden">
+            <div className="px-6 py-4 border-b border-slate-100 flex items-center gap-2">
+              <Key className="w-5 h-5 text-indigo-500" />
+              <h2 className="font-semibold text-slate-900">Domain Registrar Access</h2>
+            </div>
+            <div className="p-6 space-y-4">
+              <p className="text-sm text-slate-500">
+                If your team is handling DNS setup for you, enter your domain registrar login below.
+                Only your account manager can view these details.
+              </p>
+
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                <div>
+                  <label className="block text-sm font-medium text-slate-700 mb-1">Registrar</label>
+                  <input
+                    type="text"
+                    className="w-full border border-slate-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                    placeholder="e.g. Namecheap, GoDaddy, Squarespace"
+                    value={creds.registrar_name}
+                    onChange={e => setCreds(c => ({ ...c, registrar_name: e.target.value }))}
+                  />
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-slate-700 mb-1">Login URL</label>
+                  <input
+                    type="url"
+                    className="w-full border border-slate-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                    placeholder="https://www.namecheap.com/myaccount/login/"
+                    value={creds.login_url}
+                    onChange={e => setCreds(c => ({ ...c, login_url: e.target.value }))}
+                  />
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-slate-700 mb-1">Username / Email</label>
+                  <input
+                    type="text"
+                    className="w-full border border-slate-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                    placeholder="your-login@email.com"
+                    value={creds.username}
+                    onChange={e => setCreds(c => ({ ...c, username: e.target.value }))}
+                  />
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-slate-700 mb-1">Password</label>
+                  <input
+                    type="password"
+                    className="w-full border border-slate-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                    placeholder="••••••••"
+                    value={creds.password}
+                    onChange={e => setCreds(c => ({ ...c, password: e.target.value }))}
+                  />
+                </div>
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium text-slate-700 mb-1">
+                  Notes <span className="text-slate-400 font-normal">(optional)</span>
+                </label>
+                <textarea
+                  className="w-full border border-slate-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500 resize-none"
+                  rows={2}
+                  placeholder="e.g. 2FA code is texted to 555-1234, domain is mybusiness.com"
+                  value={creds.notes}
+                  onChange={e => setCreds(c => ({ ...c, notes: e.target.value }))}
+                />
+              </div>
+
+              {credsError && <p className="text-sm text-red-500">{credsError}</p>}
+
+              <button
+                onClick={handleSaveCreds}
+                disabled={savingCreds}
+                className="flex items-center gap-2 px-5 py-2.5 bg-indigo-600 text-white text-sm font-semibold rounded-xl hover:bg-indigo-700 disabled:opacity-60 transition-colors"
+              >
+                {savingCreds ? <><Loader2 className="w-4 h-4 animate-spin" /> Saving...</>
+                  : credsSaved ? <><CheckCircle className="w-4 h-4" /> Saved!</>
+                  : <><Save className="w-4 h-4" /> Save Credentials</>}
+              </button>
+            </div>
+          </div>
+        )}
       </div>
     </ClientLayout>
   );
