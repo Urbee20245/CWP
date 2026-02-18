@@ -1,11 +1,201 @@
+# ─────────────────────────────────────────────────────────────────────────────
+# Supabase Function Configuration
+# verify_jwt = false is required for:
+#   - All admin-called functions (they validate the JWT internally via auth.getUser)
+#   - All webhook receivers (Stripe, Retell) — no user JWT exists
+#   - All cron/background jobs — no user JWT exists
+#   - All public-facing forms — no user JWT exists
+# The CLI ignores `export const config = { auth: false }` in TypeScript files.
+# This config.toml is the ONLY way to set verify_jwt via the CLI.
+# ─────────────────────────────────────────────────────────────────────────────
+
+# ── Admin-facing functions ────────────────────────────────────────────────────
+
+[functions.apply-invoice-discount]
+verify_jwt = false
+
+[functions.create-billing-product]
+verify_jwt = false
+
+[functions.create-client-user]
+verify_jwt = false
+
+[functions.delete-client-user]
+verify_jwt = false
+
+[functions.disable-voice]
+verify_jwt = false
+
+[functions.force-calendar-reauth]
+verify_jwt = false
+
+[functions.generate-admin-content]
+verify_jwt = false
+
+[functions.generate-blog-post]
+verify_jwt = false
+
+[functions.generate-document]
+verify_jwt = false
+
+[functions.generate-email-content]
+verify_jwt = false
+
+[functions.generate-system-prompt-from-website]
+verify_jwt = false
+
+[functions.generate-website]
+verify_jwt = false
+
+[functions.get-agent-settings]
+verify_jwt = false
+
+[functions.get-calendar-diagnostics]
+verify_jwt = false
+
+[functions.get-retell-agents]
+verify_jwt = false
+
+[functions.get-retell-workspace-usage]
+verify_jwt = false
+
+[functions.get-twilio-config]
+verify_jwt = false
+
+[functions.get-twilio-phone-numbers]
+verify_jwt = false
+
+[functions.get-voice-clients]
+verify_jwt = false
+
+[functions.google-oauth-init]
+verify_jwt = false
+
+[functions.get-platform-phone-numbers]
+verify_jwt = false
+
+[functions.process-blog-schedules]
+verify_jwt = false
+
+[functions.process-scheduled-calls]
+verify_jwt = false
+
+[functions.provision-voice-number]
+verify_jwt = false
+
+[functions.retell-get-agent]
+verify_jwt = false
+
+[functions.save-agent-settings]
+verify_jwt = false
+
+[functions.save-retell-agent-id]
+verify_jwt = false
+
+[functions.save-retell-workspace-creds]
+verify_jwt = false
+
+[functions.save-twilio-credentials]
+verify_jwt = false
+
+[functions.save-website-edits]
+verify_jwt = false
+
+[functions.send-email]
+verify_jwt = false
+
+[functions.send-sms]
+verify_jwt = false
+
+[functions.set-voice-budget]
+verify_jwt = false
+
+[functions.stripe-api]
+verify_jwt = false
+
+[functions.submit-a2p-registration]
+verify_jwt = false
+
+[functions.test-twilio-connection]
+verify_jwt = false
+
+[functions.trigger-retell-call]
+verify_jwt = false
+
+[functions.twilio-connect-complete]
+verify_jwt = false
+
+[functions.update-a2p-status]
+verify_jwt = false
+
+[functions.update-client-profile]
+verify_jwt = false
+
+[functions.update-website-publish]
+verify_jwt = false
+
+# ── Webhooks (external callers — Stripe, Retell — send no user JWT) ───────────
+
+[functions.stripe-webhook]
+verify_jwt = false
+
+[functions.retell-webhook]
+verify_jwt = false
+
+# ── Cron / background jobs ────────────────────────────────────────────────────
+
+[functions.check-invoices-for-reminders]
+verify_jwt = false
 
 [functions.refresh-voice-metrics]
-enabled = true
-verify_jwt = true
+verify_jwt = false
 import_map = "./functions/refresh-voice-metrics/deno.json"
-# Uncomment to specify a custom file path to the entrypoint.
-# Supported file extensions are: .ts, .js, .mjs, .jsx, .tsx
 entrypoint = "./functions/refresh-voice-metrics/index.ts"
-# Specifies static files to be bundled with the function. Supports glob patterns.
-# For example, if you want to serve static HTML pages in your function:
-# static_files = [ "./functions/refresh-voice-metrics/*.html" ]
+
+# ── Public-facing (no auth required) ─────────────────────────────────────────
+
+[functions.append-to-google-sheet]
+verify_jwt = false
+
+[functions.book-meeting]
+verify_jwt = false
+
+[functions.cal-oauth-callback]
+verify_jwt = false
+
+[functions.cal-oauth-init]
+verify_jwt = false
+
+[functions.cancel-subscription]
+verify_jwt = false
+
+[functions.check-availability]
+verify_jwt = false
+
+[functions.get-consultation-slots]
+verify_jwt = false
+
+[functions.get-leads-status]
+verify_jwt = false
+
+[functions.ingest-lead]
+verify_jwt = false
+
+[functions.public-contact-form]
+verify_jwt = false
+
+[functions.rotate-lead-ingest-key]
+verify_jwt = false
+
+[functions.save-cal-api-key]
+verify_jwt = false
+
+[functions.send-magic-link]
+verify_jwt = false
+import_map = "./functions/send-magic-link/deno.json"
+
+[functions.send-password-reset]
+verify_jwt = false
+
+[functions.submit-contact-form]
+verify_jwt = false
