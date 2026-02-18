@@ -412,5 +412,47 @@ export const AdminService = {
     topic?: string;
     word_count?: number;
     author_name?: string;
+    auto_publish?: boolean;
+    generate_image?: boolean;
   }) => invokeEdgeFunction('generate-blog-post', params),
+
+  // Blog Schedules -------------------------------------------------------
+  getBlogSchedule: async (clientId: string) => {
+    const { data, error } = await supabase
+      .from('blog_schedules')
+      .select('*')
+      .eq('client_id', clientId)
+      .maybeSingle();
+    if (error) throw error;
+    return data;
+  },
+
+  saveBlogSchedule: async (clientId: string, schedule: {
+    is_active: boolean;
+    days_of_week: string[];
+    word_count: number;
+    auto_publish: boolean;
+    generate_images: boolean;
+    total_posts_target: number | null;
+    author_name: string;
+  }) => {
+    const { data, error } = await supabase
+      .from('blog_schedules')
+      .upsert({ client_id: clientId, ...schedule }, { onConflict: 'client_id' })
+      .select()
+      .single();
+    if (error) throw error;
+    return data;
+  },
+
+  deleteBlogSchedule: async (clientId: string) => {
+    const { error } = await supabase
+      .from('blog_schedules')
+      .delete()
+      .eq('client_id', clientId);
+    if (error) throw error;
+    return { success: true };
+  },
+
+  processBlogSchedules: async () => invokeEdgeFunction('process-blog-schedules', {}),
 };
