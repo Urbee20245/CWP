@@ -3,7 +3,7 @@
 import React, { useState, useEffect } from 'react';
 import { useAuth } from '../hooks/useAuth';
 import { supabase } from '../integrations/supabase/client';
-import { Loader2, DollarSign, FileText, ExternalLink, Zap, CreditCard, CheckCircle2, AlertTriangle, Download, X } from 'lucide-react';
+import { Loader2, DollarSign, FileText, ExternalLink, Zap, CreditCard, CheckCircle2, AlertTriangle, Download, X, Mic2, TrendingUp } from 'lucide-react';
 import ClientLayout from '../components/ClientLayout';
 import { ClientBillingService } from '../services/clientBillingService';
 import ServiceStatusBanner from '../components/ServiceStatusBanner';
@@ -41,6 +41,13 @@ interface BillingProduct {
   stripe_price_id: string;
 }
 
+interface VoiceUsage {
+  voice_active: boolean;
+  total_calls: number;
+  total_minutes: number;
+  budget_cents: number;
+}
+
 const ClientBilling: React.FC = () => {
   const { profile } = useAuth();
   const [invoices, setInvoices] = useState<Invoice[]>([]);
@@ -53,6 +60,15 @@ const ClientBilling: React.FC = () => {
   const [isClientRecordMissing, setIsClientRecordMissing] = useState(false);
   const [clientServiceStatus, setClientServiceStatus] = useState<'active' | 'paused' | 'onboarding' | 'completed'>('onboarding');
   
+  // AI Voice usage state
+  const [voiceUsage, setVoiceUsage] = useState<VoiceUsage | null>(null);
+  const [voiceLoading, setVoiceLoading] = useState(false);
+  const [budgetInput, setBudgetInput] = useState('');
+  const [isSavingBudget, setIsSavingBudget] = useState(false);
+  const [budgetError, setBudgetError] = useState<string | null>(null);
+  const [budgetSuccess, setBudgetSuccess] = useState(false);
+  const [clientId, setClientId] = useState<string | null>(null);
+
   // Cancellation Modal State
   const [isCancelModalOpen, setIsCancelModalOpen] = useState(false);
   const [cancellationTarget, setCancellationTarget] = useState<Subscription | null>(null);
@@ -85,6 +101,7 @@ const ClientBilling: React.FC = () => {
     }
     
     const clientId = clientData.id;
+    setClientId(clientId);
     setStripeCustomerId(clientData.stripe_customer_id);
     setClientServiceStatus(clientData.service_status as any);
     setCancellationEffectiveDate(clientData.cancellation_effective_date);
@@ -133,9 +150,30 @@ const ClientBilling: React.FC = () => {
     const { data: productsData } = await supabase
         .from('billing_products')
         .select('name, stripe_price_id');
-        
+
     if (productsData) {
         setProducts(productsData as BillingProduct[]);
+    }
+
+    // 6. Fetch AI Voice usage (if workspace is configured)
+    setVoiceLoading(true);
+    try {
+      const { data: { session } } = await supabase.auth.getSession();
+      const { data: voiceRes, error: voiceErr } = await supabase.functions.invoke('get-retell-workspace-usage', {
+        body: { client_id: clientId },
+        headers: { Authorization: `Bearer ${session?.access_token}` },
+      });
+      if (!voiceErr) {
+        const parsed = typeof voiceRes === 'string' ? JSON.parse(voiceRes) : voiceRes;
+        if (parsed && !parsed.error) {
+          setVoiceUsage(parsed as VoiceUsage);
+          setBudgetInput(((parsed.budget_cents ?? 1000) / 100).toFixed(2));
+        }
+      }
+    } catch {
+      // Voice usage is optional — silently skip if unavailable
+    } finally {
+      setVoiceLoading(false);
     }
 
     setIsLoading(false);
@@ -203,6 +241,35 @@ const ClientBilling: React.FC = () => {
   
   const handleDownloadInvoice = (pdfUrl: string) => {
       window.open(pdfUrl, '_blank');
+  };
+
+  const handleSaveBudget = async () => {
+    setBudgetError(null);
+    setBudgetSuccess(false);
+    const dollars = parseFloat(budgetInput);
+    if (isNaN(dollars) || dollars < 10) {
+      setBudgetError('Minimum budget is $10.00');
+      return;
+    }
+    const cents = Math.round(dollars * 100);
+    setIsSavingBudget(true);
+    try {
+      const { data: { session } } = await supabase.auth.getSession();
+      const { data: res, error: fnErr } = await supabase.functions.invoke('set-voice-budget', {
+        body: { budget_cents: cents },
+        headers: { Authorization: `Bearer ${session?.access_token}` },
+      });
+      if (fnErr) throw new Error(fnErr.message);
+      const parsed = typeof res === 'string' ? JSON.parse(res) : res;
+      if (parsed?.error) throw new Error(parsed.error);
+      setVoiceUsage(prev => prev ? { ...prev, budget_cents: cents } : prev);
+      setBudgetSuccess(true);
+      setTimeout(() => setBudgetSuccess(false), 3000);
+    } catch (e: any) {
+      setBudgetError(e.message || 'Failed to save budget.');
+    } finally {
+      setIsSavingBudget(false);
+    }
   };
 
   const getStatusColor = (status: string) => {
@@ -339,6 +406,120 @@ const ClientBilling: React.FC = () => {
                         </p>
                     </div>
                 </div>
+
+                {/* AI Voice Usage — shown only when workspace is configured */}
+                {(voiceLoading || (voiceUsage && voiceUsage.voice_active)) && (
+                  <div className="lg:col-span-3">
+                    <div className="bg-white rounded-xl shadow-lg border border-slate-100 p-6">
+                      <h2 className="text-xl font-bold text-slate-900 mb-1 flex items-center gap-2">
+                        <Mic2 className="w-5 h-5 text-violet-600" /> AI Voice
+                        <span className="ml-1 px-2 py-0.5 text-[10px] font-bold rounded-full bg-emerald-100 text-emerald-700 uppercase tracking-wide">Active</span>
+                      </h2>
+                      <p className="text-xs text-slate-500 mb-5 border-b border-slate-100 pb-4">Your AI voice call usage this month</p>
+
+                      {voiceLoading ? (
+                        <div className="flex items-center gap-2 text-slate-500 text-sm py-4">
+                          <Loader2 className="w-4 h-4 animate-spin" /> Loading usage data...
+                        </div>
+                      ) : voiceUsage ? (() => {
+                        const budget = voiceUsage.budget_cents;
+                        // Estimated spend at $0.05/min
+                        const estimatedCents = Math.round(voiceUsage.total_minutes * 5);
+                        const usagePct = budget > 0 ? Math.min(estimatedCents / budget, 1) : 0;
+                        const usagePctDisplay = Math.round(usagePct * 100);
+                        const isNearLimit = usagePct >= 0.9;
+
+                        return (
+                          <div className="space-y-5">
+                            {/* Stats row */}
+                            <div className="grid grid-cols-2 md:grid-cols-3 gap-4">
+                              <div className="bg-slate-50 rounded-xl p-4 text-center border border-slate-100">
+                                <p className="text-3xl font-bold text-slate-900">{voiceUsage.total_calls}</p>
+                                <p className="text-xs text-slate-500 mt-1 uppercase tracking-wide">Calls This Month</p>
+                              </div>
+                              <div className="bg-slate-50 rounded-xl p-4 text-center border border-slate-100">
+                                <p className="text-3xl font-bold text-slate-900">{voiceUsage.total_minutes}</p>
+                                <p className="text-xs text-slate-500 mt-1 uppercase tracking-wide">Minutes Used</p>
+                              </div>
+                              <div className="bg-violet-50 rounded-xl p-4 text-center border border-violet-100 col-span-2 md:col-span-1">
+                                <p className="text-3xl font-bold text-violet-700">${(budget / 100).toFixed(2)}</p>
+                                <p className="text-xs text-violet-500 mt-1 uppercase tracking-wide">Monthly Budget</p>
+                              </div>
+                            </div>
+
+                            {/* Usage meter */}
+                            <div>
+                              <div className="flex justify-between items-center mb-1.5">
+                                <span className="text-xs font-semibold text-slate-600 flex items-center gap-1">
+                                  <TrendingUp className="w-3.5 h-3.5" /> Usage
+                                </span>
+                                <span className={`text-xs font-bold ${isNearLimit ? 'text-amber-600' : 'text-slate-600'}`}>
+                                  {usagePctDisplay}%
+                                </span>
+                              </div>
+                              <div className="w-full bg-slate-100 rounded-full h-3 overflow-hidden">
+                                <div
+                                  className={`h-3 rounded-full transition-all duration-500 ${isNearLimit ? 'bg-amber-500' : 'bg-violet-500'}`}
+                                  style={{ width: `${usagePctDisplay}%` }}
+                                />
+                              </div>
+                              <p className="text-[11px] text-slate-400 mt-1">
+                                Estimated usage based on call minutes · Budget resets monthly
+                              </p>
+                            </div>
+
+                            {/* 90% alert */}
+                            {isNearLimit && (
+                              <div className="flex items-start gap-3 p-3 bg-amber-50 border border-amber-200 rounded-xl">
+                                <AlertTriangle className="w-4 h-4 text-amber-600 mt-0.5 flex-shrink-0" />
+                                <p className="text-xs text-amber-800">
+                                  You've used <strong>{usagePctDisplay}%</strong> of your monthly budget. Consider increasing your budget to avoid any service interruptions.
+                                </p>
+                              </div>
+                            )}
+
+                            {/* Budget control */}
+                            <div className="border-t border-slate-100 pt-4">
+                              <p className="text-sm font-semibold text-slate-700 mb-2">Adjust Monthly Budget</p>
+                              <p className="text-xs text-slate-500 mb-3">Set the maximum you'd like to spend on AI voice calls each month. Minimum $10.00.</p>
+                              <div className="flex items-center gap-3 flex-wrap">
+                                <div className="relative">
+                                  <span className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 text-sm font-semibold">$</span>
+                                  <input
+                                    type="number"
+                                    min="10"
+                                    step="5"
+                                    value={budgetInput}
+                                    onChange={e => { setBudgetInput(e.target.value); setBudgetError(null); }}
+                                    className="w-36 pl-7 pr-3 py-2 border border-slate-200 rounded-lg text-sm font-medium focus:outline-none focus:ring-2 focus:ring-violet-500"
+                                  />
+                                </div>
+                                <button
+                                  onClick={handleSaveBudget}
+                                  disabled={isSavingBudget}
+                                  className="px-4 py-2 bg-violet-600 text-white rounded-lg text-sm font-semibold hover:bg-violet-700 transition-colors disabled:opacity-50 flex items-center gap-2"
+                                >
+                                  {isSavingBudget ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : null}
+                                  Save Budget
+                                </button>
+                                {budgetSuccess && (
+                                  <span className="text-sm text-emerald-600 flex items-center gap-1 font-semibold">
+                                    <CheckCircle2 className="w-4 h-4" /> Saved!
+                                  </span>
+                                )}
+                              </div>
+                              {budgetError && (
+                                <p className="text-xs text-red-600 mt-2 flex items-center gap-1">
+                                  <AlertTriangle className="w-3.5 h-3.5" /> {budgetError}
+                                </p>
+                              )}
+                            </div>
+                          </div>
+                        );
+                      })() : null}
+                    </div>
+                  </div>
+                )}
 
                 {/* Invoice List */}
                 <div className="lg:col-span-2 space-y-6">

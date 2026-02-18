@@ -371,6 +371,13 @@ export const AdminService = {
     return invokeEdgeFunction('get-platform-phone-numbers', {});
   },
 
+  // Retell Workspace Billing
+  saveRetellWorkspaceCreds: async (clientId: string, workspaceId: string, apiKey: string) =>
+    invokeEdgeFunction('save-retell-workspace-creds', { client_id: clientId, workspace_id: workspaceId, api_key: apiKey }),
+
+  getRetellWorkspaceUsage: async (clientId: string, year?: number, month?: number) =>
+    invokeEdgeFunction('get-retell-workspace-usage', { client_id: clientId, year, month }),
+
   // Website Builder
   saveCustomDomain: async (clientId: string, customDomain: string | null) => {
     const { error } = await supabase
