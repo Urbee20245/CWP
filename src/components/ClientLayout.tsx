@@ -2,158 +2,206 @@
 
 import React, { useState } from 'react';
 import { useAuth } from '../hooks/useAuth';
-import { Link } from 'react-router-dom';
-import { Briefcase, DollarSign, LogOut, User, Zap, CalendarCheck, Sparkles, Menu, X, ArrowRight, HelpCircle, Settings, ClipboardList, Globe } from 'lucide-react';
+import { Link, useLocation } from 'react-router-dom';
+import {
+  DollarSign, LogOut, User, Zap, CalendarCheck,
+  Sparkles, Menu, X, HelpCircle, Settings, ClipboardList, Globe,
+  LayoutDashboard, ChevronRight
+} from 'lucide-react';
 
 interface ClientLayoutProps {
   children: React.ReactNode;
 }
 
+interface NavItem {
+  name: string;
+  href: string;
+  icon: React.ElementType;
+  description?: string;
+}
+
+interface NavSection {
+  title: string;
+  items: NavItem[];
+}
+
 const ClientLayout: React.FC<ClientLayoutProps> = ({ children }) => {
   const { profile, signOut } = useAuth();
+  const location = useLocation();
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
 
-  const navItems = [
-    { name: 'Dashboard', href: '/client/dashboard', icon: Briefcase },
-    { name: 'My Website', href: '/client/website', icon: Globe },
-    { name: 'Leads', href: '/client/leads', icon: ClipboardList },
-    { name: 'Appointments', href: '/client/appointments', icon: CalendarCheck },
-    { name: 'Billing', href: '/client/billing', icon: DollarSign },
-    { name: 'Add-ons', href: '/client/addons', icon: Zap },
-    { name: 'My Profile', href: '/client/profile', icon: User },
-    { name: 'Settings', href: '/client/settings', icon: Settings },
-    { name: 'Help & Guides', href: '/client/help', icon: HelpCircle },
+  const navSections: NavSection[] = [
+    {
+      title: 'My Portal',
+      items: [
+        { name: 'Dashboard', href: '/client/dashboard', icon: LayoutDashboard, description: 'Overview & projects' },
+        { name: 'My Website', href: '/client/website', icon: Globe, description: 'Manage your site' },
+        { name: 'Leads', href: '/client/leads', icon: ClipboardList, description: 'Lead management' },
+        { name: 'Billing', href: '/client/billing', icon: DollarSign, description: 'Invoices & payments' },
+        { name: 'Add-ons', href: '/client/addons', icon: Zap, description: 'Upgrade your plan' },
+      ],
+    },
+    {
+      title: 'With Your Team',
+      items: [
+        { name: 'Book Appointment', href: '/client/appointments', icon: CalendarCheck, description: 'Schedule a call with admin' },
+      ],
+    },
+    {
+      title: 'Account',
+      items: [
+        { name: 'My Profile', href: '/client/profile', icon: User, description: 'Profile settings' },
+        { name: 'Settings', href: '/client/settings', icon: Settings, description: 'Integrations & config' },
+        { name: 'Help & Guides', href: '/client/help', icon: HelpCircle, description: 'Support resources' },
+      ],
+    },
   ];
-  
-  const jetSuiteItem = { name: 'JetSuite', href: '/client/jetsuite', icon: Sparkles };
-  
-  const handleSignOut = () => {
-      setIsMobileMenuOpen(false);
-      signOut();
+
+  const isActiveLink = (href: string) => {
+    return location.pathname === href || location.pathname.startsWith(href + '/');
   };
 
-  return (
-    <div className="min-h-screen bg-slate-50 pt-16 md:pt-20">
-      
-      {/* Mobile Header (Fixed on top) */}
-      <div className="fixed top-0 left-0 right-0 z-40 bg-white border-b border-slate-200 p-3 flex items-center justify-between md:hidden">
-          <Link to="/client/dashboard">
-              <img 
-                  src="/CWPlogolight.png" 
-                  alt="Custom Websites Plus" 
-                  className="h-8 w-auto object-contain"
-              />
+  const handleSignOut = () => {
+    setIsMobileMenuOpen(false);
+    signOut();
+  };
+
+  const getInitials = (name: string | undefined) => {
+    if (!name) return 'C';
+    return name.split(' ').map(n => n[0]).join('').toUpperCase().slice(0, 2);
+  };
+
+  const NavLink = ({ item, onClick }: { item: NavItem; onClick?: () => void }) => {
+    const isActive = isActiveLink(item.href);
+    return (
+      <Link
+        to={item.href}
+        onClick={onClick}
+        className={`
+          flex items-center gap-3 px-3 py-2 rounded-lg text-sm font-medium transition-all duration-150 group
+          ${isActive
+            ? 'bg-indigo-600 text-white shadow-sm'
+            : 'text-slate-600 hover:bg-slate-100 hover:text-slate-900'
+          }
+        `}
+      >
+        <item.icon className={`w-4 h-4 flex-shrink-0 ${isActive ? 'text-white' : 'text-slate-400 group-hover:text-slate-600'}`} />
+        <span className="flex-1">{item.name}</span>
+        {isActive && <ChevronRight className="w-3.5 h-3.5 text-white/60" />}
+      </Link>
+    );
+  };
+
+  const SidebarContent = ({ isMobile = false, onNavClick }: { isMobile?: boolean; onNavClick?: () => void }) => (
+    <div className="flex flex-col h-full">
+      {/* Logo */}
+      {!isMobile && (
+        <div className="px-5 py-4 border-b border-slate-100">
+          <Link to="/client/dashboard" className="block">
+            <img src="/CWPlogolight.png" alt="Custom Websites Plus" className="h-8 w-auto object-contain" />
           </Link>
-          <button onClick={() => setIsMobileMenuOpen(!isMobileMenuOpen)} className="p-2 text-slate-600 hover:text-indigo-600">
-              {isMobileMenuOpen ? <X className="w-6 h-6" /> : <Menu className="w-6 h-6" />}
-          </button>
+        </div>
+      )}
+
+      {/* User Card */}
+      <div className={`px-4 py-3 border-b border-slate-100 ${isMobile ? 'mt-14' : ''}`}>
+        <div className="flex items-center gap-3 p-2.5 rounded-xl bg-gradient-to-br from-indigo-50 to-indigo-100 border border-indigo-200">
+          <div className="w-9 h-9 rounded-lg bg-gradient-to-br from-indigo-500 to-violet-600 flex items-center justify-center text-white font-bold text-sm shadow-sm flex-shrink-0">
+            {getInitials(profile?.full_name)}
+          </div>
+          <div className="flex-1 min-w-0">
+            <p className="text-sm font-semibold text-slate-900 truncate leading-tight">{profile?.full_name || 'Client'}</p>
+            <p className="text-[11px] text-indigo-600 font-medium">Client Portal</p>
+          </div>
+        </div>
+      </div>
+
+      {/* Navigation */}
+      <nav className="flex-1 px-3 py-4 overflow-y-auto space-y-5">
+        {navSections.map((section) => (
+          <div key={section.title}>
+            <p className="px-3 mb-1.5 text-[10px] font-bold text-slate-400 uppercase tracking-widest">
+              {section.title}
+            </p>
+            <div className="space-y-0.5">
+              {section.items.map((item) => (
+                <NavLink key={item.name} item={item} onClick={onNavClick} />
+              ))}
+            </div>
+          </div>
+        ))}
+      </nav>
+
+      {/* JetSuite Promo */}
+      <div className="px-3 pb-3">
+        <Link
+          to="/client/jetsuite"
+          onClick={onNavClick}
+          className={`flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm font-semibold transition-all border ${
+            isActiveLink('/client/jetsuite')
+              ? 'bg-indigo-600 text-white border-indigo-600 shadow-sm'
+              : 'bg-gradient-to-r from-indigo-50 to-violet-50 text-indigo-700 border-indigo-200 hover:from-indigo-100 hover:to-violet-100'
+          }`}
+        >
+          <Sparkles className="w-4 h-4 flex-shrink-0" />
+          <span>JetSuite Tools</span>
+          {!isActiveLink('/client/jetsuite') && (
+            <span className="ml-auto text-[10px] font-bold bg-indigo-600 text-white px-1.5 py-0.5 rounded-full">PRO</span>
+          )}
+        </Link>
+      </div>
+
+      {/* Sign Out */}
+      <div className="p-3 border-t border-slate-100">
+        <button
+          onClick={handleSignOut}
+          className="flex items-center justify-center gap-2 w-full px-4 py-2.5 rounded-lg text-sm font-semibold text-slate-500 hover:bg-red-50 hover:text-red-600 transition-all border border-transparent hover:border-red-100"
+        >
+          <LogOut className="w-4 h-4" />
+          Sign Out
+        </button>
+      </div>
+    </div>
+  );
+
+  return (
+    <div className="min-h-screen bg-[#F4F6FA]">
+      {/* Mobile Header */}
+      <div className="fixed top-0 left-0 right-0 z-40 bg-white border-b border-slate-200 px-4 h-14 flex items-center justify-between md:hidden shadow-sm">
+        <Link to="/client/dashboard">
+          <img src="/CWPlogolight.png" alt="Custom Websites Plus" className="h-7 w-auto object-contain" />
+        </Link>
+        <button
+          onClick={() => setIsMobileMenuOpen(!isMobileMenuOpen)}
+          className="p-2 rounded-lg text-slate-600 hover:bg-slate-100 transition-colors"
+        >
+          {isMobileMenuOpen ? <X className="w-5 h-5" /> : <Menu className="w-5 h-5" />}
+        </button>
       </div>
 
       <div className="flex">
-        {/* Sidebar (Desktop) */}
-        <div className="hidden md:block w-64 bg-white border-r border-slate-200 sticky top-20 h-[calc(100vh-80px)] p-6 flex-shrink-0 flex flex-col">
-          
-          {/* Logo */}
-          <Link to="/client/dashboard" className="mb-6 block">
-            <img 
-              src="/CWPlogolight.png" 
-              alt="Custom Websites Plus" 
-              className="h-10 w-auto object-contain"
-            />
-          </Link>
-          
-          <div className="mb-8 pt-4 border-t border-slate-100">
-            <h3 className="text-lg font-bold text-slate-900">Client Portal</h3>
-            <p className="text-xs text-slate-500">Welcome, {profile?.full_name || 'Client'}</p>
-          </div>
-          
-          {/* Main Navigation Links */}
-          <nav className="space-y-2 flex-1">
-            {navItems.map((item) => (
-              <Link
-                key={item.name}
-                to={item.href}
-                className="flex items-center gap-3 px-3 py-2 rounded-lg text-sm font-medium text-slate-700 hover:bg-indigo-50 hover:text-indigo-600 transition-colors"
-              >
-                <item.icon className="w-5 h-5" />
-                {item.name}
-              </Link>
-            ))}
-          </nav>
-          
-          {/* JetSuite Link */}
-          <div className="mt-4 pt-4 border-t border-slate-100">
-            <Link
-                to={jetSuiteItem.href}
-                className="flex items-center gap-3 px-3 py-2 rounded-lg text-sm font-medium text-indigo-600 hover:bg-indigo-50 hover:text-indigo-700 transition-colors w-full text-left"
-            >
-                <jetSuiteItem.icon className="w-5 h-5" />
-                {jetSuiteItem.name}
-            </Link>
-          </div>
-          
-          {/* Sign Out Button */}
-          <div className="mt-4 pt-4 border-t border-slate-100">
-            <button 
-              onClick={handleSignOut} 
-              className="flex items-center gap-3 px-3 py-2 rounded-lg text-sm font-medium text-red-600 hover:bg-red-50 hover:text-red-700 transition-colors w-full text-left border border-red-100 hover:border-red-200"
-            >
-              <LogOut className="w-5 h-5" />
-              Sign Out
-            </button>
-          </div>
-        </div>
-        
-        {/* Mobile Menu Overlay */}
+        {/* Desktop Sidebar */}
+        <aside className="hidden md:flex w-60 bg-white border-r border-slate-200 fixed top-0 left-0 h-screen flex-col shadow-sm z-30">
+          <SidebarContent />
+        </aside>
+
+        {/* Mobile Sidebar Overlay */}
         {isMobileMenuOpen && (
-            <div className="fixed inset-0 z-30 bg-black/50 backdrop-blur-sm md:hidden" onClick={() => setIsMobileMenuOpen(false)}>
-                <div className="w-64 bg-white h-full p-6 overflow-y-auto shadow-2xl" onClick={(e) => e.stopPropagation()}>
-                    <div className="mb-8">
-                        <h3 className="text-lg font-bold text-slate-900">Client Portal</h3>
-                        <p className="text-xs text-slate-500">Welcome, {profile?.full_name || 'Client'}</p>
-                    </div>
-                    <nav className="space-y-2">
-                        {navItems.map((item) => (
-                            <Link
-                                key={item.name}
-                                to={item.href}
-                                onClick={() => setIsMobileMenuOpen(false)}
-                                className="flex items-center gap-3 px-3 py-2 rounded-lg text-sm font-medium text-slate-700 hover:bg-indigo-50 hover:text-indigo-600 transition-colors"
-                            >
-                                <item.icon className="w-5 h-5" />
-                                {item.name}
-                            </Link>
-                        ))}
-                    </nav>
-                    
-                    {/* Mobile JetSuite Link */}
-                    <div className="mt-6 pt-4 border-t border-slate-100">
-                        <Link
-                            to={jetSuiteItem.href}
-                            onClick={() => setIsMobileMenuOpen(false)}
-                            className="flex items-center gap-3 px-3 py-2 rounded-lg text-sm font-medium text-indigo-600 hover:bg-indigo-50 hover:text-indigo-700 transition-colors w-full text-left"
-                        >
-                            <jetSuiteItem.icon className="w-5 h-5" />
-                            {jetSuiteItem.name}
-                        </Link>
-                    </div>
-                    
-                    {/* Mobile Sign Out Button */}
-                    <div className="mt-4 pt-4 border-t border-slate-100">
-                        <button 
-                            onClick={handleSignOut} 
-                            className="flex items-center gap-3 px-3 py-2 rounded-lg text-sm font-medium text-red-600 hover:bg-red-50 hover:text-red-700 transition-colors w-full text-left border border-red-100 hover:border-red-200"
-                        >
-                            <LogOut className="w-5 h-5" />
-                            Sign Out
-                        </button>
-                    </div>
-                </div>
-            </div>
+          <div
+            className="fixed inset-0 z-30 bg-black/40 backdrop-blur-sm md:hidden"
+            onClick={() => setIsMobileMenuOpen(false)}
+          >
+            <aside
+              className="w-64 bg-white h-full flex flex-col shadow-2xl"
+              onClick={e => e.stopPropagation()}
+            >
+              <SidebarContent isMobile onNavClick={() => setIsMobileMenuOpen(false)} />
+            </aside>
+          </div>
         )}
 
         {/* Main Content */}
-        <main className="flex-1 p-4 md:p-0">
+        <main className="flex-1 md:ml-60 min-h-screen pt-14 md:pt-0">
           {children}
         </main>
       </div>
