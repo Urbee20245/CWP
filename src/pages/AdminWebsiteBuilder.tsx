@@ -3,9 +3,9 @@
 import React, { useState, useEffect, useCallback, useRef } from 'react';
 import AdminLayout from '../components/AdminLayout';
 import {
-  Globe, Loader2, AlertTriangle, CheckCircle, Eye, Copy,
+  Globe, Loader2, AlertTriangle, CheckCircle, Eye, Copy, EyeOff, ExternalLink,
   RefreshCw, ToggleLeft, ToggleRight, Wand2, Upload, ImageIcon,
-  ChevronDown, ChevronRight, FileText, Check, Link, Save, Info,
+  ChevronDown, ChevronRight, FileText, Check, Link, Save, Info, Key,
   Calendar, Phone, FileText as FormIcon, Shield, Sparkles, MessageSquare,
 } from 'lucide-react';
 import { supabase } from '../integrations/supabase/client';
@@ -56,6 +56,17 @@ const AdminWebsiteBuilder: React.FC = () => {
   const [domainSaved, setDomainSaved] = useState(false);
   const [domainError, setDomainError] = useState<string | null>(null);
   const [showDnsInstructions, setShowDnsInstructions] = useState(false);
+
+  // Registrar credentials state (read-only for admin)
+  const [domainCreds, setDomainCreds] = useState<{
+    registrar_name: string;
+    login_url: string;
+    username: string;
+    password: string;
+    notes: string;
+  } | null>(null);
+  const [showPassword, setShowPassword] = useState(false);
+  const [copiedField, setCopiedField] = useState<string | null>(null);
 
   // Image upload state
   const [uploadingLogo, setUploadingLogo] = useState(false);
@@ -137,6 +148,26 @@ const AdminWebsiteBuilder: React.FC = () => {
       const client = clients.find(c => c.id === clientId);
       setForm(f => ({ ...f, business_name: client?.business_name || '' }));
     }
+
+    // Load registrar credentials
+    const { data: credsData } = await supabase
+      .from('client_domain_credentials')
+      .select('registrar_name, login_url, username, password, notes')
+      .eq('client_id', clientId)
+      .maybeSingle();
+
+    setDomainCreds(credsData
+      ? {
+          registrar_name: credsData.registrar_name,
+          login_url: credsData.login_url,
+          username: credsData.username,
+          password: credsData.password,
+          notes: credsData.notes,
+        }
+      : null
+    );
+    setShowPassword(false);
+
     setLoadingBrief(false);
   }, [clients]);
 
@@ -299,6 +330,12 @@ const AdminWebsiteBuilder: React.FC = () => {
     } finally {
       setSavingDomain(false);
     }
+  };
+
+  const copyField = (value: string, field: string) => {
+    navigator.clipboard.writeText(value);
+    setCopiedField(field);
+    setTimeout(() => setCopiedField(null), 2000);
   };
 
   const copyUrl = () => {
@@ -853,6 +890,99 @@ const AdminWebsiteBuilder: React.FC = () => {
                         </li>
                         <li>DNS changes take up to <strong>24–48 hours</strong> to propagate.</li>
                       </ol>
+                    </div>
+                  )}
+                </div>
+
+                {/* Registrar Login card */}
+                <div className="bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden">
+                  <div className="px-5 py-4 border-b border-slate-100 flex items-center gap-2">
+                    <Key className="w-4 h-4 text-indigo-500" />
+                    <h3 className="font-semibold text-slate-900 text-sm uppercase tracking-wide">Registrar Login</h3>
+                    {domainCreds?.registrar_name && (
+                      <span className="ml-auto text-xs bg-emerald-100 text-emerald-700 font-medium px-2 py-0.5 rounded-full">
+                        {domainCreds.registrar_name}
+                      </span>
+                    )}
+                  </div>
+
+                  {!domainCreds || !domainCreds.username ? (
+                    <div className="px-5 py-8 text-center">
+                      <Key className="w-8 h-8 text-slate-300 mx-auto mb-2" />
+                      <p className="text-sm text-slate-400">
+                        Client hasn't entered registrar credentials yet.
+                      </p>
+                      <p className="text-xs text-slate-400 mt-1">
+                        Ask them to log into their client portal → My Website → Domain Registrar Access.
+                      </p>
+                    </div>
+                  ) : (
+                    <div className="p-5 space-y-3">
+                      {/* Login URL */}
+                      {domainCreds.login_url && (
+                        <div className="flex items-center gap-2">
+                          <span className="text-xs font-medium text-slate-500 w-20 flex-shrink-0">Login URL</span>
+                          <a
+                            href={domainCreds.login_url}
+                            target="_blank"
+                            rel="noreferrer"
+                            className="flex items-center gap-1.5 text-sm text-indigo-600 hover:underline truncate flex-1"
+                          >
+                            {domainCreds.login_url}
+                            <ExternalLink className="w-3.5 h-3.5 flex-shrink-0" />
+                          </a>
+                        </div>
+                      )}
+
+                      {/* Username */}
+                      <div className="flex items-center gap-2">
+                        <span className="text-xs font-medium text-slate-500 w-20 flex-shrink-0">Username</span>
+                        <span className="flex-1 text-sm text-slate-800 font-mono truncate">
+                          {domainCreds.username}
+                        </span>
+                        <button
+                          onClick={() => copyField(domainCreds.username, 'username')}
+                          className="flex items-center gap-1 text-xs text-slate-400 hover:text-indigo-600 flex-shrink-0"
+                        >
+                          {copiedField === 'username'
+                            ? <><CheckCircle className="w-3.5 h-3.5 text-emerald-500" /> Copied</>
+                            : <><Copy className="w-3.5 h-3.5" /> Copy</>}
+                        </button>
+                      </div>
+
+                      {/* Password */}
+                      <div className="flex items-center gap-2">
+                        <span className="text-xs font-medium text-slate-500 w-20 flex-shrink-0">Password</span>
+                        <span className="flex-1 text-sm text-slate-800 font-mono truncate">
+                          {showPassword ? domainCreds.password : '••••••••'}
+                        </span>
+                        <div className="flex items-center gap-2 flex-shrink-0">
+                          <button
+                            onClick={() => setShowPassword(v => !v)}
+                            className="text-slate-400 hover:text-indigo-600"
+                          >
+                            {showPassword
+                              ? <EyeOff className="w-3.5 h-3.5" />
+                              : <Eye className="w-3.5 h-3.5" />}
+                          </button>
+                          <button
+                            onClick={() => copyField(domainCreds.password, 'password')}
+                            className="flex items-center gap-1 text-xs text-slate-400 hover:text-indigo-600"
+                          >
+                            {copiedField === 'password'
+                              ? <><CheckCircle className="w-3.5 h-3.5 text-emerald-500" /> Copied</>
+                              : <><Copy className="w-3.5 h-3.5" /> Copy</>}
+                          </button>
+                        </div>
+                      </div>
+
+                      {/* Notes */}
+                      {domainCreds.notes && (
+                        <div className="mt-1 p-3 bg-amber-50 border border-amber-200 rounded-xl text-xs text-amber-800">
+                          <p className="font-semibold mb-0.5">Notes from client:</p>
+                          <p>{domainCreds.notes}</p>
+                        </div>
+                      )}
                     </div>
                   )}
                 </div>
