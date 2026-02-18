@@ -127,6 +127,8 @@ export const AdminService = {
   // ... (keep existing methods)
   createClientUser: async (clientData: any) => invokeEdgeFunction('create-client-user', clientData),
   deleteClientUser: async (clientId: string, userId: string) => invokeEdgeFunction('delete-client-user', { clientId, userId }),
+  updateClientProfile: async (profileId: string, fullName: string, role: string) =>
+    invokeEdgeFunction('update-client-profile', { profile_id: profileId, full_name: fullName, role }),
   sendSms: async (to: string, body: string) => invokeEdgeFunction('send-sms', { to, body }),
   
   // Updated AI Voice Provisioning
