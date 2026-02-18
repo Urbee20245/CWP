@@ -445,113 +445,121 @@ const ClientProjectDetail: React.FC = () => {
 
   return (
     <ClientLayout>
-      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-12">
-        <Link to="/client/dashboard" className="text-indigo-600 hover:text-indigo-800 text-sm font-medium mb-4 block">
-          ← Back to Projects
+      <div className="p-6 lg:p-8 max-w-7xl mx-auto">
+        <Link to="/client/dashboard" className="inline-flex items-center gap-1.5 text-sm font-semibold text-slate-500 hover:text-indigo-600 transition-colors mb-6">
+          <ArrowLeft className="w-3.5 h-3.5" /> Back to Dashboard
         </Link>
-        
+
         {/* Service Status Banner (Non-blocking) */}
         <ServiceStatusBanner status={project.service_status} type="project" />
 
         {/* Client Acknowledgment Banner */}
         {isPaused && latestPauseLog && !latestPauseLog.client_acknowledged && (
-            <div className="p-4 mb-8 bg-indigo-50 border border-indigo-200 rounded-xl flex justify-between items-center">
+            <div className="p-4 mb-4 bg-indigo-50 border border-indigo-200 rounded-2xl flex justify-between items-center">
                 <div className="flex items-center gap-3">
                     <AlertTriangle className="w-5 h-5 text-indigo-600 flex-shrink-0" />
                     <p className="text-sm text-indigo-800">
                         <strong>Action Required:</strong> Please acknowledge the service pause.
                     </p>
                 </div>
-                <button 
+                <button
                     onClick={handleAcknowledgePause}
-                    className="text-indigo-600 hover:text-indigo-800 text-sm font-medium flex-shrink-0 px-4 py-2 bg-white rounded-lg border border-indigo-300 hover:bg-indigo-100"
+                    className="text-sm font-semibold flex-shrink-0 px-4 py-2 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 transition-colors"
                 >
                     <CheckCircle2 className="w-4 h-4 inline mr-1" /> Acknowledge
                 </button>
             </div>
         )}
 
-        {/* Overdue Warning Banner (Non-blocking) */}
+        {/* Overdue Warning Banner */}
         {showOverdueBanner && (
-            <div className="p-4 mb-8 bg-amber-50 border border-amber-200 rounded-xl flex justify-between items-center">
+            <div className="p-4 mb-4 bg-amber-50 border border-amber-200 rounded-2xl flex items-center justify-between gap-3">
                 <div className="flex items-center gap-3">
                     <AlertTriangle className="w-5 h-5 text-amber-600 flex-shrink-0" />
-                    <p className="text-sm text-amber-800">
-                        <strong>Billing Notice:</strong> You have one or more overdue invoices. Please visit the billing section to resolve.
-                    </p>
+                    <p className="text-sm text-amber-800 font-medium">You have overdue invoices. Resolve them to avoid service interruption.</p>
                 </div>
-                <Link to="/client/billing" className="text-amber-600 hover:text-amber-800 text-sm font-medium flex-shrink-0">
-                    View Billing
+                <Link to="/client/billing" className="text-sm font-semibold text-amber-700 hover:text-amber-900 transition-colors flex-shrink-0">
+                    View Billing →
                 </Link>
             </div>
         )}
 
-        <h1 className="text-3xl font-bold text-slate-900 mb-2 flex items-center gap-3 relative">
-          <Briefcase className="w-7 h-7 text-indigo-600" />
-          {project.title}
-          <HelpPopover 
-              title="Project Detail View"
-              content="Track progress, view milestones, communicate with the team via threads, and share/download project files."
-          />
-        </h1>
-        <p className="text-slate-500 mb-8">{project.description}</p>
+        {/* Project Header Card */}
+        <div className="bg-white rounded-2xl border border-slate-200 p-6 mb-6">
+          <div className="flex items-start justify-between gap-4 flex-wrap">
+            <div className="flex items-center gap-4">
+              <div className="w-12 h-12 rounded-xl bg-gradient-to-br from-indigo-500 to-violet-600 flex items-center justify-center flex-shrink-0">
+                <Briefcase className="w-6 h-6 text-white" />
+              </div>
+              <div>
+                <div className="flex items-center gap-3">
+                  <h1 className="text-xl font-bold text-slate-900">{project.title}</h1>
+                  <HelpPopover
+                    title="Project Detail View"
+                    content="Track progress, view milestones, communicate with the team via threads, and share/download project files."
+                  />
+                </div>
+                <p className="text-sm text-slate-500 mt-0.5">{project.description}</p>
+              </div>
+            </div>
+            {/* Progress summary */}
+            <div className="flex items-center gap-6">
+              <div className="text-center">
+                <div className="text-2xl font-bold text-indigo-600">{project.progress_percent}%</div>
+                <div className="text-xs text-slate-500 font-medium">Complete</div>
+              </div>
+              <div className="text-center">
+                <div className="text-2xl font-bold text-slate-900">{completedTasks}/{totalTasks}</div>
+                <div className="text-xs text-slate-500 font-medium">Tasks</div>
+              </div>
+            </div>
+          </div>
+          {/* Progress bar */}
+          <div className="mt-4 w-full h-2 bg-slate-100 rounded-full overflow-hidden">
+            <div
+              className={`${getProgressColor(project.progress_percent)} h-full rounded-full transition-all duration-700`}
+              style={{ width: `${project.progress_percent}%` }}
+            />
+          </div>
+        </div>
+
+        {/* Deposit CTA — shown prominently before main grid if unpaid */}
+        {isDepositRequired && !project.deposit_paid && (
+          <div className="mb-6 p-5 bg-gradient-to-r from-indigo-600 to-violet-600 rounded-2xl text-white flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
+            <div>
+              <p className="text-xs font-bold uppercase tracking-widest text-indigo-200 mb-1">Action Required</p>
+              <p className="text-lg font-bold">Project Deposit Due</p>
+              <p className="text-sm text-indigo-100 mt-0.5">
+                A deposit of <strong>${(project.required_deposit_cents! / 100).toFixed(2)}</strong> is required before work can begin.
+              </p>
+            </div>
+            <button
+              onClick={handlePayDeposit}
+              disabled={isPayingDeposit}
+              className="flex-shrink-0 flex items-center gap-2 px-6 py-3 bg-white text-indigo-700 rounded-xl font-bold text-sm hover:bg-indigo-50 transition-colors disabled:opacity-60"
+            >
+              {isPayingDeposit
+                ? <><Loader2 className="w-4 h-4 animate-spin" /> Redirecting...</>
+                : <><DollarSign className="w-4 h-4" /> Pay ${(project.required_deposit_cents! / 100).toFixed(2)} Now</>
+              }
+            </button>
+          </div>
+        )}
+
+        {isDepositRequired && project.deposit_paid && (
+          <div className="mb-6 p-4 bg-emerald-50 border border-emerald-200 rounded-2xl flex items-center gap-3">
+            <CheckCircle2 className="w-5 h-5 text-emerald-600 flex-shrink-0" />
+            <p className="text-sm font-semibold text-emerald-800">
+              Deposit of ${(project.required_deposit_cents! / 100).toFixed(2)} paid — thank you!
+            </p>
+          </div>
+        )}
 
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
           
-          {/* Left Column: Progress, SLA & Tasks */}
-          <div className="lg:col-span-1 space-y-8">
-            
-            {/* Progress View */}
-            <div className="bg-white p-6 rounded-xl shadow-lg border border-slate-100">
-              <h2 className="text-xl font-bold mb-4 flex items-center gap-2">
-                Project Progress
-                {renderHelpIcon("Progress is updated by the project manager based on task completion and milestone delivery.")}
-              </h2>
-              <div className="text-4xl font-bold text-indigo-600 mb-4">{project.progress_percent}%</div>
-              
-              <div className="w-full bg-slate-200 rounded-full h-3 mb-4">
-                <div 
-                  className={`${getProgressColor(project.progress_percent)} h-3 rounded-full transition-all duration-500`} 
-                  style={{ width: `${project.progress_percent}%` }}
-                ></div>
-              </div>
+          {/* Left Column: SLA & Tasks */}
+          <div className="lg:col-span-1 space-y-6">
 
-              <p className="text-sm text-slate-600">{completedTasks}/{totalTasks} Tasks Completed</p>
-            </div>
-            
-            {/* Deposit Status */}
-            {isDepositRequired && (
-                <div className={`p-6 rounded-xl border ${project.deposit_paid ? 'bg-emerald-50 border-emerald-200' : 'bg-red-50 border-red-200'} shadow-lg`}>
-                    <h2 className="text-xl font-bold mb-2 flex items-center gap-2">
-                        <DollarSign className="w-5 h-5" /> Deposit Required
-                    </h2>
-                    <p className="text-lg font-bold mt-1 text-slate-900">
-                        Required: ${project.required_deposit_cents ? (project.required_deposit_cents / 100).toFixed(2) : 'N/A'}
-                    </p>
-                    <p className={`text-sm font-semibold mt-2 ${project.deposit_paid ? 'text-emerald-700' : 'text-red-700'}`}>
-                        Status: {project.deposit_paid ? 'PAID' : 'AWAITING PAYMENT'}
-                    </p>
-                    
-                    {!project.deposit_paid && (
-                        <button 
-                            onClick={handlePayDeposit}
-                            disabled={isPayingDeposit}
-                            className="mt-4 w-full py-3 bg-indigo-600 text-white rounded-lg font-semibold hover:bg-indigo-700 transition-colors disabled:opacity-50 flex items-center justify-center gap-2"
-                        >
-                            {isPayingDeposit ? (
-                                <>
-                                    <Loader2 className="w-5 h-5 animate-spin" /> Redirecting...
-                                </>
-                            ) : (
-                                <>
-                                    <DollarSign className="w-5 h-5" /> Pay Deposit Now
-                                </>
-                            )}
-                        </button>
-                    )}
-                </div>
-            )}
-            
             {/* SLA Status (Client View) */}
             {project.sla_due_date && slaMetrics && (
                 <div className="bg-white p-6 rounded-xl shadow-lg border border-slate-100">
