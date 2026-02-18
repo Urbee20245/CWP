@@ -372,6 +372,15 @@ export const AdminService = {
   },
 
   // Website Builder
+  saveCustomDomain: async (clientId: string, customDomain: string | null) => {
+    const { error } = await supabase
+      .from('website_briefs')
+      .update({ custom_domain: customDomain ? customDomain.trim().toLowerCase() : null })
+      .eq('client_id', clientId);
+    if (error) throw error;
+    return { success: true };
+  },
+
   generateWebsite: async (briefData: {
     client_id: string;
     business_name: string;

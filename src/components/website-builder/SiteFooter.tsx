@@ -6,13 +6,16 @@ interface SiteFooterProps {
   global: WebsiteGlobal;
   pages: WebsitePage[];
   siteSlug: string;
+  customDomain?: boolean;
 }
 
-const SiteFooter: React.FC<SiteFooterProps> = ({ global: g, pages, siteSlug }) => {
+const SiteFooter: React.FC<SiteFooterProps> = ({ global: g, pages, siteSlug, customDomain }) => {
   const year = new Date().getFullYear();
 
-  const getHref = (page: WebsitePage) =>
-    page.slug === '' ? `/site/${siteSlug}` : `/site/${siteSlug}/${page.slug}`;
+  const getHref = (page: WebsitePage) => {
+    if (customDomain) return page.slug === '' ? '/' : `/${page.slug}`;
+    return page.slug === '' ? `/site/${siteSlug}` : `/site/${siteSlug}/${page.slug}`;
+  };
 
   return (
     <footer className="bg-slate-900 text-slate-300">

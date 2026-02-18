@@ -76,6 +76,7 @@ export interface WebsiteBrief {
   generation_error: string | null;
   website_json: WebsiteJson | null;
   client_slug: string | null;
+  custom_domain: string | null;
   is_published: boolean;
   premium_features: PremiumFeatureId[];
   created_at: string;

@@ -17,9 +17,10 @@ interface SiteRendererProps {
   websiteJson: WebsiteJson;
   currentPageId?: string;
   siteSlug: string;
+  customDomain?: boolean;
 }
 
-type SectionComponent = React.FC<{ content: any; global: any; variant: string; siteSlug?: string }>;
+type SectionComponent = React.FC<{ content: any; global: any; variant: string; siteSlug?: string; customDomain?: boolean }>;
 
 const SECTION_MAP: Record<SectionType, SectionComponent> = {
   hero: HeroSection as SectionComponent,
@@ -38,6 +39,7 @@ const SiteRenderer: React.FC<SiteRendererProps> = ({
   websiteJson,
   currentPageId = 'home',
   siteSlug,
+  customDomain,
 }) => {
   const { global: g, pages } = websiteJson;
 
@@ -59,6 +61,7 @@ const SiteRenderer: React.FC<SiteRendererProps> = ({
         pages={pages}
         siteSlug={siteSlug}
         currentPageId={activePage?.id || 'home'}
+        customDomain={customDomain}
       />
 
       {activePage?.sections.map((section, i) => {
@@ -74,11 +77,12 @@ const SiteRenderer: React.FC<SiteRendererProps> = ({
             global={g}
             variant={section.variant}
             siteSlug={siteSlug}
+            customDomain={customDomain}
           />
         );
       })}
 
-      <SiteFooter global={g} pages={pages} siteSlug={siteSlug} />
+      <SiteFooter global={g} pages={pages} siteSlug={siteSlug} customDomain={customDomain} />
     </div>
   );
 };
