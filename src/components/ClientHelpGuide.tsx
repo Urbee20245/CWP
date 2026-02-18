@@ -1,5 +1,5 @@
 import React, { useState, useMemo } from 'react';
-import { MessageSquare, FileText, CalendarCheck, Zap, ArrowRight, CheckCircle2, Bot, Phone, ChevronDown, ChevronUp, DollarSign, ExternalLink, Calendar, AlertTriangle, Key } from 'lucide-react';
+import { MessageSquare, FileText, CalendarCheck, Zap, CheckCircle2, Bot, Phone, ChevronDown, ChevronUp, DollarSign, Calendar, AlertTriangle, Key } from 'lucide-react';
 import { Link } from 'react-router-dom';
 
 interface HelpItem {
@@ -223,7 +223,79 @@ const ClientHelpGuide: React.FC<ClientHelpGuideProps> = ({ filter }) => {
             keywords: 'twilio setup a2p 10dlc phone number voice sms billing purchase regulatory compliance credentials sid auth token',
         },
         
-        // NEW: Cal.com Integration Guide
+        // NEW: Cal.com Account Creation Guide
+        {
+            id: 'calcom-signup',
+            title: 'Cal.com: How to Create Your Account',
+            icon: <Calendar className="w-5 h-5 text-emerald-600" />,
+            content: (
+                <div className="space-y-6 text-sm text-slate-700">
+                    <div className="p-4 bg-emerald-50 border border-emerald-200 rounded-xl flex items-start gap-3">
+                        <CheckCircle2 className="w-5 h-5 text-emerald-600 flex-shrink-0 mt-0.5" />
+                        <div>
+                            <p className="font-bold text-emerald-800">Cal.com is 100% Free</p>
+                            <p className="text-emerald-700 mt-0.5">The free plan includes unlimited event types, calendar sync, and all the features you need to get started with AI booking.</p>
+                        </div>
+                    </div>
+
+                    <h4 className="font-bold text-slate-900">Step 1 — Create Your Account</h4>
+                    <ol className="list-decimal list-inside ml-4 space-y-2">
+                        <li>Visit <a href="https://app.cal.com/signup" target="_blank" rel="noopener noreferrer" className="text-emerald-600 hover:underline font-semibold">app.cal.com/signup</a></li>
+                        <li>Enter your name, email address, and create a password.</li>
+                        <li>Choose a username — this becomes your public booking link (e.g., <code className="bg-slate-100 px-1 rounded text-xs">cal.com/your-name</code>).</li>
+                        <li>Click <strong>Create Account</strong> and verify your email.</li>
+                    </ol>
+
+                    <h4 className="font-bold text-slate-900">Step 2 — Connect Your Calendar</h4>
+                    <p>After logging in, Cal.com will prompt you to connect a calendar. This is required so Cal.com knows when you're available.</p>
+                    <ol className="list-decimal list-inside ml-4 space-y-2">
+                        <li>Click <strong>"Connect a Calendar"</strong> and select Google Calendar or Outlook.</li>
+                        <li>Complete the Google/Outlook authorization flow.</li>
+                        <li>Once connected, Cal.com will automatically block off times when you're busy.</li>
+                    </ol>
+
+                    <h4 className="font-bold text-slate-900">Step 3 — Set Your Availability</h4>
+                    <ol className="list-decimal list-inside ml-4 space-y-2">
+                        <li>In the left sidebar, click <strong>"Availability"</strong>.</li>
+                        <li>Configure your working hours (e.g., Mon–Fri, 9am–5pm).</li>
+                        <li>Set your time zone — this is critical for accurate booking.</li>
+                        <li>Click <strong>"Save"</strong>.</li>
+                    </ol>
+
+                    <h4 className="font-bold text-slate-900">Step 4 — Create an Event Type</h4>
+                    <p>An event type defines the meeting format clients can book with you.</p>
+                    <ol className="list-decimal list-inside ml-4 space-y-2">
+                        <li>Click <strong>"Event Types"</strong> in the sidebar.</li>
+                        <li>Click <strong>"New Event Type"</strong> and select <strong>"One-on-One"</strong>.</li>
+                        <li>Set the title (e.g., "15-Minute Consultation"), duration (15 min), and location (Phone or Google Meet).</li>
+                        <li>Click <strong>"Create"</strong>.</li>
+                        <li>Note the URL — the number in it is your <strong>Event Type ID</strong> (you'll need this for your CWP integration).</li>
+                    </ol>
+
+                    <div className="p-4 bg-indigo-50 border border-indigo-200 rounded-xl">
+                        <p className="font-bold text-indigo-800 mb-1">📌 Finding Your Event Type ID</p>
+                        <p className="text-indigo-700 text-xs">After creating your event type, open it and look at the URL bar. It will look like: <code className="bg-indigo-100 px-1 rounded">app.cal.com/event-types/<strong>123456</strong></code>. The number is your ID — copy it and paste it into your CWP Integrations settings.</p>
+                    </div>
+
+                    <h4 className="font-bold text-slate-900">Step 5 — Connect Cal.com in CWP</h4>
+                    <ol className="list-decimal list-inside ml-4 space-y-2">
+                        <li>Go to <Link to="/client/settings" className="text-indigo-600 hover:underline font-semibold">Integrations</Link> in your CWP portal.</li>
+                        <li>Open the <strong>"Calendar Booking"</strong> section.</li>
+                        <li>Under Cal.com, click <strong>"Connect Cal.com"</strong> (OAuth) or enter your API key.</li>
+                        <li>Enter your Event Type ID in the field provided.</li>
+                        <li>Click <strong>"Save"</strong>. You're done!</li>
+                    </ol>
+
+                    <div className="p-3 bg-amber-50 border border-amber-200 rounded-xl text-amber-800">
+                        <p className="font-bold">Need help?</p>
+                        <p className="text-xs mt-1">If you get stuck at any step, contact your project manager or visit <a href="https://cal.com/docs" target="_blank" rel="noopener noreferrer" className="underline">cal.com/docs</a>.</p>
+                    </div>
+                </div>
+            ),
+            keywords: 'cal.com signup create account calendar setup free booking availability event type id',
+        },
+
+        // Cal.com Integration Guide (existing)
         {
             id: 'calcom-integration',
             title: 'Cal.com: Connect & Event Type ID',

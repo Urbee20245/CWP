@@ -50,6 +50,20 @@ const AdminWebsiteBuilder: React.FC = () => {
   const [copied, setCopied] = useState(false);
   const [expandedPages, setExpandedPages] = useState<Record<string, boolean>>({});
 
+  // Collapsible left-sidebar sections
+  const [openLeftSections, setOpenLeftSections] = useState<Record<string, boolean>>({
+    brief: true,
+    pages: false,
+    features: false,
+    assets: false,
+  });
+  const [collapsedFeatureGroups, setCollapsedFeatureGroups] = useState<Record<string, boolean>>({});
+
+  const toggleLeftSection = (key: string) =>
+    setOpenLeftSections(prev => ({ ...prev, [key]: !prev[key] }));
+  const toggleFeatureGroup = (group: string) =>
+    setCollapsedFeatureGroups(prev => ({ ...prev, [group]: !prev[group] }));
+
   // Custom domain state
   const [customDomainInput, setCustomDomainInput] = useState('');
   const [savingDomain, setSavingDomain] = useState(false);
@@ -370,8 +384,18 @@ const AdminWebsiteBuilder: React.FC = () => {
           <div className="lg:col-span-1 space-y-5">
 
             {/* Brief card */}
-            <div className="bg-white rounded-2xl border border-slate-200 shadow-sm p-6">
-              <h2 className="text-lg font-semibold text-slate-900 mb-4">Client Brief</h2>
+            <div className="bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden">
+              <button
+                onClick={() => toggleLeftSection('brief')}
+                className="w-full flex items-center justify-between px-6 py-4 hover:bg-slate-50 transition-colors"
+              >
+                <div className="flex items-center gap-2">
+                  <LayoutDashboard className="w-4 h-4 text-indigo-500" />
+                  <h2 className="text-sm font-bold text-slate-900">Client Brief</h2>
+                </div>
+                <ChevronDown className={`w-4 h-4 text-slate-400 transition-transform ${openLeftSections.brief ? '' : '-rotate-90'}`} />
+              </button>
+            {openLeftSections.brief && <div className="px-6 pb-6 border-t border-slate-100 pt-4">
 
               {/* Client selector */}
               <div className="mb-4">
@@ -469,11 +493,23 @@ const AdminWebsiteBuilder: React.FC = () => {
                   placeholder="Luxurious, minimal, lots of white space..."
                 />
               </div>
+            </div>}{/* end brief collapsible */}
             </div>
 
             {/* Pages card */}
-            <div className="bg-white rounded-2xl border border-slate-200 shadow-sm p-6">
-              <h2 className="text-lg font-semibold text-slate-900 mb-1">Pages to Generate</h2>
+            <div className="bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden">
+              <button
+                onClick={() => toggleLeftSection('pages')}
+                className="w-full flex items-center justify-between px-6 py-4 hover:bg-slate-50 transition-colors"
+              >
+                <div className="flex items-center gap-2">
+                  <FileText className="w-4 h-4 text-indigo-500" />
+                  <h2 className="text-sm font-bold text-slate-900">Pages to Generate</h2>
+                  <span className="text-xs bg-indigo-100 text-indigo-700 px-1.5 py-0.5 rounded-full font-semibold">{selectedPages.size}</span>
+                </div>
+                <ChevronDown className={`w-4 h-4 text-slate-400 transition-transform ${openLeftSections.pages ? '' : '-rotate-90'}`} />
+              </button>
+            {openLeftSections.pages && <div className="px-6 pb-6 border-t border-slate-100 pt-4">
               <p className="text-xs text-slate-400 mb-4">Select which pages AI should build. Home is always included.</p>
               <div className="space-y-2">
                 {ALL_PAGE_OPTIONS.map(option => {
@@ -516,14 +552,25 @@ const AdminWebsiteBuilder: React.FC = () => {
               <p className="text-xs text-slate-400 mt-3">
                 {selectedPages.size} page{selectedPages.size !== 1 ? 's' : ''} selected
               </p>
+            </div>}{/* end pages collapsible */}
             </div>
 
             {/* Premium Features card */}
-            <div className="bg-white rounded-2xl border border-slate-200 shadow-sm p-6">
-              <div className="flex items-center gap-2 mb-1">
-                <Sparkles className="w-5 h-5 text-amber-500" />
-                <h2 className="text-lg font-semibold text-slate-900">Premium Features</h2>
-              </div>
+            <div className="bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden">
+              <button
+                onClick={() => toggleLeftSection('features')}
+                className="w-full flex items-center justify-between px-6 py-4 hover:bg-slate-50 transition-colors"
+              >
+                <div className="flex items-center gap-2">
+                  <Sparkles className="w-4 h-4 text-amber-500" />
+                  <h2 className="text-sm font-bold text-slate-900">Premium Features</h2>
+                  {selectedPremiumFeatures.size > 0 && (
+                    <span className="text-xs bg-amber-100 text-amber-700 px-1.5 py-0.5 rounded-full font-semibold">{selectedPremiumFeatures.size} on</span>
+                  )}
+                </div>
+                <ChevronDown className={`w-4 h-4 text-slate-400 transition-transform ${openLeftSections.features ? '' : '-rotate-90'}`} />
+              </button>
+            {openLeftSections.features && <div className="px-6 pb-6 border-t border-slate-100 pt-4">
               <p className="text-xs text-slate-400 mb-5">
                 Select add-ons to enable for this client's website. These are billed separately.
               </p>
@@ -534,19 +581,24 @@ const AdminWebsiteBuilder: React.FC = () => {
                   const selectedInGroup = featuresInGroup.filter(f => selectedPremiumFeatures.has(f.id)).length;
                   return (
                     <div key={group}>
-                      {/* Group header */}
-                      <div className="flex items-center gap-2 mb-2">
+                      {/* Collapsible Group header */}
+                      <button
+                        type="button"
+                        onClick={() => toggleFeatureGroup(group)}
+                        className="w-full flex items-center gap-2 mb-2 hover:opacity-80 transition-opacity"
+                      >
                         <span className="text-slate-400">{PREMIUM_GROUP_ICONS[group]}</span>
                         <span className="text-xs font-semibold text-slate-500 uppercase tracking-wider">{group}</span>
                         {selectedInGroup > 0 && (
-                          <span className="ml-auto text-xs bg-indigo-100 text-indigo-700 font-medium px-2 py-0.5 rounded-full">
+                          <span className="text-xs bg-amber-100 text-amber-700 font-medium px-2 py-0.5 rounded-full">
                             {selectedInGroup} on
                           </span>
                         )}
-                      </div>
+                        <ChevronDown className={`ml-auto w-3.5 h-3.5 text-slate-400 transition-transform ${collapsedFeatureGroups[group] ? '-rotate-90' : ''}`} />
+                      </button>
 
                       {/* Feature checkboxes */}
-                      <div className="space-y-2">
+                      {!collapsedFeatureGroups[group] && <div className="space-y-2">
                         {featuresInGroup.map(feature => {
                           const isSelected = selectedPremiumFeatures.has(feature.id);
                           return (
@@ -587,7 +639,7 @@ const AdminWebsiteBuilder: React.FC = () => {
                             </button>
                           );
                         })}
-                      </div>
+                      </div>}
                     </div>
                   );
                 })}
@@ -598,12 +650,24 @@ const AdminWebsiteBuilder: React.FC = () => {
                   {selectedPremiumFeatures.size} premium feature{selectedPremiumFeatures.size !== 1 ? 's' : ''} enabled
                 </p>
               )}
+            </div>}{/* end features collapsible */}
             </div>
 
             {/* Assets card */}
             {selectedClientId && (
-              <div className="bg-white rounded-2xl border border-slate-200 shadow-sm p-6">
-                <h2 className="text-lg font-semibold text-slate-900 mb-1">Assets</h2>
+              <div className="bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden">
+                <button
+                  onClick={() => toggleLeftSection('assets')}
+                  className="w-full flex items-center justify-between px-6 py-4 hover:bg-slate-50 transition-colors"
+                >
+                  <div className="flex items-center gap-2">
+                    <ImageIcon className="w-4 h-4 text-indigo-500" />
+                    <h2 className="text-sm font-bold text-slate-900">Assets</h2>
+                    {(logoUrl || heroUrl) && <span className="text-xs bg-emerald-100 text-emerald-700 px-1.5 py-0.5 rounded-full font-semibold">Uploaded</span>}
+                  </div>
+                  <ChevronDown className={`w-4 h-4 text-slate-400 transition-transform ${openLeftSections.assets ? '' : '-rotate-90'}`} />
+                </button>
+              {openLeftSections.assets && <div className="px-6 pb-6 border-t border-slate-100 pt-4">
                 <p className="text-xs text-slate-400 mb-4">Upload images — saved instantly, no regeneration needed.</p>
 
                 {uploadError && (
@@ -693,6 +757,7 @@ const AdminWebsiteBuilder: React.FC = () => {
                     }}
                   />
                 </div>
+              </div>}{/* end assets collapsible */}
               </div>
             )}
 
