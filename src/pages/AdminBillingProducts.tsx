@@ -12,10 +12,10 @@ interface BillingProduct {
   id: string;
   name: string;
   description: string;
-  billing_type: 'one_time' | 'subscription'; // Simplified type
-  amount_cents: number | null; 
-  setup_fee_cents: number | null; 
-  monthly_price_cents: number | null; 
+  billing_type: 'one_time' | 'subscription' | 'yearly';
+  amount_cents: number | null;
+  setup_fee_cents: number | null;
+  monthly_price_cents: number | null;
   currency: string;
   stripe_product_id: string;
   stripe_price_id: string;
@@ -53,8 +53,8 @@ const AdminBillingProducts: React.FC = () => {
     name: '',
     description: '',
     oneTimeAmount: 0, // USD for one_time
-    monthlyPrice: 0, // USD for subscription
-    billingType: 'one_time' as 'one_time' | 'subscription', // Removed setup_plus_subscription
+    monthlyPrice: 0, // USD for subscription (monthly or yearly)
+    billingType: 'one_time' as 'one_time' | 'subscription' | 'yearly',
     features: [] as string[],
     bundledWithProductId: '' as string, // New state for bundling
   });
@@ -153,6 +153,13 @@ const AdminBillingProducts: React.FC = () => {
             setIsCreating(false);
             return;
         }
+    } else if (billingType === 'yearly') {
+        monthlyPriceCents = Math.round(monthlyPrice * 100);
+        if (monthlyPriceCents <= 0) {
+            setFormError('Yearly Price must be set.');
+            setIsCreating(false);
+            return;
+        }
     }
 
     if (!name) {
@@ -164,16 +171,16 @@ const AdminBillingProducts: React.FC = () => {
     const finalDescription = description;
 
     try {
-      // CRITICAL FIX: Only send amount_cents if billing_type is 'one_time'
+      // Only send amount_cents if billing_type is 'one_time'
       const finalAmountCents = billingType === 'one_time' ? amountCents : null;
-      
+
       await AdminService.createBillingProduct({
         name,
         description: finalDescription,
         amount_cents: finalAmountCents,
         billing_type: billingType,
         monthly_price_cents: monthlyPriceCents,
-        // Pass the bundled product ID if it's a subscription and selected
+        // Pass the bundled product ID only for subscription type
         bundled_with_product_id: billingType === 'subscription' && bundledWithProductId ? bundledWithProductId : null,
       });
 
@@ -243,21 +250,22 @@ const AdminBillingProducts: React.FC = () => {
   const getTypeIcon = (type: BillingProduct['billing_type']) => {
       switch (type) {
           case 'subscription': return <Zap className="w-4 h-4" />;
+          case 'yearly': return <Zap className="w-4 h-4" />;
           case 'one_time': return <Clock className="w-4 h-4" />;
           default: return <FileText className="w-4 h-4" />;
       }
   };
-  
+
   const renderPriceDisplay = (product: BillingProduct) => {
-      const monthlyPrice = product.monthly_price_cents;
+      const recurringPrice = product.monthly_price_cents;
       const oneTimePrice = product.amount_cents;
-      
+
       if (product.billing_type === 'one_time' && oneTimePrice !== null) {
           return `$${(oneTimePrice / 100).toFixed(2)}`;
       }
-      if (product.billing_type === 'subscription' && monthlyPrice !== null) {
-          let display = `$${(monthlyPrice / 100).toFixed(2)}/mo`;
-          
+      if (product.billing_type === 'subscription' && recurringPrice !== null) {
+          let display = `$${(recurringPrice / 100).toFixed(2)}/mo`;
+
           if (product.bundled_with_product_id) {
               const setupFeeProduct = products.find(p => p.id === product.bundled_with_product_id);
               if (setupFeeProduct && setupFeeProduct.amount_cents) {
@@ -265,6 +273,9 @@ const AdminBillingProducts: React.FC = () => {
               }
           }
           return display;
+      }
+      if (product.billing_type === 'yearly' && recurringPrice !== null) {
+          return `$${(recurringPrice / 100).toFixed(2)}/yr`;
       }
       return 'N/A';
   };
@@ -361,8 +372,8 @@ const AdminBillingProducts: React.FC = () => {
                   disabled={isCreating}
                 >
                   <option value="subscription">Monthly Subscription</option>
+                  <option value="yearly">Yearly Subscription</option>
                   <option value="one_time">One-Time Payment</option>
-                  {/* Removed setup_plus_subscription */}
                 </select>
               </div>
               
@@ -387,7 +398,7 @@ const AdminBillingProducts: React.FC = () => {
                         </div>
                     </div>
                 )}
-                
+
                 {formData.billingType === 'subscription' && (
                     <>
                         <div className="col-span-2">
@@ -407,8 +418,8 @@ const AdminBillingProducts: React.FC = () => {
                                 />
                             </div>
                         </div>
-                        
-                        {/* NEW: Bundle With Selector */}
+
+                        {/* Bundle With Selector */}
                         <div className="col-span-2">
                             <label className="block text-sm font-medium text-slate-700 mb-1">Bundle With Setup Fee (Optional)</label>
                             <select
@@ -428,6 +439,27 @@ const AdminBillingProducts: React.FC = () => {
                             <p className="text-xs text-slate-500 mt-1">The setup fee will be charged immediately with the first month's subscription.</p>
                         </div>
                     </>
+                )}
+
+                {formData.billingType === 'yearly' && (
+                    <div className="col-span-2">
+                        <label className="block text-sm font-medium text-slate-700 mb-1">Yearly Price (USD) *</label>
+                        <div className="relative">
+                            <span className="absolute left-3 top-2.5 text-slate-500 text-sm">$</span>
+                            <input
+                                type="number"
+                                name="monthlyPrice"
+                                value={formData.monthlyPrice || ''}
+                                onChange={handleFormChange}
+                                className="w-full pl-6 pr-2 py-2 border border-slate-300 rounded-lg text-sm"
+                                required
+                                min="0.01"
+                                step="0.01"
+                                disabled={isCreating}
+                            />
+                        </div>
+                        <p className="text-xs text-slate-500 mt-1">Clients are billed this amount once per year.</p>
+                    </div>
                 )}
               </div>
               
@@ -487,7 +519,7 @@ const AdminBillingProducts: React.FC = () => {
                                     <p className="font-bold text-slate-900">{renderPriceDisplay(product)}</p>
                                     <div className="flex items-center gap-1 text-xs text-slate-500">
                                         {getTypeIcon(product.billing_type)}
-                                        <span>{product.billing_type.replace('_', ' ')}</span>
+                                        <span>{product.billing_type === 'yearly' ? 'yearly subscription' : product.billing_type.replace('_', ' ')}</span>
                                     </div>
                                 </div>
                                 <button 

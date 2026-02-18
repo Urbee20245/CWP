@@ -124,7 +124,7 @@ interface Client {
 interface BillingProduct {
   id: string;
   name: string;
-  billing_type: 'one_time' | 'subscription'; // Updated type
+  billing_type: 'one_time' | 'subscription' | 'yearly';
   amount_cents: number | null;
   monthly_price_cents: number | null;
   stripe_price_id: string;
@@ -470,9 +470,10 @@ const AdminClientDetail: React.FC = () => {
             setupFeePriceId
         );
         
-        if (result.requires_action && result.hosted_invoice_url) {
-            alert("Subscription created but requires payment action. Redirecting to invoice.");
+        if (result.hosted_invoice_url) {
+            // Always open the invoice when one is available — the client needs to pay
             window.open(result.hosted_invoice_url, '_blank');
+            alert("Subscription created. The invoice has been opened in a new tab. Share this link with the client so they can complete payment.");
         } else {
             alert(`Subscription started successfully! Status: ${result.status}`);
         }
@@ -701,7 +702,7 @@ const AdminClientDetail: React.FC = () => {
       return client?.deposits?.some(d => d.stripe_invoice_id === stripeInvoiceId) || false;
   };
   
-  const subscriptionProducts = products.filter(p => p.billing_type === 'subscription');
+  const subscriptionProducts = products.filter(p => p.billing_type === 'subscription' || p.billing_type === 'yearly');
   const oneTimeProducts = products.filter(p => p.billing_type === 'one_time');
   
   const unappliedDeposits = client?.deposits?.filter(d => d.status === 'paid' || d.status === 'applied') || [];
@@ -1215,7 +1216,7 @@ const AdminClientDetail: React.FC = () => {
                         <option value="">Select a plan...</option>
                         {subscriptionProducts.map(product => (
                           <option key={product.stripe_price_id} value={product.stripe_price_id}>
-                            {getPlanName(product.stripe_price_id)} (${(product.monthly_price_cents! / 100).toFixed(2)}/mo)
+                            {product.name} (${(product.monthly_price_cents! / 100).toFixed(2)}{product.billing_type === 'yearly' ? '/yr' : '/mo'})
                           </option>
                         ))}
                       </select>

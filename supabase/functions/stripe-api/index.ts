@@ -187,24 +187,24 @@ serve(async (req) => {
             await applyUnappliedDeposits(customerId, subscription.latest_invoice.id);
         }
 
-        // If payment is required, return the invoice URL
-        if (subscription.latest_invoice && typeof subscription.latest_invoice !== 'string') {
-          const invoice = subscription.latest_invoice;
-          if (invoice.payment_intent && typeof invoice.payment_intent !== 'string' && invoice.payment_intent.status === 'requires_action') {
-            return jsonResponse({ 
-              subscription_id: subscription.id,
-              status: subscription.status,
-              hosted_invoice_url: invoice.hosted_invoice_url,
-              requires_action: true,
-            });
-          }
-        }
-        
-        // If no immediate payment required (e.g., free trial or successful first payment)
-        return jsonResponse({ 
+        // Determine payment status and always surface the hosted invoice URL when payment is needed
+        const latestInvoice = subscription.latest_invoice && typeof subscription.latest_invoice !== 'string'
+          ? subscription.latest_invoice
+          : null;
+
+        const paymentIntent = latestInvoice?.payment_intent && typeof latestInvoice.payment_intent !== 'string'
+          ? latestInvoice.payment_intent
+          : null;
+
+        // Payment is required whenever the intent is not already succeeded
+        // This covers: requires_payment_method, requires_action (3DS), requires_confirmation, etc.
+        const requiresPayment = paymentIntent !== null && paymentIntent.status !== 'succeeded';
+
+        return jsonResponse({
           subscription_id: subscription.id,
           status: subscription.status,
-          requires_action: false,
+          hosted_invoice_url: latestInvoice?.hosted_invoice_url ?? null,
+          requires_action: requiresPayment,
         });
       }
 
