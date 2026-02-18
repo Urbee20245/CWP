@@ -270,19 +270,14 @@ const AdminVoiceManagement: React.FC = () => {
     setIsSavingWorkspace(true);
     setWorkspaceSaveMsg(null);
     try {
-      const { data: { session } } = await supabase.auth.getSession();
-      const res = await supabase.functions.invoke('save-retell-workspace-creds', {
-        body: {
-          client_id: selectedClientId,
-          workspace_id: workspaceId.trim() || undefined,
-          api_key: workspaceApiKey.trim() || undefined,
-        },
-        headers: { Authorization: `Bearer ${session?.access_token}` },
-      });
-      if (res.error) throw new Error(res.error.message);
+      await AdminService.saveRetellWorkspaceCreds(
+        selectedClientId,
+        workspaceId.trim(),
+        workspaceApiKey.trim(),
+      );
       setWorkspaceSaveMsg({ type: 'success', text: 'Workspace credentials saved.' });
     } catch (e: any) {
-      setWorkspaceSaveMsg({ type: 'error', text: e.message || 'Failed to save credentials.' });
+      setWorkspaceSaveMsg({ type: 'error', text: e.message || 'Failed to save credentials. Ensure the edge function is deployed.' });
     } finally {
       setIsSavingWorkspace(false);
     }
@@ -293,14 +288,7 @@ const AdminVoiceManagement: React.FC = () => {
     setIsLoadingUsage(true);
     setUsageData(null);
     try {
-      const { data: { session } } = await supabase.auth.getSession();
-      const res = await supabase.functions.invoke('get-retell-workspace-usage', {
-        body: { client_id: selectedClientId },
-        headers: { Authorization: `Bearer ${session?.access_token}` },
-      });
-      if (res.error) throw new Error(res.error.message);
-      const d = typeof res.data === 'string' ? JSON.parse(res.data) : res.data;
-      if (d?.error) throw new Error(d.error);
+      const d = await AdminService.getRetellWorkspaceUsage(selectedClientId);
       setUsageData(d);
     } catch (e: any) {
       setWorkspaceSaveMsg({ type: 'error', text: `Usage fetch failed: ${e.message}` });

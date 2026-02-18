@@ -7,19 +7,20 @@ import { GoogleGenAI } from 'https://esm.sh/@google/genai@1.34.0';
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2';
 import { handleCors, jsonResponse, errorResponse } from '../_shared/utils.ts';
 
-const GEMINI_API_KEY         = Deno.env.get('GEMINI_API_KEY');
-const PEXELS_API_KEY         = Deno.env.get('PEXELS_API_KEY');   // optional
-const SUPABASE_URL           = Deno.env.get('SUPABASE_URL')!;
+const GEMINI_API_KEY          = Deno.env.get('GEMINI_API_KEY');
+const PEXELS_API_KEY          = Deno.env.get('PEXELS_API_KEY');   // fallback only
+const SUPABASE_URL            = Deno.env.get('SUPABASE_URL')!;
 const SUPABASE_SERVICE_ROLE_KEY = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!;
 
 if (!GEMINI_API_KEY) throw new Error('GEMINI_API_KEY is not set.');
 
 const ai = new GoogleGenAI({ apiKey: GEMINI_API_KEY });
 
+// ─── helpers ─────────────────────────────────────────────────────────────────
+
 function slugify(text: string): string {
   return text
-    .toLowerCase()
-    .trim()
+    .toLowerCase().trim()
     .replace(/[^a-z0-9\s-]/g, '')
     .replace(/\s+/g, '-')
     .replace(/-+/g, '-')
@@ -27,34 +28,90 @@ function slugify(text: string): string {
 }
 
 async function makeUniqueSlug(supabaseAdmin: any, clientId: string, base: string): Promise<string> {
-  let slug = slugify(base);
+  const slug = slugify(base);
   let attempt = 0;
   while (true) {
     const candidate = attempt === 0 ? slug : `${slug}-${attempt}`;
     const { data } = await supabaseAdmin
-      .from('blog_posts')
-      .select('id')
-      .eq('client_id', clientId)
-      .eq('slug', candidate)
-      .maybeSingle();
+      .from('blog_posts').select('id')
+      .eq('client_id', clientId).eq('slug', candidate).maybeSingle();
     if (!data) return candidate;
     attempt++;
   }
 }
 
-/** Fetch a featured image from Pexels (returns null if no API key or search fails) */
-async function fetchFeaturedImage(query: string): Promise<{ url: string; alt: string } | null> {
+/**
+ * PRIMARY: Generate a featured image using Gemini Imagen 3.
+ * Uploads the result to Supabase Storage and returns a public URL.
+ */
+async function generateImageWithGemini(
+  supabaseAdmin: any,
+  clientId: string,
+  imagePrompt: string,
+): Promise<{ url: string; alt: string } | null> {
+  try {
+    console.log(`[generate-blog-post] Generating image via Imagen 3: "${imagePrompt}"`);
+
+    const response = await ai.models.generateImages({
+      model: 'imagen-3.0-generate-002',
+      prompt: imagePrompt,
+      config: {
+        numberOfImages: 1,
+        aspectRatio: '16:9',
+        outputMimeType: 'image/jpeg',
+      },
+    });
+
+    const imageBytes = response.generatedImages?.[0]?.image?.imageBytes;
+    if (!imageBytes) {
+      console.warn('[generate-blog-post] Imagen 3 returned no image bytes.');
+      return null;
+    }
+
+    // Decode base64 → Uint8Array
+    const binary = atob(imageBytes);
+    const bytes  = new Uint8Array(binary.length);
+    for (let i = 0; i < binary.length; i++) bytes[i] = binary.charCodeAt(i);
+
+    const fileName = `blog-${clientId}-${Date.now()}.jpg`;
+    const storagePath = `blog-images/${fileName}`;
+
+    const { error: uploadError } = await supabaseAdmin.storage
+      .from('website-images')
+      .upload(storagePath, bytes, { contentType: 'image/jpeg', upsert: false });
+
+    if (uploadError) {
+      console.error('[generate-blog-post] Storage upload error:', uploadError.message);
+      return null;
+    }
+
+    const { data: { publicUrl } } = supabaseAdmin.storage
+      .from('website-images')
+      .getPublicUrl(storagePath);
+
+    console.log(`[generate-blog-post] Image uploaded: ${publicUrl}`);
+    return { url: publicUrl, alt: imagePrompt };
+
+  } catch (err: any) {
+    console.error('[generate-blog-post] Imagen 3 error:', err.message);
+    return null;
+  }
+}
+
+/**
+ * FALLBACK: Fetch a stock image from Pexels (requires PEXELS_API_KEY).
+ */
+async function fetchImageFromPexels(query: string): Promise<{ url: string; alt: string } | null> {
   if (!PEXELS_API_KEY) return null;
   try {
-    const searchUrl = `https://api.pexels.com/v1/search?query=${encodeURIComponent(query)}&per_page=5&orientation=landscape`;
-    const res = await fetch(searchUrl, {
-      headers: { Authorization: PEXELS_API_KEY },
-    });
+    const res = await fetch(
+      `https://api.pexels.com/v1/search?query=${encodeURIComponent(query)}&per_page=5&orientation=landscape`,
+      { headers: { Authorization: PEXELS_API_KEY } },
+    );
     if (!res.ok) return null;
     const data = await res.json();
     const photos: any[] = data?.photos || [];
     if (photos.length === 0) return null;
-    // Pick a random one from the top 5 to add variety
     const photo = photos[Math.floor(Math.random() * photos.length)];
     return {
       url: photo.src?.large2x || photo.src?.large || photo.src?.original,
@@ -64,6 +121,8 @@ async function fetchFeaturedImage(query: string): Promise<{ url: string; alt: st
     return null;
   }
 }
+
+// ─── main handler ─────────────────────────────────────────────────────────────
 
 serve(async (req) => {
   const corsResponse = handleCors(req);
@@ -78,17 +137,16 @@ serve(async (req) => {
     const {
       client_id,
       topic,
-      word_count = 600,
+      word_count    = 600,
       author_name,
-      auto_publish = false,
+      auto_publish  = false,
       generate_image = true,
-      // Internal use: schedule runner passes these
       schedule_id,
     } = await req.json();
 
     if (!client_id) return errorResponse('Missing client_id.', 400);
 
-    // Fetch client brief for business context
+    // Business context
     const { data: brief } = await supabaseAdmin
       .from('website_briefs')
       .select('business_name, industry, services_offered, location, tone')
@@ -97,63 +155,55 @@ serve(async (req) => {
 
     if (!brief) return errorResponse('No website brief found for this client.', 404);
 
-    // Check blog is enabled
+    // Gate check
     const { data: client } = await supabaseAdmin
-      .from('clients')
-      .select('blog_enabled, business_name')
-      .eq('id', client_id)
-      .maybeSingle();
+      .from('clients').select('blog_enabled, business_name')
+      .eq('id', client_id).maybeSingle();
 
-    if (!client?.blog_enabled) {
-      return errorResponse('Blog is not enabled for this client.', 403);
-    }
+    if (!client?.blog_enabled) return errorResponse('Blog is not enabled for this client.', 403);
 
     const articleTopic = topic || `Tips for ${brief.industry} in ${brief.location}`;
     const targetWords  = Math.min(Math.max(word_count, 300), 2000);
 
-    console.log(`[generate-blog-post] Generating for client_id=${client_id} topic="${articleTopic}"`);
+    console.log(`[generate-blog-post] client_id=${client_id} topic="${articleTopic}"`);
 
-    const systemInstruction = `You are an expert SEO content strategist and blog writer specializing in local business content marketing.
-Write SEO-optimized, engaging articles for local service businesses that rank on Google and convert readers into customers.
+    // ── Step 1: Generate article text with Gemini ──────────────────────────
 
-OUTPUT FORMAT: Return ONLY a valid JSON object — no markdown fences, no explanation.
+    const systemInstruction = `You are an expert SEO content strategist and blog writer for local businesses.
+
+OUTPUT FORMAT: Return ONLY a valid JSON object — no markdown fences, no preamble.
 
 {
-  "title": string,              // compelling, SEO-friendly H1 title (50-70 chars)
-  "meta_title": string,         // SEO meta title for <title> tag (50-60 chars, include location + keyword)
-  "meta_description": string,   // SEO meta description (150-160 chars, include CTA, location, main keyword)
-  "seo_keywords": string[],     // 6-8 targeted keywords/phrases (mix of short and long-tail)
-  "excerpt": string,            // 2-3 sentence teaser for blog listing (max 200 chars)
-  "category": string,           // single category label (e.g. "Tips", "How-To", "Industry News", "Guide")
-  "image_search_query": string, // 3-5 word photo search query for stock image (e.g. "plumber fixing pipe")
-  "content": string             // full article in semantic HTML (use <h2>, <h3>, <p>, <ul>, <li>, <strong> tags)
+  "title": string,              // SEO H1 title (50-70 chars)
+  "meta_title": string,         // <title> tag copy (50-60 chars, include location + primary keyword)
+  "meta_description": string,   // meta description (150-160 chars, include CTA, location, keyword)
+  "seo_keywords": string[],     // 6-8 targeted keywords (short + long-tail mix)
+  "excerpt": string,            // 2-3 sentence listing teaser (max 200 chars)
+  "category": string,           // one of: Tips | How-To | Guide | Industry News | Case Study
+  "image_prompt": string,       // detailed Imagen AI prompt for a PROFESSIONAL blog header image (16:9 landscape, photorealistic, no text in image). Describe lighting, style, subject clearly. e.g. "A professional plumber in a blue uniform fixing copper pipes under a kitchen sink, natural window light, photorealistic"
+  "content": string             // full article in clean semantic HTML (<h2>,<h3>,<p>,<ul>,<li>,<strong>)
 }
 
 WRITING RULES:
-- Write approximately ${targetWords} words for the article content
-- Include the business location naturally in intro and conclusion (for local SEO)
-- Use the primary keyword in the H1 title, first paragraph, and at least 2 subheadings
-- Reference their specific services naturally throughout
-- Use the business's tone: ${brief.tone}
-- Structure: compelling intro (with primary keyword) → 3-5 main sections with keyword-rich h2 headings → conclusion with strong CTA
-- CTA should encourage readers to call or contact the local business
-- Include schema-friendly content (clear who, what, where, why)
-- Do NOT mention competitor businesses by name
+- ~${targetWords} words in the content field
+- Mention the business location naturally in intro + conclusion (local SEO)
+- Use the primary keyword in: H1 title, first paragraph, 2+ subheadings
+- Tone: ${brief.tone}
+- Structure: compelling intro → 3-5 sections with keyword-rich <h2> → conclusion with strong CTA
+- CTA encourages readers to call or contact the local business
+- Never mention competitor businesses
 - Return ONLY the JSON object, nothing else`;
 
-    const userPrompt = `Write an SEO-optimized blog article for this local business:
+    const userPrompt = `Write an SEO-optimized blog article for:
 
 Business: ${brief.business_name}
 Industry: ${brief.industry}
 Services: ${brief.services_offered}
 Location: ${brief.location}
 Tone: ${brief.tone}
+Topic: ${articleTopic}`;
 
-Article Topic: ${articleTopic}
-
-Write an engaging, comprehensive article that will rank on Google and convert local readers into customers.`;
-
-    const response = await ai.models.generateContent({
+    const textResponse = await ai.models.generateContent({
       model: 'gemini-2.5-flash',
       contents: [{ role: 'user', parts: [{ text: userPrompt }] }],
       config: {
@@ -164,9 +214,8 @@ Write an engaging, comprehensive article that will rank on Google and convert lo
       },
     });
 
-    const rawText = response.text?.trim() || '';
+    const rawText = textResponse.text?.trim() || '';
     let articleJson: any;
-
     try {
       articleJson = JSON.parse(rawText);
     } catch {
@@ -175,42 +224,58 @@ Write an engaging, comprehensive article that will rank on Google and convert lo
     }
 
     if (!articleJson.title || !articleJson.content) {
-      return errorResponse('AI response was missing required fields.', 500);
+      return errorResponse('AI response missing required fields.', 500);
     }
 
-    // Optionally fetch a featured image from Pexels
+    // ── Step 2: Generate featured image ────────────────────────────────────
+
     let featuredImageUrl: string | null = null;
     let featuredImageAlt: string | null = null;
 
-    if (generate_image && articleJson.image_search_query) {
-      const img = await fetchFeaturedImage(articleJson.image_search_query);
-      if (img) {
-        featuredImageUrl = img.url;
-        featuredImageAlt = img.alt;
+    if (generate_image) {
+      // PRIMARY: Gemini Imagen 3 (AI-generated, on-brand)
+      if (articleJson.image_prompt) {
+        const geminiImg = await generateImageWithGemini(supabaseAdmin, client_id, articleJson.image_prompt);
+        if (geminiImg) {
+          featuredImageUrl = geminiImg.url;
+          featuredImageAlt = geminiImg.alt;
+        }
+      }
+
+      // FALLBACK: Pexels stock photo (only if Gemini failed)
+      if (!featuredImageUrl && PEXELS_API_KEY) {
+        const fallbackQuery = articleJson.image_prompt?.split(',')[0] || articleTopic;
+        const pexelsImg = await fetchImageFromPexels(fallbackQuery);
+        if (pexelsImg) {
+          featuredImageUrl = pexelsImg.url;
+          featuredImageAlt = pexelsImg.alt;
+          console.log('[generate-blog-post] Fell back to Pexels for image.');
+        }
       }
     }
 
-    const slug = await makeUniqueSlug(supabaseAdmin, client_id, articleJson.title);
+    // ── Step 3: Save to DB ─────────────────────────────────────────────────
 
+    const slug = await makeUniqueSlug(supabaseAdmin, client_id, articleJson.title);
     const publishedAt = auto_publish ? new Date().toISOString() : null;
 
     const { data: post, error: insertError } = await supabaseAdmin
       .from('blog_posts')
       .insert({
         client_id,
-        title:               articleJson.title,
+        title:            articleJson.title,
         slug,
-        excerpt:             articleJson.excerpt || '',
-        content:             articleJson.content,
-        category:            articleJson.category || 'Tips',
-        author_name:         author_name || 'The Team',
-        meta_title:          articleJson.meta_title || articleJson.title,
-        meta_description:    articleJson.meta_description || articleJson.excerpt || '',
-        seo_keywords:        articleJson.seo_keywords || [],
-        featured_image_url:  featuredImageUrl,
-        featured_image_alt:  featuredImageAlt,
-        is_published:        auto_publish,
-        published_at:        publishedAt,
+        excerpt:          articleJson.excerpt || '',
+        content:          articleJson.content,
+        category:         articleJson.category || 'Tips',
+        author_name:      author_name || 'The Team',
+        meta_title:       articleJson.meta_title || articleJson.title,
+        meta_description: articleJson.meta_description || articleJson.excerpt || '',
+        seo_keywords:     articleJson.seo_keywords || [],
+        featured_image_url: featuredImageUrl,
+        featured_image_alt: featuredImageAlt,
+        is_published:     auto_publish,
+        published_at:     publishedAt,
       })
       .select('id, title, slug, category, featured_image_url, meta_title')
       .single();
@@ -220,12 +285,19 @@ Write an engaging, comprehensive article that will rank on Google and convert lo
       return errorResponse('Failed to save blog post.', 500);
     }
 
-    // If this was triggered from a schedule, bump the counter
+    // Bump schedule counter if triggered from cron
     if (schedule_id) {
-      await supabaseAdmin.rpc('increment_schedule_post_count', { p_schedule_id: schedule_id });
+      const { data: schedRow } = await supabaseAdmin
+        .from('blog_schedules').select('posts_generated').eq('id', schedule_id).maybeSingle();
+      if (schedRow) {
+        await supabaseAdmin
+          .from('blog_schedules')
+          .update({ posts_generated: (schedRow.posts_generated || 0) + 1, last_run_at: new Date().toISOString() })
+          .eq('id', schedule_id);
+      }
     }
 
-    console.log(`[generate-blog-post] Created post id=${post.id} slug="${slug}" image=${!!featuredImageUrl}`);
+    console.log(`[generate-blog-post] Created post id=${post.id} image=${!!featuredImageUrl} (gemini=${!!featuredImageUrl && !PEXELS_API_KEY || !!featuredImageUrl})`);
     return jsonResponse({ success: true, post });
 
   } catch (error: any) {
