@@ -3,7 +3,11 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import { Link } from 'react-router-dom';
 import { supabase } from '../integrations/supabase/client';
-import { Users, Briefcase, DollarSign, Loader2, ArrowRight, Zap, MessageSquare, Bell, Clock, TrendingUp, CalendarCheck, Phone, Video, User } from 'lucide-react';
+import {
+  Users, Briefcase, DollarSign, Loader2, ArrowRight, Zap, MessageSquare,
+  Bell, Clock, TrendingUp, CalendarCheck, Phone, Video, User, ArrowUpRight,
+  MoreHorizontal
+} from 'lucide-react';
 import AdminLayout from '../components/AdminLayout';
 import HelpPopover from '../components/HelpPopover';
 import { format, isPast, parseISO } from 'date-fns';
@@ -77,10 +81,7 @@ const AdminDashboard: React.FC = () => {
 
     const { data: remindersData, error: remindersError } = await supabase
         .from('client_reminders')
-        .select(`
-            id, note, reminder_date,
-            clients (id, business_name)
-        `)
+        .select(`id, note, reminder_date, clients (id, business_name)`)
         .eq('is_completed', false)
         .order('reminder_date', { ascending: true })
         .limit(5);
@@ -115,7 +116,6 @@ const AdminDashboard: React.FC = () => {
         setRecentMessages(messagesData as RecentMessage[] || []);
     }
 
-    // Fetch upcoming appointments
     const now = new Date().toISOString();
     const { data: appointmentsData, error: appointmentsError } = await supabase
         .from('appointments')
@@ -153,22 +153,66 @@ const AdminDashboard: React.FC = () => {
   }, [fetchData]);
 
   const overdueReminders = reminders.filter(r => isPast(new Date(r.reminder_date)));
-  const upcomingReminders = reminders.filter(r => !isPast(new Date(r.reminder_date)));
+
+  const statCards = [
+    {
+      label: 'Total Clients',
+      value: stats.totalClients,
+      icon: Users,
+      href: '/admin/clients',
+      color: 'indigo',
+      bg: 'bg-indigo-50',
+      iconColor: 'text-indigo-600',
+      trend: null,
+    },
+    {
+      label: 'Active Projects',
+      value: stats.activeProjects,
+      icon: Briefcase,
+      href: '/admin/projects',
+      color: 'emerald',
+      bg: 'bg-emerald-50',
+      iconColor: 'text-emerald-600',
+      trend: null,
+    },
+    {
+      label: 'Total Revenue',
+      value: `$${stats.totalRevenue.toLocaleString(undefined, { minimumFractionDigits: 0, maximumFractionDigits: 0 })}`,
+      icon: TrendingUp,
+      href: '/admin/billing/revenue',
+      color: 'violet',
+      bg: 'bg-violet-50',
+      iconColor: 'text-violet-600',
+      trend: null,
+    },
+    {
+      label: 'Add-on Requests',
+      value: stats.pendingAddonRequests,
+      icon: Zap,
+      href: '/admin/clients',
+      color: 'amber',
+      bg: 'bg-amber-50',
+      iconColor: 'text-amber-600',
+      trend: stats.pendingAddonRequests > 0 ? 'New' : null,
+    },
+  ];
 
   return (
     <AdminLayout>
       <div className="p-6 lg:p-8 max-w-7xl mx-auto">
 
         {/* Page Header */}
-        <div className="mb-8">
-          <div className="flex items-center gap-3 mb-1">
-            <h1 className="text-2xl font-bold text-slate-900">Dashboard</h1>
-            <HelpPopover
-              title="Agency Overview Dashboard"
-              content="Monitor key performance indicators (KPIs) including client count, active projects, revenue, and pending requests."
-            />
+        <div className="mb-8 flex items-start justify-between">
+          <div>
+            <div className="flex items-center gap-2 mb-1">
+              <h1 className="text-2xl font-bold text-slate-900">Dashboard</h1>
+              <HelpPopover
+                title="Agency Overview Dashboard"
+                content="Monitor key performance indicators (KPIs) including client count, active projects, revenue, and pending requests."
+              />
+            </div>
+            <p className="text-slate-500 text-sm">Here's what's happening with your agency today.</p>
           </div>
-          <p className="text-slate-500 text-sm">Welcome back. Here's your agency overview.</p>
         </div>
 
         {isLoading ? (
@@ -178,107 +222,85 @@ const AdminDashboard: React.FC = () => {
         ) : (
           <div className="space-y-6">
 
-            {/* Stats Grid - 4 equal cards */}
+            {/* Stats Row */}
             <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
-              <Link to="/admin/clients" className="bg-white rounded-xl p-5 border border-slate-200 hover:border-indigo-300 hover:shadow-md transition-all group">
-                <div className="flex items-center justify-between mb-3">
-                  <div className="w-10 h-10 rounded-lg bg-indigo-50 flex items-center justify-center">
-                    <Users className="w-5 h-5 text-indigo-600" />
+              {statCards.map((card) => (
+                <Link
+                  key={card.label}
+                  to={card.href}
+                  className="bg-white rounded-2xl p-5 border border-slate-200 hover:border-slate-300 hover:shadow-md transition-all group relative overflow-hidden"
+                >
+                  <div className="flex items-start justify-between mb-4">
+                    <div className={`w-10 h-10 rounded-xl ${card.bg} flex items-center justify-center`}>
+                      <card.icon className={`w-5 h-5 ${card.iconColor}`} />
+                    </div>
+                    <div className="flex items-center gap-1.5">
+                      {card.trend && (
+                        <span className="text-[10px] font-bold bg-amber-100 text-amber-700 px-1.5 py-0.5 rounded-full">{card.trend}</span>
+                      )}
+                      <ArrowUpRight className="w-4 h-4 text-slate-300 group-hover:text-slate-500 transition-colors" />
+                    </div>
                   </div>
-                  <ArrowRight className="w-4 h-4 text-slate-300 group-hover:text-indigo-500 transition-colors" />
-                </div>
-                <p className="text-2xl font-bold text-slate-900">{stats.totalClients}</p>
-                <p className="text-sm text-slate-500">Total Clients</p>
-              </Link>
-
-              <Link to="/admin/projects" className="bg-white rounded-xl p-5 border border-slate-200 hover:border-emerald-300 hover:shadow-md transition-all group">
-                <div className="flex items-center justify-between mb-3">
-                  <div className="w-10 h-10 rounded-lg bg-emerald-50 flex items-center justify-center">
-                    <Briefcase className="w-5 h-5 text-emerald-600" />
-                  </div>
-                  <ArrowRight className="w-4 h-4 text-slate-300 group-hover:text-emerald-500 transition-colors" />
-                </div>
-                <p className="text-2xl font-bold text-slate-900">{stats.activeProjects}</p>
-                <p className="text-sm text-slate-500">Active Projects</p>
-              </Link>
-
-              <Link to="/admin/billing/revenue" className="bg-white rounded-xl p-5 border border-slate-200 hover:border-purple-300 hover:shadow-md transition-all group">
-                <div className="flex items-center justify-between mb-3">
-                  <div className="w-10 h-10 rounded-lg bg-purple-50 flex items-center justify-center">
-                    <TrendingUp className="w-5 h-5 text-purple-600" />
-                  </div>
-                  <ArrowRight className="w-4 h-4 text-slate-300 group-hover:text-purple-500 transition-colors" />
-                </div>
-                <p className="text-2xl font-bold text-slate-900">${stats.totalRevenue.toLocaleString(undefined, { minimumFractionDigits: 0, maximumFractionDigits: 0 })}</p>
-                <p className="text-sm text-slate-500">Total Revenue</p>
-              </Link>
-
-              <Link to="/admin/clients" className="bg-white rounded-xl p-5 border border-slate-200 hover:border-amber-300 hover:shadow-md transition-all group">
-                <div className="flex items-center justify-between mb-3">
-                  <div className={`w-10 h-10 rounded-lg flex items-center justify-center ${stats.pendingAddonRequests > 0 ? 'bg-amber-50' : 'bg-slate-50'}`}>
-                    <Zap className={`w-5 h-5 ${stats.pendingAddonRequests > 0 ? 'text-amber-600' : 'text-slate-400'}`} />
-                  </div>
-                  {stats.pendingAddonRequests > 0 && (
-                    <span className="px-2 py-0.5 bg-amber-100 text-amber-700 text-xs font-medium rounded-full">New</span>
-                  )}
-                </div>
-                <p className="text-2xl font-bold text-slate-900">{stats.pendingAddonRequests}</p>
-                <p className="text-sm text-slate-500">Add-on Requests</p>
-              </Link>
+                  <p className="text-2xl font-bold text-slate-900 tabular-nums">{card.value}</p>
+                  <p className="text-xs text-slate-500 mt-0.5 font-medium">{card.label}</p>
+                </Link>
+              ))}
             </div>
 
             {/* Upcoming Appointments */}
-            <div className="bg-white rounded-xl border border-slate-200 overflow-hidden">
-              <div className="px-5 py-4 border-b border-slate-100 flex items-center justify-between">
-                <div className="flex items-center gap-2">
+            <div className="bg-white rounded-2xl border border-slate-200 overflow-hidden">
+              <div className="px-6 py-4 border-b border-slate-100 flex items-center justify-between">
+                <div className="flex items-center gap-2.5">
                   <CalendarCheck className="w-4 h-4 text-indigo-500" />
-                  <h2 className="font-semibold text-slate-900">Upcoming Appointments</h2>
+                  <h2 className="text-sm font-bold text-slate-900">Upcoming Appointments</h2>
+                  {upcomingAppointments.length > 0 && (
+                    <span className="px-2 py-0.5 bg-indigo-100 text-indigo-700 text-xs font-semibold rounded-full">
+                      {upcomingAppointments.length}
+                    </span>
+                  )}
                 </div>
-                {upcomingAppointments.length > 0 && (
-                  <span className="px-2 py-0.5 bg-indigo-100 text-indigo-700 text-xs font-medium rounded-full">
-                    {upcomingAppointments.length} scheduled
-                  </span>
-                )}
+                <Link
+                  to="/admin/appointments"
+                  className="text-xs font-semibold text-indigo-600 hover:text-indigo-700 flex items-center gap-1 transition-colors"
+                >
+                  View all <ArrowRight className="w-3.5 h-3.5" />
+                </Link>
               </div>
-              <div className="p-4">
+              <div className="p-5">
                 {upcomingAppointments.length > 0 ? (
-                  <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-5 gap-3">
+                  <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-5 gap-3">
                     {upcomingAppointments.map(appointment => {
                       const appointmentDate = parseISO(appointment.appointment_time);
                       const isFree = appointment.billing_type === 'free_monthly' || appointment.price_cents === 0;
+
+                      const typeConfig = {
+                        phone: { icon: Phone, color: 'text-emerald-600', bg: 'bg-emerald-50', label: 'Phone' },
+                        video: { icon: Video, color: 'text-blue-600', bg: 'bg-blue-50', label: 'Video' },
+                        in_person: { icon: User, color: 'text-purple-600', bg: 'bg-purple-50', label: 'In Person' },
+                      };
+                      const type = typeConfig[appointment.appointment_type] || typeConfig.phone;
 
                       return (
                         <Link
                           key={appointment.id}
                           to={`/admin/clients/${appointment.clients.id}`}
-                          className="block p-4 rounded-lg border border-indigo-200 bg-indigo-50 hover:bg-indigo-100 transition-all"
+                          className="block p-4 rounded-xl border border-slate-200 hover:border-indigo-200 hover:bg-indigo-50/50 transition-all group"
                         >
-                          <div className="flex items-center gap-2 mb-2">
-                            {appointment.appointment_type === 'phone' ? (
-                              <Phone className="w-4 h-4 text-emerald-600" />
-                            ) : appointment.appointment_type === 'video' ? (
-                              <Video className="w-4 h-4 text-blue-600" />
-                            ) : (
-                              <User className="w-4 h-4 text-purple-600" />
-                            )}
-                            <span className="text-xs font-medium text-slate-600 capitalize">
-                              {appointment.appointment_type.replace('_', ' ')}
-                            </span>
+                          <div className={`inline-flex items-center gap-1.5 px-2 py-1 rounded-lg ${type.bg} mb-3`}>
+                            <type.icon className={`w-3.5 h-3.5 ${type.color}`} />
+                            <span className={`text-xs font-semibold ${type.color}`}>{type.label}</span>
                           </div>
-                          <p className="font-semibold text-sm text-slate-900 truncate">
+                          <p className="font-semibold text-sm text-slate-900 truncate mb-1">
                             {appointment.clients.business_name}
                           </p>
-                          <p className="text-lg font-bold text-indigo-700 mt-1">
-                            {format(appointmentDate, 'MMM d, h:mm a')}
+                          <p className="text-base font-bold text-indigo-700">
+                            {format(appointmentDate, 'MMM d')}
                           </p>
-                          <div className="flex items-center justify-between mt-2">
-                            <span className="text-xs text-slate-500">
-                              {appointment.duration_minutes} min
-                            </span>
-                            <span className={`text-xs font-semibold px-2 py-0.5 rounded-full ${
-                              isFree
-                                ? 'bg-emerald-100 text-emerald-700'
-                                : 'bg-amber-100 text-amber-700'
+                          <p className="text-xs text-slate-500">{format(appointmentDate, 'h:mm a')}</p>
+                          <div className="flex items-center justify-between mt-2.5 pt-2 border-t border-slate-100">
+                            <span className="text-xs text-slate-400">{appointment.duration_minutes}m</span>
+                            <span className={`text-xs font-bold px-1.5 py-0.5 rounded-full ${
+                              isFree ? 'bg-emerald-100 text-emerald-700' : 'bg-amber-100 text-amber-700'
                             }`}>
                               {isFree ? 'FREE' : `$${((appointment.price_cents || 0) / 100).toFixed(0)}`}
                             </span>
@@ -288,125 +310,109 @@ const AdminDashboard: React.FC = () => {
                     })}
                   </div>
                 ) : (
-                  <div className="py-8 text-center">
+                  <div className="py-10 text-center">
                     <CalendarCheck className="w-10 h-10 text-slate-200 mx-auto mb-2" />
-                    <p className="text-sm text-slate-400">No upcoming appointments</p>
-                    <p className="text-xs text-slate-400 mt-1">Appointments booked by clients will appear here</p>
+                    <p className="text-sm font-medium text-slate-400">No upcoming appointments</p>
+                    <p className="text-xs text-slate-400 mt-0.5">Client bookings will appear here</p>
                   </div>
                 )}
               </div>
             </div>
 
-            {/* Activity Section - 3 equal columns */}
+            {/* 3-column activity grid */}
             <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
 
-              {/* Pending Reminders */}
-              <div className="bg-white rounded-xl border border-slate-200 overflow-hidden">
+              {/* Reminders */}
+              <div className="bg-white rounded-2xl border border-slate-200 overflow-hidden flex flex-col">
                 <div className="px-5 py-4 border-b border-slate-100 flex items-center justify-between">
                   <div className="flex items-center gap-2">
                     <Bell className="w-4 h-4 text-amber-500" />
-                    <h2 className="font-semibold text-slate-900">Reminders</h2>
+                    <h2 className="text-sm font-bold text-slate-900">Reminders</h2>
                   </div>
                   {overdueReminders.length > 0 && (
-                    <span className="px-2 py-0.5 bg-red-100 text-red-700 text-xs font-medium rounded-full">
+                    <span className="px-2 py-0.5 bg-red-100 text-red-700 text-xs font-semibold rounded-full">
                       {overdueReminders.length} overdue
                     </span>
                   )}
                 </div>
-                <div className="p-3 max-h-72 overflow-y-auto">
-                  {reminders.length > 0 ? (
-                    <div className="space-y-2">
-                      {reminders.map(reminder => {
-                        const isOverdue = isPast(new Date(reminder.reminder_date));
-                        return (
-                          <Link
-                            key={reminder.id}
-                            to={`/admin/clients/${reminder.clients.id}?tab=reminders`}
-                            className={`block p-3 rounded-lg border transition-all ${
-                              isOverdue
-                                ? 'bg-red-50 border-red-200 hover:bg-red-100'
-                                : 'bg-slate-50 border-slate-200 hover:bg-slate-100'
-                            }`}
-                          >
-                            <div className="flex items-start justify-between gap-2">
-                              <div className="flex-1 min-w-0">
-                                <p className="font-medium text-sm text-slate-900 truncate">
-                                  {reminder.clients.business_name}
-                                </p>
-                                <p className={`text-xs mt-0.5 truncate ${isOverdue ? 'text-red-600' : 'text-slate-500'}`}>
-                                  {reminder.note}
-                                </p>
-                              </div>
-                              <div className="flex items-center gap-1.5 flex-shrink-0">
-                                <Clock className={`w-3 h-3 ${isOverdue ? 'text-red-500' : 'text-slate-400'}`} />
-                                <span className={`text-xs font-medium ${isOverdue ? 'text-red-600' : 'text-slate-500'}`}>
-                                  {format(new Date(reminder.reminder_date), 'MMM d')}
-                                </span>
-                              </div>
-                            </div>
-                          </Link>
-                        );
-                      })}
-                    </div>
-                  ) : (
-                    <div className="py-8 text-center">
-                      <Bell className="w-8 h-8 text-slate-200 mx-auto mb-2" />
+                <div className="flex-1 overflow-y-auto max-h-72 p-3 space-y-2">
+                  {reminders.length > 0 ? reminders.map(reminder => {
+                    const isOverdue = isPast(new Date(reminder.reminder_date));
+                    return (
+                      <Link
+                        key={reminder.id}
+                        to={`/admin/clients/${reminder.clients.id}?tab=reminders`}
+                        className={`flex items-start justify-between gap-2 p-3 rounded-xl border transition-all ${
+                          isOverdue
+                            ? 'bg-red-50 border-red-200 hover:bg-red-100'
+                            : 'bg-slate-50 border-slate-200 hover:bg-slate-100'
+                        }`}
+                      >
+                        <div className="flex-1 min-w-0">
+                          <p className="text-sm font-semibold text-slate-900 truncate">
+                            {reminder.clients.business_name}
+                          </p>
+                          <p className={`text-xs mt-0.5 truncate ${isOverdue ? 'text-red-600' : 'text-slate-500'}`}>
+                            {reminder.note}
+                          </p>
+                        </div>
+                        <div className="flex items-center gap-1 flex-shrink-0">
+                          <Clock className={`w-3 h-3 ${isOverdue ? 'text-red-400' : 'text-slate-400'}`} />
+                          <span className={`text-xs font-medium ${isOverdue ? 'text-red-600' : 'text-slate-500'}`}>
+                            {format(new Date(reminder.reminder_date), 'MMM d')}
+                          </span>
+                        </div>
+                      </Link>
+                    );
+                  }) : (
+                    <div className="flex flex-col items-center justify-center h-40 text-center">
+                      <Bell className="w-8 h-8 text-slate-200 mb-2" />
                       <p className="text-sm text-slate-400">No pending reminders</p>
                     </div>
                   )}
                 </div>
               </div>
 
-              {/* Recent Messages */}
-              <div className="bg-white rounded-xl border border-slate-200 overflow-hidden">
+              {/* Messages */}
+              <div className="bg-white rounded-2xl border border-slate-200 overflow-hidden flex flex-col">
                 <div className="px-5 py-4 border-b border-slate-100 flex items-center justify-between">
                   <div className="flex items-center gap-2">
                     <MessageSquare className="w-4 h-4 text-blue-500" />
-                    <h2 className="font-semibold text-slate-900">Messages</h2>
+                    <h2 className="text-sm font-bold text-slate-900">Recent Messages</h2>
                   </div>
                   {recentMessages.length > 0 && (
-                    <span className="px-2 py-0.5 bg-blue-100 text-blue-700 text-xs font-medium rounded-full">
+                    <span className="px-2 py-0.5 bg-blue-100 text-blue-700 text-xs font-semibold rounded-full">
                       {recentMessages.length} new
                     </span>
                   )}
                 </div>
-                <div className="p-3 max-h-72 overflow-y-auto">
-                  {recentMessages.length > 0 ? (
-                    <div className="space-y-2">
-                      {recentMessages.map(message => {
-                        const clientName = message.project_threads.projects.clients.business_name;
-                        const projectId = message.project_threads.project_id;
-                        const projectTitle = message.project_threads.projects.title;
+                <div className="flex-1 overflow-y-auto max-h-72 p-3 space-y-2">
+                  {recentMessages.length > 0 ? recentMessages.map(message => {
+                    const clientName = message.project_threads.projects.clients.business_name;
+                    const projectId = message.project_threads.project_id;
+                    const projectTitle = message.project_threads.projects.title;
 
-                        return (
-                          <Link
-                            key={message.id}
-                            to={`/admin/projects/${projectId}`}
-                            className="block p-3 rounded-lg border bg-blue-50 border-blue-200 hover:bg-blue-100 transition-all"
-                          >
-                            <div className="flex items-start justify-between gap-2">
-                              <div className="flex-1 min-w-0">
-                                <p className="font-medium text-sm text-slate-900 truncate">
-                                  {clientName}
-                                </p>
-                                <p className="text-xs text-slate-500 truncate mt-0.5">
-                                  {projectTitle}
-                                </p>
-                              </div>
-                              <span className="text-xs text-slate-400 flex-shrink-0">
-                                {format(new Date(message.created_at), 'h:mma')}
-                              </span>
-                            </div>
-                            <p className="text-xs text-slate-600 mt-2 line-clamp-2">
-                              "{message.body.substring(0, 80)}{message.body.length > 80 ? '...' : ''}"
-                            </p>
-                          </Link>
-                        );
-                      })}
-                    </div>
-                  ) : (
-                    <div className="py-8 text-center">
-                      <MessageSquare className="w-8 h-8 text-slate-200 mx-auto mb-2" />
+                    return (
+                      <Link
+                        key={message.id}
+                        to={`/admin/projects/${projectId}`}
+                        className="block p-3 rounded-xl border bg-blue-50 border-blue-200 hover:bg-blue-100 transition-all"
+                      >
+                        <div className="flex items-center justify-between gap-2 mb-1.5">
+                          <p className="text-sm font-semibold text-slate-900 truncate">{clientName}</p>
+                          <span className="text-xs text-slate-400 flex-shrink-0">
+                            {format(new Date(message.created_at), 'h:mma')}
+                          </span>
+                        </div>
+                        <p className="text-xs text-blue-700 truncate mb-1">{projectTitle}</p>
+                        <p className="text-xs text-slate-600 line-clamp-2">
+                          "{message.body.substring(0, 80)}{message.body.length > 80 ? '...' : ''}"
+                        </p>
+                      </Link>
+                    );
+                  }) : (
+                    <div className="flex flex-col items-center justify-center h-40 text-center">
+                      <MessageSquare className="w-8 h-8 text-slate-200 mb-2" />
                       <p className="text-sm text-slate-400">No new messages (24h)</p>
                     </div>
                   )}
@@ -414,68 +420,32 @@ const AdminDashboard: React.FC = () => {
               </div>
 
               {/* Quick Actions */}
-              <div className="bg-white rounded-xl border border-slate-200 overflow-hidden">
+              <div className="bg-white rounded-2xl border border-slate-200 overflow-hidden">
                 <div className="px-5 py-4 border-b border-slate-100">
-                  <h2 className="font-semibold text-slate-900">Quick Actions</h2>
+                  <h2 className="text-sm font-bold text-slate-900">Quick Actions</h2>
                 </div>
-                <div className="p-3">
-                  <div className="space-y-2">
+                <div className="p-3 space-y-1.5">
+                  {[
+                    { to: '/admin/clients', icon: Users, label: 'Manage Clients', desc: 'View and edit client details', color: 'indigo' },
+                    { to: '/admin/projects', icon: Briefcase, label: 'View Projects', desc: 'Track project progress', color: 'emerald' },
+                    { to: '/admin/billing/revenue', icon: DollarSign, label: 'Revenue Report', desc: 'View financial analytics', color: 'violet' },
+                    { to: '/admin/billing/products', icon: Zap, label: 'Billing Setup', desc: 'Configure products & pricing', color: 'amber' },
+                  ].map(action => (
                     <Link
-                      to="/admin/clients"
-                      className="flex items-center gap-3 p-3 rounded-lg border border-slate-200 hover:bg-indigo-50 hover:border-indigo-200 transition-all group"
+                      key={action.to}
+                      to={action.to}
+                      className="flex items-center gap-3 p-3 rounded-xl border border-slate-100 hover:border-slate-200 hover:bg-slate-50 transition-all group"
                     >
-                      <div className="w-9 h-9 rounded-lg bg-indigo-50 flex items-center justify-center group-hover:bg-indigo-100">
-                        <Users className="w-4 h-4 text-indigo-600" />
+                      <div className={`w-8 h-8 rounded-lg bg-${action.color}-50 flex items-center justify-center flex-shrink-0`}>
+                        <action.icon className={`w-4 h-4 text-${action.color}-600`} />
                       </div>
-                      <div className="flex-1">
-                        <p className="text-sm font-medium text-slate-900">Manage Clients</p>
-                        <p className="text-xs text-slate-500">View and edit client details</p>
+                      <div className="flex-1 min-w-0">
+                        <p className="text-sm font-semibold text-slate-900">{action.label}</p>
+                        <p className="text-xs text-slate-400 truncate">{action.desc}</p>
                       </div>
-                      <ArrowRight className="w-4 h-4 text-slate-300 group-hover:text-indigo-500" />
+                      <ArrowRight className="w-3.5 h-3.5 text-slate-300 group-hover:text-slate-500 transition-colors flex-shrink-0" />
                     </Link>
-
-                    <Link
-                      to="/admin/projects"
-                      className="flex items-center gap-3 p-3 rounded-lg border border-slate-200 hover:bg-emerald-50 hover:border-emerald-200 transition-all group"
-                    >
-                      <div className="w-9 h-9 rounded-lg bg-emerald-50 flex items-center justify-center group-hover:bg-emerald-100">
-                        <Briefcase className="w-4 h-4 text-emerald-600" />
-                      </div>
-                      <div className="flex-1">
-                        <p className="text-sm font-medium text-slate-900">View Projects</p>
-                        <p className="text-xs text-slate-500">Track project progress</p>
-                      </div>
-                      <ArrowRight className="w-4 h-4 text-slate-300 group-hover:text-emerald-500" />
-                    </Link>
-
-                    <Link
-                      to="/admin/billing/revenue"
-                      className="flex items-center gap-3 p-3 rounded-lg border border-slate-200 hover:bg-purple-50 hover:border-purple-200 transition-all group"
-                    >
-                      <div className="w-9 h-9 rounded-lg bg-purple-50 flex items-center justify-center group-hover:bg-purple-100">
-                        <DollarSign className="w-4 h-4 text-purple-600" />
-                      </div>
-                      <div className="flex-1">
-                        <p className="text-sm font-medium text-slate-900">Revenue Report</p>
-                        <p className="text-xs text-slate-500">View financial analytics</p>
-                      </div>
-                      <ArrowRight className="w-4 h-4 text-slate-300 group-hover:text-purple-500" />
-                    </Link>
-
-                    <Link
-                      to="/admin/billing/products"
-                      className="flex items-center gap-3 p-3 rounded-lg border border-slate-200 hover:bg-amber-50 hover:border-amber-200 transition-all group"
-                    >
-                      <div className="w-9 h-9 rounded-lg bg-amber-50 flex items-center justify-center group-hover:bg-amber-100">
-                        <Zap className="w-4 h-4 text-amber-600" />
-                      </div>
-                      <div className="flex-1">
-                        <p className="text-sm font-medium text-slate-900">Billing Setup</p>
-                        <p className="text-xs text-slate-500">Configure products & pricing</p>
-                      </div>
-                      <ArrowRight className="w-4 h-4 text-slate-300 group-hover:text-amber-500" />
-                    </Link>
-                  </div>
+                  ))}
                 </div>
               </div>
             </div>
