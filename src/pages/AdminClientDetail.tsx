@@ -1302,6 +1302,61 @@ const AdminClientDetail: React.FC = () => {
                 </div>{/* end left billing col */}
 
                 <div className="space-y-6">
+                    <CreateInvoiceForm
+                        clientId={client.id}
+                        oneTimeProducts={oneTimeProducts}
+                        onInvoiceCreated={fetchClientData}
+                        isProcessing={isProcessing}
+                        setIsProcessing={setIsProcessing}
+                    />
+
+                    <div className="bg-white p-6 rounded-xl shadow-lg border border-slate-100">
+                      <h2 className="text-xl font-bold mb-4 flex items-center gap-2 text-slate-900 border-b border-slate-100 pb-4">
+                        <CreditCard className="w-5 h-5 text-blue-600" /> Collect Deposit
+                      </h2>
+                      <form onSubmit={handleCollectDeposit} className="space-y-3">
+                        <div>
+                          <label className="block text-sm font-medium text-slate-700 mb-1">Amount (USD) *</label>
+                          <div className="relative">
+                            <span className="absolute left-3 top-2.5 text-slate-500 text-sm">$</span>
+                            <input
+                              type="number"
+                              value={depositAmount}
+                              onChange={(e) => setDepositAmount(parseFloat(e.target.value) || '')}
+                              className="w-full pl-6 pr-2 py-2 border border-slate-300 rounded-lg text-sm"
+                              required
+                              min="1"
+                              step="0.01"
+                              placeholder="0.00"
+                              disabled={isProcessing}
+                            />
+                          </div>
+                        </div>
+                        <div>
+                          <label className="block text-sm font-medium text-slate-700 mb-1">Description</label>
+                          <input
+                            type="text"
+                            value={depositDescription}
+                            onChange={(e) => setDepositDescription(e.target.value)}
+                            className="w-full p-2 border border-slate-300 rounded-lg text-sm"
+                            placeholder="e.g. Project deposit — 50% upfront"
+                            disabled={isProcessing}
+                          />
+                        </div>
+                        <button
+                          type="submit"
+                          disabled={isProcessing || !depositAmount || !client.stripe_customer_id}
+                          className="w-full py-2 bg-blue-600 text-white rounded-lg text-sm font-semibold hover:bg-blue-700 transition-colors disabled:opacity-50 flex items-center justify-center gap-2"
+                        >
+                          {isProcessing ? <Loader2 className="w-4 h-4 animate-spin" /> : <DollarSign className="w-4 h-4" />}
+                          Send Deposit Invoice
+                        </button>
+                        {!client.stripe_customer_id && (
+                          <p className="text-xs text-amber-600">A Stripe customer must be created before collecting a deposit.</p>
+                        )}
+                      </form>
+                    </div>
+
                     <div className="bg-white p-6 rounded-xl shadow-lg border border-slate-100">
                       <h2 className="text-xl font-bold mb-4 flex items-center gap-2 text-slate-900 border-b border-slate-100 pb-4">
                         <CreditCard className="w-5 h-5 text-blue-600" /> Deposit History ({client.deposits?.length || 0})
