@@ -41,12 +41,20 @@ serve(async (req) => {
         { status: 400, headers: corsHeaders }
       );
     }
-    
+
+    if (!['one_time', 'subscription', 'yearly'].includes(billing_type)) {
+      return new Response(
+        JSON.stringify({ error: 'Invalid billing_type. Must be one_time, subscription, or yearly.' }),
+        { status: 400, headers: corsHeaders }
+      );
+    }
+
     // --- Determine amounts for Stripe and DB ---
     let stripeUnitAmount = 0;
     let dbAmountCents = null;
     let dbMonthlyPriceCents = null;
     let isRecurring = false;
+    let recurringInterval: 'month' | 'year' = 'month';
 
     if (billing_type === 'one_time') {
         stripeUnitAmount = amount_cents || 0;
@@ -55,17 +63,29 @@ serve(async (req) => {
         stripeUnitAmount = monthly_price_cents || 0;
         dbMonthlyPriceCents = monthly_price_cents;
         isRecurring = true;
+        recurringInterval = 'month';
+    } else if (billing_type === 'yearly') {
+        stripeUnitAmount = monthly_price_cents || 0; // monthly_price_cents stores yearly amount for 'yearly' type
+        dbMonthlyPriceCents = monthly_price_cents;
+        isRecurring = true;
+        recurringInterval = 'year';
     }
-    
-    if (stripeUnitAmount <= 0 && billing_type !== 'one_time') {
+
+    if (stripeUnitAmount <= 0) {
       if (billing_type === 'subscription') {
         return new Response(
           JSON.stringify({ error: 'Monthly Price must be greater than zero for subscription type' }),
           { status: 400, headers: corsHeaders }
         );
       }
+      if (billing_type === 'yearly') {
+        return new Response(
+          JSON.stringify({ error: 'Yearly Price must be greater than zero for yearly type' }),
+          { status: 400, headers: corsHeaders }
+        );
+      }
     }
-    
+
     console.log(`[create-billing-product] Creating product: ${name} (${billing_type})`);
 
     // 1. Create Stripe Product and Price
@@ -75,7 +95,7 @@ serve(async (req) => {
       default_price_data: {
         currency: currency,
         unit_amount: stripeUnitAmount,
-        recurring: isRecurring ? { interval: 'month' } : undefined,
+        recurring: isRecurring ? { interval: recurringInterval } : undefined,
       },
       expand: ['default_price'],
     });
