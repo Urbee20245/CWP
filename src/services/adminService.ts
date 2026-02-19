@@ -204,7 +204,13 @@ export const AdminService = {
   },
   
   createStripeCustomer: async (clientId: string) => invokeEdgeFunction('stripe-api/create-customer', { client_id: clientId }),
-  createSubscription: async (clientId: string, priceId: string, setupFeePriceId?: string) => invokeEdgeFunction('stripe-api/create-subscription', { client_id: clientId, price_id: priceId, setup_fee_price_id: setupFeePriceId }),
+  // Use a dedicated function that persists the pending subscription + invoice immediately
+  createSubscription: async (clientId: string, priceId: string, setupFeePriceId?: string) =>
+    invokeEdgeFunction('create-maintenance-subscription', {
+      client_id: clientId,
+      price_id: priceId,
+      setup_fee_price_id: setupFeePriceId,
+    }),
   createInvoice: async (clientId: string, lineItems: any[], dueDate?: string) => invokeEdgeFunction('stripe-api/create-invoice', { client_id: clientId, line_items: lineItems, due_date: dueDate }),
   createDepositInvoice: async (clientId: string, amount: number, description: string, projectId?: string) => invokeEdgeFunction('stripe-api/create-deposit-invoice', { client_id: clientId, deposit_details: { amount, description, project_id: projectId } }),
   createMilestoneInvoice: async (clientId: string, milestoneId: string, amountCents: number, description: string, projectId: string) => invokeEdgeFunction('stripe-api/create-milestone-invoice', { client_id: clientId, milestone_details: { milestone_id: milestoneId, amount_cents: amountCents, description, project_id: projectId } }),

@@ -202,6 +202,61 @@ serve(async (req) => {
         // This covers: requires_payment_method, requires_action (3DS), requires_confirmation, etc.
         const requiresPayment = paymentIntent !== null && paymentIntent.status !== 'succeeded';
 
+        // Persist subscription and invoice immediately so the client portal shows the pending plan + pay link
+        // (Do not rely solely on async webhooks.)
+
+        try {
+          const { error: subscriptionUpsertError } = await supabaseAdmin
+            .from('subscriptions')
+            .upsert({
+              client_id: client.id,
+              stripe_subscription_id: subscription.id,
+              stripe_price_id: price_id,
+              status: subscription.status,
+              current_period_end: subscription.current_period_end
+                ? new Date(subscription.current_period_end * 1000).toISOString()
+                : null,
+              cancel_at_period_end: subscription.cancel_at_period_end,
+            }, { onConflict: 'stripe_subscription_id' });
+
+          if (subscriptionUpsertError) {
+            console.error('[stripe-api] Failed to upsert subscription record:', subscriptionUpsertError);
+          }
+
+          if (latestInvoice?.id) {
+            const { error: invoiceUpsertError } = await supabaseAdmin
+              .from('invoices')
+              .upsert({
+                client_id: client.id,
+                stripe_invoice_id: latestInvoice.id,
+                status: latestInvoice.status,
+                hosted_invoice_url: latestInvoice.hosted_invoice_url,
+                pdf_url: latestInvoice.invoice_pdf,
+                amount_due: latestInvoice.amount_due,
+                currency: latestInvoice.currency,
+                due_date: latestInvoice.due_date
+                  ? new Date(latestInvoice.due_date * 1000).toISOString()
+                  : null,
+              }, { onConflict: 'stripe_invoice_id' });
+
+            if (invoiceUpsertError) {
+              console.error('[stripe-api] Failed to upsert subscription invoice record:', invoiceUpsertError);
+            }
+          }
+
+          if (subscription.status === 'active' || subscription.status === 'trialing') {
+            const { error: clientUpdateError } = await supabaseAdmin
+              .from('clients')
+              .update({ stripe_subscription_id: subscription.id })
+              .eq('id', client.id);
+            if (clientUpdateError) {
+              console.error('[stripe-api] Failed to update client with active subscription ID:', clientUpdateError);
+            }
+          }
+        } catch (e: any) {
+          console.error('[stripe-api] Failed to persist subscription/invoice records:', e?.message || e);
+        }
+
         return jsonResponse({
           subscription_id: subscription.id,
           status: subscription.status,
