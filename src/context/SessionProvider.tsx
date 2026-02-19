@@ -39,6 +39,7 @@ const checkDevAdminBypass = (user: User | null, fetchedProfile: Profile | null):
 };
 
 
+
 const SessionProvider: React.FC<SessionProviderProps> = ({ children }) => {
   const [user, setUser] = useState<User | null>(null);
   const [profile, setProfile] = useState<Profile | null>(null);
@@ -85,30 +86,32 @@ const SessionProvider: React.FC<SessionProviderProps> = ({ children }) => {
 
 
   useEffect(() => {
-    // Initial check
-    supabase.auth.getSession().then(({ data: { session } }) => {
-        loadSession(session);
-    });
+    let initialized = false;
 
-    // Handle real-time auth state changes
+    // Set up auth state listener FIRST
     const { data: authListener } = supabase.auth.onAuthStateChange(
       async (event, session) => {
-        // Set loading true temporarily during state transition
-        setIsLoading(true); 
-        
-        if (event === 'SIGNED_IN' || event === 'INITIAL_SESSION' || event === 'TOKEN_REFRESHED') {
-            // For SIGNED_IN, we rely on the new session object being passed
-            loadSession(session);
+        if (!initialized) return; // Skip until initial session is loaded
+
+        setIsLoading(true);
+
+        if (event === 'SIGNED_IN' || event === 'TOKEN_REFRESHED') {
+          await loadSession(session);
         } else if (event === 'SIGNED_OUT') {
-            setUser(null);
-            setProfile(null);
-            setIsLoading(false);
+          setUser(null);
+          setProfile(null);
+          setIsLoading(false);
         } else {
-            // For other events, ensure we still resolve loading state
-            setIsLoading(false);
+          setIsLoading(false);
         }
       }
     );
+
+    // Then get the initial session
+    supabase.auth.getSession().then(({ data: { session } }) => {
+      initialized = true;
+      loadSession(session);
+    });
 
     return () => {
       authListener.subscription.unsubscribe();

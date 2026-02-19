@@ -26,6 +26,12 @@ const AdminClientList: React.FC = () => {
 
   const fetchData = useCallback(async () => {
     setIsLoading(true);
+
+    // Refresh session to ensure fresh JWT
+    const { error: refreshError } = await supabase.auth.refreshSession();
+    if (refreshError) {
+      console.error('Session refresh failed:', refreshError);
+    }
     
     // Fetch Clients and their associated profile names
     const { data: clientsData, error: clientsError } = await supabase
@@ -39,14 +45,21 @@ const AdminClientList: React.FC = () => {
     if (clientsError) {
       console.error('Error fetching clients:', clientsError);
     } else {
-      const formattedClients: ClientSummary[] = clientsData.map(client => ({
-        id: client.id,
-        business_name: client.business_name,
-        status: client.status,
-        owner_profile_id: client.owner_profile_id,
-        owner_name: (client.profiles as Profile)?.full_name || 'N/A',
-        project_count: (client.projects as any[])[0]?.count || 0,
-      }));
+      const formattedClients: ClientSummary[] = clientsData.map(client => {
+        const profilesRel: any = (client as any).profiles;
+        const ownerName = Array.isArray(profilesRel)
+          ? profilesRel?.[0]?.full_name
+          : profilesRel?.full_name;
+
+        return {
+          id: client.id,
+          business_name: client.business_name,
+          status: client.status,
+          owner_profile_id: client.owner_profile_id,
+          owner_name: ownerName || 'N/A',
+          project_count: (client.projects as any[])[0]?.count || 0,
+        };
+      });
       setClients(formattedClients);
     }
 

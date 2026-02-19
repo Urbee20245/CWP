@@ -297,8 +297,8 @@ export const AdminService = {
   getScheduledCalls: async (filters?: { client_id?: string; status?: string }) => {
     let query = supabase
       .from('retell_scheduled_calls')
-      .select(`
-        *,
+      .select(`*
+        ,
         clients!retell_scheduled_calls_client_id_fkey(id, business_name, phone),
         profiles!retell_scheduled_calls_created_by_fkey(id, email, full_name)
       `)
@@ -320,8 +320,8 @@ export const AdminService = {
   getScheduledCall: async (scheduledCallId: string) => {
     const { data, error } = await supabase
       .from('retell_scheduled_calls')
-      .select(`
-        *,
+      .select(`*
+        ,
         clients!retell_scheduled_calls_client_id_fkey(id, business_name, phone),
         profiles!retell_scheduled_calls_created_by_fkey(id, email, full_name)
       `)
@@ -461,37 +461,21 @@ export const AdminService = {
 
   // Admin impersonation — generates a one-time magic link to access a client's portal
   impersonateClient: async (clientEmail: string, adminName: string): Promise<string> => {
-    // Force-refresh the session and use the returned token directly in a raw fetch,
-    // bypassing supabase.functions.invoke. This guarantees:
-    //   1. A non-stale access_token (refreshSession always returns a fresh one)
-    //   2. The `apikey` header is explicitly included (Supabase gateway requires both
-    //      Authorization + apikey; custom headers in functions.invoke can drop apikey)
-    const { data: refreshData, error: refreshError } = await supabase.auth.refreshSession();
-    if (refreshError || !refreshData.session) {
-      throw new Error(refreshError?.message || 'Session expired. Please log in again.');
-    }
-
-    const url = `${SUPABASE_EDGE_BASE}/admin-impersonate`;
-    const res = await fetch(url, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'Authorization': `Bearer ${refreshData.session.access_token}`,
-        'apikey': SUPABASE_ANON_KEY_PUBLIC,
+    const { data, error } = await supabase.functions.invoke('admin-impersonate', {
+      body: {
+        client_email: clientEmail,
+        admin_name: adminName,
       },
-      body: JSON.stringify({ client_email: clientEmail, admin_name: adminName }),
     });
 
-    const text = await res.text();
-    let json: any = null;
-    try { json = JSON.parse(text); } catch { /* leave as null */ }
-
-    if (!res.ok) {
-      const message = json?.error || json?.message || text || `Request failed (${res.status})`;
+    if (error) {
+      const message = await extractEdgeFunctionErrorMessage(error, data);
       throw new Error(message);
     }
-    if (json?.error) throw new Error(json.error);
-    if (!json?.action_link) throw new Error('No access link returned from server.');
-    return json.action_link as string;
+
+    const parsed: any = data;
+    if (parsed?.error) throw new Error(parsed.error);
+    if (!parsed?.action_link) throw new Error('No access link returned from server.');
+    return parsed.action_link as string;
   },
 };
