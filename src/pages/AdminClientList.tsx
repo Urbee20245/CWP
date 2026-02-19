@@ -2,12 +2,10 @@
 
 import React, { useState, useEffect, useCallback } from 'react';
 import { Link } from 'react-router-dom';
-import { useAuth } from '../hooks/useAuth';
 import { supabase } from '../integrations/supabase/client';
-import { Users, Briefcase, DollarSign, Loader2, LogOut, Plus } from 'lucide-react';
+import { Users, Loader2, Plus } from 'lucide-react';
 import AdminLayout from '../components/AdminLayout';
 import AddClientDialog from '../components/AddClientDialog';
-import { Profile } from '../types/auth';
 
 interface ClientSummary {
   id: string;
@@ -19,7 +17,6 @@ interface ClientSummary {
 }
 
 const AdminClientList: React.FC = () => {
-  const { profile } = useAuth();
   const [clients, setClients] = useState<ClientSummary[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [isDialogOpen, setIsDialogOpen] = useState(false);
@@ -27,29 +24,25 @@ const AdminClientList: React.FC = () => {
   const fetchData = useCallback(async () => {
     setIsLoading(true);
 
-    // Refresh session to ensure fresh JWT
-    const { error: refreshError } = await supabase.auth.refreshSession();
-    if (refreshError) {
-      console.error('Session refresh failed:', refreshError);
-    }
-    
-    // Fetch Clients and their associated profile names
-    const { data: clientsData, error: clientsError } = await supabase
-      .from('clients')
-      .select(`
-        id, business_name, status, owner_profile_id,
-        profiles (full_name),
-        projects (count)
-      `);
+    try {
+      // Fetch Clients and their associated profile names
+      const { data: clientsData, error: clientsError } = await supabase
+        .from('clients')
+        .select(`
+          id, business_name, status, owner_profile_id,
+          profiles (full_name),
+          projects (count)
+        `);
 
-    if (clientsError) {
-      console.error('Error fetching clients:', clientsError);
-    } else {
-      const formattedClients: ClientSummary[] = clientsData.map(client => {
+      if (clientsError) {
+        console.error('Error fetching clients:', clientsError);
+        setClients([]);
+        return;
+      }
+
+      const formattedClients: ClientSummary[] = (clientsData || []).map((client) => {
         const profilesRel: any = (client as any).profiles;
-        const ownerName = Array.isArray(profilesRel)
-          ? profilesRel?.[0]?.full_name
-          : profilesRel?.full_name;
+        const ownerName = Array.isArray(profilesRel) ? profilesRel?.[0]?.full_name : profilesRel?.full_name;
 
         return {
           id: client.id,
@@ -57,13 +50,14 @@ const AdminClientList: React.FC = () => {
           status: client.status,
           owner_profile_id: client.owner_profile_id,
           owner_name: ownerName || 'N/A',
-          project_count: (client.projects as any[])[0]?.count || 0,
+          project_count: ((client as any).projects as any[])?.[0]?.count || 0,
         };
       });
-      setClients(formattedClients);
-    }
 
-    setIsLoading(false);
+      setClients(formattedClients);
+    } finally {
+      setIsLoading(false);
+    }
   }, []);
 
   useEffect(() => {
@@ -72,10 +66,14 @@ const AdminClientList: React.FC = () => {
 
   const getStatusColor = (status: string) => {
     switch (status) {
-      case 'active': return 'bg-emerald-100 text-emerald-800';
-      case 'restricted': return 'bg-red-100 text-red-800';
-      case 'grace': return 'bg-amber-100 text-amber-800';
-      default: return 'bg-slate-100 text-slate-800';
+      case 'active':
+        return 'bg-emerald-100 text-emerald-800';
+      case 'restricted':
+        return 'bg-red-100 text-red-800';
+      case 'grace':
+        return 'bg-amber-100 text-amber-800';
+      default:
+        return 'bg-slate-100 text-slate-800';
     }
   };
 
@@ -93,7 +91,7 @@ const AdminClientList: React.FC = () => {
         <div className="bg-white rounded-xl shadow-lg border border-slate-100 p-6">
           <div className="flex justify-between items-center mb-6 border-b border-slate-100 pb-4">
             <h2 className="text-xl font-bold text-slate-900">Client List</h2>
-            <button 
+            <button
               onClick={() => setIsDialogOpen(true)}
               className="flex items-center gap-2 px-4 py-2 bg-indigo-600 text-white rounded-lg text-sm font-semibold hover:bg-indigo-700"
             >
@@ -122,7 +120,7 @@ const AdminClientList: React.FC = () => {
                     <tr key={client.id} className="hover:bg-slate-50 cursor-pointer">
                       <td className="px-4 py-4 whitespace-nowrap text-sm font-medium text-indigo-600 hover:text-indigo-800">
                         <Link to={`/admin/clients/${client.id}`} className="block">
-                            {client.business_name}
+                          {client.business_name}
                         </Link>
                       </td>
                       <td className="px-4 py-4 whitespace-nowrap text-sm text-slate-600">{client.owner_name}</td>
@@ -145,12 +143,8 @@ const AdminClientList: React.FC = () => {
           )}
         </div>
       </div>
-      
-      <AddClientDialog 
-        isOpen={isDialogOpen}
-        onClose={() => setIsDialogOpen(false)}
-        onClientAdded={fetchData}
-      />
+
+      <AddClientDialog isOpen={isDialogOpen} onClose={() => setIsDialogOpen(false)} onClientAdded={fetchData} />
     </AdminLayout>
   );
 };
