@@ -125,7 +125,7 @@ serve(async (req) => {
     if (dbError) {
       console.error('[create-billing-product] DB error:', dbError);
       return new Response(
-        JSON.stringify({ error: 'Failed to save product to database' }),
+        JSON.stringify({ error: `Failed to save product to database: ${dbError.message}` }),
         { status: 500, headers: corsHeaders }
       );
     }
