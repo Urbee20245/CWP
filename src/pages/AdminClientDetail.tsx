@@ -3,7 +3,7 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import { useParams, Link, useNavigate } from 'react-router-dom';
 import { supabase } from '../integrations/supabase/client';
-import { Loader2, Briefcase, FileText, DollarSign, Plus, CreditCard, Zap, ExternalLink, ShieldCheck, Lock, Trash2, Send, AlertCircle, MessageSquare, Phone, CheckCircle2, Pause, Play, Clock, Download, Edit, Bell, BellOff, Users, Percent, Calendar, X, AlertTriangle } from 'lucide-react';
+import { Loader2, Briefcase, FileText, DollarSign, Plus, CreditCard, Zap, ExternalLink, ShieldCheck, Lock, Trash2, Send, AlertCircle, MessageSquare, Phone, CheckCircle2, Pause, Play, Clock, Download, Edit, Bell, BellOff, Users, Percent, Calendar, X, AlertTriangle, Eye } from 'lucide-react';
 import AdminLayout from '../components/AdminLayout';
 import { Profile } from '../types/auth';
 import { AdminService } from '../services/adminService'; // Use AdminService for admin functions
@@ -134,7 +134,7 @@ interface BillingProduct {
 const AdminClientDetail: React.FC = () => {
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
-  const { user } = useAuth();
+  const { user, profile: adminProfile } = useAuth();
   const [client, setClient] = useState<Client | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [activeTab, setActiveTab] = useState<'projects' | 'billing' | 'reminders' | 'addons'>('billing'); // Default to billing
@@ -546,6 +546,25 @@ const AdminClientDetail: React.FC = () => {
       }
   };
   
+  const handleImpersonateClient = async () => {
+    if (!client) return;
+    const clientEmail = client.profiles?.email;
+    if (!clientEmail) {
+      alert('Cannot access portal: client email address is missing.');
+      return;
+    }
+    setIsProcessing(true);
+    try {
+      const adminName = adminProfile?.full_name || 'Admin';
+      const actionLink = await AdminService.impersonateClient(clientEmail, adminName);
+      window.open(actionLink, '_blank', 'noopener,noreferrer');
+    } catch (e: any) {
+      alert(`Failed to generate client access link: ${e.message}`);
+    } finally {
+      setIsProcessing(false);
+    }
+  };
+
   const handleSendEmailClick = () => {
       if (!client) return;
       const recipientEmail = client.billing_email || client.profiles?.email;
@@ -790,6 +809,14 @@ const AdminClientDetail: React.FC = () => {
               className="flex items-center gap-2 px-3.5 py-2 bg-slate-100 text-slate-700 rounded-lg text-sm font-semibold hover:bg-slate-200 transition-colors"
             >
               <Edit className="w-4 h-4" /> Edit
+            </button>
+            <button
+              onClick={handleImpersonateClient}
+              disabled={isProcessing || !client.profiles?.email}
+              title={client.profiles?.email ? `Access ${client.business_name}'s portal` : 'No client email on record'}
+              className="flex items-center gap-2 px-3.5 py-2 bg-violet-50 text-violet-700 rounded-lg text-sm font-semibold hover:bg-violet-100 disabled:opacity-50 transition-colors"
+            >
+              {isProcessing ? <Loader2 className="w-4 h-4 animate-spin" /> : <Eye className="w-4 h-4" />} Access Portal
             </button>
             <button
               onClick={handleDeleteClient}

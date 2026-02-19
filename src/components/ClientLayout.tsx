@@ -1,13 +1,16 @@
 "use client";
 
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { useAuth } from '../hooks/useAuth';
 import { Link, useLocation } from 'react-router-dom';
 import {
   DollarSign, LogOut, User, Zap, CalendarCheck,
   Sparkles, Menu, X, HelpCircle, Settings, ClipboardList, Globe,
-  LayoutDashboard, ChevronRight
+  LayoutDashboard, ChevronRight, ShieldAlert
 } from 'lucide-react';
+
+const IMPERSONATION_KEY = 'cwp_admin_view';
+const IMPERSONATION_NAME_KEY = 'cwp_admin_name';
 
 interface ClientLayoutProps {
   children: React.ReactNode;
@@ -29,6 +32,31 @@ const ClientLayout: React.FC<ClientLayoutProps> = ({ children }) => {
   const { profile, signOut } = useAuth();
   const location = useLocation();
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
+  const [isAdminView, setIsAdminView] = useState(false);
+  const [adminName, setAdminName] = useState('Admin');
+
+  // Detect admin_view flag from URL params (set by the magic link redirect) and persist in sessionStorage
+  useEffect(() => {
+    const params = new URLSearchParams(location.search);
+    if (params.get('admin_view') === 'true') {
+      const name = params.get('admin_name') || 'Admin';
+      sessionStorage.setItem(IMPERSONATION_KEY, 'true');
+      sessionStorage.setItem(IMPERSONATION_NAME_KEY, name);
+    }
+    const stored = sessionStorage.getItem(IMPERSONATION_KEY);
+    if (stored === 'true') {
+      setIsAdminView(true);
+      setAdminName(sessionStorage.getItem(IMPERSONATION_NAME_KEY) || 'Admin');
+    }
+  }, [location.search]);
+
+  const handleExitAdminView = () => {
+    sessionStorage.removeItem(IMPERSONATION_KEY);
+    sessionStorage.removeItem(IMPERSONATION_NAME_KEY);
+    window.close();
+    // Fallback in case window.close() is blocked
+    window.location.href = '/admin/clients';
+  };
 
   const navSections: NavSection[] = [
     {
@@ -166,8 +194,23 @@ const ClientLayout: React.FC<ClientLayoutProps> = ({ children }) => {
 
   return (
     <div className="min-h-screen bg-[#F4F6FA]">
+      {/* Admin View Banner */}
+      {isAdminView && (
+        <div className="fixed top-0 left-0 right-0 z-50 flex items-center justify-between px-4 py-2 bg-amber-500 text-white text-sm font-semibold shadow-lg">
+          <div className="flex items-center gap-2">
+            <ShieldAlert className="w-4 h-4 flex-shrink-0" />
+            <span>Admin View — viewing as <strong>{profile?.full_name || 'client'}</strong> (logged in as {adminName})</span>
+          </div>
+          <button
+            onClick={handleExitAdminView}
+            className="flex items-center gap-1.5 px-3 py-1 rounded-lg bg-white/20 hover:bg-white/30 transition-colors text-white text-xs font-bold"
+          >
+            <X className="w-3.5 h-3.5" /> Exit
+          </button>
+        </div>
+      )}
       {/* Mobile Header */}
-      <div className="fixed top-0 left-0 right-0 z-40 bg-white border-b border-slate-200 px-4 h-14 flex items-center justify-between md:hidden shadow-sm">
+      <div className={`fixed left-0 right-0 z-40 bg-white border-b border-slate-200 px-4 h-14 flex items-center justify-between md:hidden shadow-sm ${isAdminView ? 'top-[36px]' : 'top-0'}`}>
         <Link to="/client/dashboard">
           <img src="/CWPlogolight.png" alt="Custom Websites Plus" className="h-7 w-auto object-contain" />
         </Link>
@@ -181,7 +224,7 @@ const ClientLayout: React.FC<ClientLayoutProps> = ({ children }) => {
 
       <div className="flex">
         {/* Desktop Sidebar */}
-        <aside className="hidden md:flex w-60 bg-white border-r border-slate-200 fixed top-0 left-0 h-screen flex-col shadow-sm z-30">
+        <aside className={`hidden md:flex w-60 bg-white border-r border-slate-200 fixed left-0 h-screen flex-col shadow-sm z-30 ${isAdminView ? 'top-[36px]' : 'top-0'}`}>
           <SidebarContent />
         </aside>
 
@@ -201,7 +244,7 @@ const ClientLayout: React.FC<ClientLayoutProps> = ({ children }) => {
         )}
 
         {/* Main Content */}
-        <main className="flex-1 md:ml-60 min-h-screen pt-14 md:pt-0">
+        <main className={`flex-1 md:ml-60 min-h-screen ${isAdminView ? 'pt-[86px] md:pt-[36px]' : 'pt-14 md:pt-0'}`}>
           {children}
         </main>
       </div>

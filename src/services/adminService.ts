@@ -458,4 +458,16 @@ export const AdminService = {
   },
 
   processBlogSchedules: async () => invokeEdgeFunction('process-blog-schedules', {}),
+
+  // Admin impersonation — generates a one-time magic link to access a client's portal
+  impersonateClient: async (clientEmail: string, adminName: string): Promise<string> => {
+    const result = await invokeEdgeFunction('admin-impersonate', {
+      client_email: clientEmail,
+      admin_name: adminName,
+    });
+    if (!result?.action_link) {
+      throw new Error('No access link returned from server.');
+    }
+    return result.action_link as string;
+  },
 };
