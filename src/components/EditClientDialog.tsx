@@ -3,7 +3,6 @@
 import React, { useState, useEffect } from 'react';
 import { X, Loader2, Save, Briefcase, Mail, Phone, AlertCircle, User, MapPin } from 'lucide-react';
 import { supabase } from '../integrations/supabase/client';
-import { AdminService } from '../services/adminService';
 import { Profile } from '../types/auth';
 
 interface ClientData {
@@ -91,8 +90,14 @@ const EditClientDialog: React.FC<EditClientDialogProps> = ({ isOpen, onClose, on
 
       if (clientError) throw clientError;
 
-      // 2. Update Profile Record via edge function (uses service role key to bypass RLS)
-      await AdminService.updateClientProfile(profileId, fullName, profileRole);
+      // 2. Update Profile Record directly using admin RLS policy
+      // (The "Admins can update any profile" RLS policy allows this; no edge function needed)
+      const { error: profileError } = await supabase
+        .from('profiles')
+        .update({ full_name: fullName, role: profileRole })
+        .eq('id', profileId);
+
+      if (profileError) throw profileError;
 
       alert(`Client ${businessName} updated successfully!`);
       onClientUpdated();
