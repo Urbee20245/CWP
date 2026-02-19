@@ -461,6 +461,15 @@ export const AdminService = {
 
   // Admin impersonation — generates a one-time magic link to access a client's portal
   impersonateClient: async (clientEmail: string, adminName: string): Promise<string> => {
+    // Force-refresh the session so the edge function gateway always receives a
+    // valid, non-expired JWT. getSession() can return a cached token; refreshSession()
+    // guarantees a fresh access token is written back to the auth store before
+    // invokeEdgeFunction picks it up.
+    const { data: refreshData, error: refreshError } = await supabase.auth.refreshSession();
+    if (refreshError || !refreshData.session) {
+      throw new Error(refreshError?.message || 'Session expired. Please log in again.');
+    }
+
     const result = await invokeEdgeFunction('admin-impersonate', {
       client_email: clientEmail,
       admin_name: adminName,
