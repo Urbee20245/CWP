@@ -26,10 +26,16 @@ serve(async (req) => {
   const corsResponse = handleCors(req);
   if (corsResponse) return corsResponse;
 
-  const supabaseAdmin = createClient(
-    Deno.env.get('SUPABASE_URL')!,
-    Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!
-  );
+  // Guard: ensure required env vars are present before doing anything else
+  const supabaseUrl = Deno.env.get('SUPABASE_URL');
+  const serviceRoleKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY');
+
+  if (!supabaseUrl || !serviceRoleKey) {
+    console.error('[admin-impersonate] Missing env vars:', { supabaseUrl: !!supabaseUrl, serviceRoleKey: !!serviceRoleKey });
+    return errorResponse('Server misconfiguration: missing Supabase credentials.', 500);
+  }
+
+  const supabaseAdmin = createClient(supabaseUrl, serviceRoleKey);
 
   try {
     // 1. Verify caller is an admin via their JWT
@@ -38,11 +44,16 @@ serve(async (req) => {
       return errorResponse('Missing authorization header.', 401);
     }
 
-    const token = authHeader.replace('Bearer ', '');
+    const token = authHeader.replace(/^Bearer\s+/i, '').trim();
+    if (!token) {
+      return errorResponse('Empty token in authorization header.', 401);
+    }
+
     const { data: { user: callerUser }, error: callerError } = await supabaseAdmin.auth.getUser(token);
 
     if (callerError || !callerUser) {
-      return errorResponse('Unauthorized: invalid token.', 401);
+      console.error('[admin-impersonate] getUser error:', callerError?.message);
+      return errorResponse(`Unauthorized: ${callerError?.message || 'invalid token'}.`, 401);
     }
 
     // Look up caller's profile to confirm admin role
@@ -81,7 +92,10 @@ serve(async (req) => {
 
     if (linkError || !linkData?.properties?.action_link) {
       console.error('[admin-impersonate] generateLink error:', linkError);
-      return errorResponse(linkError?.message || 'Failed to generate access link.', 500);
+      return errorResponse(
+        `Failed to generate access link for ${client_email}: ${linkError?.message || 'no action_link returned'}`,
+        500
+      );
     }
 
     console.log(`[admin-impersonate] Admin ${callerUser.id} generated impersonation link for ${client_email}`);
@@ -90,6 +104,6 @@ serve(async (req) => {
 
   } catch (error: any) {
     console.error('[admin-impersonate] Unhandled error:', error.message);
-    return errorResponse(error.message, 500);
+    return errorResponse(`Unexpected error: ${error.message}`, 500);
   }
 });
