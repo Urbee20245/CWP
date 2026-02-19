@@ -461,22 +461,37 @@ export const AdminService = {
 
   // Admin impersonation — generates a one-time magic link to access a client's portal
   impersonateClient: async (clientEmail: string, adminName: string): Promise<string> => {
-    // Force-refresh the session so the edge function gateway always receives a
-    // valid, non-expired JWT. getSession() can return a cached token; refreshSession()
-    // guarantees a fresh access token is written back to the auth store before
-    // invokeEdgeFunction picks it up.
+    // Force-refresh the session and use the returned token directly in a raw fetch,
+    // bypassing supabase.functions.invoke. This guarantees:
+    //   1. A non-stale access_token (refreshSession always returns a fresh one)
+    //   2. The `apikey` header is explicitly included (Supabase gateway requires both
+    //      Authorization + apikey; custom headers in functions.invoke can drop apikey)
     const { data: refreshData, error: refreshError } = await supabase.auth.refreshSession();
     if (refreshError || !refreshData.session) {
       throw new Error(refreshError?.message || 'Session expired. Please log in again.');
     }
 
-    const result = await invokeEdgeFunction('admin-impersonate', {
-      client_email: clientEmail,
-      admin_name: adminName,
+    const url = `${SUPABASE_EDGE_BASE}/admin-impersonate`;
+    const res = await fetch(url, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${refreshData.session.access_token}`,
+        'apikey': SUPABASE_ANON_KEY_PUBLIC,
+      },
+      body: JSON.stringify({ client_email: clientEmail, admin_name: adminName }),
     });
-    if (!result?.action_link) {
-      throw new Error('No access link returned from server.');
+
+    const text = await res.text();
+    let json: any = null;
+    try { json = JSON.parse(text); } catch { /* leave as null */ }
+
+    if (!res.ok) {
+      const message = json?.error || json?.message || text || `Request failed (${res.status})`;
+      throw new Error(message);
     }
-    return result.action_link as string;
+    if (json?.error) throw new Error(json.error);
+    if (!json?.action_link) throw new Error('No access link returned from server.');
+    return json.action_link as string;
   },
 };
