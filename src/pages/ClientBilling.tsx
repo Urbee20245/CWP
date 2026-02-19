@@ -292,8 +292,18 @@ const ClientBilling: React.FC = () => {
       return products.find(p => p.stripe_price_id === priceId)?.name || 'Unknown Plan';
   };
   
+  // Fully active subscription (first payment already processed)
   const activeSubscription = subscriptions.find(sub => sub.status === 'active' || sub.status === 'trialing');
-  
+  // Subscription awaiting first payment — admin created it but client hasn't paid yet
+  const pendingSubscription = subscriptions.find(sub => sub.status === 'incomplete' || sub.status === 'past_due');
+  // What to render in the subscription card (prefer active over pending)
+  const displayedSubscription = activeSubscription || pendingSubscription;
+  const isPaymentRequired = !activeSubscription && !!pendingSubscription;
+  // The open invoice the client must pay to activate their pending subscription
+  const pendingPaymentInvoice = isPaymentRequired
+    ? invoices.find(inv => inv.status === 'open' || inv.status === 'draft')
+    : null;
+
   const unappliedDeposits = deposits.filter(d => d.status === 'paid' && !d.applied_to_invoice_id);
   const totalUnappliedCredit = unappliedDeposits.reduce((sum, d) => sum + d.amount_cents, 0) / 100;
 
@@ -332,55 +342,84 @@ const ClientBilling: React.FC = () => {
                             <Zap className="w-5 h-5 text-amber-600" /> Maintenance Plans
                         </h2>
                         
-                        {activeSubscription ? (
-                            <div className="space-y-3 mb-6 p-4 bg-slate-50 rounded-lg border border-slate-200">
-                                <p className="text-lg font-bold text-slate-900">{getPlanName(activeSubscription.stripe_price_id)}</p>
+                        {displayedSubscription ? (
+                            <div className={`space-y-3 mb-6 p-4 rounded-lg border ${isPaymentRequired ? 'bg-amber-50 border-amber-300' : 'bg-slate-50 border-slate-200'}`}>
+                                {/* Payment required banner */}
+                                {isPaymentRequired && (
+                                    <div className="flex items-start gap-2 p-2 bg-amber-100 border border-amber-400 rounded-lg mb-2">
+                                        <AlertTriangle className="w-4 h-4 text-amber-700 mt-0.5 flex-shrink-0" />
+                                        <div>
+                                            <p className="text-xs font-bold text-amber-800">Payment Required to Activate</p>
+                                            <p className="text-xs text-amber-700">Your plan is ready but needs first payment to start.</p>
+                                        </div>
+                                    </div>
+                                )}
+
+                                <p className="text-lg font-bold text-slate-900">{getPlanName(displayedSubscription.stripe_price_id)}</p>
                                 <p className="text-sm text-slate-600 flex justify-between">
                                     <span>Status:</span>
-                                    <span className={`px-2 py-0.5 rounded-full text-xs font-semibold ${getStatusColor(activeSubscription.status)}`}>
-                                        {activeSubscription.status}
+                                    <span className={`px-2 py-0.5 rounded-full text-xs font-semibold ${isPaymentRequired ? 'bg-amber-200 text-amber-900' : getStatusColor(displayedSubscription.status)}`}>
+                                        {isPaymentRequired ? 'Awaiting First Payment' : displayedSubscription.status}
                                     </span>
                                 </p>
-                                <p className="text-sm text-slate-600 flex justify-between">
-                                    <span>Renews:</span>
-                                    <span>{format(new Date(activeSubscription.current_period_end), 'MMM dd, yyyy')}</span>
-                                </p>
-                                
-                                {activeSubscription.cancel_at_period_end ? (
+                                {activeSubscription && activeSubscription.current_period_end && (
+                                    <p className="text-sm text-slate-600 flex justify-between">
+                                        <span>Renews:</span>
+                                        <span>{format(new Date(activeSubscription.current_period_end), 'MMM dd, yyyy')}</span>
+                                    </p>
+                                )}
+
+                                {/* Pay now button for pending subscriptions */}
+                                {isPaymentRequired && pendingPaymentInvoice?.hosted_invoice_url && (
+                                    <a
+                                        href={pendingPaymentInvoice.hosted_invoice_url}
+                                        target="_blank"
+                                        rel="noopener noreferrer"
+                                        className="w-full py-2.5 mt-2 bg-amber-500 text-white rounded-lg text-sm font-bold hover:bg-amber-600 transition-colors flex items-center justify-center gap-2"
+                                    >
+                                        <CreditCard className="w-4 h-4" /> Pay Now &amp; Activate — ${(pendingPaymentInvoice.amount_due / 100).toFixed(2)}
+                                    </a>
+                                )}
+
+                                {activeSubscription?.cancel_at_period_end ? (
                                     <div className="text-sm text-red-600 font-semibold pt-3 border-t border-slate-200 flex flex-col items-start gap-1">
                                         <div className="flex items-center gap-2">
-                                            <X className="w-4 h-4" /> 
+                                            <X className="w-4 h-4" />
                                             <span>Cancellation Pending</span>
                                         </div>
                                         <span className="text-xs text-slate-500">Service ends: {cancellationEffectiveDate ? format(new Date(cancellationEffectiveDate), 'MMM dd, yyyy') : 'N/A'}</span>
                                     </div>
-                                ) : (
-                                    <button 
+                                ) : activeSubscription && !isPaymentRequired ? (
+                                    <button
                                         onClick={() => handleCancelSubscription(activeSubscription)}
                                         disabled={isProcessing}
                                         className="w-full py-2 mt-4 bg-red-500 text-white rounded-lg text-sm font-semibold hover:bg-red-600 transition-colors disabled:opacity-50"
                                     >
                                         Cancel Subscription
                                     </button>
-                                )}
+                                ) : null}
                             </div>
                         ) : (
-                            <p className="text-slate-500 mb-6">No active maintenance plan found.</p>
+                            <p className="text-slate-500 mb-6">No maintenance plan found. Contact your administrator to get started.</p>
                         )}
-                        
+
                         <p className="text-xs text-slate-500 mb-4">
                             Maintenance plans cover ongoing support, hosting, and updates. Billing status does not affect your access to this portal.
                         </p>
 
                       {activeSubscription ? (
-  <button 
+  <button
     onClick={handlePortalSession}
     disabled={isProcessing || !stripeCustomerId}
     className="w-full py-3 bg-indigo-600 text-white rounded-lg font-semibold hover:bg-indigo-700 transition-colors disabled:opacity-50 flex items-center justify-center gap-2"
   >
     {isProcessing ? <Loader2 className="w-4 h-4 animate-spin" /> : <CreditCard className="w-4 h-4" />}
-    Manage Billing & Plans
+    Manage Billing &amp; Plans
   </button>
+) : isPaymentRequired ? (
+  <div className="w-full py-3 bg-amber-50 border border-amber-300 text-amber-800 rounded-lg font-semibold text-center text-sm">
+    Billing portal available after first payment is completed
+  </div>
 ) : (
   <div className="w-full py-3 bg-slate-100 text-slate-500 rounded-lg font-semibold text-center">
     <p className="text-sm">No active plan</p>
@@ -388,7 +427,7 @@ const ClientBilling: React.FC = () => {
   </div>
 )}
 <p className="text-xs text-slate-500 mt-2 text-center">
-  {(activeSubscription || stripeCustomerId) ? '(Opens Stripe Customer Portal)' : ''}
+  {activeSubscription ? '(Opens Stripe Customer Portal)' : ''}
 </p>
                     </div>
                     

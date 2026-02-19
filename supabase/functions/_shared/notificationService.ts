@@ -1,5 +1,11 @@
-// This is a mock service. In a real environment, this would integrate with SendGrid/Postmark/Twilio.
+import { sendPublicFormEmail } from './publicEmailService.ts';
 
+// ─────────────────────────────────────────────────────────────────────────────
+// Billing stage notifications
+//   Stage 1 – Invoice overdue notice
+//   Stage 2 – Final notice before service restriction
+//   Stage 3 – Payment confirmed / access restored
+// ─────────────────────────────────────────────────────────────────────────────
 export async function sendBillingNotification(
   clientEmail: string,
   clientName: string,
@@ -7,72 +13,110 @@ export async function sendBillingNotification(
   graceDate?: string
 ) {
   let subject = '';
-  let body = '';
+  let html = '';
 
   switch (stage) {
     case 1:
       subject = `Action Required – Invoice Past Due for ${clientName}`;
-      body = `Dear ${clientName}, your recent invoice is now overdue. Please pay it by ${graceDate} to avoid service interruption.`;
+      html = `
+        <div style="font-family:Arial,sans-serif;max-width:600px;margin:0 auto;">
+          <h2 style="color:#d97706;">Invoice Past Due</h2>
+          <p>Dear ${clientName},</p>
+          <p>Your recent invoice is now <strong>overdue</strong>. Please log in to your client portal and pay by <strong>${graceDate || 'as soon as possible'}</strong> to avoid service interruption.</p>
+          <p><a href="https://customwebsitesplus.com/client/billing" style="display:inline-block;background:#4f46e5;color:#fff;padding:10px 20px;border-radius:8px;text-decoration:none;font-weight:700;">View Invoice &amp; Pay</a></p>
+          <p style="color:#64748b;font-size:13px;">If you have already paid, please disregard this notice.</p>
+          <p>Thank you,<br/>The Custom Websites Plus Team</p>
+        </div>`;
       break;
     case 2:
       subject = `Final Notice – Service Access At Risk for ${clientName}`;
-      body = `Dear ${clientName}, this is your final reminder. Access to your project portal will be restricted after ${graceDate} if the invoice remains unpaid.`;
+      html = `
+        <div style="font-family:Arial,sans-serif;max-width:600px;margin:0 auto;">
+          <h2 style="color:#dc2626;">Final Notice — Service Access At Risk</h2>
+          <p>Dear ${clientName},</p>
+          <p>This is your <strong>final reminder</strong>. Access to your project portal will be restricted after <strong>${graceDate || 'the due date'}</strong> if the outstanding invoice remains unpaid.</p>
+          <p><a href="https://customwebsitesplus.com/client/billing" style="display:inline-block;background:#dc2626;color:#fff;padding:10px 20px;border-radius:8px;text-decoration:none;font-weight:700;">Pay Now to Keep Access</a></p>
+          <p style="color:#64748b;font-size:13px;">Contact us immediately if you have questions or need assistance.</p>
+          <p>Thank you,<br/>The Custom Websites Plus Team</p>
+        </div>`;
       break;
     case 3:
-      subject = `Access Restored for ${clientName}`;
-      body = `Dear ${clientName}, your payment has been successfully processed, and access to your project portal has been restored. Thank you!`;
+      subject = `Payment Confirmed – Access Restored for ${clientName}`;
+      html = `
+        <div style="font-family:Arial,sans-serif;max-width:600px;margin:0 auto;">
+          <h2 style="color:#16a34a;">Payment Confirmed</h2>
+          <p>Dear ${clientName},</p>
+          <p>Your payment has been <strong>successfully processed</strong>. Full access to your project portal has been restored.</p>
+          <p><a href="https://customwebsitesplus.com/client/billing" style="display:inline-block;background:#16a34a;color:#fff;padding:10px 20px;border-radius:8px;text-decoration:none;font-weight:700;">Go to My Portal</a></p>
+          <p>Thank you for your continued business!</p>
+          <p>The Custom Websites Plus Team</p>
+        </div>`;
       break;
     default:
-      console.warn(`[notificationService] Unknown notification stage: ${stage}`);
+      console.warn(`[notificationService] Unknown billing notification stage: ${stage}`);
       return;
   }
 
-  console.log(`[notificationService] Sending email to ${clientEmail} (Stage ${stage}): ${subject}`);
-  // In a real app, call email API here.
-  
+  console.log(`[notificationService] Sending billing notification (stage ${stage}) to ${clientEmail}`);
+  try {
+    await sendPublicFormEmail(clientEmail, subject, html, 'billing@customwebsitesplus.com');
+  } catch (e: any) {
+    console.error(`[notificationService] Failed to send billing notification: ${e.message}`);
+  }
+
   return { success: true, subject };
 }
 
+// ─────────────────────────────────────────────────────────────────────────────
+// Service status notifications (paused / resumed)
+// ─────────────────────────────────────────────────────────────────────────────
 export async function sendServiceStatusNotification(
     clientEmail: string,
     clientName: string,
     action: 'paused' | 'resumed',
     projectTitle?: string
 ) {
+    const target = projectTitle ? `on project: <strong>${projectTitle}</strong>` : 'on your account';
     let subject = '';
-    let body = '';
-    const target = projectTitle ? `on project: ${projectTitle}` : 'on your account';
+    let html = '';
 
     if (action === 'paused') {
-        subject = `Important: Service Temporarily Paused ${target}`;
-        body = `Dear ${clientName},
-
-Active work ${target} has been temporarily paused by our team. Your client portal remains fully accessible, and you can view all project details, files, and billing history.
-
-No action is required unless noted by your project manager. Please contact us if you have any questions.
-
-Thank you,
-The Custom Websites Plus Team`;
+        subject = `Important: Service Temporarily Paused for ${clientName}`;
+        html = `
+          <div style="font-family:Arial,sans-serif;max-width:600px;margin:0 auto;">
+            <h2 style="color:#d97706;">Service Temporarily Paused</h2>
+            <p>Dear ${clientName},</p>
+            <p>Active work ${target} has been temporarily paused by our team. Your client portal remains fully accessible and you can view all project details, files, and billing history.</p>
+            <p>No action is required unless noted by your project manager. Please contact us if you have any questions.</p>
+            <p>Thank you,<br/>The Custom Websites Plus Team</p>
+          </div>`;
     } else if (action === 'resumed') {
-        subject = `Update: Service Resumed ${target}`;
-        body = `Dear ${clientName},
-
-Active work ${target} has now resumed. We appreciate your patience and look forward to continuing your project.
-
-You can track the latest progress in your client portal.
-
-Thank you,
-The Custom Websites Plus Team`;
+        subject = `Update: Service Resumed for ${clientName}`;
+        html = `
+          <div style="font-family:Arial,sans-serif;max-width:600px;margin:0 auto;">
+            <h2 style="color:#16a34a;">Service Resumed</h2>
+            <p>Dear ${clientName},</p>
+            <p>Active work ${target} has now <strong>resumed</strong>. We appreciate your patience and look forward to continuing your project.</p>
+            <p>You can track the latest progress in your <a href="https://customwebsitesplus.com/client/projects">client portal</a>.</p>
+            <p>Thank you,<br/>The Custom Websites Plus Team</p>
+          </div>`;
     } else {
         return { success: false, message: 'Invalid action' };
     }
 
-    console.log(`[notificationService] Sending service status email to ${clientEmail} (${action}): ${subject}`);
-    // In a real app, call email API here.
-    
+    console.log(`[notificationService] Sending service status email (${action}) to ${clientEmail}`);
+    try {
+        await sendPublicFormEmail(clientEmail, subject, html, 'support@customwebsitesplus.com');
+    } catch (e: any) {
+        console.error(`[notificationService] Failed to send service status notification: ${e.message}`);
+    }
+
     return { success: true, subject };
 }
 
+// ─────────────────────────────────────────────────────────────────────────────
+// Invoice reminder (upcoming / overdue)
+// ─────────────────────────────────────────────────────────────────────────────
 export async function sendInvoiceReminder(
     supabaseAdmin: any,
     invoiceId: string,
@@ -82,43 +126,74 @@ export async function sendInvoiceReminder(
     hostedUrl: string,
     reminderType: 'upcoming' | 'overdue'
 ) {
-    const subject = reminderType === 'upcoming' 
-        ? `Reminder: Your Invoice for $${invoiceAmount.toFixed(2)} is Due Soon`
-        : `URGENT: Invoice for $${invoiceAmount.toFixed(2)} is Past Due`;
-        
-    const body = `
-Dear ${clientName},
+    const isOverdue = reminderType === 'overdue';
+    const subject = isOverdue
+        ? `URGENT: Invoice for $${invoiceAmount.toFixed(2)} is Past Due — ${clientName}`
+        : `Reminder: Your Invoice for $${invoiceAmount.toFixed(2)} is Due Soon — ${clientName}`;
 
-This is a friendly reminder regarding your recent invoice for **$${invoiceAmount.toFixed(2)}**.
-
-**Status:** ${reminderType === 'upcoming' ? 'Due Soon' : 'Past Due'}
-
-Please click the link below to view and pay the invoice:
-
-[View & Pay Invoice](${hostedUrl})
-
-If you have already made this payment, please disregard this email. If you have any questions, please contact us immediately.
-
-Thank you,
-The Custom Websites Plus Team
-`;
+    const html = `
+      <div style="font-family:Arial,sans-serif;max-width:600px;margin:0 auto;">
+        <h2 style="color:${isOverdue ? '#dc2626' : '#d97706'};">${isOverdue ? 'Invoice Past Due' : 'Invoice Due Soon'}</h2>
+        <p>Dear ${clientName},</p>
+        <p>This is a ${isOverdue ? '<strong>urgent reminder</strong>' : 'friendly reminder'} regarding your invoice for <strong>$${invoiceAmount.toFixed(2)}</strong>.</p>
+        <p>Status: <strong>${isOverdue ? 'Past Due' : 'Due Soon'}</strong></p>
+        <p>
+          <a href="${hostedUrl}" style="display:inline-block;background:${isOverdue ? '#dc2626' : '#4f46e5'};color:#fff;padding:10px 20px;border-radius:8px;text-decoration:none;font-weight:700;">
+            View &amp; Pay Invoice
+          </a>
+        </p>
+        <p style="color:#64748b;font-size:13px;">If you have already made this payment, please disregard this email. Contact us if you have any questions.</p>
+        <p>Thank you,<br/>The Custom Websites Plus Team</p>
+      </div>`;
 
     console.log(`[notificationService] Sending ${reminderType} reminder for invoice ${invoiceId} to ${clientEmail}`);
-    
-    // Use the send-email Edge Function via AdminService or direct invocation
-    // Since this is running in an Edge Function, we must use the AdminService pattern or direct DB insert/RPC call to trigger the email.
-    
-    // For simplicity and to avoid circular dependencies in Edge Functions, we will log the action and assume an external system (or another Edge Function) handles the actual sending based on the log.
-    
-    // For now, we will just log the action and update the invoice record.
-    
-    // In a real app, we would call the send-email function here.
-    
-    // Update the invoice record to mark the reminder sent
+
+    try {
+        await sendPublicFormEmail(clientEmail, subject, html, 'billing@customwebsitesplus.com');
+    } catch (e: any) {
+        console.error(`[notificationService] Failed to send invoice reminder: ${e.message}`);
+    }
+
+    // Update the invoice record to record that a reminder was sent
     await supabaseAdmin
         .from('invoices')
         .update({ last_reminder_sent_at: new Date().toISOString() })
         .eq('id', invoiceId);
-        
+
+    return { success: true, subject };
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// New subscription created — client needs to pay the first invoice
+// ─────────────────────────────────────────────────────────────────────────────
+export async function sendSubscriptionCreatedNotification(
+    clientEmail: string,
+    clientName: string,
+    planName: string,
+    hostedInvoiceUrl: string
+) {
+    const subject = `Action Required: Complete Your ${planName} Subscription Setup`;
+    const html = `
+      <div style="font-family:Arial,sans-serif;max-width:600px;margin:0 auto;">
+        <h2 style="color:#4f46e5;">Your Subscription is Ready — Payment Required</h2>
+        <p>Dear ${clientName},</p>
+        <p>Your <strong>${planName}</strong> subscription has been set up and is ready to activate. To complete the setup and start your subscription, please pay the first invoice now.</p>
+        <p>
+          <a href="${hostedInvoiceUrl}" style="display:inline-block;background:#4f46e5;color:#fff;padding:12px 24px;border-radius:8px;text-decoration:none;font-weight:700;font-size:15px;">
+            Pay First Invoice &amp; Activate Subscription
+          </a>
+        </p>
+        <p>After payment, your subscription will be automatically activated and billed monthly. You can manage your subscription anytime from your <a href="https://customwebsitesplus.com/client/billing">billing portal</a>.</p>
+        <p style="color:#64748b;font-size:13px;">If you have any questions, reply to this email or contact us at support@customwebsitesplus.com.</p>
+        <p>Thank you,<br/>The Custom Websites Plus Team</p>
+      </div>`;
+
+    console.log(`[notificationService] Sending subscription created notification to ${clientEmail} for plan: ${planName}`);
+    try {
+        await sendPublicFormEmail(clientEmail, subject, html, 'billing@customwebsitesplus.com');
+    } catch (e: any) {
+        console.error(`[notificationService] Failed to send subscription created notification: ${e.message}`);
+    }
+
     return { success: true, subject };
 }
