@@ -131,7 +131,7 @@ const AdminEmailDraft: React.FC = () => {
         setGenerationError(null);
         
         try {
-            // 1. Send email via secure Edge Function
+            // Send email via secure Edge Function — the function itself logs to email_logs.
             await AdminService.sendEmail(
                 client.billing_email,
                 currentSubject,
@@ -139,19 +139,7 @@ const AdminEmailDraft: React.FC = () => {
                 client.id,
                 user.id
             );
-            
-            // 2. Log the email status in email_logs table
-            const logData = {
-                client_id: client.id,
-                to_email: client.billing_email,
-                subject: currentSubject,
-                body: currentBody,
-                status: 'sent',
-                sent_by: user.id,
-            };
-            
-            await supabase.from('email_logs').insert(logData);
-            
+
             setSendResult('success');
             
             // Redirect back to client detail page after success

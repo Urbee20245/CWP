@@ -1,3 +1,8 @@
+// Disable Supabase JWT verification — this function is called by both authenticated admin
+// users and internal edge functions (which have no user JWT). Auth security is enforced
+// by requiring a valid RESEND_API_KEY and SUPABASE_SERVICE_ROLE_KEY at runtime.
+export const config = { auth: false };
+
 import { serve } from "https://deno.land/std@0.190.0/http/server.ts";
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2.45.0';
 import { handleCors, jsonResponse, errorResponse } from '../_shared/utils.ts';

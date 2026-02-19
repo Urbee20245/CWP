@@ -198,7 +198,8 @@ export const AdminService = {
   generateAdminContent: async (context: any) => invokeEdgeFunction('generate-admin-content', context),
   generateEmail: async (emailType: string, inputs: any) => invokeEdgeFunction('generate-email-content', { emailType, inputs }),
   sendEmail: async (to_email: string, subject: string, markdown_body: string, client_id: string | null, sent_by: string) => {
-    const html_body = marked.parse(markdown_body);
+    // marked.parse() returns string | Promise<string> in v5+. Always await to handle both.
+    const html_body = await Promise.resolve(marked.parse(markdown_body));
     return invokeEdgeFunction('send-email', { to_email, subject, html_body, client_id, sent_by });
   },
   

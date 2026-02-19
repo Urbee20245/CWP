@@ -4,7 +4,7 @@ import { serve } from "https://deno.land/std@0.190.0/http/server.ts";
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2.45.0';
 import Stripe from 'https://esm.sh/stripe@14.21.0?target=deno';
 import { handleCors, jsonResponse, errorResponse } from '../_shared/utils.ts';
-import { sendBillingNotification } from '../_shared/notificationService.ts';
+import { sendBillingNotification, sendSubscriptionCreatedNotification } from '../_shared/notificationService.ts';
 
 const STRIPE_SECRET_KEY = Deno.env.get('STRIPE_SECRET_KEY');
 const STRIPE_WEBHOOK_SECRET = Deno.env.get('STRIPE_WEBHOOK_SECRET');
@@ -324,7 +324,7 @@ serve(async (req) => {
           .upsert(subscriptionData, { onConflict: 'stripe_subscription_id' });
 
         if (upsertError) console.error('[stripe-webhook] Subscription upsert failed:', upsertError);
-        
+
         // Update client record with the latest active subscription ID (for reference, not access)
         if (subscription.status === 'active' || subscription.status === 'trialing') {
             await supabaseAdmin
@@ -336,6 +336,52 @@ serve(async (req) => {
                 .from('clients')
                 .update({ stripe_subscription_id: null })
                 .eq('id', client_id);
+        }
+
+        // When a new subscription is created and requires first payment (status=incomplete),
+        // notify the client via email with the payment link so they can activate immediately.
+        if (event.type === 'customer.subscription.created' && subscription.status === 'incomplete') {
+            const { data: clientRecord } = await supabaseAdmin
+                .from('clients')
+                .select('business_name, billing_email, profiles(email)')
+                .eq('id', client_id)
+                .single();
+
+            const clientEmail = clientRecord?.billing_email || clientRecord?.profiles?.email;
+            if (clientEmail && clientRecord) {
+                // Find the latest open invoice for this customer to get the payment URL
+                const { data: openInvoice } = await supabaseAdmin
+                    .from('invoices')
+                    .select('hosted_invoice_url')
+                    .eq('client_id', client_id)
+                    .eq('status', 'open')
+                    .order('created_at', { ascending: false })
+                    .limit(1)
+                    .maybeSingle();
+
+                // Also look up the plan name from billing_products
+                const priceId = subscription.items.data[0]?.price.id;
+                const { data: productRecord } = priceId ? await supabaseAdmin
+                    .from('billing_products')
+                    .select('name')
+                    .eq('stripe_price_id', priceId)
+                    .maybeSingle() : { data: null };
+
+                const planName = productRecord?.name || 'Maintenance Plan';
+                const invoiceUrl = openInvoice?.hosted_invoice_url;
+
+                if (invoiceUrl) {
+                    await sendSubscriptionCreatedNotification(
+                        clientEmail,
+                        clientRecord.business_name,
+                        planName,
+                        invoiceUrl
+                    );
+                    console.log(`[stripe-webhook] Subscription created notification sent to ${clientEmail}`);
+                } else {
+                    console.warn(`[stripe-webhook] No open invoice found for new subscription ${subscription.id} — skipping client notification`);
+                }
+            }
         }
         break;
       }
