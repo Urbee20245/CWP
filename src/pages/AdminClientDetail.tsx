@@ -553,12 +553,21 @@ const AdminClientDetail: React.FC = () => {
       alert('Cannot access portal: client email address is missing.');
       return;
     }
+
+    // Open the tab synchronously — browsers block window.open after an await
+    const newTab = window.open('about:blank', '_blank');
+    if (!newTab) {
+      alert('Popup was blocked. Please allow popups for this site and try again.');
+      return;
+    }
+
     setIsProcessing(true);
     try {
       const adminName = adminProfile?.full_name || 'Admin';
       const actionLink = await AdminService.impersonateClient(clientEmail, adminName);
-      window.open(actionLink, '_blank', 'noopener,noreferrer');
+      newTab.location.href = actionLink;
     } catch (e: any) {
+      newTab.close();
       alert(`Failed to generate client access link: ${e.message}`);
     } finally {
       setIsProcessing(false);
