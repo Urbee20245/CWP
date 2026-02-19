@@ -548,7 +548,7 @@ const AdminClientDetail: React.FC = () => {
   
   const handleImpersonateClient = async () => {
     if (!client) return;
-    const clientEmail = client.profiles?.email;
+    const clientEmail = client.profiles?.email || client.billing_email;
     if (!clientEmail) {
       alert('Cannot access portal: client email address is missing.');
       return;
@@ -821,8 +821,8 @@ const AdminClientDetail: React.FC = () => {
             </button>
             <button
               onClick={handleImpersonateClient}
-              disabled={isProcessing || !client.profiles?.email}
-              title={client.profiles?.email ? `Access ${client.business_name}'s portal` : 'No client email on record'}
+              disabled={isProcessing || (!client.profiles?.email && !client.billing_email)}
+              title={(client.profiles?.email || client.billing_email) ? `Access ${client.business_name}'s portal` : 'No client email on record'}
               className="flex items-center gap-2 px-3.5 py-2 bg-violet-50 text-violet-700 rounded-lg text-sm font-semibold hover:bg-violet-100 disabled:opacity-50 transition-colors"
             >
               {isProcessing ? <Loader2 className="w-4 h-4 animate-spin" /> : <Eye className="w-4 h-4" />} Access Portal
