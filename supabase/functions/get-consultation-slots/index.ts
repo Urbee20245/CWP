@@ -1,5 +1,6 @@
 export const config = {
-  auth: false,
+  // Public endpoint (used by booking UI and website forms)
+  verify_jwt: false,
 };
 
 import { serve } from "https://deno.land/std@0.190.0/http/server.ts";
