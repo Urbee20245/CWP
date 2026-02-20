@@ -1,7 +1,7 @@
 "use client";
 
 import React, { useState, useEffect, useRef, useCallback } from 'react';
-import { Loader2, Send, MessageSquare, AlertCircle } from 'lucide-react';
+import { Loader2, Send, MessageSquare, AlertCircle, Smile } from 'lucide-react';
 import { AdminService } from '../services/adminService';
 
 interface SmsMessage {
@@ -24,6 +24,20 @@ interface SmsInboxProps {
   clientPhone: string;
 }
 
+const EMOJIS = [
+  // Smileys
+  '😊', '😂', '😍', '🥰', '😘', '😁', '😄', '😅', '🤣', '😎',
+  '🤩', '😏', '😒', '😔', '😢', '😭', '😡', '🤔', '🙄', '😴',
+  // Gestures
+  '👍', '👎', '👋', '🤝', '👏', '🙌', '🤞', '✌️', '🤟', '💪',
+  // Hearts
+  '❤️', '🧡', '💛', '💚', '💙', '💜', '🖤', '💔', '💕', '💞',
+  // Objects
+  '🎉', '🎊', '🎁', '🎂', '🔥', '✨', '💫', '⭐', '🌟', '🎵',
+  // Symbols
+  '✅', '❌', '⚠️', '💯', '🔔', '📱', '💬', '📢', '🆗', '🚀',
+];
+
 const SmsInbox: React.FC<SmsInboxProps> = ({ clientId, clientName, clientPhone }) => {
   const [messages, setMessages] = useState<SmsMessage[]>([]);
   const [isLoading, setIsLoading] = useState(true);
@@ -31,8 +45,13 @@ const SmsInbox: React.FC<SmsInboxProps> = ({ clientId, clientName, clientPhone }
   const [fetchError, setFetchError] = useState<string | null>(null);
   const [sendError, setSendError] = useState<string | null>(null);
   const [messageBody, setMessageBody] = useState('');
+  const [showEmojiPicker, setShowEmojiPicker] = useState(false);
+  const [textareaRows, setTextareaRows] = useState(2);
   const bottomRef = useRef<HTMLDivElement>(null);
   const pollingRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  const textareaRef = useRef<HTMLTextAreaElement>(null);
+  const emojiPickerRef = useRef<HTMLDivElement>(null);
+  const cursorPosRef = useRef<number>(0);
 
   const fetchMessages = useCallback(async () => {
     try {
@@ -59,6 +78,18 @@ const SmsInbox: React.FC<SmsInboxProps> = ({ clientId, clientName, clientPhone }
     bottomRef.current?.scrollIntoView({ behavior: 'smooth' });
   }, [messages]);
 
+  // Close emoji picker on outside click
+  useEffect(() => {
+    if (!showEmojiPicker) return;
+    const handleClickOutside = (e: MouseEvent) => {
+      if (emojiPickerRef.current && !emojiPickerRef.current.contains(e.target as Node)) {
+        setShowEmojiPicker(false);
+      }
+    };
+    document.addEventListener('mousedown', handleClickOutside);
+    return () => document.removeEventListener('mousedown', handleClickOutside);
+  }, [showEmojiPicker]);
+
   const handleSend = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!messageBody.trim()) return;
@@ -71,6 +102,7 @@ const SmsInbox: React.FC<SmsInboxProps> = ({ clientId, clientName, clientPhone }
     try {
       await AdminService.sendSms(to, messageBody.trim(), clientId);
       setMessageBody('');
+      setTextareaRows(2);
       // Immediately refresh to show the sent message
       await fetchMessages();
     } catch (err: any) {
@@ -78,6 +110,31 @@ const SmsInbox: React.FC<SmsInboxProps> = ({ clientId, clientName, clientPhone }
     } finally {
       setIsSending(false);
     }
+  };
+
+  const handleEmojiClick = (emoji: string) => {
+    const pos = cursorPosRef.current;
+    const before = messageBody.slice(0, pos);
+    const after = messageBody.slice(pos);
+    const newBody = before + emoji + after;
+    setMessageBody(newBody);
+    // Restore focus and position cursor after inserted emoji
+    setTimeout(() => {
+      if (textareaRef.current) {
+        const newPos = pos + emoji.length;
+        textareaRef.current.focus();
+        textareaRef.current.setSelectionRange(newPos, newPos);
+        cursorPosRef.current = newPos;
+      }
+    }, 0);
+  };
+
+  const handleTextareaChange = (e: React.ChangeEvent<HTMLTextAreaElement>) => {
+    setMessageBody(e.target.value);
+    cursorPosRef.current = e.target.selectionStart ?? e.target.value.length;
+    // Auto-expand rows (2 default, up to 4)
+    const lines = e.target.value.split('\n').length;
+    setTextareaRows(Math.min(4, Math.max(2, lines)));
   };
 
   const formatTime = (ts: string) => {
@@ -94,8 +151,12 @@ const SmsInbox: React.FC<SmsInboxProps> = ({ clientId, clientName, clientPhone }
     }
   };
 
+  const charCount = messageBody.length;
+  const charCountColor =
+    charCount >= 160 ? 'text-red-600' : charCount >= 140 ? 'text-amber-500' : 'text-slate-400';
+
   return (
-    <div className="flex flex-col h-full min-h-[480px] bg-white rounded-xl shadow-lg border border-slate-100 overflow-hidden">
+    <div className="max-w-2xl mx-auto flex flex-col bg-white rounded-xl shadow-lg border border-slate-100 overflow-hidden">
       {/* Header */}
       <div className="flex items-center gap-3 px-5 py-4 border-b border-slate-100 bg-slate-50">
         <MessageSquare className="w-5 h-5 text-indigo-600 flex-shrink-0" />
@@ -105,8 +166,8 @@ const SmsInbox: React.FC<SmsInboxProps> = ({ clientId, clientName, clientPhone }
         </div>
       </div>
 
-      {/* Message thread */}
-      <div className="flex-1 overflow-y-auto px-4 py-4 space-y-3">
+      {/* Message thread — fixed height, scrollable */}
+      <div className="h-96 overflow-y-auto px-4 py-4 space-y-3">
         {isLoading ? (
           <div className="flex items-center justify-center h-full py-12">
             <Loader2 className="w-6 h-6 animate-spin text-indigo-600" />
@@ -127,7 +188,7 @@ const SmsInbox: React.FC<SmsInboxProps> = ({ clientId, clientName, clientPhone }
             const isOutbound = msg.direction === 'outbound';
             return (
               <div key={msg.id} className={`flex ${isOutbound ? 'justify-end' : 'justify-start'}`}>
-                <div className={`max-w-[75%] space-y-1`}>
+                <div className="max-w-[75%] space-y-1">
                   <p className={`text-xs font-semibold ${isOutbound ? 'text-right text-indigo-500' : 'text-left text-slate-500'}`}>
                     {isOutbound ? 'You' : clientName}
                   </p>
@@ -160,33 +221,77 @@ const SmsInbox: React.FC<SmsInboxProps> = ({ clientId, clientName, clientPhone }
       )}
 
       {/* Compose area */}
-      <form onSubmit={handleSend} className="flex gap-2 items-end px-4 py-3 border-t border-slate-100">
-        <textarea
-          value={messageBody}
-          onChange={(e) => setMessageBody(e.target.value)}
-          onKeyDown={(e) => {
-            if (e.key === 'Enter' && !e.shiftKey) {
-              e.preventDefault();
-              if (messageBody.trim() && !isSending && clientPhone) handleSend(e as any);
-            }
-          }}
-          placeholder={clientPhone ? 'Type a message… (Enter to send)' : 'No phone number on record'}
-          rows={2}
-          disabled={isSending || !clientPhone}
-          className="flex-1 px-3 py-2 border border-slate-300 rounded-xl text-sm resize-none focus:border-indigo-500 outline-none disabled:opacity-50"
-        />
-        <button
-          type="submit"
-          disabled={isSending || !messageBody.trim() || !clientPhone}
-          className="flex-shrink-0 p-2.5 bg-indigo-600 text-white rounded-xl hover:bg-indigo-700 transition-colors disabled:opacity-40 flex items-center justify-center"
-        >
-          {isSending ? (
-            <Loader2 className="w-4 h-4 animate-spin" />
-          ) : (
-            <Send className="w-4 h-4" />
+      <div className="border-t border-slate-100 px-4 py-3">
+        {/* Emoji picker popover anchor */}
+        <div ref={emojiPickerRef} className="relative">
+          {showEmojiPicker && (
+            <div className="absolute bottom-full mb-2 left-0 z-50 bg-white border border-slate-200 rounded-xl shadow-lg p-2 max-h-48 overflow-y-auto">
+              <div className="grid grid-cols-5 gap-1">
+                {EMOJIS.map((emoji) => (
+                  <button
+                    key={emoji}
+                    type="button"
+                    onClick={() => handleEmojiClick(emoji)}
+                    className="text-xl p-1 hover:bg-slate-100 rounded-lg transition-colors leading-none"
+                  >
+                    {emoji}
+                  </button>
+                ))}
+              </div>
+            </div>
           )}
-        </button>
-      </form>
+
+          <form onSubmit={handleSend} className="flex gap-2 items-end">
+            {/* Emoji toggle button */}
+            <button
+              type="button"
+              onClick={() => setShowEmojiPicker((v) => !v)}
+              className="flex-shrink-0 p-2 text-slate-400 hover:text-indigo-600 transition-colors rounded-lg hover:bg-slate-50"
+              title="Insert emoji"
+            >
+              <Smile className="w-5 h-5" />
+            </button>
+
+            {/* Textarea + char counter */}
+            <div className="flex-1 flex flex-col gap-1">
+              <textarea
+                ref={textareaRef}
+                value={messageBody}
+                onChange={handleTextareaChange}
+                onSelect={(e) => {
+                  cursorPosRef.current = (e.target as HTMLTextAreaElement).selectionStart;
+                }}
+                onKeyDown={(e) => {
+                  if (e.key === 'Enter' && !e.shiftKey) {
+                    e.preventDefault();
+                    if (messageBody.trim() && !isSending && clientPhone) handleSend(e as any);
+                  }
+                }}
+                placeholder={clientPhone ? 'Type a message… (Enter to send)' : 'No phone number on record'}
+                rows={textareaRows}
+                spellCheck={true}
+                lang="en"
+                disabled={isSending || !clientPhone}
+                className="w-full px-3 py-2 border border-slate-300 rounded-xl text-sm resize-none focus:border-indigo-500 outline-none disabled:opacity-50"
+              />
+              <p className={`text-xs text-right ${charCountColor}`}>{charCount} / 160</p>
+            </div>
+
+            {/* Send button */}
+            <button
+              type="submit"
+              disabled={isSending || !messageBody.trim() || !clientPhone}
+              className="flex-shrink-0 p-2.5 bg-indigo-600 text-white rounded-xl hover:bg-indigo-700 transition-colors disabled:opacity-40 flex items-center justify-center"
+            >
+              {isSending ? (
+                <Loader2 className="w-4 h-4 animate-spin" />
+              ) : (
+                <Send className="w-4 h-4" />
+              )}
+            </button>
+          </form>
+        </div>
+      </div>
     </div>
   );
 };
