@@ -52,7 +52,17 @@ serve(async (req) => {
       return jsonRes({ error: 'Provide at least workspace_id or api_key to save' }, 400);
     }
 
+    // Check if a row already exists for this client (number_source is NOT NULL with no reliable DEFAULT in live DB)
+    const { data: existing } = await supabaseAdmin
+      .from('client_voice_integrations')
+      .select('number_source')
+      .eq('client_id', client_id)
+      .maybeSingle();
+
     const payload: any = { client_id };
+    if (!existing) {
+      payload.number_source = 'platform'; // Required — prevents NOT NULL violation on new row INSERT
+    }
     if (workspace_id !== undefined) payload.retell_workspace_id = workspace_id.trim();
     if (api_key !== undefined) payload.retell_workspace_api_key = api_key.trim();
 
