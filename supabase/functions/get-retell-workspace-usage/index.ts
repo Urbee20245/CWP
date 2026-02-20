@@ -98,11 +98,12 @@ serve(async (req) => {
 
     do {
       const body: any = {
-        filter_criteria: [
-          {
-            start_timestamp: [startMs, endMs],
-          }
-        ],
+        filter_criteria: {
+          start_timestamp: {
+            lower_threshold: startMs,
+            upper_threshold: endMs,
+          },
+        },
         limit: 1000,
       };
       if (cursor) body.pagination_key = cursor;
