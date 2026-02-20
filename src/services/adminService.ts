@@ -158,6 +158,7 @@ export const AdminService = {
 
   // SMS
   sendSms: async (to: string, body: string, clientId?: string) => invokeEdgeFunction('send-sms', { to, body, client_id: clientId }),
+  getSmsMessages: async (clientId: string) => invokeEdgeFunction('get-sms-messages', { client_id: clientId }),
 
   // Updated AI Voice Provisioning
   provisionVoiceNumber: async (clientId: string, source: 'client' | 'platform', phoneNumber?: string, a2pData?: any, retellAgentId?: string) => {

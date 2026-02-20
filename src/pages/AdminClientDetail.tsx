@@ -9,7 +9,7 @@ import { Profile } from '../types/auth';
 import { AdminService } from '../services/adminService'; // Use AdminService for admin functions
 import { ClientBillingService } from '../services/clientBillingService'; // Use ClientBillingService for client functions
 import AddProjectDialog from '../components/AddProjectDialog';
-import SendSmsDialog from '../components/SendSmsDialog'; // Import the new dialog
+import SmsInbox from '../components/SmsInbox';
 import EditClientDialog from '../components/EditClientDialog'; // New Import
 import CreateInvoiceForm from '../components/CreateInvoiceForm'; // NEW IMPORT
 import { format } from 'date-fns';
@@ -137,12 +137,11 @@ const AdminClientDetail: React.FC = () => {
   const { user, profile: adminProfile } = useAuth();
   const [client, setClient] = useState<Client | null>(null);
   const [isLoading, setIsLoading] = useState(true);
-  const [activeTab, setActiveTab] = useState<'projects' | 'billing' | 'reminders' | 'addons'>('billing'); // Default to billing
+  const [activeTab, setActiveTab] = useState<'projects' | 'billing' | 'reminders' | 'addons' | 'sms'>('billing'); // Default to billing
   const [fetchError, setFetchError] = useState<string | null>(null); // New state for fetch errors
-  
+
   // Dialog State
   const [isProjectDialogOpen, setIsProjectDialogOpen] = useState(false);
-  const [isSmsDialogOpen, setIsSmsDialogOpen] = useState(false); 
   const [isEditDialogOpen, setIsEditDialogOpen] = useState(false); // New State
   
   // Billing State
@@ -801,7 +800,7 @@ const AdminClientDetail: React.FC = () => {
           </div>
           <div className="flex gap-2 flex-wrap">
             <button
-              onClick={() => setIsSmsDialogOpen(true)}
+              onClick={() => setActiveTab('sms')}
               disabled={!client.phone}
               className="flex items-center gap-2 px-3.5 py-2 bg-indigo-600 text-white rounded-lg text-sm font-semibold hover:bg-indigo-700 disabled:bg-slate-300 transition-colors"
             >
@@ -844,6 +843,7 @@ const AdminClientDetail: React.FC = () => {
             { id: 'projects', label: 'Projects' },
             { id: 'billing', label: 'Billing' },
             { id: 'addons', label: 'Add-on Requests' },
+            { id: 'sms', label: 'SMS Inbox' },
           ].map(tab => (
             <button
               key={tab.id}
@@ -1135,6 +1135,14 @@ const AdminClientDetail: React.FC = () => {
                         )}
                     </div>
                 </div>
+            )}
+
+            {activeTab === 'sms' && (
+              <SmsInbox
+                clientId={client.id}
+                clientName={client.business_name}
+                clientPhone={client.phone}
+              />
             )}
 
             {activeTab === 'projects' && (
@@ -1568,16 +1576,6 @@ const AdminClientDetail: React.FC = () => {
         />
       )}
       
-      {client && (
-        <SendSmsDialog
-          isOpen={isSmsDialogOpen}
-          onClose={() => setIsSmsDialogOpen(false)}
-          clientName={client.business_name}
-          clientPhone={client.phone}
-          clientId={client.id}
-        />
-      )}
-
       {client && (
         <EditClientDialog
           isOpen={isEditDialogOpen}

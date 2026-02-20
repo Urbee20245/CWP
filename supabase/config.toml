@@ -134,12 +134,18 @@ verify_jwt = false
 [functions.update-website-publish]
 verify_jwt = false
 
-# ── Webhooks (external callers — Stripe, Retell — send no user JWT) ───────────
+# ── Webhooks (external callers — Stripe, Retell, Twilio — send no user JWT) ──
 
 [functions.stripe-webhook]
 verify_jwt = false
 
 [functions.retell-webhook]
+verify_jwt = false
+
+[functions.twilio-sms-webhook]
+verify_jwt = false
+
+[functions.get-sms-messages]
 verify_jwt = false
 
 # ── Cron / background jobs ────────────────────────────────────────────────────
