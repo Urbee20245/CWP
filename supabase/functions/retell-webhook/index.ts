@@ -4,7 +4,6 @@ export const config = {
 
 import { serve } from "https://deno.land/std@0.190.0/http/server.ts";
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2.45.0';
-import { createHmac } from "https://deno.land/std@0.224.0/crypto/mod.ts";
 import { handleCors, jsonResponse, errorResponse, corsHeaders } from '../_shared/utils.ts';
 
 function timingSafeEqualString(a: string, b: string): boolean {
@@ -24,17 +23,28 @@ function timingSafeEqualString(a: string, b: string): boolean {
     return diff === 0;
 }
 
-function verifyRetellSignature(
+async function verifyRetellSignature(
     body: string,
     signature: string | null,
     secret: string,
-): boolean {
+): Promise<boolean> {
     if (!signature) return false;
 
     const received = signature.trim().toLowerCase();
     if (!received) return false;
 
-    const expected = createHmac("sha256", secret).update(body).digest("hex").toLowerCase();
+    const enc = new TextEncoder();
+    const key = await crypto.subtle.importKey(
+        "raw",
+        enc.encode(secret),
+        { name: "HMAC", hash: "SHA-256" },
+        false,
+        ["sign"],
+    );
+    const sigBuffer = await crypto.subtle.sign("HMAC", key, enc.encode(body));
+    const expected = Array.from(new Uint8Array(sigBuffer))
+        .map(b => b.toString(16).padStart(2, '0'))
+        .join('');
 
     return timingSafeEqualString(expected, received);
 }
@@ -69,7 +79,7 @@ serve(async (req) => {
             return new Response('Server misconfigured', { status: 500, headers: corsHeaders });
         }
 
-        if (!verifyRetellSignature(rawBody, signature, secret)) {
+        if (!await verifyRetellSignature(rawBody, signature, secret)) {
             return new Response('Invalid signature', { status: 401, headers: corsHeaders });
         }
 
