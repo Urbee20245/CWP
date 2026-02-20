@@ -1574,9 +1574,10 @@ const AdminClientDetail: React.FC = () => {
           onClose={() => setIsSmsDialogOpen(false)}
           clientName={client.business_name}
           clientPhone={client.phone}
+          clientId={client.id}
         />
       )}
-      
+
       {client && (
         <EditClientDialog
           isOpen={isEditDialogOpen}
