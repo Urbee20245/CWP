@@ -9,9 +9,10 @@ interface SendSmsDialogProps {
   onClose: () => void;
   clientName: string;
   clientPhone: string;
+  clientId?: string;
 }
 
-const SendSmsDialog: React.FC<SendSmsDialogProps> = ({ isOpen, onClose, clientName, clientPhone }) => {
+const SendSmsDialog: React.FC<SendSmsDialogProps> = ({ isOpen, onClose, clientName, clientPhone, clientId }) => {
   const [messageBody, setMessageBody] = useState('');
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -43,7 +44,7 @@ const SendSmsDialog: React.FC<SendSmsDialogProps> = ({ isOpen, onClose, clientNa
     const to = clientPhone.startsWith('+') ? clientPhone : `+1${clientPhone.replace(/\D/g, '')}`;
 
     try {
-      await AdminService.sendSms(to, messageBody);
+      await AdminService.sendSms(to, messageBody, clientId);
       setSuccess(true);
       setTimeout(onClose, 3000);
     } catch (e: any) {

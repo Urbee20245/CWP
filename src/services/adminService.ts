@@ -50,33 +50,59 @@ async function extractEdgeFunctionErrorMessage(error: any, parsedBody: any) {
 }
 
 const invokeEdgeFunction = async (functionName: string, payload: any, options?: { headers?: Record<string, string> }) => {
-  // Explicitly get session to ensure auth header is fresh
-  const { data: { session }, error: sessionError } = await supabase.auth.getSession();
+  /**
+   * Always invoke with an explicit access token and refresh/retry once for JWT failures.
+   * This avoids intermittent "Invalid JWT" errors when the session token is stale.
+   */
+  const invokeWithToken = async (accessToken: string) => {
+    return supabase.functions.invoke(functionName, {
+      body: payload,
+      headers: {
+        ...options?.headers,
+        Authorization: `Bearer ${accessToken}`,
+      },
+    });
+  };
+
+  const { data: sessionData, error: sessionError } = await supabase.auth.getSession();
   if (sessionError) {
     throw new Error(`Could not get user session: ${sessionError.message}`);
   }
-  if (!session) {
-    // This should not happen in admin context, but as a safeguard
+  if (!sessionData.session?.access_token) {
     throw new Error('Admin user not authenticated.');
   }
 
-  const { data, error } = await supabase.functions.invoke(functionName, {
-    body: payload,
-    headers: {
-      ...options?.headers,
-      'Authorization': `Bearer ${session.access_token}`,
-    },
-  });
+  let result = await invokeWithToken(sessionData.session.access_token);
+
+  // If JWT-related failure, refresh + retry once
+  if (result.error) {
+    let errMsg = '';
+    try {
+      const parsed = typeof result.data === 'string' ? JSON.parse(result.data) : result.data;
+      errMsg = await extractEdgeFunctionErrorMessage(result.error, parsed);
+    } catch {
+      errMsg = result.error.message || '';
+    }
+
+    if (/invalid jwt|jwt expired|token.*expired/i.test(errMsg)) {
+      console.warn(`[adminService] JWT stale for ${functionName}, refreshing session…`);
+      const { data: refreshData, error: refreshError } = await supabase.auth.refreshSession();
+      if (refreshError || !refreshData.session?.access_token) {
+        throw new Error('Session expired. Please log in again.');
+      }
+      result = await invokeWithToken(refreshData.session.access_token);
+    }
+  }
 
   let parsed: any = null;
   try {
-    parsed = typeof data === 'string' ? JSON.parse(data) : data;
+    parsed = typeof result.data === 'string' ? JSON.parse(result.data) : result.data;
   } catch {
     // ignore
   }
 
-  if (error) {
-    const message = await extractEdgeFunctionErrorMessage(error, parsed);
+  if (result.error) {
+    const message = await extractEdgeFunctionErrorMessage(result.error, parsed);
     console.error(`[adminService] Error invoking ${functionName}:`, message);
     throw new Error(message);
   }
@@ -129,8 +155,10 @@ export const AdminService = {
   deleteClientUser: async (clientId: string, userId: string) => invokeEdgeFunction('delete-client-user', { clientId, userId }),
   updateClientProfile: async (profileId: string, fullName: string, role: string) =>
     invokeEdgeFunction('update-client-profile', { profile_id: profileId, full_name: fullName, role }),
-  sendSms: async (to: string, body: string) => invokeEdgeFunction('send-sms', { to, body }),
-  
+
+  // SMS
+  sendSms: async (to: string, body: string, clientId?: string) => invokeEdgeFunction('send-sms', { to, body, client_id: clientId }),
+
   // Updated AI Voice Provisioning
   provisionVoiceNumber: async (clientId: string, source: 'client' | 'platform', phoneNumber?: string, a2pData?: any, retellAgentId?: string) => {
     return invokeEdgeFunction('provision-voice-number', {
@@ -220,263 +248,5 @@ export const AdminService = {
       const { data, error } = await supabase.rpc('delete_pending_deposit', { p_deposit_id: depositId });
       if (error) throw error;
       return data;
-  },
-  applyInvoiceDiscount: async (invoiceId: string, discountType: any, discountValue: number, appliedBy: string) => invokeEdgeFunction('apply-invoice-discount', { invoice_id: invoiceId, discount_type: discountType, discount_value: discountValue, applied_by: appliedBy }),
-  resendInvoiceEmail: async (invoiceId: string, clientEmail: string, clientName: string, hostedUrl: string, amount: number, sentBy: string) => {
-      const subject = `Invoice Reminder: ${clientName} - $${amount.toFixed(2)} Due`;
-      const markdown_body = `Dear ${clientName},\n\nThis is a reminder for your invoice of **$${amount.toFixed(2)}**.\n\n[View & Pay Invoice](${hostedUrl})\n\nThank you,\nThe Custom Websites Plus Team`;
-      return AdminService.sendEmail(clientEmail, subject, markdown_body, null, sentBy);
-  },
-  markInvoiceResolved: async (invoiceId: string) => {
-      const { error } = await supabase.from('invoices').update({ status: 'paid', last_reminder_sent_at: new Date().toISOString() }).eq('id', invoiceId);
-      if (error) throw error;
-      return { success: true };
-  },
-  toggleInvoiceReminders: async (invoiceId: string, disable: boolean) => {
-      const { error } = await supabase.from('invoices').update({ disable_reminders: disable }).eq('id', invoiceId);
-      if (error) throw error;
-      return { success: true };
-  },
-  createClientReminder: async (clientId: string, adminId: string, reminderDate: string, note: string) => {
-    const { data, error } = await supabase.from('client_reminders').insert({ client_id: clientId, admin_id: adminId, reminder_date: reminderDate, note: note });
-    if (error) throw error;
-    return data;
-  },
-  completeClientReminder: async (reminderId: string) => {
-    const { data, error } = await supabase.from('client_reminders').update({ is_completed: true }).eq('id', reminderId);
-    if (error) throw error;
-    return data;
-  },
-
-  // AI Agent Settings
-  // Public read helper (avoids expired JWT issues)
-  getAgentSettings: async (clientId: string) => callPublicEdgeFunction('get-agent-settings', { client_id: clientId }),
-  saveAgentSettings: async (settings: any) => invokeEdgeFunction('save-agent-settings', settings),
-
-  // Calendar Diagnostics (admin-only)
-  getCalendarDiagnostics: async (clientId: string) => invokeEdgeFunction('get-calendar-diagnostics', { client_id: clientId }),
-  forceCalendarReauth: async (clientId: string) => invokeEdgeFunction('force-calendar-reauth', { client_id: clientId }),
-
-  disconnectGoogleCalendar: async (clientId: string) => {
-    const { error } = await supabase
-      .from('client_google_calendar')
-      .update({ connection_status: 'disconnected' })
-      .eq('client_id', clientId);
-    if (error) throw error;
-    return { success: true };
-  },
-  resetGoogleCalendar: async (clientId: string) => {
-    const { error } = await supabase
-      .from('client_google_calendar')
-      .delete()
-      .eq('client_id', clientId);
-    if (error) throw error;
-    return { success: true };
-  },
-
-  // Retell Call Scheduling
-  // Trigger a Retell AI call immediately or schedule for later
-  triggerRetellCall: async (params: {
-    client_id: string | null; // Optional - null for ad-hoc calls to non-clients
-    prospect_name: string;
-    prospect_phone: string;
-    retell_agent_id: string;
-    from_phone_number?: string; // Required if client_id is null
-    scheduled_time?: string; // ISO timestamp - if provided, schedules the call
-    trigger_immediately?: boolean; // If true, calls immediately
-    admin_notes?: string;
-    call_metadata?: any;
-    connection_type?: string; // How admin connected with prospect (referral, event, linkedin, website, direct)
-    referrer_name?: string; // Name of person who referred (for referrals)
-    event_name?: string; // Name of event (for event connections)
-    direct_context?: string; // Brief context (for direct connections)
-  }) => {
-    return invokeEdgeFunction('trigger-retell-call', params);
-  },
-
-  // Get all scheduled calls (admin view)
-  getScheduledCalls: async (filters?: { client_id?: string; status?: string }) => {
-    let query = supabase
-      .from('retell_scheduled_calls')
-      .select(`*
-        ,
-        clients!retell_scheduled_calls_client_id_fkey(id, business_name, phone),
-        profiles!retell_scheduled_calls_created_by_fkey(id, email, full_name)
-      `)
-      .order('scheduled_time', { ascending: false });
-
-    if (filters?.client_id) {
-      query = query.eq('client_id', filters.client_id);
-    }
-    if (filters?.status) {
-      query = query.eq('status', filters.status);
-    }
-
-    const { data, error } = await query;
-    if (error) throw error;
-    return data;
-  },
-
-  // Get a single scheduled call by ID
-  getScheduledCall: async (scheduledCallId: string) => {
-    const { data, error } = await supabase
-      .from('retell_scheduled_calls')
-      .select(`*
-        ,
-        clients!retell_scheduled_calls_client_id_fkey(id, business_name, phone),
-        profiles!retell_scheduled_calls_created_by_fkey(id, email, full_name)
-      `)
-      .eq('id', scheduledCallId)
-      .maybeSingle();
-
-    if (error) throw error;
-    return data;
-  },
-
-  // Cancel a scheduled call
-  cancelScheduledCall: async (scheduledCallId: string) => {
-    const { error } = await supabase
-      .from('retell_scheduled_calls')
-      .update({ status: 'cancelled' })
-      .eq('id', scheduledCallId);
-
-    if (error) throw error;
-    return { success: true };
-  },
-
-  // Update scheduled call notes
-  updateScheduledCallNotes: async (scheduledCallId: string, admin_notes: string) => {
-    const { error } = await supabase
-      .from('retell_scheduled_calls')
-      .update({ admin_notes })
-      .eq('id', scheduledCallId);
-
-    if (error) throw error;
-    return { success: true };
-  },
-
-  // Manually trigger a scheduled call (force it to run now)
-  forceScheduledCall: async (scheduledCallId: string) => {
-    return invokeEdgeFunction('trigger-retell-call', { scheduled_call_id: scheduledCallId });
-  },
-
-  // Process all pending scheduled calls (manual trigger of cron job)
-  processScheduledCalls: async () => {
-    return invokeEdgeFunction('process-scheduled-calls', {});
-  },
-
-  // Get all Retell agents
-  getRetellAgents: async () => {
-    return invokeEdgeFunction('get-retell-agents', {});
-  },
-
-  // Get platform outbound phone numbers (for admin calling)
-  getPlatformPhoneNumbers: async () => {
-    return invokeEdgeFunction('get-platform-phone-numbers', {});
-  },
-
-  // Retell Workspace Billing
-  saveRetellWorkspaceCreds: async (clientId: string, workspaceId: string, apiKey: string) =>
-    invokeEdgeFunction('save-retell-workspace-creds', { client_id: clientId, workspace_id: workspaceId, api_key: apiKey }),
-
-  getRetellWorkspaceUsage: async (clientId: string, year?: number, month?: number) =>
-    invokeEdgeFunction('get-retell-workspace-usage', { client_id: clientId, year, month }),
-
-  // Website Builder
-  saveCustomDomain: async (clientId: string, customDomain: string | null) => {
-    const { error } = await supabase
-      .from('website_briefs')
-      .update({ custom_domain: customDomain ? customDomain.trim().toLowerCase() : null })
-      .eq('client_id', clientId);
-    if (error) throw error;
-    return { success: true };
-  },
-
-  generateWebsite: async (briefData: {
-    client_id: string;
-    business_name: string;
-    industry: string;
-    services_offered: string;
-    location: string;
-    tone: string;
-    primary_color: string;
-    art_direction?: string;
-    pages_to_generate?: string[];
-    premium_features?: string[];
-  }) => invokeEdgeFunction('generate-website', briefData),
-
-  updateWebsitePublish: async (clientId: string, isPublished: boolean) =>
-    invokeEdgeFunction('update-website-publish', { client_id: clientId, is_published: isPublished }),
-
-  saveWebsiteEdits: async (clientId: string, edits: Array<{ field_path: string; new_value: string }>) =>
-    invokeEdgeFunction('save-website-edits', { client_id: clientId, edits }),
-
-  generateBlogPost: async (params: {
-    client_id: string;
-    topic?: string;
-    word_count?: number;
-    author_name?: string;
-    auto_publish?: boolean;
-    generate_image?: boolean;
-  }) => invokeEdgeFunction('generate-blog-post', params),
-
-  // Blog Schedules -------------------------------------------------------
-  getBlogSchedule: async (clientId: string) => {
-    const { data, error } = await supabase
-      .from('blog_schedules')
-      .select('*')
-      .eq('client_id', clientId)
-      .maybeSingle();
-    if (error) throw error;
-    return data;
-  },
-
-  saveBlogSchedule: async (clientId: string, schedule: {
-    is_active: boolean;
-    days_of_week: string[];
-    word_count: number;
-    auto_publish: boolean;
-    generate_images: boolean;
-    total_posts_target: number | null;
-    author_name: string;
-  }) => {
-    const { data, error } = await supabase
-      .from('blog_schedules')
-      .upsert({ client_id: clientId, ...schedule }, { onConflict: 'client_id' })
-      .select()
-      .single();
-    if (error) throw error;
-    return data;
-  },
-
-  deleteBlogSchedule: async (clientId: string) => {
-    const { error } = await supabase
-      .from('blog_schedules')
-      .delete()
-      .eq('client_id', clientId);
-    if (error) throw error;
-    return { success: true };
-  },
-
-  processBlogSchedules: async () => invokeEdgeFunction('process-blog-schedules', {}),
-
-  // Admin impersonation — generates a one-time magic link to access a client's portal
-  impersonateClient: async (clientEmail: string, adminName: string): Promise<string> => {
-    const { data, error } = await supabase.functions.invoke('admin-impersonate', {
-      body: {
-        client_email: clientEmail,
-        admin_name: adminName,
-      },
-    });
-
-    if (error) {
-      const message = await extractEdgeFunctionErrorMessage(error, data);
-      throw new Error(message);
-    }
-
-    const parsed: any = data;
-    if (parsed?.error) throw new Error(parsed.error);
-    if (!parsed?.action_link) throw new Error('No access link returned from server.');
-    return parsed.action_link as string;
   },
 };
