@@ -250,4 +250,20 @@ export const AdminService = {
       if (error) throw error;
       return data;
   },
+
+  /**
+   * Generate a one-time magic link for a client so an admin can access their portal.
+   * Calls the `admin-impersonate` edge function which uses the Supabase Admin Auth API.
+   * Returns the action_link URL string.
+   */
+  impersonateClient: async (clientEmail: string, adminName: string): Promise<string> => {
+    const data = await invokeEdgeFunction('admin-impersonate', {
+      client_email: clientEmail,
+      admin_name: adminName,
+    });
+    if (!data?.action_link) {
+      throw new Error('No action_link returned from server.');
+    }
+    return data.action_link;
+  },
 };

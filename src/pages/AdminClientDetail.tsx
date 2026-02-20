@@ -470,9 +470,9 @@ const AdminClientDetail: React.FC = () => {
         );
         
         if (result.hosted_invoice_url) {
-            // Always open the invoice when one is available — the client needs to pay
-            window.open(result.hosted_invoice_url, '_blank');
-            alert("Subscription created. The invoice has been opened in a new tab. Share this link with the client so they can complete payment.");
+            // The invoice URL is already saved to the invoices table by the edge function.
+            // The client will see a prominent "Pay Now" button in their Billing & Payments portal.
+            alert("Subscription created. The client will see a \"Pay Now\" button in their Billing & Payments portal to complete their first payment.");
         } else {
             alert(`Subscription started successfully! Status: ${result.status}`);
         }
