@@ -57,6 +57,7 @@ import AdminWebsiteBuilder from './src/pages/AdminWebsiteBuilder';
 import AdminBlogManager from './src/pages/AdminBlogManager';
 import ClientWebsite from './src/pages/ClientWebsite';
 import PublicSite from './src/pages/PublicSite';
+import SiteRendererPage from './src/pages/SiteRenderer';
 import BlogListingPage from './src/pages/BlogListingPage';
 import BlogPostPage from './src/pages/BlogPostPage';
 import CustomDomainSite from './src/pages/CustomDomainSite';
@@ -143,10 +144,10 @@ const AppContent: React.FC = () => {
           <Route path="website" element={<ClientWebsite />} />
         </Route>
 
-        <Route path="/site/:slug" element={<PublicSite />} />
+        <Route path="/site/:slug" element={<SiteRendererPage />} />
         <Route path="/site/:slug/blog" element={<BlogListingPage />} />
         <Route path="/site/:slug/blog/:post" element={<BlogPostPage />} />
-        <Route path="/site/:slug/:page" element={<PublicSite />} />
+        <Route path="/site/:slug/:page" element={<SiteRendererPage />} />
 
         <Route path="*" element={<NotFoundPage />} />
       </Routes>
