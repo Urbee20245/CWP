@@ -43,7 +43,7 @@ export function useSiteData(slug: string | undefined): UseSiteDataResult {
       const { data, error } = await supabase
         .from('website_briefs')
         .select('website_json, is_published, premium_features, client_id')
-        .eq('client_slug', slug)
+        .eq('slug', slug)
         .maybeSingle();
 
       if (cancelled) return;
