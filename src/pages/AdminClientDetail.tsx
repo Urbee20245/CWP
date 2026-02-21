@@ -16,6 +16,7 @@ import { format } from 'date-fns';
 import { ensureArray } from '../utils/dataNormalization'; // Import normalization utility
 import { useAuth } from '../hooks/useAuth';
 import AdminClientLeadsPanel from '../components/AdminClientLeadsPanel';
+import ClientAddonsPanel from '../components/ClientAddonsPanel';
 
 interface ProjectSummary {
   id: string;
@@ -137,7 +138,7 @@ const AdminClientDetail: React.FC = () => {
   const { user, profile: adminProfile } = useAuth();
   const [client, setClient] = useState<Client | null>(null);
   const [isLoading, setIsLoading] = useState(true);
-  const [activeTab, setActiveTab] = useState<'projects' | 'billing' | 'reminders' | 'addons' | 'sms'>('billing'); // Default to billing
+  const [activeTab, setActiveTab] = useState<'projects' | 'billing' | 'reminders' | 'addons' | 'features' | 'sms'>('billing'); // Default to billing
   const [fetchError, setFetchError] = useState<string | null>(null); // New state for fetch errors
 
   // Dialog State
@@ -843,6 +844,7 @@ const AdminClientDetail: React.FC = () => {
             { id: 'projects', label: 'Projects' },
             { id: 'billing', label: 'Billing' },
             { id: 'addons', label: 'Add-on Requests' },
+            { id: 'features', label: 'Website Add-ons' },
             { id: 'sms', label: 'SMS Inbox' },
           ].map(tab => (
             <button
@@ -1134,6 +1136,19 @@ const AdminClientDetail: React.FC = () => {
                             <p className="text-slate-500 text-sm">No add-on requests found for this client.</p>
                         )}
                     </div>
+                </div>
+            )}
+
+            {activeTab === 'features' && (
+                <div className="bg-white p-6 rounded-xl shadow-lg border border-slate-100">
+                    <h2 className="text-xl font-bold mb-1 flex items-center gap-2 text-slate-900 border-b border-slate-100 pb-4">
+                        <Zap className="w-5 h-5 text-indigo-600" /> Website Add-ons
+                    </h2>
+                    <p className="text-sm text-slate-500 mb-6">
+                        Toggle the premium features enabled on {client.business_name}'s public website.
+                        Changes take effect immediately after saving.
+                    </p>
+                    <ClientAddonsPanel clientId={client.id} />
                 </div>
             )}
 
