@@ -266,4 +266,56 @@ export const AdminService = {
     }
     return data.action_link;
   },
+
+  // ── Website Builder ────────────────────────────────────────────────────────
+
+  /** Trigger AI generation of a multi-page website for a client. */
+  generateWebsite: async (payload: {
+    client_id: string;
+    business_name: string;
+    industry: string;
+    services_offered: string;
+    location: string;
+    tone: string;
+    primary_color?: string;
+    art_direction?: string;
+    pages_to_generate?: string[];
+    premium_features?: string[];
+  }) => invokeEdgeFunction('generate-website', payload),
+
+  /** Publish or unpublish a client's website. */
+  updateWebsitePublish: async (clientId: string, isPublished: boolean) => {
+    const { error } = await supabase
+      .from('website_briefs')
+      .update({ is_published: isPublished })
+      .eq('client_id', clientId);
+    if (error) throw new Error(error.message);
+  },
+
+  /** Save a custom domain for a client's website. */
+  saveCustomDomain: async (clientId: string, domain: string | null) => {
+    const { error } = await supabase
+      .from('website_briefs')
+      .update({ custom_domain: domain })
+      .eq('client_id', clientId);
+    if (error) throw new Error(error.message);
+  },
+
+  // ── Site Import ────────────────────────────────────────────────────────────
+
+  /**
+   * Import an existing site (ZIP or URL) into CWP via Claude AI.
+   * Returns { success, client_slug, website_json, backend_features, pages_imported, business_name }.
+   */
+  importSite: async (payload: {
+    client_id: string;
+    source_type: 'url' | 'zip';
+    url?: string;
+    zip_base64?: string;
+    slug?: string;
+    custom_domain?: string;
+    tone?: string;
+    primary_color?: string;
+    premium_features?: string[];
+  }) => invokeEdgeFunction('import-site', payload),
 };
