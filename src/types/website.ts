@@ -136,6 +136,8 @@ export type PremiumFeatureId =
   // Widgets & chatbots
   | 'chat_widget'
   | 'ai_chatbot'
+  // Blog
+  | 'blog'
   // Client Portal
   | 'client_back_office';
 
