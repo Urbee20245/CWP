@@ -16,6 +16,7 @@ import { format } from 'date-fns';
 import { ensureArray } from '../utils/dataNormalization'; // Import normalization utility
 import { useAuth } from '../hooks/useAuth';
 import AdminClientLeadsPanel from '../components/AdminClientLeadsPanel';
+import ExportSiteButton from '../components/ExportSiteButton';
 
 interface ProjectSummary {
   id: string;
@@ -826,6 +827,7 @@ const AdminClientDetail: React.FC = () => {
             >
               {isProcessing ? <Loader2 className="w-4 h-4 animate-spin" /> : <Eye className="w-4 h-4" />} Access Portal
             </button>
+            <ExportSiteButton clientId={client.id} businessName={client.business_name} />
             <button
               onClick={handleDeleteClient}
               disabled={isProcessing}

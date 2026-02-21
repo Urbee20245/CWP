@@ -11,6 +11,10 @@
 
 # ── Admin-facing functions ────────────────────────────────────────────────────
 
+[functions.export-site-zip]
+verify_jwt = false
+import_map = "./functions/export-site-zip/deno.json"
+
 [functions.apply-invoice-discount]
 verify_jwt = false
 
