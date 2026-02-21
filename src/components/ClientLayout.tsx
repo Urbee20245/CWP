@@ -6,7 +6,7 @@ import { Link, useLocation } from 'react-router-dom';
 import {
   DollarSign, LogOut, User, Zap, CalendarCheck,
   Sparkles, Menu, X, HelpCircle, Settings, ClipboardList, Globe,
-  LayoutDashboard, ChevronRight, ShieldAlert
+  LayoutDashboard, ChevronRight, ShieldAlert, FileCheck,
 } from 'lucide-react';
 
 const IMPERSONATION_KEY = 'cwp_admin_view';
@@ -66,6 +66,7 @@ const ClientLayout: React.FC<ClientLayoutProps> = ({ children }) => {
         { name: 'My Website', href: '/client/website', icon: Globe, description: 'Manage your site' },
         { name: 'Leads', href: '/client/leads', icon: ClipboardList, description: 'Lead management' },
         { name: 'Billing', href: '/client/billing', icon: DollarSign, description: 'Invoices & payments' },
+        { name: 'My Proposal', href: '/client/proposals', icon: FileCheck, description: 'View your service proposal' },
         { name: 'Add-ons', href: '/client/addons', icon: Zap, description: 'Upgrade your plan' },
       ],
     },

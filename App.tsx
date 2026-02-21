@@ -63,6 +63,9 @@ import BlogListingPage from './src/pages/BlogListingPage';
 import BlogPostPage from './src/pages/BlogPostPage';
 import CustomDomainSite from './src/pages/CustomDomainSite';
 import CustomDomainAdmin from './src/pages/CustomDomainAdmin';
+import AdminProposalList from './src/pages/AdminProposalList';
+import AdminProposalBuilder from './src/pages/AdminProposalBuilder';
+import ClientProposalReview from './src/pages/ClientProposalReview';
 
 // Returns true when the app is loaded from a client's custom domain
 // (not the main CWP domain, localhost, or a Vercel preview URL)
@@ -128,6 +131,9 @@ const AppContent: React.FC = () => {
           <Route path="website-builder" element={<AdminWebsiteBuilder />} />
           <Route path="site-import" element={<AdminSiteImport />} />
           <Route path="blog-manager" element={<AdminBlogManager />} />
+          <Route path="proposals" element={<AdminProposalList />} />
+          <Route path="proposals/new" element={<AdminProposalBuilder />} />
+          <Route path="proposals/:id" element={<AdminProposalBuilder />} />
         </Route>
 
         <Route path="/client/*" element={<ProtectedRoute allowedRoles={['client']} />}>
@@ -144,6 +150,8 @@ const AppContent: React.FC = () => {
           <Route path="jetsuite" element={<ClientJetSuitePage />} />
           <Route path="help" element={<ClientHelpPage />} />
           <Route path="website" element={<ClientWebsite />} />
+          <Route path="proposals" element={<ClientProposalReview />} />
+          <Route path="proposals/:id" element={<ClientProposalReview />} />
         </Route>
 
         <Route path="/site/:slug" element={<SiteRendererPage />} />

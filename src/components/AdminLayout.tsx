@@ -7,7 +7,7 @@ import {
   Users, Briefcase, DollarSign, LogOut, Bot, BarChart3, Settings,
   FileText, Mail as MailIcon, Zap, CalendarCheck, Menu, X, User,
   Phone, Cpu, ChevronDown, ShieldCheck, PhoneCall, Globe, BookOpen,
-  LayoutDashboard, Inbox, TrendingUp, Package, Download,
+  LayoutDashboard, Inbox, TrendingUp, Package, Download, FilePlus2,
 } from 'lucide-react';
 
 interface AdminLayoutProps {
@@ -71,6 +71,7 @@ const AdminLayout: React.FC<AdminLayoutProps> = ({ children }) => {
         { name: 'Revenue', href: '/admin/billing/revenue', icon: BarChart3 },
         { name: 'Products', href: '/admin/billing/products', icon: DollarSign },
         { name: 'Add-on Catalog', href: '/admin/addons/catalog', icon: Package },
+        { name: 'Proposals', href: '/admin/proposals', icon: FilePlus2 },
       ],
     },
   ];
