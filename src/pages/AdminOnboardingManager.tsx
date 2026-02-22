@@ -5,7 +5,7 @@ import { supabase } from '../integrations/supabase/client';
 import AdminLayout from '../components/AdminLayout';
 import {
   Loader2, ChevronDown, ChevronUp, ExternalLink, Copy, Check,
-  Sparkles, ToggleLeft, ToggleRight, RefreshCw, X,
+  Sparkles, RefreshCw, X,
 } from 'lucide-react';
 
 // ─── Types ────────────────────────────────────────────────────────────────────
@@ -41,6 +41,7 @@ interface BillingProduct {
   active: boolean;
   show_in_onboarding: boolean;
   onboarding_category: string | null;
+  onboarding_type: 'core' | 'addon' | 'hidden' | null;
 }
 
 interface Addon {
@@ -54,7 +55,10 @@ interface Addon {
   is_active: boolean;
   show_in_onboarding: boolean;
   onboarding_category: string | null;
+  onboarding_type: 'core' | 'addon' | 'hidden' | null;
 }
+
+type OnboardingType = 'core' | 'addon' | 'hidden';
 
 interface ClientProposal {
   id: string;
@@ -276,6 +280,42 @@ const AdminOnboardingManager: React.FC = () => {
     setSavingId(null);
   };
 
+  // ── Onboarding type selectors ─────────────────────────────────────────────
+
+  const setProductOnboardingType = async (p: BillingProduct, type: OnboardingType) => {
+    const updates = {
+      onboarding_type: type,
+      show_in_onboarding: type !== 'hidden',
+    };
+    const { error } = await supabase
+      .from('billing_products')
+      .update(updates)
+      .eq('id', p.id);
+    if (!error) {
+      setProducts(prev => prev.map(x => x.id === p.id ? { ...x, ...updates } : x));
+      showToast('Saved!');
+    } else {
+      showToast('Update failed.', 'error');
+    }
+  };
+
+  const setAddonOnboardingType = async (a: Addon, type: OnboardingType) => {
+    const updates = {
+      onboarding_type: type,
+      show_in_onboarding: type !== 'hidden',
+    };
+    const { error } = await supabase
+      .from('addon_catalog')
+      .update(updates)
+      .eq('id', a.id);
+    if (!error) {
+      setAddons(prev => prev.map(x => x.id === a.id ? { ...x, ...updates } : x));
+      showToast('Saved!');
+    } else {
+      showToast('Update failed.', 'error');
+    }
+  };
+
   // ── Revoke & issue Gem link ───────────────────────────────────────────────
 
   const revokeAndIssueLink = async (proposal: ClientProposal) => {
@@ -359,7 +399,7 @@ const AdminOnboardingManager: React.FC = () => {
                   : 'text-slate-500 hover:text-slate-700'
               }`}
             >
-              {tab === 'products' ? 'Core Products' : tab === 'addons' ? 'Add-ons' : 'Submissions'}
+              {tab === 'products' ? 'Services' : tab === 'addons' ? 'Add-ons' : 'Submissions'}
             </button>
           ))}
         </div>
@@ -589,9 +629,9 @@ const AdminOnboardingManager: React.FC = () => {
         {activeTab === 'products' && (
           <div className="bg-white rounded-2xl border border-slate-200">
             <div className="px-6 py-4 border-b border-slate-100">
-              <h2 className="font-bold text-slate-800">Core Services in Gem</h2>
+              <h2 className="font-bold text-slate-800">Services</h2>
               <p className="text-xs text-slate-400 mt-0.5">
-                Toggle visibility and edit how each product appears in the Gem onboarding flow.
+                Set how each billing product appears in the Gem onboarding flow. "Core Service" shows in Step 1, "Add-on" shows in Step 2, "Hidden" removes it from onboarding.
               </p>
             </div>
 
@@ -603,20 +643,10 @@ const AdminOnboardingManager: React.FC = () => {
               <div className="divide-y divide-slate-100">
                 {products.map(p => {
                   const isEditing = editingProduct === p.id;
+                  const currentType: OnboardingType = (p.onboarding_type as OnboardingType) || 'hidden';
                   return (
                     <div key={p.id} className="px-6 py-4">
                       <div className="flex items-start gap-4">
-                        {/* Toggle */}
-                        <button
-                          onClick={() => toggleProductOnboarding(p)}
-                          className="mt-1 flex-shrink-0"
-                          title={p.show_in_onboarding ? 'Hide from Gem' : 'Show in Gem'}
-                        >
-                          {p.show_in_onboarding
-                            ? <ToggleRight className="w-6 h-6 text-indigo-500" />
-                            : <ToggleLeft className="w-6 h-6 text-slate-300" />}
-                        </button>
-
                         <div className="flex-1 min-w-0">
                           {isEditing ? (
                             <div className="space-y-3">
@@ -688,29 +718,82 @@ const AdminOnboardingManager: React.FC = () => {
                             </div>
                           ) : (
                             <div>
-                              <div className="flex items-center gap-3 flex-wrap">
+                              <div className="flex items-center gap-3 flex-wrap mb-2">
                                 <p className="font-semibold text-slate-800 text-sm">{p.name}</p>
-                                {p.show_in_onboarding && (
-                                  <span className="px-2 py-0.5 rounded-full bg-indigo-50 text-indigo-600 text-xs font-medium">
-                                    Visible in Gem
+                                {/* Status badge */}
+                                {currentType === 'core' && (
+                                  <span className="px-2 py-0.5 rounded-full bg-blue-50 text-blue-700 text-xs font-semibold border border-blue-200">
+                                    Core Service
+                                  </span>
+                                )}
+                                {currentType === 'addon' && (
+                                  <span className="px-2 py-0.5 rounded-full bg-purple-50 text-purple-700 text-xs font-semibold border border-purple-200">
+                                    Add-on
+                                  </span>
+                                )}
+                                {currentType === 'hidden' && (
+                                  <span className="px-2 py-0.5 rounded-full bg-slate-100 text-slate-500 text-xs font-semibold border border-slate-200">
+                                    Hidden
                                   </span>
                                 )}
                                 {p.onboarding_category && (
-                                  <span className="px-2 py-0.5 rounded-full bg-slate-100 text-slate-500 text-xs">
+                                  <span className="px-2 py-0.5 rounded-full bg-slate-100 text-slate-400 text-xs">
                                     {p.onboarding_category}
                                   </span>
                                 )}
                               </div>
-                              <p className="text-xs text-slate-400 mt-1 leading-relaxed line-clamp-2">
+                              <p className="text-xs text-slate-400 mb-2 leading-relaxed line-clamp-2">
                                 {p.onboarding_description || p.description || '—'}
                               </p>
-                              <div className="flex gap-4 mt-1 text-xs text-slate-500">
-                                {(p.amount_cents || p.setup_fee_cents) && (
-                                  <span>{formatCents(p.amount_cents || p.setup_fee_cents)} one-time</span>
+                              <div className="flex gap-4 mb-3 text-xs text-slate-500">
+                                {p.billing_type === 'yearly' && p.amount_cents && (
+                                  <span>{formatCents(p.amount_cents)}/yr</span>
                                 )}
-                                {p.monthly_price_cents && (
+                                {p.billing_type === 'subscription' && p.monthly_price_cents && (
                                   <span>{formatCents(p.monthly_price_cents)}/mo</span>
                                 )}
+                                {p.billing_type === 'one_time' && (p.amount_cents || p.setup_fee_cents) && (
+                                  <span>{formatCents(p.amount_cents || p.setup_fee_cents)} one-time</span>
+                                )}
+                                {p.billing_type === 'setup_plus_subscription' && (
+                                  <>
+                                    {p.setup_fee_cents && <span>{formatCents(p.setup_fee_cents)} setup</span>}
+                                    {p.monthly_price_cents && <span>+ {formatCents(p.monthly_price_cents)}/mo</span>}
+                                  </>
+                                )}
+                              </div>
+                              {/* 3-way pill selector */}
+                              <div className="flex gap-1.5">
+                                <button
+                                  onClick={() => setProductOnboardingType(p, 'core')}
+                                  className={`px-3 py-1 rounded-full text-xs font-semibold transition-all border ${
+                                    currentType === 'core'
+                                      ? 'bg-[#2563EB] text-white border-[#2563EB] shadow-sm'
+                                      : 'bg-white text-slate-500 border-slate-200 hover:border-blue-300 hover:text-blue-600'
+                                  }`}
+                                >
+                                  Core Service
+                                </button>
+                                <button
+                                  onClick={() => setProductOnboardingType(p, 'addon')}
+                                  className={`px-3 py-1 rounded-full text-xs font-semibold transition-all border ${
+                                    currentType === 'addon'
+                                      ? 'bg-[#7C3AED] text-white border-[#7C3AED] shadow-sm'
+                                      : 'bg-white text-slate-500 border-slate-200 hover:border-purple-300 hover:text-purple-600'
+                                  }`}
+                                >
+                                  Add-on
+                                </button>
+                                <button
+                                  onClick={() => setProductOnboardingType(p, 'hidden')}
+                                  className={`px-3 py-1 rounded-full text-xs font-semibold transition-all border ${
+                                    currentType === 'hidden'
+                                      ? 'bg-slate-500 text-white border-slate-500 shadow-sm'
+                                      : 'bg-white text-slate-400 border-slate-200 hover:border-slate-400 hover:text-slate-600'
+                                  }`}
+                                >
+                                  Hidden
+                                </button>
                               </div>
                             </div>
                           )}
@@ -741,9 +824,9 @@ const AdminOnboardingManager: React.FC = () => {
         {activeTab === 'addons' && (
           <div className="bg-white rounded-2xl border border-slate-200">
             <div className="px-6 py-4 border-b border-slate-100">
-              <h2 className="font-bold text-slate-800">Add-ons in Gem</h2>
+              <h2 className="font-bold text-slate-800">Add-ons</h2>
               <p className="text-xs text-slate-400 mt-0.5">
-                Toggle visibility and edit add-ons shown in the Gem onboarding flow.
+                Set how each add-on appears in the Gem onboarding flow. "Core Service" moves it to Step 1, "Add-on" keeps it in Step 2, "Hidden" removes it from onboarding.
               </p>
             </div>
 
@@ -755,20 +838,10 @@ const AdminOnboardingManager: React.FC = () => {
               <div className="divide-y divide-slate-100">
                 {addons.map(a => {
                   const isEditing = editingAddon === a.id;
+                  const currentType: OnboardingType = (a.onboarding_type as OnboardingType) || 'hidden';
                   return (
                     <div key={a.id} className="px-6 py-4">
                       <div className="flex items-start gap-4">
-                        {/* Toggle */}
-                        <button
-                          onClick={() => toggleAddonOnboarding(a)}
-                          className="mt-1 flex-shrink-0"
-                          title={a.show_in_onboarding ? 'Hide from Gem' : 'Show in Gem'}
-                        >
-                          {a.show_in_onboarding
-                            ? <ToggleRight className="w-6 h-6 text-indigo-500" />
-                            : <ToggleLeft className="w-6 h-6 text-slate-300" />}
-                        </button>
-
                         <div className="flex-1 min-w-0">
                           {isEditing ? (
                             <div className="space-y-3">
@@ -848,28 +921,72 @@ const AdminOnboardingManager: React.FC = () => {
                             </div>
                           ) : (
                             <div>
-                              <div className="flex items-center gap-3 flex-wrap">
+                              <div className="flex items-center gap-3 flex-wrap mb-2">
                                 <p className="font-semibold text-slate-800 text-sm">{a.name}</p>
-                                {a.show_in_onboarding && (
-                                  <span className="px-2 py-0.5 rounded-full bg-indigo-50 text-indigo-600 text-xs font-medium">
-                                    Visible in Gem
+                                {/* Status badge */}
+                                {currentType === 'core' && (
+                                  <span className="px-2 py-0.5 rounded-full bg-blue-50 text-blue-700 text-xs font-semibold border border-blue-200">
+                                    Core Service
+                                  </span>
+                                )}
+                                {currentType === 'addon' && (
+                                  <span className="px-2 py-0.5 rounded-full bg-purple-50 text-purple-700 text-xs font-semibold border border-purple-200">
+                                    Add-on
+                                  </span>
+                                )}
+                                {currentType === 'hidden' && (
+                                  <span className="px-2 py-0.5 rounded-full bg-slate-100 text-slate-500 text-xs font-semibold border border-slate-200">
+                                    Hidden
                                   </span>
                                 )}
                                 {a.onboarding_category && (
-                                  <span className="px-2 py-0.5 rounded-full bg-slate-100 text-slate-500 text-xs">
+                                  <span className="px-2 py-0.5 rounded-full bg-slate-100 text-slate-400 text-xs">
                                     {a.onboarding_category}
                                   </span>
                                 )}
                               </div>
-                              <p className="text-xs text-slate-400 mt-1 leading-relaxed line-clamp-2">
+                              <p className="text-xs text-slate-400 mb-2 leading-relaxed line-clamp-2">
                                 {a.description || '—'}
                               </p>
-                              <div className="flex gap-4 mt-1 text-xs text-slate-500">
+                              <div className="flex gap-4 mb-3 text-xs text-slate-500">
                                 {a.setup_fee_cents && <span>{formatCents(a.setup_fee_cents)} setup</span>}
                                 {a.monthly_price_cents && <span>{formatCents(a.monthly_price_cents)}/mo</span>}
                                 {a.billing_type === 'one_time' && a.price_cents && (
                                   <span>{formatCents(a.price_cents)} one-time</span>
                                 )}
+                              </div>
+                              {/* 3-way pill selector */}
+                              <div className="flex gap-1.5">
+                                <button
+                                  onClick={() => setAddonOnboardingType(a, 'core')}
+                                  className={`px-3 py-1 rounded-full text-xs font-semibold transition-all border ${
+                                    currentType === 'core'
+                                      ? 'bg-[#2563EB] text-white border-[#2563EB] shadow-sm'
+                                      : 'bg-white text-slate-500 border-slate-200 hover:border-blue-300 hover:text-blue-600'
+                                  }`}
+                                >
+                                  Core Service
+                                </button>
+                                <button
+                                  onClick={() => setAddonOnboardingType(a, 'addon')}
+                                  className={`px-3 py-1 rounded-full text-xs font-semibold transition-all border ${
+                                    currentType === 'addon'
+                                      ? 'bg-[#7C3AED] text-white border-[#7C3AED] shadow-sm'
+                                      : 'bg-white text-slate-500 border-slate-200 hover:border-purple-300 hover:text-purple-600'
+                                  }`}
+                                >
+                                  Add-on
+                                </button>
+                                <button
+                                  onClick={() => setAddonOnboardingType(a, 'hidden')}
+                                  className={`px-3 py-1 rounded-full text-xs font-semibold transition-all border ${
+                                    currentType === 'hidden'
+                                      ? 'bg-slate-500 text-white border-slate-500 shadow-sm'
+                                      : 'bg-white text-slate-400 border-slate-200 hover:border-slate-400 hover:text-slate-600'
+                                  }`}
+                                >
+                                  Hidden
+                                </button>
                               </div>
                             </div>
                           )}

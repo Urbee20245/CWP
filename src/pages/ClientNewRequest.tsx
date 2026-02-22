@@ -58,6 +58,22 @@ function formatCents(cents: number | null): string {
   return `$${(cents / 100).toFixed(2)}`;
 }
 
+function formatProductPrice(p: BillingProduct): string {
+  if (p.billing_type === 'yearly') {
+    return `${formatCents(p.amount_cents)}/yr`;
+  }
+  if (p.billing_type === 'subscription') {
+    return `${formatCents(p.monthly_price_cents)}/mo`;
+  }
+  if (p.billing_type === 'setup_plus_subscription') {
+    const setup = p.setup_fee_cents ? `${formatCents(p.setup_fee_cents)} setup` : '';
+    const monthly = p.monthly_price_cents ? `${formatCents(p.monthly_price_cents)}/mo` : '';
+    return [setup, monthly].filter(Boolean).join(' + ');
+  }
+  // one_time or fallback
+  return `${formatCents(p.amount_cents || p.setup_fee_cents)} one-time`;
+}
+
 function generateToken(): string {
   return Math.random().toString(36).slice(2) + Date.now().toString(36);
 }
@@ -195,31 +211,80 @@ const ClientNewRequest: React.FC = () => {
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [profile]);
 
-  // ── Load products ─────────────────────────────────────────────────────────
+  // ── Load products (core step: onboarding_type='core' from both tables) ────
 
   const loadProducts = useCallback(async () => {
     setIsLoadingProducts(true);
-    const { data, error } = await supabase
-      .from('billing_products')
-      .select('*')
-      .eq('show_in_onboarding', true)
-      .eq('active', true);
+    const [productsRes, addonsRes] = await Promise.all([
+      supabase
+        .from('billing_products')
+        .select('*')
+        .eq('onboarding_type', 'core')
+        .eq('show_in_onboarding', true)
+        .eq('active', true),
+      supabase
+        .from('addon_catalog')
+        .select('id, name, description, price_cents, setup_fee_cents, monthly_price_cents, billing_type, is_active, show_in_onboarding, onboarding_category, onboarding_type')
+        .eq('onboarding_type', 'core')
+        .eq('show_in_onboarding', true)
+        .eq('is_active', true),
+    ]);
 
-    if (!error && data) setProducts(data as BillingProduct[]);
+    const billingProducts: BillingProduct[] = (productsRes.data || []) as BillingProduct[];
+    // Map addon_catalog items classified as 'core' into BillingProduct shape
+    const addonProducts: BillingProduct[] = (addonsRes.data || []).map((a: any) => ({
+      id: a.id,
+      name: a.name,
+      description: a.description,
+      onboarding_description: null,
+      billing_type: a.billing_type,
+      amount_cents: a.price_cents ?? null,
+      setup_fee_cents: a.setup_fee_cents ?? null,
+      monthly_price_cents: a.monthly_price_cents ?? null,
+      active: a.is_active,
+      show_in_onboarding: a.show_in_onboarding,
+      onboarding_category: a.onboarding_category,
+    }));
+
+    setProducts([...billingProducts, ...addonProducts]);
     setIsLoadingProducts(false);
   }, []);
 
-  // ── Load addons ───────────────────────────────────────────────────────────
+  // ── Load addons (addon step: onboarding_type='addon' from both tables) ────
 
   const loadAddons = useCallback(async () => {
     setIsLoadingAddons(true);
-    const { data, error } = await supabase
-      .from('addon_catalog')
-      .select('*')
-      .eq('show_in_onboarding', true)
-      .eq('is_active', true);
+    const [addonsRes, productsRes] = await Promise.all([
+      supabase
+        .from('addon_catalog')
+        .select('*')
+        .eq('onboarding_type', 'addon')
+        .eq('show_in_onboarding', true)
+        .eq('is_active', true),
+      supabase
+        .from('billing_products')
+        .select('id, name, description, onboarding_description, billing_type, amount_cents, setup_fee_cents, monthly_price_cents, active, show_in_onboarding, onboarding_category, onboarding_type')
+        .eq('onboarding_type', 'addon')
+        .eq('show_in_onboarding', true)
+        .eq('active', true),
+    ]);
 
-    if (!error && data) setAddons(data as Addon[]);
+    const catalogAddons: Addon[] = (addonsRes.data || []) as Addon[];
+    // Map billing_products classified as 'addon' into Addon shape
+    const productAddons: Addon[] = (productsRes.data || []).map((p: any) => ({
+      id: p.id,
+      name: p.name,
+      description: p.onboarding_description || p.description,
+      price_cents: p.amount_cents ?? null,
+      setup_fee_cents: p.setup_fee_cents ?? null,
+      monthly_price_cents: p.monthly_price_cents ?? null,
+      billing_type: p.billing_type,
+      is_active: p.active,
+      show_in_onboarding: p.show_in_onboarding,
+      onboarding_category: p.onboarding_category,
+    }));
+
+    setAddons([...catalogAddons, ...productAddons]);
     setIsLoadingAddons(false);
   }, []);
 
@@ -471,16 +536,9 @@ const ClientNewRequest: React.FC = () => {
                             </div>
                           </div>
                           <div className="mt-3 flex gap-3 text-xs">
-                            {(p.amount_cents || p.setup_fee_cents) ? (
-                              <span className="text-slate-700 font-medium">
-                                {formatCents(p.amount_cents || p.setup_fee_cents)} one-time
-                              </span>
-                            ) : null}
-                            {p.monthly_price_cents ? (
-                              <span className="text-emerald-600 font-medium">
-                                {formatCents(p.monthly_price_cents)}/mo
-                              </span>
-                            ) : null}
+                            <span className={p.billing_type === 'subscription' || p.billing_type === 'yearly' ? 'text-emerald-600 font-medium' : 'text-slate-700 font-medium'}>
+                              {formatProductPrice(p)}
+                            </span>
                           </div>
                         </button>
                       );
@@ -676,18 +734,27 @@ const ClientNewRequest: React.FC = () => {
                                 <p className="text-slate-900 font-medium text-sm">{p.name}</p>
                                 <p className="text-slate-400 text-xs mt-0.5">
                                   {p.billing_type === 'subscription' ? 'Monthly subscription' :
-                                   p.billing_type === 'yearly' ? 'Yearly subscription' : 'One-time'}
+                                   p.billing_type === 'yearly' ? 'Yearly subscription' :
+                                   p.billing_type === 'setup_plus_subscription' ? 'Setup + subscription' : 'One-time'}
                                 </p>
                               </div>
                               <div className="text-right flex-shrink-0">
-                                {(p.amount_cents || p.setup_fee_cents) ? (
-                                  <p className="text-slate-800 text-sm font-semibold">
-                                    {formatCents(p.amount_cents || p.setup_fee_cents)}
-                                  </p>
-                                ) : null}
-                                {p.monthly_price_cents ? (
-                                  <p className="text-emerald-600 text-xs font-medium">{formatCents(p.monthly_price_cents)}/mo</p>
-                                ) : null}
+                                {p.billing_type === 'yearly' && p.amount_cents ? (
+                                  <p className="text-emerald-600 text-sm font-semibold">{formatCents(p.amount_cents)}/yr</p>
+                                ) : p.billing_type === 'subscription' && p.monthly_price_cents ? (
+                                  <p className="text-emerald-600 text-sm font-semibold">{formatCents(p.monthly_price_cents)}/mo</p>
+                                ) : p.billing_type === 'setup_plus_subscription' ? (
+                                  <>
+                                    {p.setup_fee_cents ? <p className="text-slate-800 text-sm font-semibold">{formatCents(p.setup_fee_cents)} setup</p> : null}
+                                    {p.monthly_price_cents ? <p className="text-emerald-600 text-xs font-medium">{formatCents(p.monthly_price_cents)}/mo</p> : null}
+                                  </>
+                                ) : (
+                                  (p.amount_cents || p.setup_fee_cents) ? (
+                                    <p className="text-slate-800 text-sm font-semibold">
+                                      {formatCents(p.amount_cents || p.setup_fee_cents)}
+                                    </p>
+                                  ) : null
+                                )}
                               </div>
                             </div>
                           ))}
