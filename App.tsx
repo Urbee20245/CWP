@@ -68,6 +68,7 @@ import AdminProposalBuilder from './src/pages/AdminProposalBuilder';
 import ClientProposalReview from './src/pages/ClientProposalReview';
 import GemOnboarding from './src/pages/GemOnboarding';
 import AdminOnboardingManager from './src/pages/AdminOnboardingManager';
+import ClientNewRequest from './src/pages/ClientNewRequest';
 
 // Returns true when the app is loaded from a client's custom domain
 // (not the main CWP domain, localhost, or a Vercel preview URL)
@@ -156,6 +157,7 @@ const AppContent: React.FC = () => {
           <Route path="website" element={<ClientWebsite />} />
           <Route path="proposals" element={<ClientProposalReview />} />
           <Route path="proposals/:id" element={<ClientProposalReview />} />
+          <Route path="new-request" element={<ClientNewRequest />} />
         </Route>
 
         <Route path="/site/:slug" element={<SiteRendererPage />} />
