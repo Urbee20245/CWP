@@ -355,13 +355,39 @@ const ClientNewRequest: React.FC = () => {
     loadAddons();
   }, [selectedProducts, addAssistantMessage, loadAddons]);
 
+  // ── Skip products step (go straight to add-ons) ───────────────────────────
+
+  const handleProductsSkip = useCallback(async () => {
+    setSelectedProducts([]);
+    await addAssistantMessage(`No problem! Let's look at what we can add to your existing services.`);
+    setStage('addons');
+    loadAddons();
+  }, [addAssistantMessage, loadAddons]);
+
   // ── Proceed from addons to proposal ──────────────────────────────────────
 
   const handleAddonsContinue = useCallback(async () => {
+    if (selectedProducts.length === 0 && selectedAddons.length === 0) {
+      await addAssistantMessage(`Please select at least one service or add-on to continue.`);
+      return;
+    }
     await addAssistantMessage(`Your proposal is ready. Review the details below.`, 700);
     setStage('proposal');
     setTimeout(() => setProposalVisible(true), 300);
-  }, [addAssistantMessage]);
+  }, [selectedProducts, selectedAddons, addAssistantMessage]);
+
+  // ── Skip add-ons step (go straight to proposal) ───────────────────────────
+
+  const handleAddonsSkip = useCallback(async () => {
+    if (selectedProducts.length === 0) {
+      await addAssistantMessage(`Please select at least one service or add-on to continue.`);
+      return;
+    }
+    setSelectedAddons([]);
+    await addAssistantMessage(`Your proposal is ready. Review the details below.`, 700);
+    setStage('proposal');
+    setTimeout(() => setProposalVisible(true), 300);
+  }, [selectedProducts, addAssistantMessage]);
 
   // ── Submit proposal ───────────────────────────────────────────────────────
 
@@ -623,13 +649,19 @@ const ClientNewRequest: React.FC = () => {
                   </div>
                 )}
 
-                <div className="flex justify-end">
+                <div className="flex flex-col items-end gap-2">
                   <button
                     onClick={handleProductsContinue}
                     disabled={selectedProducts.length === 0}
                     className="px-8 py-3 rounded-xl font-bold text-white text-sm bg-[#2563EB] hover:bg-[#1D4ED8] transition-colors disabled:opacity-40 disabled:cursor-not-allowed active:scale-95"
                   >
                     Continue →
+                  </button>
+                  <button
+                    onClick={handleProductsSkip}
+                    className="text-slate-400 text-xs hover:text-slate-600 hover:underline transition-colors"
+                  >
+                    Skip — I just need add-ons
                   </button>
                 </div>
               </div>
@@ -747,19 +779,27 @@ const ClientNewRequest: React.FC = () => {
                   </div>
                 )}
 
-                <div className="flex justify-between items-center">
+                <div className="flex justify-between items-start">
                   <button
                     onClick={() => setStage('products')}
                     className="px-5 py-2.5 rounded-xl font-semibold text-sm text-slate-600 border border-slate-300 bg-white hover:bg-slate-50 transition-colors"
                   >
                     ← Back
                   </button>
-                  <button
-                    onClick={handleAddonsContinue}
-                    className="px-8 py-3 rounded-xl font-bold text-white text-sm bg-[#2563EB] hover:bg-[#1D4ED8] transition-colors active:scale-95"
-                  >
-                    View Proposal →
-                  </button>
+                  <div className="flex flex-col items-end gap-2">
+                    <button
+                      onClick={handleAddonsContinue}
+                      className="px-8 py-3 rounded-xl font-bold text-white text-sm bg-[#2563EB] hover:bg-[#1D4ED8] transition-colors active:scale-95"
+                    >
+                      View Proposal →
+                    </button>
+                    <button
+                      onClick={handleAddonsSkip}
+                      className="text-slate-400 text-xs hover:text-slate-600 hover:underline transition-colors"
+                    >
+                      Skip — I only need a core service
+                    </button>
+                  </div>
                 </div>
               </div>
             )}

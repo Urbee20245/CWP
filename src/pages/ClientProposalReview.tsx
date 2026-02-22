@@ -50,6 +50,7 @@ const ProposalListView: React.FC<{ proposals: ClientProposal[]; onSelect: (id: s
     approved: 'bg-emerald-100 text-emerald-700',
     declined: 'bg-red-100 text-red-700',
     revised: 'bg-amber-100 text-amber-700',
+    retracted: 'bg-slate-100 text-slate-500',
   };
 
   return (
@@ -307,6 +308,7 @@ const ClientProposalReview: React.FC = () => {
       .select('*, clients(business_name, billing_email)')
       .eq('client_id', cId)
       .neq('status', 'draft')
+      .neq('status', 'retracted')
       .order('created_at', { ascending: false });
 
     if (err) {
