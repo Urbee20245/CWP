@@ -2,6 +2,7 @@
 
 import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { useSearchParams } from 'react-router-dom';
+import { Info } from 'lucide-react';
 import { supabase } from '../integrations/supabase/client';
 
 // ─── Types ────────────────────────────────────────────────────────────────────
@@ -985,15 +986,31 @@ const CWPOnboarding: React.FC = () => {
                 </div>
               </div>
 
+              {/* Hosting & SSL notice */}
+              {selectedProducts.length > 0 && (
+                <div
+                  className="rounded-xl p-4 border flex gap-3 items-start"
+                  style={{
+                    backgroundColor: '#EFF6FF',
+                    borderColor: '#BFDBFE',
+                    animation: 'fade-up 0.5s 0.25s ease both',
+                  }}
+                >
+                  <Info className="w-4 h-4 flex-shrink-0 mt-0.5" style={{ color: '#1E40AF' }} />
+                  <p className="text-sm leading-relaxed" style={{ color: '#1E40AF' }}>
+                    All core services include free website hosting and SSL certificate for the first year.
+                  </p>
+                </div>
+              )}
+
               {/* Disclaimer */}
               <div
                 className="rounded-xl p-4 bg-[#FEF3C7] border border-amber-200"
                 style={{ animation: 'fade-up 0.5s 0.3s ease both' }}
               >
-                <p className="text-[#92400E] text-sm font-semibold mb-1">⚠️ Estimated Proposal Only</p>
+                <p className="text-[#92400E] text-sm font-semibold mb-1">⚠️ Important</p>
                 <p className="text-[#92400E] text-xs leading-relaxed opacity-80">
-                  This is an estimated proposal only. Final pricing will be confirmed by our team before
-                  any charges. Please speak with a manager for final confirmation.
+                  This is an estimated proposal based on standard pricing. Final pricing will be confirmed by our team after reviewing your specific requirements. Approval of this proposal is not approval of the final price. A manager will contact you to confirm all costs before any work begins or charges are made.
                 </p>
               </div>
             </div>

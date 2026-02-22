@@ -285,7 +285,7 @@ const AdminOnboardingManager: React.FC = () => {
   const setProductOnboardingType = async (p: BillingProduct, type: OnboardingType) => {
     const updates = {
       onboarding_type: type,
-      show_in_onboarding: type !== 'hidden',
+      show_in_onboarding: type === 'core' ? true : type === 'addon' ? true : false,
     };
     const { error } = await supabase
       .from('billing_products')
@@ -302,7 +302,7 @@ const AdminOnboardingManager: React.FC = () => {
   const setAddonOnboardingType = async (a: Addon, type: OnboardingType) => {
     const updates = {
       onboarding_type: type,
-      show_in_onboarding: type !== 'hidden',
+      show_in_onboarding: type === 'core' ? true : type === 'addon' ? true : false,
     };
     const { error } = await supabase
       .from('addon_catalog')
