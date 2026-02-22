@@ -90,6 +90,14 @@ function formatProductPrice(p: BillingProduct): string {
   return `${formatCents(p.amount_cents || p.setup_fee_cents)} one-time`;
 }
 
+function formatAddonPrice(a: Addon): string {
+  const parts: string[] = [];
+  if (a.setup_fee_cents) parts.push(`${formatCents(a.setup_fee_cents)} setup`);
+  if (a.monthly_price_cents) parts.push(`${formatCents(a.monthly_price_cents)}/mo`);
+  if (a.billing_type === 'one_time' && a.price_cents) parts.push(`${formatCents(a.price_cents)} one-time`);
+  return parts.join(' + ') || '$0';
+}
+
 function generateToken(): string {
   return Math.random().toString(36).slice(2) + Date.now().toString(36);
 }
@@ -480,6 +488,74 @@ const CWPOnboarding: React.FC = () => {
       });
 
       if (error) throw error;
+
+      // Fire-and-forget confirmation email
+      const supabaseUrl = 'https://nvgumhlewbqynrhlkqhx.supabase.co';
+      const selectedItemsHtml = [
+        ...selectedProducts.map(p =>
+          `<div style="padding: 6px 0; border-bottom: 1px solid #e2e8f0; color: #334155;">
+             ✓ ${p.name} — ${formatProductPrice(p)}
+           </div>`
+        ),
+        ...selectedAddons.map(a =>
+          `<div style="padding: 6px 0; border-bottom: 1px solid #e2e8f0; color: #334155;">
+             ✓ ${a.name} — ${formatAddonPrice(a)}
+           </div>`
+        ),
+      ].join('');
+      const emailHtml = `
+  <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; padding: 20px; color: #1e293b;">
+    <img src="https://www.customwebsitesplus.com/CWPlogodark.png"
+         alt="Custom Websites Plus"
+         style="height: 50px; margin-bottom: 24px; display: block;" />
+
+    <h2 style="color: #0f172a; margin-bottom: 8px;">
+      Thank you, ${clientInfo.firstName}!
+    </h2>
+    <p style="color: #475569; line-height: 1.6;">
+      We've received your service request for <strong>${clientInfo.businessName}</strong>
+      and a member of our team will be in touch within 24 hours to review
+      your proposal and confirm final pricing.
+    </p>
+
+    <div style="background: #f8fafc; border: 1px solid #e2e8f0; border-radius: 8px; padding: 20px; margin: 24px 0;">
+      <p style="font-weight: 600; color: #0f172a; margin: 0 0 12px 0;">
+        Your Selected Services:
+      </p>
+      ${selectedItemsHtml}
+    </div>
+
+    <div style="background: #fefce8; border: 1px solid #fde047; border-radius: 8px; padding: 16px; margin: 16px 0;">
+      <p style="color: #854d0e; font-size: 14px; margin: 0;">
+        <strong>⚠️ Please Note:</strong> This is an estimated proposal only.
+        Final pricing will be confirmed by our team. Approval of this proposal
+        is not approval of the final price.
+      </p>
+    </div>
+
+    <p style="color: #475569; line-height: 1.6;">
+      If you have any immediate questions, feel free to reach us at
+      <a href="mailto:hello@customwebsitesplus.com" style="color: #2563eb;">
+        hello@customwebsitesplus.com
+      </a>
+    </p>
+
+    <hr style="border: none; border-top: 1px solid #e2e8f0; margin: 24px 0;" />
+    <p style="color: #94a3b8; font-size: 12px; margin: 0;">
+      Custom Websites Plus · customwebsitesplus.com
+    </p>
+  </div>
+  `;
+      fetch(`${supabaseUrl}/functions/v1/send-email`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          to_email: clientInfo.email,
+          subject: 'We received your proposal request — Custom Websites Plus',
+          html_body: emailHtml,
+        }),
+      }).catch(console.error);
+
       setStage('success');
     } catch (err) {
       console.error('Submission error:', err);

@@ -13,6 +13,7 @@ interface ClientSummary {
   status: string;
   owner_profile_id: string;
   owner_name: string;
+  owner_email: string;
   project_count: number;
 }
 
@@ -25,14 +26,9 @@ const AdminClientList: React.FC = () => {
     setIsLoading(true);
 
     try {
-      // Fetch Clients and their associated profile names
       const { data: clientsData, error: clientsError } = await supabase
         .from('clients')
-        .select(`
-          id, business_name, status, owner_profile_id,
-          profiles (full_name),
-          projects (count)
-        `);
+        .select('id, business_name, status, owner_profile_id, projects(count)');
 
       if (clientsError) {
         console.error('Error fetching clients:', clientsError);
@@ -40,19 +36,28 @@ const AdminClientList: React.FC = () => {
         return;
       }
 
-      const formattedClients: ClientSummary[] = (clientsData || []).map((client) => {
-        const profilesRel: any = (client as any).profiles;
-        const ownerName = Array.isArray(profilesRel) ? profilesRel?.[0]?.full_name : profilesRel?.full_name;
+      const profileIds = (clientsData || [])
+        .map((c: any) => c.owner_profile_id)
+        .filter(Boolean);
 
-        return {
-          id: client.id,
-          business_name: client.business_name,
-          status: client.status,
-          owner_profile_id: client.owner_profile_id,
-          owner_name: ownerName || 'N/A',
-          project_count: ((client as any).projects as any[])?.[0]?.count || 0,
-        };
-      });
+      const { data: profilesData } = await supabase
+        .from('profiles')
+        .select('id, full_name, email')
+        .in('id', profileIds);
+
+      const profileMap = Object.fromEntries(
+        (profilesData || []).map((p: any) => [p.id, p])
+      );
+
+      const formattedClients: ClientSummary[] = (clientsData || []).map((client: any) => ({
+        id: client.id,
+        business_name: client.business_name,
+        status: client.status,
+        owner_profile_id: client.owner_profile_id,
+        owner_name: profileMap[client.owner_profile_id]?.full_name || 'N/A',
+        owner_email: profileMap[client.owner_profile_id]?.email || '',
+        project_count: client.projects?.[0]?.count || 0,
+      }));
 
       setClients(formattedClients);
     } finally {
@@ -123,7 +128,12 @@ const AdminClientList: React.FC = () => {
                           {client.business_name}
                         </Link>
                       </td>
-                      <td className="px-4 py-4 whitespace-nowrap text-sm text-slate-600">{client.owner_name}</td>
+                      <td className="px-4 py-4 whitespace-nowrap">
+                        <div>
+                          <p className="font-medium text-slate-900 text-sm">{client.owner_name}</p>
+                          <p className="text-slate-400 text-xs">{client.owner_email}</p>
+                        </div>
+                      </td>
                       <td className="px-4 py-4 whitespace-nowrap text-sm text-slate-600">{client.project_count}</td>
                       <td className="px-4 py-4 whitespace-nowrap">
                         <span className={`px-2 inline-flex text-xs leading-5 font-semibold rounded-full ${getStatusColor(client.status)}`}>
