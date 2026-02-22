@@ -4,7 +4,7 @@ import React, { useState, useEffect } from 'react';
 import { useAuth } from '../hooks/useAuth';
 import { Link, useLocation } from 'react-router-dom';
 import {
-  DollarSign, LogOut, User, Zap, CalendarCheck,
+  DollarSign, LogOut, User, CalendarCheck,
   Sparkles, Menu, X, HelpCircle, Settings, ClipboardList, Globe,
   LayoutDashboard, ChevronRight, ShieldAlert, FileCheck, PlusCircle,
 } from 'lucide-react';
@@ -68,7 +68,6 @@ const ClientLayout: React.FC<ClientLayoutProps> = ({ children }) => {
         { name: 'Leads', href: '/client/leads', icon: ClipboardList, description: 'Lead management' },
         { name: 'Billing', href: '/client/billing', icon: DollarSign, description: 'Invoices & payments' },
         { name: 'My Proposal', href: '/client/proposals', icon: FileCheck, description: 'View your service proposal' },
-        { name: 'Add-ons', href: '/client/addons', icon: Zap, description: 'Upgrade your plan' },
       ],
     },
     {
