@@ -107,11 +107,12 @@ const ClientBilling: React.FC = () => {
     setCancellationEffectiveDate(clientData.cancellation_effective_date);
     setIsClientRecordMissing(false);
 
-    // 2. Fetch invoices for that client ID
+    // 2. Fetch invoices for that client ID (exclude retracted — clients should never see these)
     const { data: invoicesData, error: invoicesError } = await supabase
       .from('invoices')
       .select('id, amount_due, status, hosted_invoice_url, pdf_url, created_at')
       .eq('client_id', clientId)
+      .neq('status', 'retracted')
       .order('created_at', { ascending: false });
 
     if (invoicesError) {
@@ -284,6 +285,7 @@ const ClientBilling: React.FC = () => {
       case 'canceled':
       case 'failed': return 'bg-red-100 text-red-800';
       case 'applied': return 'bg-purple-100 text-purple-800';
+      case 'retracted': return 'bg-slate-100 text-slate-800';
       default: return 'bg-slate-100 text-slate-800';
     }
   };

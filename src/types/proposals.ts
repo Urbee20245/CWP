@@ -3,7 +3,7 @@ export interface ClientProposal {
   client_id: string;
   created_by: string | null;
   title: string;
-  status: 'draft' | 'sent' | 'approved' | 'declined' | 'revised';
+  status: 'draft' | 'sent' | 'approved' | 'declined' | 'revised' | 'retracted';
   notes: string | null;
   client_message: string | null;
   client_response: string | null;
@@ -11,6 +11,8 @@ export interface ClientProposal {
   declined_at: string | null;
   sent_at: string | null;
   converted_to_invoice_id: string | null;
+  retracted_at: string | null;
+  retracted_reason: string | null;
   created_at: string;
   updated_at: string;
   // joined

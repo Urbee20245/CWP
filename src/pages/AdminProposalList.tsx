@@ -4,10 +4,10 @@ import React, { useState, useEffect, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
 import AdminLayout from '../components/AdminLayout';
 import { supabase } from '../integrations/supabase/client';
-import { Loader2, FilePlus2, ChevronRight, Filter } from 'lucide-react';
+import { Loader2, FilePlus2, ChevronRight, Filter, XCircle } from 'lucide-react';
 import { ClientProposal } from '../types/proposals';
 
-const STATUS_OPTIONS = ['all', 'draft', 'sent', 'approved', 'declined', 'revised'] as const;
+const STATUS_OPTIONS = ['all', 'draft', 'sent', 'approved', 'declined', 'revised', 'retracted'] as const;
 
 function formatDate(dateStr: string | null) {
   if (!dateStr) return '—';
@@ -21,19 +21,28 @@ function StatusBadge({ status }: { status: ClientProposal['status'] }) {
     approved: 'bg-emerald-100 text-emerald-700',
     declined: 'bg-red-100 text-red-700',
     revised: 'bg-amber-100 text-amber-700',
+    retracted: 'bg-slate-100 text-slate-500',
   };
   return (
-    <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-semibold capitalize ${map[status]}`}>
+    <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-semibold capitalize ${map[status] ?? 'bg-slate-100 text-slate-600'}`}>
       {status}
     </span>
   );
 }
+
+const RETRACTABLE_STATUSES = ['draft', 'sent', 'approved'];
 
 const AdminProposalList: React.FC = () => {
   const navigate = useNavigate();
   const [proposals, setProposals] = useState<ClientProposal[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [statusFilter, setStatusFilter] = useState<string>('all');
+
+  // Retract state
+  const [retractConfirmId, setRetractConfirmId] = useState<string | null>(null);
+  const [retractReason, setRetractReason] = useState('');
+  const [isRetracting, setIsRetracting] = useState(false);
+  const [retractToast, setRetractToast] = useState<string | null>(null);
 
   const fetchProposals = useCallback(async () => {
     setIsLoading(true);
@@ -53,6 +62,30 @@ const AdminProposalList: React.FC = () => {
   useEffect(() => {
     fetchProposals();
   }, [fetchProposals]);
+
+  const handleRetractProposal = async (proposalId: string) => {
+    setIsRetracting(true);
+    const { error } = await supabase
+      .from('client_proposals')
+      .update({
+        status: 'retracted',
+        retracted_at: new Date().toISOString(),
+        retracted_reason: retractReason || null,
+      })
+      .eq('id', proposalId);
+
+    if (!error) {
+      setRetractToast('Proposal retracted successfully');
+      setTimeout(() => setRetractToast(null), 4000);
+      setRetractConfirmId(null);
+      setRetractReason('');
+      fetchProposals();
+    } else {
+      console.error('[AdminProposalList] retract error:', error);
+      alert('Failed to retract proposal. Please try again.');
+    }
+    setIsRetracting(false);
+  };
 
   const filtered = statusFilter === 'all'
     ? proposals
@@ -100,6 +133,14 @@ const AdminProposalList: React.FC = () => {
           </div>
         </div>
 
+        {/* Retract toast */}
+        {retractToast && (
+          <div className="mb-4 px-4 py-3 bg-emerald-50 border border-emerald-200 text-emerald-800 text-sm font-medium rounded-lg flex items-center gap-2">
+            <span className="w-2 h-2 rounded-full bg-emerald-500 flex-shrink-0" />
+            {retractToast}
+          </div>
+        )}
+
         {/* Content */}
         {isLoading ? (
           <div className="flex justify-center items-center h-40">
@@ -136,24 +177,73 @@ const AdminProposalList: React.FC = () => {
               </thead>
               <tbody className="divide-y divide-slate-100">
                 {filtered.map(proposal => (
-                  <tr
-                    key={proposal.id}
-                    onClick={() => navigate(`/admin/proposals/${proposal.id}`)}
-                    className="hover:bg-slate-50 cursor-pointer transition-colors"
-                  >
-                    <td className="px-5 py-4 font-semibold text-slate-900">
-                      {proposal.clients?.business_name || '—'}
-                    </td>
-                    <td className="px-5 py-4 text-slate-700">{proposal.title}</td>
-                    <td className="px-5 py-4">
-                      <StatusBadge status={proposal.status} />
-                    </td>
-                    <td className="px-5 py-4 text-slate-500">{formatDate(proposal.created_at)}</td>
-                    <td className="px-5 py-4 text-slate-500">{formatDate(proposal.sent_at)}</td>
-                    <td className="px-5 py-4 text-right">
-                      <ChevronRight className="w-4 h-4 text-slate-400 inline" />
-                    </td>
-                  </tr>
+                  <React.Fragment key={proposal.id}>
+                    <tr
+                      onClick={() => navigate(`/admin/proposals/${proposal.id}`)}
+                      className="hover:bg-slate-50 cursor-pointer transition-colors"
+                    >
+                      <td className="px-5 py-4 font-semibold text-slate-900">
+                        {proposal.clients?.business_name || '—'}
+                      </td>
+                      <td className="px-5 py-4 text-slate-700">{proposal.title}</td>
+                      <td className="px-5 py-4">
+                        <StatusBadge status={proposal.status} />
+                      </td>
+                      <td className="px-5 py-4 text-slate-500">{formatDate(proposal.created_at)}</td>
+                      <td className="px-5 py-4 text-slate-500">{formatDate(proposal.sent_at)}</td>
+                      <td className="px-5 py-4 text-right">
+                        <div className="flex items-center justify-end gap-2">
+                          {RETRACTABLE_STATUSES.includes(proposal.status) && (
+                            <button
+                              onClick={e => {
+                                e.stopPropagation();
+                                setRetractConfirmId(proposal.id);
+                                setRetractReason('');
+                              }}
+                              title="Retract proposal"
+                              className="text-rose-400 hover:text-rose-600 transition-colors"
+                            >
+                              <XCircle className="w-4 h-4" />
+                            </button>
+                          )}
+                          <ChevronRight className="w-4 h-4 text-slate-400" />
+                        </div>
+                      </td>
+                    </tr>
+                    {retractConfirmId === proposal.id && (
+                      <tr>
+                        <td colSpan={6} className="px-5 py-4 bg-rose-50 border-b border-rose-100">
+                          <div className="flex flex-col gap-3">
+                            <p className="text-sm font-semibold text-slate-800">Are you sure you want to retract this proposal?</p>
+                            <input
+                              type="text"
+                              value={retractReason}
+                              onChange={e => setRetractReason(e.target.value)}
+                              placeholder="Reason (optional)"
+                              className="w-full max-w-md p-2 border border-slate-300 rounded-lg text-sm focus:outline-none focus:border-rose-400"
+                              autoFocus
+                            />
+                            <div className="flex gap-2">
+                              <button
+                                onClick={() => handleRetractProposal(proposal.id)}
+                                disabled={isRetracting}
+                                className="px-4 py-1.5 bg-rose-600 text-white rounded-lg text-sm font-semibold hover:bg-rose-700 transition-colors disabled:opacity-50 flex items-center gap-1.5"
+                              >
+                                {isRetracting ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <XCircle className="w-3.5 h-3.5" />}
+                                Confirm Retract
+                              </button>
+                              <button
+                                onClick={() => setRetractConfirmId(null)}
+                                className="px-4 py-1.5 border border-slate-300 text-slate-600 rounded-lg text-sm font-semibold hover:bg-slate-100 transition-colors"
+                              >
+                                Cancel
+                              </button>
+                            </div>
+                          </div>
+                        </td>
+                      </tr>
+                    )}
+                  </React.Fragment>
                 ))}
               </tbody>
             </table>
