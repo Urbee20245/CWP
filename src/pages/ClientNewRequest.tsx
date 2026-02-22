@@ -20,6 +20,7 @@ interface BillingProduct {
   active: boolean;
   show_in_onboarding: boolean;
   onboarding_category: string | null;
+  required_maintenance_key?: string | null;
 }
 
 interface Addon {
@@ -87,6 +88,22 @@ function generateToken(): string {
   return Math.random().toString(36).slice(2) + Date.now().toString(36);
 }
 
+function resolveMaintenancePlans(
+  selectedProducts: BillingProduct[],
+  addonsByKey: Record<string, Addon>
+): Array<{ addon: Addon; requiredBy: string }> {
+  const seen = new Set<string>();
+  const result: Array<{ addon: Addon; requiredBy: string }> = [];
+  for (const p of selectedProducts) {
+    const key = p.required_maintenance_key;
+    if (!key || seen.has(key)) continue;
+    seen.add(key);
+    const addon = addonsByKey[key];
+    if (addon) result.push({ addon, requiredBy: p.name });
+  }
+  return result;
+}
+
 // ─── Typing indicator ─────────────────────────────────────────────────────────
 
 const TypingIndicator: React.FC = () => (
@@ -136,6 +153,7 @@ const ClientNewRequest: React.FC = () => {
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [proposalVisible, setProposalVisible] = useState(false);
   const [loadError, setLoadError] = useState<string | null>(null);
+  const [maintenanceAddonsByKey, setMaintenanceAddonsByKey] = useState<Record<string, Addon>>({});
 
   const messagesEndRef = useRef<HTMLDivElement>(null);
 
@@ -227,7 +245,7 @@ const ClientNewRequest: React.FC = () => {
     const [productsRes, addonsRes] = await Promise.all([
       supabase
         .from('billing_products')
-        .select('*')
+        .select('id, name, description, onboarding_description, billing_type, amount_cents, monthly_price_cents, setup_fee_cents, active, show_in_onboarding, onboarding_category, onboarding_type, required_maintenance_key')
         .eq('onboarding_type', 'core')
         .eq('show_in_onboarding', true)
         .eq('active', true),
@@ -253,9 +271,44 @@ const ClientNewRequest: React.FC = () => {
       active: a.is_active,
       show_in_onboarding: a.show_in_onboarding,
       onboarding_category: a.onboarding_category,
+      required_maintenance_key: null,
     }));
 
     setProducts([...billingProducts, ...addonProducts]);
+
+    // Fetch the maintenance addon records for any required_maintenance_key values
+    const maintenanceKeys = [
+      ...new Set(
+        billingProducts
+          .map(p => p.required_maintenance_key)
+          .filter((k): k is string => !!k)
+      ),
+    ];
+    if (maintenanceKeys.length > 0) {
+      const { data: maintData } = await supabase
+        .from('addon_catalog')
+        .select('id, name, description, price_cents, setup_fee_cents, monthly_price_cents, billing_type, is_active, show_in_onboarding, onboarding_category, key')
+        .in('key', maintenanceKeys);
+      const map: Record<string, Addon> = {};
+      (maintData || []).forEach((a: any) => {
+        if (a.key) {
+          map[a.key] = {
+            id: a.id,
+            name: a.name,
+            description: a.description,
+            price_cents: a.price_cents ?? null,
+            setup_fee_cents: a.setup_fee_cents ?? null,
+            monthly_price_cents: a.monthly_price_cents ?? null,
+            billing_type: a.billing_type,
+            is_active: a.is_active,
+            show_in_onboarding: a.show_in_onboarding,
+            onboarding_category: a.onboarding_category,
+          };
+        }
+      });
+      setMaintenanceAddonsByKey(map);
+    }
+
     setIsLoadingProducts(false);
   }, []);
 
@@ -335,13 +388,22 @@ const ClientNewRequest: React.FC = () => {
       oneTime += p.amount_cents || p.setup_fee_cents || 0;
       monthly += p.monthly_price_cents || 0;
     }
+
+    // Auto-required maintenance plans (exclude any already manually selected as add-ons)
+    const selectedAddonIds = new Set(selectedAddons.map(a => a.id));
+    for (const { addon } of resolveMaintenancePlans(selectedProducts, maintenanceAddonsByKey)) {
+      if (selectedAddonIds.has(addon.id)) continue;
+      oneTime += (addon.setup_fee_cents || 0) + (addon.billing_type === 'one_time' ? (addon.price_cents || 0) : 0);
+      monthly += addon.monthly_price_cents || 0;
+    }
+
     for (const a of selectedAddons) {
       oneTime += (a.setup_fee_cents || 0) + (a.billing_type === 'one_time' ? (a.price_cents || 0) : 0);
       monthly += a.monthly_price_cents || 0;
     }
 
     return { oneTime, monthly };
-  }, [selectedProducts, selectedAddons]);
+  }, [selectedProducts, selectedAddons, maintenanceAddonsByKey]);
 
   // ── Proceed from products to addons ──────────────────────────────────────
 
@@ -397,6 +459,13 @@ const ClientNewRequest: React.FC = () => {
     const token = generateToken();
 
     try {
+      // Merge auto-required maintenance plans into selected_addons (dedup by id)
+      const existingAddonIds = new Set(selectedAddons.map(a => a.id));
+      const maintenancePlansToSave = resolveMaintenancePlans(selectedProducts, maintenanceAddonsByKey)
+        .filter(({ addon }) => !existingAddonIds.has(addon.id))
+        .map(({ addon }) => addon);
+      const allAddons = [...selectedAddons, ...maintenancePlansToSave];
+
       const { error } = await supabase.from('onboarding_sessions').insert({
         session_token: token,
         first_name: clientProfile.firstName,
@@ -405,7 +474,7 @@ const ClientNewRequest: React.FC = () => {
         phone: clientProfile.phone,
         email: clientProfile.email,
         selected_products: selectedProducts,
-        selected_addons: selectedAddons,
+        selected_addons: allAddons,
         estimated_one_time_cents: oneTime,
         estimated_monthly_cents: monthly,
         status: 'proposal_submitted',
@@ -416,18 +485,37 @@ const ClientNewRequest: React.FC = () => {
 
       // Fire-and-forget confirmation email
       const supabaseUrl = 'https://nvgumhlewbqynrhlkqhx.supabase.co';
+      const maintenancePlansForEmail = resolveMaintenancePlans(selectedProducts, maintenanceAddonsByKey)
+        .filter(({ addon }) => !existingAddonIds.has(addon.id));
+      const coreServicesEmailHtml = selectedProducts.map(p =>
+        `<div style="padding: 6px 0; border-bottom: 1px solid #e2e8f0; color: #334155;">
+           ✓ ${p.name} — ${formatProductPrice(p)}
+         </div>`
+      ).join('');
+      const maintenanceEmailHtml = maintenancePlansForEmail.length > 0
+        ? `<p style="font-weight: 600; color: #0f172a; margin: 16px 0 8px 0; font-size: 13px; text-transform: uppercase; letter-spacing: 0.05em;">Monthly Maintenance (Required)</p>` +
+          maintenancePlansForEmail.map(({ addon, requiredBy }) =>
+            `<div style="padding: 6px 0; border-bottom: 1px solid #e2e8f0; color: #334155;">
+               ✓ ${addon.name} — ${formatAddonPrice(addon)}<br>
+               <span style="color: #94a3b8; font-size: 12px;">Required with ${requiredBy}</span>
+             </div>`
+          ).join('')
+        : '';
+      const addonsEmailHtml = selectedAddons.length > 0
+        ? `<p style="font-weight: 600; color: #0f172a; margin: 16px 0 8px 0; font-size: 13px; text-transform: uppercase; letter-spacing: 0.05em;">Add-ons</p>` +
+          selectedAddons.map(a =>
+            `<div style="padding: 6px 0; border-bottom: 1px solid #e2e8f0; color: #334155;">
+               ✓ ${a.name} — ${formatAddonPrice(a)}
+             </div>`
+          ).join('')
+        : '';
       const selectedItemsHtml = [
-        ...selectedProducts.map(p =>
-          `<div style="padding: 6px 0; border-bottom: 1px solid #e2e8f0; color: #334155;">
-             ✓ ${p.name} — ${formatProductPrice(p)}
-           </div>`
-        ),
-        ...selectedAddons.map(a =>
-          `<div style="padding: 6px 0; border-bottom: 1px solid #e2e8f0; color: #334155;">
-             ✓ ${a.name} — ${formatAddonPrice(a)}
-           </div>`
-        ),
-      ].join('');
+        coreServicesEmailHtml
+          ? `<p style="font-weight: 600; color: #0f172a; margin: 0 0 8px 0; font-size: 13px; text-transform: uppercase; letter-spacing: 0.05em;">Core Services</p>${coreServicesEmailHtml}`
+          : '',
+        maintenanceEmailHtml,
+        addonsEmailHtml,
+      ].filter(Boolean).join('');
       const emailHtml = `
   <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; padding: 20px; color: #1e293b;">
     <img src="https://www.customwebsitesplus.com/CWPlogodark.png"
@@ -488,9 +576,12 @@ const ClientNewRequest: React.FC = () => {
     } finally {
       setIsSubmitting(false);
     }
-  }, [clientProfile, selectedProducts, selectedAddons, computeTotals, addAssistantMessage]);
+  }, [clientProfile, selectedProducts, selectedAddons, computeTotals, addAssistantMessage, maintenanceAddonsByKey]);
 
   const { oneTime, monthly } = computeTotals();
+
+  const maintenancePlansForProposal = resolveMaintenancePlans(selectedProducts, maintenanceAddonsByKey)
+    .filter(({ addon }) => !selectedAddons.some(a => a.id === addon.id));
 
   // ─── Render ───────────────────────────────────────────────────────────────
 
@@ -872,6 +963,41 @@ const ClientNewRequest: React.FC = () => {
                                     </p>
                                   ) : null
                                 )}
+                              </div>
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+                    )}
+
+                    {/* Monthly Maintenance (Required) */}
+                    {maintenancePlansForProposal.length > 0 && (
+                      <div style={{ animation: 'fade-up 0.5s 0.05s ease both' }}>
+                        <p className="text-xs font-bold text-slate-400 uppercase tracking-widest mb-3">
+                          Monthly Maintenance{' '}
+                          <span className="text-slate-300 font-normal normal-case tracking-normal">(Required)</span>
+                        </p>
+                        <div>
+                          {maintenancePlansForProposal.map(({ addon, requiredBy }, i) => (
+                            <div
+                              key={addon.id}
+                              className="flex items-start justify-between gap-4 py-3"
+                              style={{ borderBottom: i < maintenancePlansForProposal.length - 1 ? '1px solid #F1F5F9' : 'none' }}
+                            >
+                              <div>
+                                <p className="text-slate-900 font-medium text-sm">{addon.name}</p>
+                                <p className="text-slate-400 text-xs mt-0.5">Required with {requiredBy}</p>
+                              </div>
+                              <div className="text-right flex-shrink-0">
+                                {addon.monthly_price_cents ? (
+                                  <p className="text-emerald-600 text-sm font-semibold">{formatCents(addon.monthly_price_cents)}/mo</p>
+                                ) : null}
+                                {addon.setup_fee_cents ? (
+                                  <p className="text-slate-800 text-xs font-medium">{formatCents(addon.setup_fee_cents)} setup</p>
+                                ) : null}
+                                {addon.billing_type === 'one_time' && addon.price_cents ? (
+                                  <p className="text-slate-800 text-sm font-semibold">{formatCents(addon.price_cents)}</p>
+                                ) : null}
                               </div>
                             </div>
                           ))}
