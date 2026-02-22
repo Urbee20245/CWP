@@ -66,6 +66,8 @@ import CustomDomainAdmin from './src/pages/CustomDomainAdmin';
 import AdminProposalList from './src/pages/AdminProposalList';
 import AdminProposalBuilder from './src/pages/AdminProposalBuilder';
 import ClientProposalReview from './src/pages/ClientProposalReview';
+import GemOnboarding from './src/pages/GemOnboarding';
+import AdminOnboardingManager from './src/pages/AdminOnboardingManager';
 
 // Returns true when the app is loaded from a client's custom domain
 // (not the main CWP domain, localhost, or a Vercel preview URL)
@@ -81,7 +83,7 @@ function isCustomDomain(): boolean {
 const AppContent: React.FC = () => {
   const location = useLocation();
   const { isLoading } = useAuth();
-  const isBackOfficeRoute = location.pathname.startsWith('/admin') || location.pathname.startsWith('/client') || location.pathname.startsWith('/back-office') || location.pathname === '/login' || location.pathname.startsWith('/site/');
+  const isBackOfficeRoute = location.pathname.startsWith('/admin') || location.pathname.startsWith('/client') || location.pathname.startsWith('/back-office') || location.pathname === '/login' || location.pathname.startsWith('/site/') || location.pathname === '/onboarding';
   const showGlobalComponents = !isBackOfficeRoute;
 
   if (isLoading) return <GlobalLoading />;
@@ -101,6 +103,7 @@ const AppContent: React.FC = () => {
         <Route path="/privacy-policy" element={<PrivacyPolicy />} />
         <Route path="/terms-and-conditions" element={<TermsAndConditions />} />
         <Route path="/login" element={<LoginPage />} />
+        <Route path="/onboarding" element={<GemOnboarding />} />
         <Route path="/back-office" element={<ProtectedRoute allowedRoles={['admin', 'client']} />}>
           <Route index element={<BackOfficeRedirect />} />
         </Route>
@@ -134,6 +137,7 @@ const AppContent: React.FC = () => {
           <Route path="proposals" element={<AdminProposalList />} />
           <Route path="proposals/new" element={<AdminProposalBuilder />} />
           <Route path="proposals/:id" element={<AdminProposalBuilder />} />
+          <Route path="onboarding" element={<AdminOnboardingManager />} />
         </Route>
 
         <Route path="/client/*" element={<ProtectedRoute allowedRoles={['client']} />}>
