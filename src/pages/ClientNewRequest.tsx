@@ -701,9 +701,9 @@ const ClientNewRequest: React.FC = () => {
                   {/* Header */}
                   <div className="px-8 py-7 bg-[#0F172A] text-center">
                     <img
-                      src="/CWPlogolight.png"
+                      src="https://www.customwebsitesplus.com/CWPlogodark.png"
                       alt="Custom Websites Plus"
-                      className="h-8 w-auto object-contain mx-auto mb-4 opacity-90"
+                      className="h-8 w-auto object-contain mx-auto mb-4"
                     />
                     <p className="text-slate-400 text-xs uppercase tracking-widest mb-2">
                       Service Request · Custom Websites Plus
