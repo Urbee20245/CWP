@@ -3,17 +3,18 @@
 import React, { useState, useEffect, useCallback, useRef } from 'react';
 import AdminLayout from '../components/AdminLayout';
 import {
-  Globe, Loader2, AlertTriangle, CheckCircle, Eye, Copy, EyeOff, ExternalLink,
-  RefreshCw, ToggleLeft, ToggleRight, Wand2, Upload, ImageIcon,
-  ChevronDown, ChevronRight, FileText, Check, Link, Save, Info, Key,
-  Calendar, Phone, FileText as FormIcon, Shield, Sparkles, MessageSquare, LayoutDashboard,
+  Globe, Loader2, AlertTriangle, CheckCircle, Eye, Copy, EyeOff,
+  RefreshCw, Wand2, ChevronDown, FileText, Check, Link, Save, Info, Key,
+  Sparkles, Send, ExternalLink, Settings, ToggleLeft, ToggleRight, X,
+  MessageSquare, ChevronRight, Zap,
 } from 'lucide-react';
 import { supabase } from '../integrations/supabase/client';
 import { AdminService } from '../services/adminService';
 import {
   WebsiteBrief, GenerationStatus, ALL_PAGE_OPTIONS, PageId,
-  PremiumFeatureId, PREMIUM_FEATURE_OPTIONS, PREMIUM_FEATURE_GROUPS, PremiumFeatureGroup,
 } from '../types/website';
+
+// ─── Types ───────────────────────────────────────────────────────────────────
 
 interface Client {
   id: string;
@@ -21,111 +22,150 @@ interface Client {
   billing_email: string;
 }
 
+interface ChatMessage {
+  id: string;
+  role: 'user' | 'assistant';
+  content: string;
+  ts: number;
+}
+
+type LeftPanelState = 'type-picker' | 'brief-form' | 'generating' | 'chat';
+type RightView = 'build' | 'pages';
+
+// ─── Constants ───────────────────────────────────────────────────────────────
+
+const WEBSITE_TYPES = [
+  { emoji: '🏪', label: 'Local Business',       desc: 'Shops, services, trades',       industry: 'Local Business' },
+  { emoji: '🍕', label: 'Restaurant',           desc: 'Food, cafe, catering',          industry: 'Restaurant & Food' },
+  { emoji: '🏥', label: 'Medical',              desc: 'Clinics, dental, wellness',     industry: 'Medical & Healthcare' },
+  { emoji: '🏠', label: 'Real Estate',          desc: 'Agents, property, rentals',     industry: 'Real Estate' },
+  { emoji: '🛒', label: 'E-Commerce',           desc: 'Online store, products',        industry: 'E-Commerce' },
+  { emoji: '💼', label: 'Professional Services',desc: 'Legal, accounting, consulting', industry: 'Professional Services' },
+  { emoji: '💅', label: 'Beauty & Wellness',    desc: 'Salon, spa, fitness',           industry: 'Beauty & Wellness' },
+  { emoji: '🎨', label: 'Portfolio/Creative',   desc: 'Design, photography, art',      industry: 'Creative Portfolio' },
+  { emoji: '❤️', label: 'Nonprofit',            desc: 'Charities, foundations',        industry: 'Nonprofit' },
+  { emoji: '💻', label: 'Tech/SaaS',            desc: 'Software, apps, startups',      industry: 'Tech & SaaS' },
+  { emoji: '📚', label: 'Education/Coaching',   desc: 'Courses, tutoring, coaching',   industry: 'Education & Coaching' },
+  { emoji: '⚡', label: 'Custom/Other',         desc: 'Something unique',              industry: '' },
+];
+
 const TONES = ['Professional', 'Friendly', 'Bold', 'Luxurious'] as const;
 
-const statusBadge = (status: GenerationStatus) => {
-  const map: Record<GenerationStatus, { label: string; className: string }> = {
-    draft:      { label: 'Draft',         className: 'bg-slate-100 text-slate-600' },
-    generating: { label: 'Generating...', className: 'bg-amber-100 text-amber-700' },
-    complete:   { label: 'Complete',      className: 'bg-emerald-100 text-emerald-700' },
-    error:      { label: 'Error',         className: 'bg-red-100 text-red-700' },
-  };
-  const s = map[status] || map.draft;
-  return (
-    <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${s.className}`}>
-      {s.label}
-    </span>
-  );
-};
+const QUICK_PROMPTS = [
+  'Make it more modern',
+  'Add a pricing section',
+  'Change hero to dark background',
+  'Add FAQ section',
+  'Make it more minimalist',
+  'Add testimonials',
+];
+
+const REGEN_REGEX = /regenerat|rebuild|start over|new site|redo/i;
+
+// ─── Helper: normalise brief row to handle old + new column names ─────────────
+
+function normaliseBrief(data: any): WebsiteBrief {
+  return {
+    ...data,
+    business_name:     data.business_name     ?? '',
+    services_offered:  data.services_offered  ?? data.services              ?? '',
+    primary_color:     data.primary_color     ?? data.brand_color           ?? '#4F46E5',
+    art_direction:     data.art_direction     ?? data.art_direction_notes   ?? '',
+    generation_status: (data.generation_status
+      ?? (data.is_generation_complete ? 'complete' : 'draft')) as GenerationStatus,
+    client_slug:       data.client_slug       ?? data.slug                  ?? null,
+  } as WebsiteBrief;
+}
+
+// ─── Component ───────────────────────────────────────────────────────────────
 
 const AdminWebsiteBuilder: React.FC = () => {
-  const [clients, setClients] = useState<Client[]>([]);
-  const [selectedClientId, setSelectedClientId] = useState('');
-  const [brief, setBrief] = useState<WebsiteBrief | null>(null);
+  // Clients
+  const [clients, setClients]               = useState<Client[]>([]);
   const [loadingClients, setLoadingClients] = useState(true);
+  const [selectedClientId, setSelectedClientId] = useState('');
+
+  // Brief & generation
+  const [brief, setBrief]           = useState<WebsiteBrief | null>(null);
   const [loadingBrief, setLoadingBrief] = useState(false);
   const [isGenerating, setIsGenerating] = useState(false);
-  const [isTogglingPublish, setIsTogglingPublish] = useState(false);
-  const [error, setError] = useState<string | null>(null);
-  const [copied, setCopied] = useState(false);
+  const [genError, setGenError]     = useState<string | null>(null);
+
+  // Left panel state machine
+  const [panelState, setPanelState] = useState<LeftPanelState>('type-picker');
+
+  // Right panel view
+  const [rightView, setRightView]   = useState<RightView>('build');
+  const [settingsOpen, setSettingsOpen] = useState(false);
   const [expandedPages, setExpandedPages] = useState<Record<string, boolean>>({});
 
-  // Collapsible left-sidebar sections
-  const [openLeftSections, setOpenLeftSections] = useState<Record<string, boolean>>({
-    brief: true,
-    pages: false,
-    features: false,
-    assets: false,
-  });
-  const [collapsedFeatureGroups, setCollapsedFeatureGroups] = useState<Record<string, boolean>>({});
-
-  const toggleLeftSection = (key: string) =>
-    setOpenLeftSections(prev => ({ ...prev, [key]: !prev[key] }));
-  const toggleFeatureGroup = (group: string) =>
-    setCollapsedFeatureGroups(prev => ({ ...prev, [group]: !prev[group] }));
-
-  // Custom domain state
-  const [customDomainInput, setCustomDomainInput] = useState('');
-  const [savingDomain, setSavingDomain] = useState(false);
-  const [domainSaved, setDomainSaved] = useState(false);
-  const [domainError, setDomainError] = useState<string | null>(null);
-  const [showDnsInstructions, setShowDnsInstructions] = useState(false);
-
-  // Registrar credentials state (read-only for admin)
-  const [domainCreds, setDomainCreds] = useState<{
-    registrar_name: string;
-    login_url: string;
-    username: string;
-    password: string;
-    notes: string;
-  } | null>(null);
-  const [showPassword, setShowPassword] = useState(false);
-  const [copiedField, setCopiedField] = useState<string | null>(null);
-
-  // Image upload state
-  const [uploadingLogo, setUploadingLogo] = useState(false);
-  const [uploadingHero, setUploadingHero] = useState(false);
-  const [uploadError, setUploadError] = useState<string | null>(null);
-  const logoInputRef = useRef<HTMLInputElement>(null);
-  const heroInputRef = useRef<HTMLInputElement>(null);
-
-  // Form state
+  // Form
   const [form, setForm] = useState({
-    business_name: '',
-    industry: '',
-    services_offered: '',
-    location: '',
-    tone: 'Professional' as typeof TONES[number],
-    primary_color: '#4F46E5',
-    art_direction: '',
+    business_name:   '',
+    industry:        '',
+    location:        '',
+    services_offered:'',
+    tone:            'Professional' as typeof TONES[number],
+    primary_color:   '#4F46E5',
+    art_direction:   '',
   });
 
-  // Page selection: default to home + about + services + contact
+  // Pages
   const [selectedPages, setSelectedPages] = useState<Set<PageId>>(
     new Set(['home', 'about', 'services', 'contact'])
   );
 
-  // Premium feature selection
-  const [selectedPremiumFeatures, setSelectedPremiumFeatures] = useState<Set<PremiumFeatureId>>(new Set());
+  // Chat
+  const [messages, setMessages]       = useState<ChatMessage[]>([]);
+  const [chatInput, setChatInput]     = useState('');
+  const [isChatLoading, setIsChatLoading] = useState(false);
+  const chatEndRef                    = useRef<HTMLDivElement>(null);
+  const chatInputRef                  = useRef<HTMLTextAreaElement>(null);
 
-  // Load clients
+  // Publish
+  const [isTogglingPublish, setIsTogglingPublish] = useState(false);
+
+  // Copy URL
+  const [copied, setCopied] = useState(false);
+
+  // Settings — custom domain
+  const [customDomainInput, setCustomDomainInput] = useState('');
+  const [savingDomain, setSavingDomain]   = useState(false);
+  const [domainSaved, setDomainSaved]     = useState(false);
+  const [domainError, setDomainError]     = useState<string | null>(null);
+  const [showDnsInstructions, setShowDnsInstructions] = useState(false);
+
+  // Settings — registrar creds
+  const [domainCreds, setDomainCreds] = useState<{
+    registrar_name: string; login_url: string;
+    username: string; password: string; notes: string;
+  } | null>(null);
+  const [showPassword, setShowPassword]   = useState(false);
+  const [copiedField, setCopiedField]     = useState<string | null>(null);
+
+  // Settings — edit-brief within settings panel
+  const [settingsForm, setSettingsForm] = useState({ ...form });
+
+  // ── Load clients ─────────────────────────────────────────────────────────
+
   useEffect(() => {
-    const load = async () => {
-      const { data } = await supabase
-        .from('clients')
-        .select('id, business_name, billing_email')
-        .order('business_name');
-      setClients(data || []);
-      setLoadingClients(false);
-    };
-    load();
+    supabase
+      .from('clients')
+      .select('id, business_name, billing_email')
+      .order('business_name')
+      .then(({ data }) => {
+        setClients(data || []);
+        setLoadingClients(false);
+      });
   }, []);
 
-  // Load existing brief when client changes
+  // ── Load brief ───────────────────────────────────────────────────────────
+
   const loadBrief = useCallback(async (clientId: string) => {
     if (!clientId) return;
     setLoadingBrief(true);
-    setError(null);
+    setGenError(null);
+
     const { data } = await supabase
       .from('website_briefs')
       .select('*')
@@ -133,37 +173,58 @@ const AdminWebsiteBuilder: React.FC = () => {
       .maybeSingle();
 
     if (data) {
-      setBrief(data as WebsiteBrief);
-      setForm({
-        business_name: data.business_name || '',
-        industry: data.industry || '',
-        services_offered: data.services_offered || '',
-        location: data.location || '',
-        tone: data.tone || 'Professional',
-        primary_color: data.primary_color || '#4F46E5',
-        art_direction: data.art_direction || '',
-      });
-      // If existing pages, preselect them
-      if (data.website_json?.pages) {
-        setSelectedPages(new Set(data.website_json.pages.map((p: any) => p.id as PageId)));
+      const nb = normaliseBrief(data);
+      setBrief(nb);
+
+      const nextForm = {
+        business_name:    nb.business_name   || '',
+        industry:         nb.industry        || '',
+        location:         nb.location        || '',
+        services_offered: nb.services_offered || '',
+        tone:             (nb.tone as typeof TONES[number]) || 'Professional',
+        primary_color:    nb.primary_color   || '#4F46E5',
+        art_direction:    nb.art_direction   || '',
+      };
+      setForm(nextForm);
+      setSettingsForm(nextForm);
+
+      if (nb.website_json?.pages) {
+        setSelectedPages(new Set(nb.website_json.pages.map((p: any) => p.id as PageId)));
       }
-      // Restore premium features
-      if (Array.isArray(data.premium_features) && data.premium_features.length > 0) {
-        setSelectedPremiumFeatures(new Set(data.premium_features as PremiumFeatureId[]));
+
+      setCustomDomainInput(nb.custom_domain || '');
+
+      // Determine panel state from brief
+      if (nb.generation_status === 'complete' && nb.website_json) {
+        setPanelState('chat');
+        setRightView('build');
+      } else if (nb.generation_status === 'error') {
+        setPanelState('brief-form');
+        setGenError(nb.generation_error || 'Generation failed. Please try again.');
+      } else if (nb.generation_status === 'generating') {
+        setPanelState('generating');
       } else {
-        setSelectedPremiumFeatures(new Set());
+        // draft — skip type picker, go straight to form
+        setPanelState('brief-form');
       }
-      // Restore custom domain
-      setCustomDomainInput(data.custom_domain || '');
     } else {
       setBrief(null);
-      setSelectedPremiumFeatures(new Set());
       setCustomDomainInput('');
       const client = clients.find(c => c.id === clientId);
-      setForm(f => ({ ...f, business_name: client?.business_name || '' }));
+      setForm(f => ({
+        ...f,
+        business_name: client?.business_name || '',
+        industry: '',
+        location: '',
+        services_offered: '',
+        tone: 'Professional',
+        primary_color: '#4F46E5',
+        art_direction: '',
+      }));
+      setPanelState('type-picker');
     }
 
-    // Load registrar credentials
+    // Load registrar creds
     const { data: credsData } = await supabase
       .from('client_domain_credentials')
       .select('registrar_name, login_url, username, password, notes')
@@ -171,17 +232,10 @@ const AdminWebsiteBuilder: React.FC = () => {
       .maybeSingle();
 
     setDomainCreds(credsData
-      ? {
-          registrar_name: credsData.registrar_name,
-          login_url: credsData.login_url,
-          username: credsData.username,
-          password: credsData.password,
-          notes: credsData.notes,
-        }
-      : null
-    );
+      ? { registrar_name: credsData.registrar_name, login_url: credsData.login_url,
+          username: credsData.username, password: credsData.password, notes: credsData.notes }
+      : null);
     setShowPassword(false);
-
     setLoadingBrief(false);
   }, [clients]);
 
@@ -189,133 +243,44 @@ const AdminWebsiteBuilder: React.FC = () => {
     if (selectedClientId) loadBrief(selectedClientId);
   }, [selectedClientId, loadBrief]);
 
-  const togglePage = (pageId: PageId) => {
-    setSelectedPages(prev => {
-      const next = new Set(prev);
-      if (pageId === 'home') return next; // locked
-      if (next.has(pageId)) { next.delete(pageId); } else { next.add(pageId); }
-      return next;
-    });
-  };
+  // ── Auto-scroll chat ──────────────────────────────────────────────────────
 
-  const togglePremiumFeature = (featureId: PremiumFeatureId) => {
-    setSelectedPremiumFeatures(prev => {
-      const next = new Set(prev);
-      if (next.has(featureId)) { next.delete(featureId); } else { next.add(featureId); }
-      return next;
-    });
-  };
+  useEffect(() => {
+    chatEndRef.current?.scrollIntoView({ behavior: 'smooth' });
+  }, [messages, isChatLoading]);
 
-  const PREMIUM_GROUP_ICONS: Record<PremiumFeatureGroup, React.ReactNode> = {
-    'Calendar':               <Calendar className="w-4 h-4" />,
-    'AI Phone Receptionist':  <Phone className="w-4 h-4" />,
-    'Forms':                  <FormIcon className="w-4 h-4" />,
-    'Legal Pages':            <Shield className="w-4 h-4" />,
-    'AI Functionality':       <Sparkles className="w-4 h-4" />,
-    'Widgets & Chatbots':     <MessageSquare className="w-4 h-4" />,
-    'Client Portal':          <LayoutDashboard className="w-4 h-4" />,
-  };
+  // ── Generate ─────────────────────────────────────────────────────────────
 
-  // Image upload handler
-  const handleImageUpload = async (
-    file: File,
-    type: 'logo' | 'hero'
-  ) => {
+  const handleGenerate = useCallback(async (overrideForm?: typeof form) => {
     if (!selectedClientId) return;
-    setUploadError(null);
-    const setter = type === 'logo' ? setUploadingLogo : setUploadingHero;
-    setter(true);
-
-    try {
-      const ext = file.name.split('.').pop() || 'png';
-      const path = `${selectedClientId}/${type}.${ext}`;
-
-      // Remove old file first (ignore error if doesn't exist)
-      await supabase.storage.from('website-images').remove([path]);
-
-      const { error: upErr } = await supabase.storage
-        .from('website-images')
-        .upload(path, file, { upsert: true, contentType: file.type });
-
-      if (upErr) throw new Error(upErr.message);
-
-      const { data: urlData } = supabase.storage
-        .from('website-images')
-        .getPublicUrl(path);
-
-      const publicUrl = urlData.publicUrl;
-      const field = type === 'logo' ? 'logo_url' : 'hero_image_url';
-
-      // Save URL into website_json.global (or create partial record)
-      const currentJson = brief?.website_json || {};
-      const updatedJson = {
-        ...currentJson,
-        global: {
-          ...(currentJson as any).global,
-          [field]: publicUrl,
-        },
-      };
-
-      await supabase
-        .from('website_briefs')
-        .upsert(
-          {
-            client_id: selectedClientId,
-            business_name: form.business_name || 'Draft',
-            industry: form.industry || '',
-            services_offered: form.services_offered || '',
-            location: form.location || '',
-            tone: form.tone,
-            primary_color: form.primary_color,
-            website_json: updatedJson,
-          },
-          { onConflict: 'client_id' }
-        );
-
-      // Refresh brief
-      await loadBrief(selectedClientId);
-    } catch (err: any) {
-      setUploadError(err.message || 'Upload failed.');
-    } finally {
-      setter(false);
-    }
-  };
-
-  const handleGenerate = async () => {
-    if (!selectedClientId) return;
+    const f = overrideForm || form;
     setIsGenerating(true);
-    setError(null);
-    try {
-      // Persist premium feature selections to the brief row before/during generation
-      await supabase
-        .from('website_briefs')
-        .upsert(
-          {
-            client_id: selectedClientId,
-            business_name: form.business_name || 'Draft',
-            industry: form.industry || '',
-            services_offered: form.services_offered || '',
-            location: form.location || '',
-            tone: form.tone,
-            primary_color: form.primary_color,
-            premium_features: Array.from(selectedPremiumFeatures),
-          },
-          { onConflict: 'client_id' }
-        );
+    setGenError(null);
+    setPanelState('generating');
 
+    try {
       await AdminService.generateWebsite({
-        client_id: selectedClientId,
-        ...form,
+        client_id:        selectedClientId,
+        business_name:    f.business_name,
+        industry:         f.industry,
+        services_offered: f.services_offered,
+        location:         f.location,
+        tone:             f.tone,
+        primary_color:    f.primary_color,
+        art_direction:    f.art_direction,
         pages_to_generate: Array.from(selectedPages),
-        premium_features: Array.from(selectedPremiumFeatures),
       });
       await loadBrief(selectedClientId);
+      setPanelState('chat');
     } catch (err: any) {
-      setError(err.message || 'Generation failed. Please try again.');
+      setGenError(err.message || 'Generation failed. Please try again.');
+      setPanelState('brief-form');
     } finally {
       setIsGenerating(false);
     }
-  };
+  }, [selectedClientId, form, selectedPages, loadBrief]);
+
+  // ── Publish toggle ────────────────────────────────────────────────────────
 
   const handleTogglePublish = async () => {
     if (!brief) return;
@@ -324,11 +289,13 @@ const AdminWebsiteBuilder: React.FC = () => {
       await AdminService.updateWebsitePublish(selectedClientId, !brief.is_published);
       setBrief(prev => prev ? { ...prev, is_published: !prev.is_published } : null);
     } catch (err: any) {
-      setError(err.message);
+      setGenError(err.message);
     } finally {
       setIsTogglingPublish(false);
     }
   };
+
+  // ── Save domain ───────────────────────────────────────────────────────────
 
   const handleSaveDomain = async () => {
     if (!selectedClientId) return;
@@ -347,801 +314,950 @@ const AdminWebsiteBuilder: React.FC = () => {
     }
   };
 
+  // ── Chat send ─────────────────────────────────────────────────────────────
+
+  const handleChatSend = useCallback(async (inputOverride?: string) => {
+    const text = (inputOverride ?? chatInput).trim();
+    if (!text || isChatLoading) return;
+
+    const userMsg: ChatMessage = { id: `${Date.now()}`, role: 'user', content: text, ts: Date.now() };
+    setMessages(prev => [...prev, userMsg]);
+    setChatInput('');
+    setIsChatLoading(true);
+
+    // If it's a regeneration request, call handleGenerate directly
+    if (REGEN_REGEX.test(text)) {
+      setMessages(prev => [...prev, {
+        id: `${Date.now()}a`,
+        role: 'assistant',
+        content: "Got it! Starting a full regeneration of your website now...",
+        ts: Date.now(),
+      }]);
+      setIsChatLoading(false);
+      await handleGenerate();
+      return;
+    }
+
+    // Otherwise call Anthropic API
+    try {
+      const apiKey = (import.meta as any).env?.VITE_ANTHROPIC_API_KEY;
+      if (!apiKey) {
+        throw new Error('VITE_ANTHROPIC_API_KEY is not configured. Add it to your .env file to enable AI chat.');
+      }
+
+      const siteInfo = brief ? `
+Current site: "${brief.business_name}" (${brief.industry})
+Location: ${brief.location}
+Services: ${brief.services_offered}
+Tone: ${brief.tone}
+Color: ${brief.primary_color}
+Pages: ${brief.website_json?.pages?.map((p: any) => p.name).join(', ') || 'none'}
+Site URL: /site/${brief.client_slug}` : 'No site generated yet.';
+
+      const systemPrompt = `You are an AI web designer assistant helping an agency build and refine client websites.
+${siteInfo}
+
+When the user wants a complete website rebuild or regeneration, respond with: REGENERATE: <art_direction_notes>
+For all other requests, give helpful, specific advice about design, content, or improvements.
+Keep responses concise and actionable. Respond in 1-3 sentences max unless detail is truly needed.`;
+
+      const res = await fetch('https://api.anthropic.com/v1/messages', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'x-api-key': apiKey,
+          'anthropic-version': '2023-06-01',
+          'anthropic-dangerous-direct-browser-access': 'true',
+        },
+        body: JSON.stringify({
+          model: 'claude-sonnet-4-20250514',
+          max_tokens: 512,
+          system: systemPrompt,
+          messages: [
+            ...messages.slice(-8).map(m => ({ role: m.role, content: m.content })),
+            { role: 'user', content: text },
+          ],
+        }),
+      });
+
+      if (!res.ok) {
+        const errBody = await res.json().catch(() => ({}));
+        throw new Error(errBody?.error?.message || `API error ${res.status}`);
+      }
+
+      const data = await res.json();
+      const reply: string = data.content?.[0]?.text || '';
+
+      // Check if AI wants to regenerate with new art direction
+      if (reply.startsWith('REGENERATE:')) {
+        const newArtDirection = reply.replace('REGENERATE:', '').trim();
+        setMessages(prev => [...prev, {
+          id: `${Date.now()}b`, role: 'assistant',
+          content: `Regenerating with updated direction: "${newArtDirection}"`,
+          ts: Date.now(),
+        }]);
+        setIsChatLoading(false);
+        const updatedForm = { ...form, art_direction: newArtDirection };
+        setForm(updatedForm);
+        await handleGenerate(updatedForm);
+        return;
+      }
+
+      setMessages(prev => [...prev, { id: `${Date.now()}c`, role: 'assistant', content: reply, ts: Date.now() }]);
+    } catch (err: any) {
+      setMessages(prev => [...prev, {
+        id: `${Date.now()}e`, role: 'assistant',
+        content: `Error: ${err.message}`,
+        ts: Date.now(),
+      }]);
+    } finally {
+      setIsChatLoading(false);
+    }
+  }, [chatInput, isChatLoading, messages, brief, form, handleGenerate]);
+
+  // ── Helpers ───────────────────────────────────────────────────────────────
+
+  const togglePage = (pageId: PageId) => {
+    if (pageId === 'home') return;
+    setSelectedPages(prev => {
+      const next = new Set(prev);
+      next.has(pageId) ? next.delete(pageId) : next.add(pageId);
+      return next;
+    });
+  };
+
+  const copyUrl = () => {
+    if (!brief?.client_slug) return;
+    navigator.clipboard.writeText(`${window.location.origin}/site/${brief.client_slug}`);
+    setCopied(true);
+    setTimeout(() => setCopied(false), 2000);
+  };
+
   const copyField = (value: string, field: string) => {
     navigator.clipboard.writeText(value);
     setCopiedField(field);
     setTimeout(() => setCopiedField(null), 2000);
   };
 
-  const copyUrl = () => {
-    if (!brief?.client_slug) return;
-    const url = `${window.location.origin}/site/${brief.client_slug}`;
-    navigator.clipboard.writeText(url);
-    setCopied(true);
-    setTimeout(() => setCopied(false), 2000);
-  };
+  const isFormValid = form.business_name && form.industry && form.services_offered && form.location;
+  const previewUrl  = brief?.client_slug ? `/site/${brief.client_slug}` : null;
+  const hasWebsite  = brief?.generation_status === 'complete' && !!brief.website_json;
+  const pageCount   = brief?.website_json?.pages?.length ?? 0;
 
-  const previewUrl = brief?.client_slug ? `/site/${brief.client_slug}` : null;
-  const hasWebsite = brief?.generation_status === 'complete' && brief.website_json;
-  const logoUrl = (brief?.website_json as any)?.global?.logo_url || '';
-  const heroUrl = (brief?.website_json as any)?.global?.hero_image_url || '';
+  // ── Derived panel state ───────────────────────────────────────────────────
+
+  // If a new client is selected without a brief, go to type-picker
+  const effectivePanelState: LeftPanelState =
+    !selectedClientId ? 'type-picker'
+    : loadingBrief    ? 'type-picker'
+    : panelState;
+
+  // ─────────────────────────────────────────────────────────────────────────
+  // RENDER
+  // ─────────────────────────────────────────────────────────────────────────
 
   return (
     <AdminLayout>
-      <div className="p-6 max-w-7xl mx-auto">
-        <div className="mb-8">
-          <h1 className="text-3xl font-bold text-slate-900 flex items-center gap-3">
-            <Globe className="w-8 h-8 text-indigo-600" />
-            Website Builder
-          </h1>
-          <p className="text-slate-500 mt-1">
-            Configure the brief, select pages, upload assets, then let AI build the site.
-          </p>
+      <div className="flex flex-col bg-slate-950 overflow-hidden" style={{ height: 'calc(100vh - 0px)' }}>
+
+        {/* ── Top Bar ─────────────────────────────────────────────────────── */}
+        <div className="flex-none flex items-center gap-3 px-4 h-14 bg-slate-900 border-b border-slate-800 z-10">
+          {/* Logo + title */}
+          <div className="flex items-center gap-2 mr-2">
+            <div className="w-7 h-7 rounded-lg bg-indigo-600 flex items-center justify-center">
+              <Wand2 className="w-4 h-4 text-white" />
+            </div>
+            <span className="text-sm font-semibold text-white hidden sm:block">AI Website Builder</span>
+          </div>
+
+          {/* Client dropdown */}
+          <div className="relative">
+            <select
+              className="bg-slate-800 border border-slate-700 text-slate-200 text-sm rounded-lg px-3 py-1.5 pr-8 focus:outline-none focus:ring-1 focus:ring-indigo-500 appearance-none cursor-pointer min-w-[180px]"
+              value={selectedClientId}
+              onChange={e => { setSelectedClientId(e.target.value); setMessages([]); }}
+              disabled={loadingClients}
+            >
+              <option value="">Select client...</option>
+              {clients.map(c => (
+                <option key={c.id} value={c.id}>{c.business_name}</option>
+              ))}
+            </select>
+            <ChevronDown className="absolute right-2.5 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-slate-400 pointer-events-none" />
+          </div>
+
+          {loadingBrief && <Loader2 className="w-4 h-4 animate-spin text-slate-400" />}
+
+          {/* Right side — only shown when site exists */}
+          {hasWebsite && (
+            <div className="ml-auto flex items-center gap-2">
+              {/* Page count badge */}
+              <span className="hidden sm:flex items-center gap-1.5 text-xs bg-slate-800 border border-slate-700 text-slate-300 px-2.5 py-1 rounded-full">
+                <FileText className="w-3.5 h-3.5" />
+                {pageCount} page{pageCount !== 1 ? 's' : ''}
+              </span>
+
+              {/* Chat / Pages tab switcher */}
+              <div className="flex items-center bg-slate-800 border border-slate-700 rounded-lg p-0.5">
+                <button
+                  onClick={() => { setRightView('build'); setSettingsOpen(false); }}
+                  className={`flex items-center gap-1.5 px-3 py-1 rounded-md text-xs font-medium transition-colors ${
+                    rightView === 'build' && !settingsOpen
+                      ? 'bg-indigo-600 text-white'
+                      : 'text-slate-400 hover:text-slate-200'
+                  }`}
+                >
+                  <Eye className="w-3.5 h-3.5" /> Preview
+                </button>
+                <button
+                  onClick={() => { setRightView('pages'); setSettingsOpen(false); }}
+                  className={`flex items-center gap-1.5 px-3 py-1 rounded-md text-xs font-medium transition-colors ${
+                    rightView === 'pages' && !settingsOpen
+                      ? 'bg-indigo-600 text-white'
+                      : 'text-slate-400 hover:text-slate-200'
+                  }`}
+                >
+                  <FileText className="w-3.5 h-3.5" /> Pages
+                </button>
+              </div>
+
+              {/* Settings */}
+              <button
+                onClick={() => setSettingsOpen(o => !o)}
+                className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium border transition-colors ${
+                  settingsOpen
+                    ? 'bg-slate-700 border-slate-600 text-white'
+                    : 'border-slate-700 text-slate-400 hover:text-slate-200 hover:border-slate-600'
+                }`}
+              >
+                <Settings className="w-3.5 h-3.5" /> Settings
+              </button>
+
+              {/* Publish toggle */}
+              <button
+                onClick={handleTogglePublish}
+                disabled={isTogglingPublish}
+                className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium border transition-colors ${
+                  brief?.is_published
+                    ? 'bg-emerald-900/50 border-emerald-700 text-emerald-400'
+                    : 'border-slate-700 text-slate-400 hover:border-slate-600 hover:text-slate-200'
+                }`}
+              >
+                {isTogglingPublish
+                  ? <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                  : brief?.is_published
+                    ? <><ToggleRight className="w-3.5 h-3.5" /> Published</>
+                    : <><ToggleLeft className="w-3.5 h-3.5" /> Draft</>
+                }
+              </button>
+
+              {/* Preview link */}
+              {previewUrl && (
+                <a
+                  href={previewUrl}
+                  target="_blank"
+                  rel="noreferrer"
+                  className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium border border-slate-700 text-slate-400 hover:text-slate-200 hover:border-slate-600 transition-colors"
+                >
+                  <ExternalLink className="w-3.5 h-3.5" />
+                </a>
+              )}
+            </div>
+          )}
         </div>
 
-        <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
-          {/* Left: Brief Form */}
-          <div className="lg:col-span-1 space-y-5">
+        {/* ── Main area ───────────────────────────────────────────────────── */}
+        <div className="flex flex-1 overflow-hidden">
 
-            {/* Brief card */}
-            <div className="bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden">
-              <button
-                onClick={() => toggleLeftSection('brief')}
-                className="w-full flex items-center justify-between px-6 py-4 hover:bg-slate-50 transition-colors"
-              >
-                <div className="flex items-center gap-2">
-                  <LayoutDashboard className="w-4 h-4 text-indigo-500" />
-                  <h2 className="text-sm font-bold text-slate-900">Client Brief</h2>
-                </div>
-                <ChevronDown className={`w-4 h-4 text-slate-400 transition-transform ${openLeftSections.brief ? '' : '-rotate-90'}`} />
-              </button>
-            {openLeftSections.brief && <div className="px-6 pb-6 border-t border-slate-100 pt-4">
+          {/* ── Left Panel ────────────────────────────────────────────────── */}
+          <div className="w-[400px] flex-none flex flex-col bg-slate-900 border-r border-slate-800 overflow-hidden">
 
-              {/* Client selector */}
-              <div className="mb-4">
-                <label className="block text-sm font-medium text-slate-700 mb-1">Client</label>
-                <select
-                  className="w-full border border-slate-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500"
-                  value={selectedClientId}
-                  onChange={e => setSelectedClientId(e.target.value)}
-                  disabled={loadingClients}
-                >
-                  <option value="">Select a client...</option>
-                  {clients.map(c => (
-                    <option key={c.id} value={c.id}>{c.business_name}</option>
-                  ))}
-                </select>
-              </div>
-
-              <div className="mb-4">
-                <label className="block text-sm font-medium text-slate-700 mb-1">Business Name</label>
-                <input
-                  type="text"
-                  className="w-full border border-slate-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500"
-                  value={form.business_name}
-                  onChange={e => setForm(f => ({ ...f, business_name: e.target.value }))}
-                  placeholder="Acme Plumbing"
-                />
-              </div>
-
-              <div className="mb-4">
-                <label className="block text-sm font-medium text-slate-700 mb-1">Industry / Niche</label>
-                <input
-                  type="text"
-                  className="w-full border border-slate-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500"
-                  value={form.industry}
-                  onChange={e => setForm(f => ({ ...f, industry: e.target.value }))}
-                  placeholder="Plumbing, HVAC, Interior Design..."
-                />
-              </div>
-
-              <div className="mb-4">
-                <label className="block text-sm font-medium text-slate-700 mb-1">Services Offered</label>
-                <textarea
-                  className="w-full border border-slate-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500 resize-none"
-                  rows={3}
-                  value={form.services_offered}
-                  onChange={e => setForm(f => ({ ...f, services_offered: e.target.value }))}
-                  placeholder="Emergency repairs, water heater install, drain cleaning..."
-                />
-              </div>
-
-              <div className="mb-4">
-                <label className="block text-sm font-medium text-slate-700 mb-1">Location</label>
-                <input
-                  type="text"
-                  className="w-full border border-slate-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500"
-                  value={form.location}
-                  onChange={e => setForm(f => ({ ...f, location: e.target.value }))}
-                  placeholder="Atlanta, GA"
-                />
-              </div>
-
-              <div className="mb-4">
-                <label className="block text-sm font-medium text-slate-700 mb-1">Brand Tone</label>
-                <select
-                  className="w-full border border-slate-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500"
-                  value={form.tone}
-                  onChange={e => setForm(f => ({ ...f, tone: e.target.value as any }))}
-                >
-                  {TONES.map(t => <option key={t} value={t}>{t}</option>)}
-                </select>
-              </div>
-
-              <div className="mb-4">
-                <label className="block text-sm font-medium text-slate-700 mb-1">Primary Brand Color</label>
-                <div className="flex items-center gap-3">
-                  <input
-                    type="color"
-                    className="w-10 h-10 rounded-lg border border-slate-300 cursor-pointer"
-                    value={form.primary_color}
-                    onChange={e => setForm(f => ({ ...f, primary_color: e.target.value }))}
-                  />
-                  <span className="text-sm text-slate-500 font-mono">{form.primary_color}</span>
-                </div>
-              </div>
-
-              <div className="mb-2">
-                <label className="block text-sm font-medium text-slate-700 mb-1">
-                  Art Direction <span className="text-slate-400 font-normal">(optional)</span>
-                </label>
-                <textarea
-                  className="w-full border border-slate-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500 resize-none"
-                  rows={2}
-                  value={form.art_direction}
-                  onChange={e => setForm(f => ({ ...f, art_direction: e.target.value }))}
-                  placeholder="Luxurious, minimal, lots of white space..."
-                />
-              </div>
-            </div>}{/* end brief collapsible */}
-            </div>
-
-            {/* Pages card */}
-            <div className="bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden">
-              <button
-                onClick={() => toggleLeftSection('pages')}
-                className="w-full flex items-center justify-between px-6 py-4 hover:bg-slate-50 transition-colors"
-              >
-                <div className="flex items-center gap-2">
-                  <FileText className="w-4 h-4 text-indigo-500" />
-                  <h2 className="text-sm font-bold text-slate-900">Pages to Generate</h2>
-                  <span className="text-xs bg-indigo-100 text-indigo-700 px-1.5 py-0.5 rounded-full font-semibold">{selectedPages.size}</span>
-                </div>
-                <ChevronDown className={`w-4 h-4 text-slate-400 transition-transform ${openLeftSections.pages ? '' : '-rotate-90'}`} />
-              </button>
-            {openLeftSections.pages && <div className="px-6 pb-6 border-t border-slate-100 pt-4">
-              <p className="text-xs text-slate-400 mb-4">Select which pages AI should build. Home is always included.</p>
-              <div className="space-y-2">
-                {ALL_PAGE_OPTIONS.map(option => {
-                  const isSelected = selectedPages.has(option.id);
-                  const isLocked = option.locked;
-                  return (
-                    <button
-                      key={option.id}
-                      type="button"
-                      onClick={() => !isLocked && togglePage(option.id)}
-                      disabled={isLocked}
-                      className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl border text-left transition-colors ${
-                        isSelected
-                          ? 'border-indigo-300 bg-indigo-50'
-                          : 'border-slate-200 bg-white hover:bg-slate-50'
-                      } ${isLocked ? 'opacity-75 cursor-default' : 'cursor-pointer'}`}
-                    >
-                      <div
-                        className={`w-5 h-5 rounded flex items-center justify-center flex-shrink-0 border-2 transition-colors ${
-                          isSelected ? 'bg-indigo-600 border-indigo-600' : 'border-slate-300 bg-white'
-                        }`}
-                      >
-                        {isSelected && <Check className="w-3 h-3 text-white" />}
-                      </div>
-                      <div className="flex-1 min-w-0">
-                        <div className="flex items-center gap-2">
-                          <span className={`text-sm font-medium ${isSelected ? 'text-indigo-700' : 'text-slate-700'}`}>
-                            {option.name}
-                          </span>
-                          {isLocked && (
-                            <span className="text-xs text-slate-400 font-mono">(always on)</span>
-                          )}
-                        </div>
-                        <p className="text-xs text-slate-400 mt-0.5">{option.description}</p>
-                      </div>
-                    </button>
-                  );
-                })}
-              </div>
-              <p className="text-xs text-slate-400 mt-3">
-                {selectedPages.size} page{selectedPages.size !== 1 ? 's' : ''} selected
-              </p>
-            </div>}{/* end pages collapsible */}
-            </div>
-
-            {/* Premium Features card */}
-            <div className="bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden">
-              <button
-                onClick={() => toggleLeftSection('features')}
-                className="w-full flex items-center justify-between px-6 py-4 hover:bg-slate-50 transition-colors"
-              >
-                <div className="flex items-center gap-2">
-                  <Sparkles className="w-4 h-4 text-amber-500" />
-                  <h2 className="text-sm font-bold text-slate-900">Premium Features</h2>
-                  {selectedPremiumFeatures.size > 0 && (
-                    <span className="text-xs bg-amber-100 text-amber-700 px-1.5 py-0.5 rounded-full font-semibold">{selectedPremiumFeatures.size} on</span>
-                  )}
-                </div>
-                <ChevronDown className={`w-4 h-4 text-slate-400 transition-transform ${openLeftSections.features ? '' : '-rotate-90'}`} />
-              </button>
-            {openLeftSections.features && <div className="px-6 pb-6 border-t border-slate-100 pt-4">
-              <p className="text-xs text-slate-400 mb-5">
-                Select add-ons to enable for this client's website. These are billed separately.
-              </p>
-
-              <div className="space-y-5">
-                {PREMIUM_FEATURE_GROUPS.map(group => {
-                  const featuresInGroup = PREMIUM_FEATURE_OPTIONS.filter(f => f.group === group);
-                  const selectedInGroup = featuresInGroup.filter(f => selectedPremiumFeatures.has(f.id)).length;
-                  return (
-                    <div key={group}>
-                      {/* Collapsible Group header */}
-                      <button
-                        type="button"
-                        onClick={() => toggleFeatureGroup(group)}
-                        className="w-full flex items-center gap-2 mb-2 hover:opacity-80 transition-opacity"
-                      >
-                        <span className="text-slate-400">{PREMIUM_GROUP_ICONS[group]}</span>
-                        <span className="text-xs font-semibold text-slate-500 uppercase tracking-wider">{group}</span>
-                        {selectedInGroup > 0 && (
-                          <span className="text-xs bg-amber-100 text-amber-700 font-medium px-2 py-0.5 rounded-full">
-                            {selectedInGroup} on
-                          </span>
-                        )}
-                        <ChevronDown className={`ml-auto w-3.5 h-3.5 text-slate-400 transition-transform ${collapsedFeatureGroups[group] ? '-rotate-90' : ''}`} />
-                      </button>
-
-                      {/* Feature checkboxes */}
-                      {!collapsedFeatureGroups[group] && <div className="space-y-2">
-                        {featuresInGroup.map(feature => {
-                          const isSelected = selectedPremiumFeatures.has(feature.id);
-                          return (
-                            <button
-                              key={feature.id}
-                              type="button"
-                              onClick={() => togglePremiumFeature(feature.id)}
-                              className={`w-full flex items-start gap-3 px-4 py-3 rounded-xl border text-left transition-colors ${
-                                isSelected
-                                  ? 'border-amber-300 bg-amber-50'
-                                  : 'border-slate-200 bg-white hover:bg-slate-50'
-                              }`}
-                            >
-                              <div
-                                className={`w-5 h-5 rounded flex items-center justify-center flex-shrink-0 border-2 mt-0.5 transition-colors ${
-                                  isSelected ? 'bg-amber-500 border-amber-500' : 'border-slate-300 bg-white'
-                                }`}
-                              >
-                                {isSelected && <Check className="w-3 h-3 text-white" />}
-                              </div>
-                              <div className="flex-1 min-w-0">
-                                <div className="flex items-center gap-2 flex-wrap">
-                                  <span className={`text-sm font-medium ${isSelected ? 'text-amber-800' : 'text-slate-700'}`}>
-                                    {feature.name}
-                                  </span>
-                                  {feature.badge && (
-                                    <span className={`text-xs font-medium px-1.5 py-0.5 rounded ${
-                                      feature.badge === 'Popular'
-                                        ? 'bg-rose-100 text-rose-600'
-                                        : 'bg-emerald-100 text-emerald-700'
-                                    }`}>
-                                      {feature.badge}
-                                    </span>
-                                  )}
-                                </div>
-                                <p className="text-xs text-slate-400 mt-0.5 leading-relaxed">{feature.description}</p>
-                              </div>
-                            </button>
-                          );
-                        })}
-                      </div>}
+            {/* ── State 1: Type Picker ──────────────────────────────────── */}
+            {effectivePanelState === 'type-picker' && (
+              <div className="flex-1 overflow-y-auto p-5">
+                {!selectedClientId ? (
+                  <div className="flex flex-col items-center justify-center h-full text-center py-16">
+                    <Globe className="w-12 h-12 text-slate-700 mb-4" />
+                    <p className="text-slate-400 text-sm">Select a client to get started</p>
+                  </div>
+                ) : (
+                  <>
+                    <div className="mb-5">
+                      <h2 className="text-white font-semibold text-base">What kind of website?</h2>
+                      <p className="text-slate-400 text-sm mt-1">Choose a type to get started</p>
                     </div>
-                  );
-                })}
-              </div>
-
-              {selectedPremiumFeatures.size > 0 && (
-                <p className="text-xs text-amber-600 font-medium mt-4">
-                  {selectedPremiumFeatures.size} premium feature{selectedPremiumFeatures.size !== 1 ? 's' : ''} enabled
-                </p>
-              )}
-            </div>}{/* end features collapsible */}
-            </div>
-
-            {/* Assets card */}
-            {selectedClientId && (
-              <div className="bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden">
-                <button
-                  onClick={() => toggleLeftSection('assets')}
-                  className="w-full flex items-center justify-between px-6 py-4 hover:bg-slate-50 transition-colors"
-                >
-                  <div className="flex items-center gap-2">
-                    <ImageIcon className="w-4 h-4 text-indigo-500" />
-                    <h2 className="text-sm font-bold text-slate-900">Assets</h2>
-                    {(logoUrl || heroUrl) && <span className="text-xs bg-emerald-100 text-emerald-700 px-1.5 py-0.5 rounded-full font-semibold">Uploaded</span>}
-                  </div>
-                  <ChevronDown className={`w-4 h-4 text-slate-400 transition-transform ${openLeftSections.assets ? '' : '-rotate-90'}`} />
-                </button>
-              {openLeftSections.assets && <div className="px-6 pb-6 border-t border-slate-100 pt-4">
-                <p className="text-xs text-slate-400 mb-4">Upload images — saved instantly, no regeneration needed.</p>
-
-                {uploadError && (
-                  <div className="mb-3 p-3 bg-red-50 border border-red-200 rounded-lg text-sm text-red-700">
-                    {uploadError}
-                  </div>
+                    <div className="grid grid-cols-2 gap-2.5">
+                      {WEBSITE_TYPES.map(type => (
+                        <button
+                          key={type.label}
+                          onClick={() => {
+                            setForm(f => ({ ...f, industry: type.industry }));
+                            setPanelState('brief-form');
+                          }}
+                          className="flex flex-col items-start gap-1 p-3.5 rounded-xl bg-slate-800 border border-slate-700 hover:border-indigo-500 hover:bg-slate-750 transition-all text-left group"
+                        >
+                          <span className="text-2xl leading-none mb-1">{type.emoji}</span>
+                          <span className="text-sm font-semibold text-white group-hover:text-indigo-300 transition-colors">{type.label}</span>
+                          <span className="text-xs text-slate-400 leading-snug">{type.desc}</span>
+                        </button>
+                      ))}
+                    </div>
+                  </>
                 )}
-
-                {/* Logo */}
-                <div className="mb-4">
-                  <label className="block text-sm font-medium text-slate-700 mb-2">Logo</label>
-                  {logoUrl ? (
-                    <div className="flex items-center gap-3 mb-2">
-                      <img src={logoUrl} alt="Logo" className="h-10 w-auto object-contain rounded border border-slate-200" />
-                      <button
-                        onClick={() => logoInputRef.current?.click()}
-                        className="text-xs text-indigo-600 hover:underline"
-                      >
-                        Replace
-                      </button>
-                    </div>
-                  ) : (
-                    <button
-                      onClick={() => logoInputRef.current?.click()}
-                      disabled={uploadingLogo}
-                      className="w-full flex items-center justify-center gap-2 py-6 border-2 border-dashed border-slate-300 rounded-xl text-sm text-slate-500 hover:border-indigo-400 hover:text-indigo-600 transition-colors disabled:opacity-60"
-                    >
-                      {uploadingLogo ? (
-                        <><Loader2 className="w-4 h-4 animate-spin" /> Uploading...</>
-                      ) : (
-                        <><Upload className="w-4 h-4" /> Upload Logo</>
-                      )}
-                    </button>
-                  )}
-                  <input
-                    ref={logoInputRef}
-                    type="file"
-                    accept="image/*"
-                    className="hidden"
-                    onChange={e => {
-                      const file = e.target.files?.[0];
-                      if (file) handleImageUpload(file, 'logo');
-                      e.target.value = '';
-                    }}
-                  />
-                </div>
-
-                {/* Hero Image */}
-                <div>
-                  <label className="block text-sm font-medium text-slate-700 mb-2">Hero Image</label>
-                  {heroUrl ? (
-                    <div className="mb-2">
-                      <img
-                        src={heroUrl}
-                        alt="Hero"
-                        className="w-full h-28 object-cover rounded-xl border border-slate-200"
-                      />
-                      <button
-                        onClick={() => heroInputRef.current?.click()}
-                        className="text-xs text-indigo-600 hover:underline mt-1"
-                      >
-                        Replace
-                      </button>
-                    </div>
-                  ) : (
-                    <button
-                      onClick={() => heroInputRef.current?.click()}
-                      disabled={uploadingHero}
-                      className="w-full flex items-center justify-center gap-2 py-6 border-2 border-dashed border-slate-300 rounded-xl text-sm text-slate-500 hover:border-indigo-400 hover:text-indigo-600 transition-colors disabled:opacity-60"
-                    >
-                      {uploadingHero ? (
-                        <><Loader2 className="w-4 h-4 animate-spin" /> Uploading...</>
-                      ) : (
-                        <><ImageIcon className="w-4 h-4" /> Upload Hero Image</>
-                      )}
-                    </button>
-                  )}
-                  <input
-                    ref={heroInputRef}
-                    type="file"
-                    accept="image/*"
-                    className="hidden"
-                    onChange={e => {
-                      const file = e.target.files?.[0];
-                      if (file) handleImageUpload(file, 'hero');
-                      e.target.value = '';
-                    }}
-                  />
-                </div>
-              </div>}{/* end assets collapsible */}
               </div>
             )}
 
-            {/* Generate button */}
-            <button
-              onClick={handleGenerate}
-              disabled={
-                isGenerating ||
-                !selectedClientId ||
-                !form.business_name ||
-                !form.industry ||
-                !form.services_offered ||
-                !form.location
-              }
-              className="w-full flex items-center justify-center gap-2 px-4 py-3 bg-indigo-600 text-white font-semibold rounded-xl hover:bg-indigo-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
-            >
-              {isGenerating ? (
-                <><Loader2 className="w-4 h-4 animate-spin" /> Generating {selectedPages.size} pages...</>
-              ) : hasWebsite ? (
-                <><RefreshCw className="w-4 h-4" /> Regenerate Website</>
-              ) : (
-                <><Wand2 className="w-4 h-4" /> Generate Website</>
-              )}
-            </button>
-          </div>
+            {/* ── State 2: Brief Form ───────────────────────────────────── */}
+            {effectivePanelState === 'brief-form' && (
+              <div className="flex-1 overflow-y-auto">
+                <div className="p-5 space-y-4">
+                  {/* Back to type picker */}
+                  {!brief && (
+                    <button
+                      onClick={() => setPanelState('type-picker')}
+                      className="flex items-center gap-1.5 text-xs text-slate-400 hover:text-slate-200 transition-colors"
+                    >
+                      <ChevronRight className="w-3.5 h-3.5 rotate-180" /> Back
+                    </button>
+                  )}
 
-          {/* Right: Output */}
-          <div className="lg:col-span-2">
-            {!selectedClientId ? (
-              <div className="bg-white rounded-2xl border border-slate-200 shadow-sm p-16 flex flex-col items-center text-center">
-                <Globe className="w-12 h-12 text-slate-300 mb-4" />
-                <p className="text-slate-500">Select a client and fill in the brief to get started.</p>
-              </div>
-            ) : loadingBrief ? (
-              <div className="bg-white rounded-2xl border border-slate-200 shadow-sm p-16 flex items-center justify-center">
-                <Loader2 className="w-8 h-8 animate-spin text-indigo-600" />
-              </div>
-            ) : isGenerating ? (
-              <div className="bg-white rounded-2xl border border-slate-200 shadow-sm p-16 flex flex-col items-center text-center">
-                <div className="relative mb-6">
-                  <Loader2 className="w-14 h-14 animate-spin text-indigo-600" />
+                  <div>
+                    <h2 className="text-white font-semibold text-base">Site Brief</h2>
+                    <p className="text-slate-400 text-xs mt-0.5">Tell the AI about this business</p>
+                  </div>
+
+                  {genError && (
+                    <div className="flex items-start gap-2 p-3 bg-red-950/50 border border-red-800 rounded-xl text-xs text-red-400">
+                      <AlertTriangle className="w-4 h-4 flex-shrink-0 mt-0.5" />
+                      <span>{genError}</span>
+                    </div>
+                  )}
+
+                  {/* Business Name */}
+                  <div>
+                    <label className="block text-xs font-medium text-slate-300 mb-1.5">Business Name *</label>
+                    <input
+                      type="text"
+                      className="w-full bg-slate-800 border border-slate-700 text-slate-100 placeholder-slate-500 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-1 focus:ring-indigo-500 focus:border-indigo-500 transition-colors"
+                      value={form.business_name}
+                      onChange={e => setForm(f => ({ ...f, business_name: e.target.value }))}
+                      placeholder="Acme Plumbing Co."
+                    />
+                  </div>
+
+                  {/* Industry */}
+                  <div>
+                    <label className="block text-xs font-medium text-slate-300 mb-1.5">Industry *</label>
+                    <input
+                      type="text"
+                      className="w-full bg-slate-800 border border-slate-700 text-slate-100 placeholder-slate-500 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-1 focus:ring-indigo-500 focus:border-indigo-500 transition-colors"
+                      value={form.industry}
+                      onChange={e => setForm(f => ({ ...f, industry: e.target.value }))}
+                      placeholder="Plumbing, HVAC, Interior Design..."
+                    />
+                  </div>
+
+                  {/* Location */}
+                  <div>
+                    <label className="block text-xs font-medium text-slate-300 mb-1.5">Location *</label>
+                    <input
+                      type="text"
+                      className="w-full bg-slate-800 border border-slate-700 text-slate-100 placeholder-slate-500 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-1 focus:ring-indigo-500 focus:border-indigo-500 transition-colors"
+                      value={form.location}
+                      onChange={e => setForm(f => ({ ...f, location: e.target.value }))}
+                      placeholder="Atlanta, GA"
+                    />
+                  </div>
+
+                  {/* Services */}
+                  <div>
+                    <label className="block text-xs font-medium text-slate-300 mb-1.5">Services Offered *</label>
+                    <textarea
+                      className="w-full bg-slate-800 border border-slate-700 text-slate-100 placeholder-slate-500 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-1 focus:ring-indigo-500 focus:border-indigo-500 transition-colors resize-none"
+                      rows={3}
+                      value={form.services_offered}
+                      onChange={e => setForm(f => ({ ...f, services_offered: e.target.value }))}
+                      placeholder="Emergency repairs, water heater install, drain cleaning..."
+                    />
+                  </div>
+
+                  {/* Brand Tone */}
+                  <div>
+                    <label className="block text-xs font-medium text-slate-300 mb-1.5">Brand Tone</label>
+                    <div className="flex flex-wrap gap-2">
+                      {TONES.map(t => (
+                        <button
+                          key={t}
+                          type="button"
+                          onClick={() => setForm(f => ({ ...f, tone: t }))}
+                          className={`px-3 py-1.5 rounded-full text-xs font-medium border transition-colors ${
+                            form.tone === t
+                              ? 'bg-indigo-600 border-indigo-500 text-white'
+                              : 'bg-slate-800 border-slate-700 text-slate-400 hover:border-slate-500 hover:text-slate-300'
+                          }`}
+                        >
+                          {t}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+
+                  {/* Brand Color */}
+                  <div>
+                    <label className="block text-xs font-medium text-slate-300 mb-1.5">Brand Color</label>
+                    <div className="flex items-center gap-2">
+                      <input
+                        type="color"
+                        className="w-9 h-9 rounded-lg border border-slate-700 bg-slate-800 cursor-pointer p-0.5"
+                        value={form.primary_color}
+                        onChange={e => setForm(f => ({ ...f, primary_color: e.target.value }))}
+                      />
+                      <input
+                        type="text"
+                        className="flex-1 bg-slate-800 border border-slate-700 text-slate-100 placeholder-slate-500 rounded-lg px-3 py-2 text-sm font-mono focus:outline-none focus:ring-1 focus:ring-indigo-500 transition-colors"
+                        value={form.primary_color}
+                        onChange={e => setForm(f => ({ ...f, primary_color: e.target.value }))}
+                        maxLength={7}
+                      />
+                    </div>
+                  </div>
+
+                  {/* Design Notes */}
+                  <div>
+                    <label className="block text-xs font-medium text-slate-300 mb-1.5">
+                      Design Notes <span className="text-slate-500 font-normal">(optional)</span>
+                    </label>
+                    <textarea
+                      className="w-full bg-slate-800 border border-slate-700 text-slate-100 placeholder-slate-500 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-1 focus:ring-indigo-500 focus:border-indigo-500 transition-colors resize-none"
+                      rows={2}
+                      value={form.art_direction}
+                      onChange={e => setForm(f => ({ ...f, art_direction: e.target.value }))}
+                      placeholder="Luxurious, minimal, lots of white space..."
+                    />
+                  </div>
+
+                  {/* Pages */}
+                  <div>
+                    <label className="block text-xs font-medium text-slate-300 mb-2">Pages</label>
+                    <div className="flex flex-wrap gap-1.5">
+                      {ALL_PAGE_OPTIONS.map(option => {
+                        const isSelected = selectedPages.has(option.id);
+                        const isLocked   = option.locked;
+                        return (
+                          <button
+                            key={option.id}
+                            type="button"
+                            onClick={() => !isLocked && togglePage(option.id)}
+                            disabled={isLocked}
+                            className={`px-3 py-1.5 rounded-full text-xs font-medium border transition-colors ${
+                              isSelected
+                                ? 'bg-indigo-600 border-indigo-500 text-white'
+                                : 'bg-slate-800 border-slate-700 text-slate-400 hover:border-slate-500 hover:text-slate-300'
+                            } ${isLocked ? 'opacity-70 cursor-default' : 'cursor-pointer'}`}
+                          >
+                            {option.name}
+                            {isLocked && <span className="ml-1 text-indigo-300 opacity-60">●</span>}
+                          </button>
+                        );
+                      })}
+                    </div>
+                  </div>
                 </div>
-                <p className="text-slate-700 font-semibold text-lg">AI is designing your website...</p>
-                <p className="text-slate-400 text-sm mt-2">Building {selectedPages.size} pages. This takes 30–60 seconds.</p>
-                <div className="mt-6 flex flex-wrap gap-2 justify-center">
+
+                {/* Generate button — sticky at bottom */}
+                <div className="flex-none p-4 border-t border-slate-800 bg-slate-900">
+                  <button
+                    onClick={() => handleGenerate()}
+                    disabled={!isFormValid || isGenerating || !selectedClientId}
+                    className="w-full flex items-center justify-center gap-2 px-4 py-3 bg-indigo-600 hover:bg-indigo-500 disabled:opacity-40 disabled:cursor-not-allowed text-white font-semibold rounded-xl transition-colors text-sm"
+                  >
+                    <Wand2 className="w-4 h-4" />
+                    Generate Website ({selectedPages.size} page{selectedPages.size !== 1 ? 's' : ''})
+                  </button>
+                </div>
+              </div>
+            )}
+
+            {/* ── State 3: Generating ───────────────────────────────────── */}
+            {effectivePanelState === 'generating' && (
+              <div className="flex-1 flex flex-col items-center justify-center text-center p-8 gap-5">
+                <div className="relative">
+                  <div className="w-16 h-16 rounded-full border-2 border-slate-700 flex items-center justify-center">
+                    <Loader2 className="w-8 h-8 text-indigo-400 animate-spin" />
+                  </div>
+                  <Sparkles className="absolute -top-1 -right-1 w-4 h-4 text-indigo-400 animate-pulse" />
+                </div>
+                <div>
+                  <p className="text-white font-semibold text-base">Building your website...</p>
+                  <p className="text-slate-400 text-sm mt-1">This takes about 30–60 seconds</p>
+                </div>
+                <div className="flex flex-wrap gap-1.5 justify-center">
                   {Array.from(selectedPages).map(pid => {
                     const opt = ALL_PAGE_OPTIONS.find(o => o.id === pid);
                     return opt ? (
-                      <span key={pid} className="px-3 py-1 bg-indigo-50 text-indigo-600 rounded-full text-xs font-medium">
+                      <span key={pid} className="px-2.5 py-1 bg-indigo-900/50 border border-indigo-800 text-indigo-300 rounded-full text-xs font-medium">
                         {opt.name}
                       </span>
                     ) : null;
                   })}
                 </div>
               </div>
-            ) : error ? (
-              <div className="bg-red-50 border border-red-200 rounded-2xl p-8">
-                <div className="flex items-start gap-3">
-                  <AlertTriangle className="w-6 h-6 text-red-500 flex-shrink-0 mt-0.5" />
-                  <div>
-                    <p className="font-semibold text-red-800">Generation failed</p>
-                    <p className="text-red-600 text-sm mt-1">{error}</p>
-                    <button onClick={() => setError(null)} className="mt-3 text-sm text-red-700 underline">
-                      Dismiss
-                    </button>
+            )}
+
+            {/* ── State 4: Chat Mode ────────────────────────────────────── */}
+            {effectivePanelState === 'chat' && (
+              <div className="flex-1 flex flex-col overflow-hidden">
+                {/* Message thread */}
+                <div className="flex-1 overflow-y-auto p-4 space-y-3">
+                  {messages.length === 0 && (
+                    <div className="flex flex-col items-center justify-center py-10 text-center gap-3">
+                      <div className="w-10 h-10 rounded-xl bg-indigo-900/50 border border-indigo-800 flex items-center justify-center">
+                        <MessageSquare className="w-5 h-5 text-indigo-400" />
+                      </div>
+                      <div>
+                        <p className="text-slate-300 text-sm font-medium">Site generated!</p>
+                        <p className="text-slate-500 text-xs mt-1">Ask me to make changes or refine the design</p>
+                      </div>
+                    </div>
+                  )}
+                  {messages.map(msg => (
+                    <div
+                      key={msg.id}
+                      className={`flex ${msg.role === 'user' ? 'justify-end' : 'justify-start'}`}
+                    >
+                      <div
+                        className={`max-w-[85%] rounded-2xl px-3.5 py-2.5 text-sm leading-relaxed ${
+                          msg.role === 'user'
+                            ? 'bg-indigo-600 text-white rounded-br-sm'
+                            : 'bg-slate-800 text-slate-200 rounded-bl-sm'
+                        }`}
+                      >
+                        {msg.content}
+                      </div>
+                    </div>
+                  ))}
+                  {isChatLoading && (
+                    <div className="flex justify-start">
+                      <div className="bg-slate-800 rounded-2xl rounded-bl-sm px-3.5 py-2.5 flex items-center gap-2">
+                        <Loader2 className="w-3.5 h-3.5 text-slate-400 animate-spin" />
+                        <span className="text-sm text-slate-400">Thinking...</span>
+                      </div>
+                    </div>
+                  )}
+                  <div ref={chatEndRef} />
+                </div>
+
+                {/* Quick prompt chips */}
+                <div className="flex-none px-3 pb-2">
+                  <div className="flex gap-1.5 overflow-x-auto pb-1 scrollbar-none">
+                    {QUICK_PROMPTS.map(p => (
+                      <button
+                        key={p}
+                        onClick={() => handleChatSend(p)}
+                        disabled={isChatLoading}
+                        className="flex-none px-3 py-1.5 bg-slate-800 border border-slate-700 text-slate-300 text-xs rounded-full hover:border-indigo-600 hover:text-indigo-300 transition-colors disabled:opacity-40 whitespace-nowrap"
+                      >
+                        {p}
+                      </button>
+                    ))}
                   </div>
                 </div>
-              </div>
-            ) : hasWebsite ? (
-              <div className="space-y-4">
-                {/* Actions bar */}
-                <div className="bg-white rounded-2xl border border-slate-200 shadow-sm p-4 flex flex-wrap items-center gap-3">
-                  {statusBadge(brief!.generation_status)}
-                  <span className="text-sm text-slate-500 font-mono">/site/{brief!.client_slug}</span>
 
-                  <div className="flex items-center gap-2 ml-auto flex-wrap">
+                {/* Chat input */}
+                <div className="flex-none p-3 border-t border-slate-800">
+                  <div className="flex items-end gap-2 bg-slate-800 border border-slate-700 rounded-xl p-2 focus-within:border-indigo-500 transition-colors">
+                    <textarea
+                      ref={chatInputRef}
+                      className="flex-1 bg-transparent text-slate-100 placeholder-slate-500 text-sm resize-none focus:outline-none leading-relaxed min-h-[36px] max-h-[100px]"
+                      placeholder="Ask me to change anything..."
+                      value={chatInput}
+                      onChange={e => setChatInput(e.target.value)}
+                      onKeyDown={e => {
+                        if (e.key === 'Enter' && !e.shiftKey) {
+                          e.preventDefault();
+                          handleChatSend();
+                        }
+                      }}
+                      rows={1}
+                    />
                     <button
-                      onClick={handleTogglePublish}
-                      disabled={isTogglingPublish}
-                      className="flex items-center gap-2 px-3 py-1.5 rounded-lg text-sm font-medium border transition-colors"
-                      style={
-                        brief!.is_published
-                          ? { borderColor: '#10b981', color: '#059669', backgroundColor: '#f0fdf4' }
-                          : { borderColor: '#e2e8f0', color: '#64748b', backgroundColor: '#f8fafc' }
-                      }
+                      onClick={() => handleChatSend()}
+                      disabled={!chatInput.trim() || isChatLoading}
+                      className="flex-none w-8 h-8 flex items-center justify-center bg-indigo-600 hover:bg-indigo-500 disabled:opacity-40 disabled:cursor-not-allowed rounded-lg transition-colors"
                     >
-                      {brief!.is_published ? <><ToggleRight className="w-4 h-4" /> Published</> : <><ToggleLeft className="w-4 h-4" /> Draft</>}
+                      <Send className="w-3.5 h-3.5 text-white" />
                     </button>
+                  </div>
+                  <p className="text-xs text-slate-600 mt-1.5 text-center">Enter to send · Shift+Enter for new line</p>
+                </div>
+              </div>
+            )}
+          </div>
 
-                    {previewUrl && (
+          {/* ── Right Panel ───────────────────────────────────────────────── */}
+          <div className="flex-1 relative overflow-hidden bg-slate-950">
+
+            {/* ── Build View (iframe) ──────────────────────────────────── */}
+            {rightView === 'build' && !settingsOpen && (
+              <>
+                {hasWebsite && previewUrl ? (
+                  <div className="flex flex-col h-full p-4 gap-3">
+                    {/* Fake browser chrome */}
+                    <div className="flex-none flex items-center gap-2 bg-slate-900 border border-slate-800 rounded-t-xl px-4 py-2.5">
+                      <div className="flex gap-1.5">
+                        <span className="w-3 h-3 rounded-full bg-red-500/70" />
+                        <span className="w-3 h-3 rounded-full bg-yellow-500/70" />
+                        <span className="w-3 h-3 rounded-full bg-green-500/70" />
+                      </div>
+                      <div className="flex-1 flex items-center bg-slate-800 border border-slate-700 rounded-md px-3 py-1 mx-2 gap-2">
+                        <span className="text-xs text-slate-400 truncate font-mono">
+                          {window.location.origin}{previewUrl}
+                        </span>
+                      </div>
                       <a
                         href={previewUrl}
                         target="_blank"
                         rel="noreferrer"
-                        className="flex items-center gap-2 px-3 py-1.5 rounded-lg text-sm font-medium border border-slate-200 text-slate-600 hover:bg-slate-50 transition-colors"
+                        className="text-slate-500 hover:text-slate-300 transition-colors"
                       >
-                        <Eye className="w-4 h-4" /> Preview
+                        <ExternalLink className="w-3.5 h-3.5" />
                       </a>
-                    )}
-
-                    <button
-                      onClick={copyUrl}
-                      className="flex items-center gap-2 px-3 py-1.5 rounded-lg text-sm font-medium border border-slate-200 text-slate-600 hover:bg-slate-50 transition-colors"
-                    >
-                      {copied ? <><CheckCircle className="w-4 h-4 text-emerald-500" /> Copied!</> : <><Copy className="w-4 h-4" /> Copy URL</>}
-                    </button>
-                  </div>
-                </div>
-
-                {/* Global settings */}
-                <div className="bg-white rounded-2xl border border-slate-200 shadow-sm p-5">
-                  <h3 className="font-semibold text-slate-900 mb-3 text-sm uppercase tracking-wide">Global Settings</h3>
-                  <div className="grid grid-cols-2 gap-x-6 gap-y-2 text-sm text-slate-600">
-                    <span><span className="font-medium text-slate-700">Font:</span> {brief!.website_json!.global.font_heading}</span>
-                    <span><span className="font-medium text-slate-700">Color:</span> {brief!.website_json!.global.primary_color}</span>
-                    <span><span className="font-medium text-slate-700">Phone:</span> {brief!.website_json!.global.phone || '—'}</span>
-                    <span><span className="font-medium text-slate-700">Address:</span> {brief!.website_json!.global.address || '—'}</span>
-                    {logoUrl && <span className="col-span-2 flex items-center gap-2"><span className="font-medium text-slate-700">Logo:</span> <img src={logoUrl} alt="logo" className="h-6" /></span>}
-                  </div>
-                </div>
-
-                {/* Custom Domain card */}
-                <div className="bg-white rounded-2xl border border-slate-200 shadow-sm p-5">
-                  <div className="flex items-center gap-2 mb-1">
-                    <Link className="w-4 h-4 text-indigo-500" />
-                    <h3 className="font-semibold text-slate-900 text-sm uppercase tracking-wide">Custom Domain</h3>
-                  </div>
-                  <p className="text-xs text-slate-400 mb-4">
-                    Connect a domain the client purchased (e.g. Namecheap, Squarespace). Once set, visitors to that domain will see this site.
-                  </p>
-
-                  <div className="flex gap-2 mb-3">
-                    <input
-                      type="text"
-                      className="flex-1 border border-slate-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500 font-mono"
-                      placeholder="www.clientsite.com"
-                      value={customDomainInput}
-                      onChange={e => setCustomDomainInput(e.target.value.trim().toLowerCase())}
+                    </div>
+                    <iframe
+                      src={previewUrl}
+                      className="flex-1 w-full rounded-b-xl border-x border-b border-slate-800 bg-white"
+                      title="Site Preview"
                     />
-                    <button
-                      onClick={handleSaveDomain}
-                      disabled={savingDomain}
-                      className="flex items-center gap-1.5 px-4 py-2 bg-indigo-600 text-white text-sm font-medium rounded-lg hover:bg-indigo-700 disabled:opacity-50 transition-colors"
-                    >
-                      {savingDomain ? (
-                        <Loader2 className="w-3.5 h-3.5 animate-spin" />
-                      ) : domainSaved ? (
-                        <><CheckCircle className="w-3.5 h-3.5" /> Saved</>
-                      ) : (
-                        <><Save className="w-3.5 h-3.5" /> Save</>
-                      )}
-                    </button>
                   </div>
-
-                  {domainError && (
-                    <p className="text-xs text-red-600 mb-3">{domainError}</p>
-                  )}
-
-                  {brief?.custom_domain && (
-                    <p className="text-xs text-emerald-600 mb-3 flex items-center gap-1">
-                      <CheckCircle className="w-3.5 h-3.5" />
-                      Connected: <span className="font-mono">{brief.custom_domain}</span>
-                    </p>
-                  )}
-
-                  {/* DNS Instructions */}
-                  <button
-                    onClick={() => setShowDnsInstructions(o => !o)}
-                    className="flex items-center gap-1.5 text-xs text-indigo-600 hover:underline"
-                  >
-                    <Info className="w-3.5 h-3.5" />
-                    {showDnsInstructions ? 'Hide' : 'Show'} DNS setup instructions
-                  </button>
-
-                  {showDnsInstructions && (
-                    <div className="mt-3 p-4 bg-slate-50 rounded-xl border border-slate-200 text-xs text-slate-600 space-y-3">
-                      <p className="font-semibold text-slate-700">Client DNS setup (Namecheap, Squarespace, etc.)</p>
-                      <ol className="space-y-2 list-decimal list-inside">
-                        <li>Log in to their domain registrar and go to <strong>DNS settings</strong>.</li>
-                        <li>
-                          Add a <strong>CNAME record</strong>:
-                          <div className="mt-1 font-mono bg-white border border-slate-200 rounded p-2 text-xs">
-                            <div>Host: <strong>www</strong></div>
-                            <div>Value: <strong>cname.vercel-dns.com</strong></div>
-                          </div>
-                        </li>
-                        <li>
-                          For the root domain (<span className="font-mono">@</span>), add an <strong>A record</strong>:
-                          <div className="mt-1 font-mono bg-white border border-slate-200 rounded p-2 text-xs">
-                            <div>Host: <strong>@</strong></div>
-                            <div>Value: <strong>76.76.21.21</strong></div>
-                          </div>
-                        </li>
-                        <li>
-                          In your <strong>Vercel project settings → Domains</strong>, add the client's domain. Vercel will auto-provision SSL.
-                        </li>
-                        <li>DNS changes take up to <strong>24–48 hours</strong> to propagate.</li>
-                      </ol>
+                ) : (
+                  <div className="flex flex-col items-center justify-center h-full text-center gap-4 p-8">
+                    <div className="w-16 h-16 rounded-2xl bg-slate-900 border border-slate-800 flex items-center justify-center">
+                      <Globe className="w-8 h-8 text-slate-700" />
                     </div>
-                  )}
-                </div>
-
-                {/* Registrar Login card */}
-                <div className="bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden">
-                  <div className="px-5 py-4 border-b border-slate-100 flex items-center gap-2">
-                    <Key className="w-4 h-4 text-indigo-500" />
-                    <h3 className="font-semibold text-slate-900 text-sm uppercase tracking-wide">Registrar Login</h3>
-                    {domainCreds?.registrar_name && (
-                      <span className="ml-auto text-xs bg-emerald-100 text-emerald-700 font-medium px-2 py-0.5 rounded-full">
-                        {domainCreds.registrar_name}
-                      </span>
-                    )}
+                    <div>
+                      <p className="text-slate-400 text-sm font-medium">No site yet</p>
+                      <p className="text-slate-600 text-xs mt-1">Fill in the brief and click Generate</p>
+                    </div>
                   </div>
+                )}
+              </>
+            )}
 
-                  {!domainCreds || !domainCreds.username ? (
-                    <div className="px-5 py-8 text-center">
-                      <Key className="w-8 h-8 text-slate-300 mx-auto mb-2" />
-                      <p className="text-sm text-slate-400">
-                        Client hasn't entered registrar credentials yet.
-                      </p>
-                      <p className="text-xs text-slate-400 mt-1">
-                        Ask them to log into their client portal → My Website → Domain Registrar Access.
-                      </p>
-                    </div>
-                  ) : (
-                    <div className="p-5 space-y-3">
-                      {/* Login URL */}
-                      {domainCreds.login_url && (
-                        <div className="flex items-center gap-2">
-                          <span className="text-xs font-medium text-slate-500 w-20 flex-shrink-0">Login URL</span>
-                          <a
-                            href={domainCreds.login_url}
-                            target="_blank"
-                            rel="noreferrer"
-                            className="flex items-center gap-1.5 text-sm text-indigo-600 hover:underline truncate flex-1"
-                          >
-                            {domainCreds.login_url}
-                            <ExternalLink className="w-3.5 h-3.5 flex-shrink-0" />
-                          </a>
-                        </div>
-                      )}
-
-                      {/* Username */}
-                      <div className="flex items-center gap-2">
-                        <span className="text-xs font-medium text-slate-500 w-20 flex-shrink-0">Username</span>
-                        <span className="flex-1 text-sm text-slate-800 font-mono truncate">
-                          {domainCreds.username}
-                        </span>
-                        <button
-                          onClick={() => copyField(domainCreds.username, 'username')}
-                          className="flex items-center gap-1 text-xs text-slate-400 hover:text-indigo-600 flex-shrink-0"
-                        >
-                          {copiedField === 'username'
-                            ? <><CheckCircle className="w-3.5 h-3.5 text-emerald-500" /> Copied</>
-                            : <><Copy className="w-3.5 h-3.5" /> Copy</>}
-                        </button>
-                      </div>
-
-                      {/* Password */}
-                      <div className="flex items-center gap-2">
-                        <span className="text-xs font-medium text-slate-500 w-20 flex-shrink-0">Password</span>
-                        <span className="flex-1 text-sm text-slate-800 font-mono truncate">
-                          {showPassword ? domainCreds.password : '••••••••'}
-                        </span>
-                        <div className="flex items-center gap-2 flex-shrink-0">
-                          <button
-                            onClick={() => setShowPassword(v => !v)}
-                            className="text-slate-400 hover:text-indigo-600"
-                          >
-                            {showPassword
-                              ? <EyeOff className="w-3.5 h-3.5" />
-                              : <Eye className="w-3.5 h-3.5" />}
-                          </button>
-                          <button
-                            onClick={() => copyField(domainCreds.password, 'password')}
-                            className="flex items-center gap-1 text-xs text-slate-400 hover:text-indigo-600"
-                          >
-                            {copiedField === 'password'
-                              ? <><CheckCircle className="w-3.5 h-3.5 text-emerald-500" /> Copied</>
-                              : <><Copy className="w-3.5 h-3.5" /> Copy</>}
-                          </button>
-                        </div>
-                      </div>
-
-                      {/* Notes */}
-                      {domainCreds.notes && (
-                        <div className="mt-1 p-3 bg-amber-50 border border-amber-200 rounded-xl text-xs text-amber-800">
-                          <p className="font-semibold mb-0.5">Notes from client:</p>
-                          <p>{domainCreds.notes}</p>
-                        </div>
-                      )}
-                    </div>
-                  )}
-                </div>
-
-                {/* Pages accordion */}
-                <div className="bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden">
-                  <div className="px-5 py-4 border-b border-slate-100 flex items-center justify-between">
-                    <h3 className="font-semibold text-slate-900">
-                      Pages <span className="text-slate-400 font-normal">({brief!.website_json!.pages.length})</span>
+            {/* ── Pages View ───────────────────────────────────────────── */}
+            {rightView === 'pages' && !settingsOpen && (
+              <div className="h-full overflow-y-auto p-5 space-y-3">
+                {hasWebsite ? (
+                  <>
+                    <h3 className="text-white font-semibold text-sm mb-4">
+                      Pages <span className="text-slate-500 font-normal">({pageCount})</span>
                     </h3>
-                    <span className="text-xs text-slate-400">Click a page to expand sections</span>
-                  </div>
-
-                  <div className="divide-y divide-slate-100">
-                    {brief!.website_json!.pages.map((page) => {
+                    {brief!.website_json!.pages.map((page: any) => {
                       const isExpanded = expandedPages[page.id] ?? false;
                       return (
-                        <div key={page.id}>
+                        <div key={page.id} className="bg-slate-900 border border-slate-800 rounded-xl overflow-hidden">
                           <button
-                            className="w-full flex items-center gap-3 px-5 py-3.5 text-left hover:bg-slate-50 transition-colors"
+                            className="w-full flex items-center gap-3 px-4 py-3.5 text-left hover:bg-slate-800/50 transition-colors"
                             onClick={() => setExpandedPages(prev => ({ ...prev, [page.id]: !isExpanded }))}
                           >
-                            <FileText className="w-4 h-4 text-indigo-500 flex-shrink-0" />
+                            <FileText className="w-4 h-4 text-indigo-400 flex-shrink-0" />
                             <div className="flex-1 min-w-0">
-                              <div className="flex items-center gap-2">
-                                <span className="font-medium text-slate-800 text-sm">{page.name}</span>
-                                <span className="text-xs text-slate-400 font-mono">
+                              <div className="flex items-center gap-2 flex-wrap">
+                                <span className="font-medium text-slate-100 text-sm">{page.name}</span>
+                                <span className="text-xs text-slate-500 font-mono">
                                   {page.slug ? `/${page.slug}` : '/'}
                                 </span>
                               </div>
-                              <p className="text-xs text-slate-400 truncate">{page.seo?.title}</p>
+                              <p className="text-xs text-slate-500 truncate mt-0.5">{page.seo?.title}</p>
                             </div>
-                            <span className="text-xs text-slate-400 mr-2">{page.sections.length} sections</span>
-                            {isExpanded
-                              ? <ChevronDown className="w-4 h-4 text-slate-400" />
-                              : <ChevronRight className="w-4 h-4 text-slate-400" />
-                            }
+                            <div className="flex items-center gap-2 flex-shrink-0">
+                              <span className="text-xs text-slate-500">{page.sections.length} sections</span>
+                              {isExpanded
+                                ? <ChevronDown className="w-4 h-4 text-slate-500" />
+                                : <ChevronRight className="w-4 h-4 text-slate-500" />
+                              }
+                            </div>
                           </button>
 
                           {isExpanded && (
-                            <div className="px-5 pb-4 bg-slate-50">
-                              {/* Page SEO */}
-                              <div className="mb-3 p-3 bg-white rounded-xl border border-slate-100 text-xs">
-                                <p className="font-medium text-slate-600 mb-1">SEO</p>
-                                <p className="text-slate-800 font-medium">{page.seo?.title}</p>
-                                <p className="text-slate-500 mt-0.5">{page.seo?.meta_description}</p>
+                            <div className="px-4 pb-4 border-t border-slate-800 pt-3 space-y-2">
+                              {/* SEO */}
+                              <div className="p-3 bg-slate-800/50 rounded-lg text-xs space-y-1">
+                                <p className="text-slate-400 font-medium">SEO</p>
+                                <p className="text-slate-200 font-medium">{page.seo?.title}</p>
+                                <p className="text-slate-400 leading-relaxed">{page.seo?.meta_description}</p>
                               </div>
                               {/* Sections */}
-                              <div className="space-y-2">
-                                {page.sections.map((section, si) => (
-                                  <div key={si} className="flex items-start gap-3 p-3 bg-white border border-slate-100 rounded-xl">
-                                    <span className="text-xs font-mono bg-indigo-50 text-indigo-600 px-2 py-0.5 rounded mt-0.5 flex-shrink-0">
-                                      {section.section_type}
-                                    </span>
-                                    <div className="flex-1 min-w-0">
-                                      <p className="text-xs text-slate-600">
-                                        Variant: <span className="font-medium text-slate-800">{section.variant}</span>
-                                      </p>
-                                      {section.editable_fields.length > 0 && (
-                                        <p className="text-xs text-slate-400 mt-0.5">
-                                          Editable: {section.editable_fields.join(', ')}
-                                        </p>
-                                      )}
-                                    </div>
-                                  </div>
-                                ))}
-                              </div>
+                              {page.sections.map((section: any, si: number) => (
+                                <div key={si} className="flex items-center gap-2 px-3 py-2 bg-slate-800/50 rounded-lg">
+                                  <span className="text-xs font-mono bg-indigo-900/50 border border-indigo-800 text-indigo-300 px-2 py-0.5 rounded flex-shrink-0">
+                                    {section.section_type}
+                                  </span>
+                                  <span className="text-xs bg-slate-700 text-slate-300 px-2 py-0.5 rounded flex-shrink-0">
+                                    {section.variant}
+                                  </span>
+                                </div>
+                              ))}
                             </div>
                           )}
                         </div>
                       );
                     })}
+                  </>
+                ) : (
+                  <div className="flex items-center justify-center h-full text-slate-500 text-sm">
+                    No pages yet — generate a site first.
+                  </div>
+                )}
+              </div>
+            )}
+
+            {/* ── Settings Panel (overlay) ────────────────────────────── */}
+            {settingsOpen && (
+              <div className="absolute inset-0 bg-slate-950 overflow-y-auto z-10">
+                <div className="p-5 space-y-5">
+                  {/* Header */}
+                  <div className="flex items-center justify-between">
+                    <h3 className="text-white font-semibold text-base flex items-center gap-2">
+                      <Settings className="w-4 h-4 text-indigo-400" /> Settings
+                    </h3>
+                    <button
+                      onClick={() => setSettingsOpen(false)}
+                      className="w-8 h-8 flex items-center justify-center rounded-lg bg-slate-800 border border-slate-700 text-slate-400 hover:text-slate-200 transition-colors"
+                    >
+                      <X className="w-4 h-4" />
+                    </button>
+                  </div>
+
+                  {/* ── Edit Brief ─────────────────────────────────────── */}
+                  <div className="bg-slate-900 border border-slate-800 rounded-xl p-4 space-y-4">
+                    <h4 className="text-sm font-semibold text-slate-200">Edit Brief</h4>
+
+                    <div className="space-y-3">
+                      {([
+                        ['Business Name', 'business_name', 'text', 'Acme Plumbing Co.'],
+                        ['Industry',      'industry',      'text', 'Plumbing, HVAC...'],
+                        ['Location',      'location',      'text', 'Atlanta, GA'],
+                      ] as const).map(([label, key, type, placeholder]) => (
+                        <div key={key}>
+                          <label className="block text-xs font-medium text-slate-400 mb-1">{label}</label>
+                          <input
+                            type={type}
+                            className="w-full bg-slate-800 border border-slate-700 text-slate-100 placeholder-slate-500 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-1 focus:ring-indigo-500 transition-colors"
+                            value={settingsForm[key]}
+                            onChange={e => setSettingsForm(f => ({ ...f, [key]: e.target.value }))}
+                            placeholder={placeholder}
+                          />
+                        </div>
+                      ))}
+
+                      <div>
+                        <label className="block text-xs font-medium text-slate-400 mb-1">Services Offered</label>
+                        <textarea
+                          className="w-full bg-slate-800 border border-slate-700 text-slate-100 placeholder-slate-500 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-1 focus:ring-indigo-500 transition-colors resize-none"
+                          rows={2}
+                          value={settingsForm.services_offered}
+                          onChange={e => setSettingsForm(f => ({ ...f, services_offered: e.target.value }))}
+                        />
+                      </div>
+
+                      <div>
+                        <label className="block text-xs font-medium text-slate-400 mb-1">Design Notes</label>
+                        <textarea
+                          className="w-full bg-slate-800 border border-slate-700 text-slate-100 placeholder-slate-500 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-1 focus:ring-indigo-500 transition-colors resize-none"
+                          rows={2}
+                          value={settingsForm.art_direction}
+                          onChange={e => setSettingsForm(f => ({ ...f, art_direction: e.target.value }))}
+                        />
+                      </div>
+
+                      <div className="flex items-center gap-2">
+                        <input
+                          type="color"
+                          className="w-8 h-8 rounded border border-slate-700 bg-slate-800 cursor-pointer p-0.5"
+                          value={settingsForm.primary_color}
+                          onChange={e => setSettingsForm(f => ({ ...f, primary_color: e.target.value }))}
+                        />
+                        <input
+                          type="text"
+                          className="flex-1 bg-slate-800 border border-slate-700 text-slate-100 rounded-lg px-3 py-2 text-sm font-mono focus:outline-none focus:ring-1 focus:ring-indigo-500 transition-colors"
+                          value={settingsForm.primary_color}
+                          onChange={e => setSettingsForm(f => ({ ...f, primary_color: e.target.value }))}
+                          maxLength={7}
+                        />
+                      </div>
+                    </div>
+
+                    <button
+                      onClick={() => {
+                        setForm(settingsForm);
+                        setSettingsOpen(false);
+                        handleGenerate(settingsForm);
+                      }}
+                      disabled={isGenerating || !selectedClientId}
+                      className="w-full flex items-center justify-center gap-2 px-4 py-2.5 bg-indigo-600 hover:bg-indigo-500 disabled:opacity-40 text-white text-sm font-semibold rounded-xl transition-colors"
+                    >
+                      <RefreshCw className="w-3.5 h-3.5" /> Regenerate with New Brief
+                    </button>
+                  </div>
+
+                  {/* ── Custom Domain ───────────────────────────────────── */}
+                  <div className="bg-slate-900 border border-slate-800 rounded-xl p-4 space-y-3">
+                    <div className="flex items-center gap-2">
+                      <Link className="w-4 h-4 text-indigo-400" />
+                      <h4 className="text-sm font-semibold text-slate-200">Custom Domain</h4>
+                    </div>
+                    <p className="text-xs text-slate-500">
+                      Connect a domain the client purchased (e.g. Namecheap, Squarespace).
+                    </p>
+
+                    {brief?.custom_domain && (
+                      <p className="text-xs text-emerald-400 flex items-center gap-1.5">
+                        <CheckCircle className="w-3.5 h-3.5" /> Connected: <span className="font-mono">{brief.custom_domain}</span>
+                      </p>
+                    )}
+
+                    <div className="flex gap-2">
+                      <input
+                        type="text"
+                        className="flex-1 bg-slate-800 border border-slate-700 text-slate-100 placeholder-slate-500 rounded-lg px-3 py-2 text-sm font-mono focus:outline-none focus:ring-1 focus:ring-indigo-500 transition-colors"
+                        placeholder="www.clientsite.com"
+                        value={customDomainInput}
+                        onChange={e => setCustomDomainInput(e.target.value.trim().toLowerCase())}
+                      />
+                      <button
+                        onClick={handleSaveDomain}
+                        disabled={savingDomain}
+                        className="flex items-center gap-1.5 px-4 py-2 bg-indigo-600 hover:bg-indigo-500 disabled:opacity-40 text-white text-sm font-medium rounded-lg transition-colors"
+                      >
+                        {savingDomain
+                          ? <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                          : domainSaved
+                            ? <><CheckCircle className="w-3.5 h-3.5" /> Saved</>
+                            : <><Save className="w-3.5 h-3.5" /> Save</>
+                        }
+                      </button>
+                    </div>
+
+                    {domainError && <p className="text-xs text-red-400">{domainError}</p>}
+
+                    {/* Copy site URL */}
+                    <button
+                      onClick={copyUrl}
+                      disabled={!brief?.client_slug}
+                      className="flex items-center gap-1.5 text-xs text-slate-400 hover:text-slate-200 transition-colors disabled:opacity-40"
+                    >
+                      {copied ? <CheckCircle className="w-3.5 h-3.5 text-emerald-400" /> : <Copy className="w-3.5 h-3.5" />}
+                      {copied ? 'Copied!' : `Copy site URL (/site/${brief?.client_slug || '…'})`}
+                    </button>
+
+                    {/* DNS Instructions */}
+                    <button
+                      onClick={() => setShowDnsInstructions(o => !o)}
+                      className="flex items-center gap-1.5 text-xs text-indigo-400 hover:text-indigo-300 transition-colors"
+                    >
+                      <Info className="w-3.5 h-3.5" />
+                      {showDnsInstructions ? 'Hide' : 'Show'} DNS setup instructions
+                    </button>
+
+                    {showDnsInstructions && (
+                      <div className="p-3 bg-slate-800/50 border border-slate-700 rounded-xl text-xs text-slate-400 space-y-2">
+                        <p className="font-semibold text-slate-300">Client DNS setup</p>
+                        <ol className="space-y-1.5 list-decimal list-inside">
+                          <li>Log into their domain registrar → DNS settings</li>
+                          <li>Add <strong className="text-slate-200">CNAME</strong>: Host <code className="text-indigo-300">www</code> → <code className="text-indigo-300">cname.vercel-dns.com</code></li>
+                          <li>Add <strong className="text-slate-200">A record</strong>: Host <code className="text-indigo-300">@</code> → <code className="text-indigo-300">76.76.21.21</code></li>
+                          <li>In Vercel project → Domains, add the client's domain</li>
+                          <li>DNS propagation: up to 24–48 hours</li>
+                        </ol>
+                      </div>
+                    )}
+                  </div>
+
+                  {/* ── Registrar Login ─────────────────────────────────── */}
+                  <div className="bg-slate-900 border border-slate-800 rounded-xl overflow-hidden">
+                    <div className="flex items-center gap-2 px-4 py-3 border-b border-slate-800">
+                      <Key className="w-4 h-4 text-indigo-400" />
+                      <h4 className="text-sm font-semibold text-slate-200">Registrar Login</h4>
+                      {domainCreds?.registrar_name && (
+                        <span className="ml-auto text-xs bg-emerald-900/50 border border-emerald-800 text-emerald-400 font-medium px-2 py-0.5 rounded-full">
+                          {domainCreds.registrar_name}
+                        </span>
+                      )}
+                    </div>
+
+                    {!domainCreds?.username ? (
+                      <div className="px-4 py-6 text-center">
+                        <Key className="w-7 h-7 text-slate-700 mx-auto mb-2" />
+                        <p className="text-sm text-slate-500">No credentials submitted yet.</p>
+                        <p className="text-xs text-slate-600 mt-1">Client portal → My Website → Domain Registrar Access</p>
+                      </div>
+                    ) : (
+                      <div className="p-4 space-y-3">
+                        {domainCreds.login_url && (
+                          <div className="flex items-center gap-2">
+                            <span className="text-xs text-slate-500 w-16 flex-shrink-0">Login URL</span>
+                            <a
+                              href={domainCreds.login_url}
+                              target="_blank"
+                              rel="noreferrer"
+                              className="flex items-center gap-1 text-xs text-indigo-400 hover:text-indigo-300 truncate flex-1"
+                            >
+                              {domainCreds.login_url}
+                              <ExternalLink className="w-3 h-3 flex-shrink-0" />
+                            </a>
+                          </div>
+                        )}
+
+                        <div className="flex items-center gap-2">
+                          <span className="text-xs text-slate-500 w-16 flex-shrink-0">Username</span>
+                          <span className="flex-1 text-sm text-slate-200 font-mono truncate">{domainCreds.username}</span>
+                          <button
+                            onClick={() => copyField(domainCreds.username, 'username')}
+                            className="flex items-center gap-1 text-xs text-slate-500 hover:text-indigo-400 flex-shrink-0 transition-colors"
+                          >
+                            {copiedField === 'username'
+                              ? <><CheckCircle className="w-3.5 h-3.5 text-emerald-400" /> Copied</>
+                              : <><Copy className="w-3.5 h-3.5" /> Copy</>
+                            }
+                          </button>
+                        </div>
+
+                        <div className="flex items-center gap-2">
+                          <span className="text-xs text-slate-500 w-16 flex-shrink-0">Password</span>
+                          <span className="flex-1 text-sm text-slate-200 font-mono truncate">
+                            {showPassword ? domainCreds.password : '••••••••'}
+                          </span>
+                          <div className="flex items-center gap-2 flex-shrink-0">
+                            <button onClick={() => setShowPassword(v => !v)} className="text-slate-500 hover:text-indigo-400 transition-colors">
+                              {showPassword ? <EyeOff className="w-3.5 h-3.5" /> : <Eye className="w-3.5 h-3.5" />}
+                            </button>
+                            <button
+                              onClick={() => copyField(domainCreds.password, 'password')}
+                              className="flex items-center gap-1 text-xs text-slate-500 hover:text-indigo-400 transition-colors"
+                            >
+                              {copiedField === 'password'
+                                ? <><CheckCircle className="w-3.5 h-3.5 text-emerald-400" /> Copied</>
+                                : <><Copy className="w-3.5 h-3.5" /> Copy</>
+                              }
+                            </button>
+                          </div>
+                        </div>
+
+                        {domainCreds.notes && (
+                          <div className="p-3 bg-amber-950/40 border border-amber-800/50 rounded-xl text-xs text-amber-300/80">
+                            <p className="font-semibold text-amber-300 mb-0.5">Notes from client:</p>
+                            <p>{domainCreds.notes}</p>
+                          </div>
+                        )}
+                      </div>
+                    )}
                   </div>
                 </div>
               </div>
-            ) : brief?.generation_status === 'error' ? (
-              <div className="bg-red-50 border border-red-200 rounded-2xl p-8">
-                <AlertTriangle className="w-8 h-8 text-red-500 mb-3" />
-                <p className="font-semibold text-red-800">Previous generation failed</p>
-                <p className="text-red-600 text-sm mt-1">{brief.generation_error}</p>
-                <p className="text-slate-500 text-sm mt-3">Update the brief and click Generate again.</p>
-              </div>
-            ) : (
-              <div className="bg-white rounded-2xl border border-slate-200 shadow-sm p-16 flex flex-col items-center text-center">
-                <Wand2 className="w-12 h-12 text-slate-300 mb-4" />
-                <p className="text-slate-600 font-medium">Ready to generate</p>
-                <p className="text-slate-400 text-sm mt-1">
-                  Fill in the brief, choose your pages, then click Generate Website.
-                </p>
-              </div>
             )}
-          </div>
-        </div>
+
+          </div>{/* end right panel */}
+        </div>{/* end main area */}
       </div>
     </AdminLayout>
   );
