@@ -338,13 +338,8 @@ const AdminWebsiteBuilder: React.FC = () => {
       return;
     }
 
-    // Otherwise call Anthropic API
+    // Otherwise call Supabase edge function
     try {
-      const apiKey = (import.meta as any).env?.VITE_ANTHROPIC_API_KEY;
-      if (!apiKey) {
-        throw new Error('VITE_ANTHROPIC_API_KEY is not configured. Add it to your .env file to enable AI chat.');
-      }
-
       const siteInfo = brief ? `
 Current site: "${brief.business_name}" (${brief.industry})
 Location: ${brief.location}
@@ -361,32 +356,16 @@ When the user wants a complete website rebuild or regeneration, respond with: RE
 For all other requests, give helpful, specific advice about design, content, or improvements.
 Keep responses concise and actionable. Respond in 1-3 sentences max unless detail is truly needed.`;
 
-      const res = await fetch('https://api.anthropic.com/v1/messages', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'x-api-key': apiKey,
-          'anthropic-version': '2023-06-01',
-          'anthropic-dangerous-direct-browser-access': 'true',
-        },
-        body: JSON.stringify({
-          model: 'claude-sonnet-4-20250514',
-          max_tokens: 512,
-          system: systemPrompt,
-          messages: [
-            ...messages.slice(-8).map(m => ({ role: m.role, content: m.content })),
-            { role: 'user', content: text },
-          ],
-        }),
+      const conversationHistory = [
+        ...messages.slice(-8).map(m => ({ role: m.role, content: m.content })),
+        { role: 'user', content: text },
+      ];
+
+      const { data, error } = await supabase.functions.invoke('website-chat', {
+        body: { system: systemPrompt, messages: conversationHistory },
       });
-
-      if (!res.ok) {
-        const errBody = await res.json().catch(() => ({}));
-        throw new Error(errBody?.error?.message || `API error ${res.status}`);
-      }
-
-      const data = await res.json();
-      const reply: string = data.content?.[0]?.text || '';
+      if (error) throw error;
+      const reply = data?.reply || "I couldn't process that request.";
 
       // Check if AI wants to regenerate with new art direction
       if (reply.startsWith('REGENERATE:')) {
