@@ -9,7 +9,7 @@ import AiContentGenerator from '../components/AiContentGenerator';
 import {
   Loader2, Save, Send, ArrowUp, ArrowDown, Trash2,
   Plus, Eye, X, AlertCircle, CheckCircle2, Package,
-  Zap, Clock, ChevronDown, ChevronUp, FileText,
+  Zap, Clock, ChevronDown, ChevronUp, FileText, Percent, CreditCard,
 } from 'lucide-react';
 import { ClientProposal, ClientProposalItem } from '../types/proposals';
 
@@ -48,9 +48,11 @@ function StatusBadge({ status }: { status: ClientProposal['status'] }) {
     approved: 'bg-emerald-100 text-emerald-700',
     declined: 'bg-red-100 text-red-700',
     revised: 'bg-amber-100 text-amber-700',
+    retracted: 'bg-slate-100 text-slate-400',
+    complete: 'bg-teal-100 text-teal-700',
   };
   return (
-    <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-semibold capitalize ${map[status]}`}>
+    <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-semibold capitalize ${map[status] || 'bg-slate-100 text-slate-600'}`}>
       {status}
     </span>
   );
@@ -218,6 +220,11 @@ const AdminProposalBuilder: React.FC = () => {
   const [approvedAt, setApprovedAt] = useState<string | null>(null);
   const [declinedAt, setDeclinedAt] = useState<string | null>(null);
 
+  // ── Payment & discount ──
+  const [paymentStructure, setPaymentStructure] = useState<'full' | 'split_50_50'>('full');
+  const [discountType, setDiscountType] = useState<'none' | 'percentage' | 'fixed'>('none');
+  const [discountValue, setDiscountValue] = useState('');
+
   // ── Catalog state ──
   const [clients, setClients] = useState<Client[]>([]);
   const [products, setProducts] = useState<BillingProduct[]>([]);
@@ -271,6 +278,10 @@ const AdminProposalBuilder: React.FC = () => {
     setClientResponse(proposal.client_response);
     setApprovedAt(proposal.approved_at);
     setDeclinedAt(proposal.declined_at);
+    setPaymentStructure((proposal.payment_structure as 'full' | 'split_50_50') || 'full');
+    const dtype = proposal.discount_type as 'percentage' | 'fixed' | null;
+    setDiscountType(dtype || 'none');
+    setDiscountValue(proposal.discount_value != null ? String(proposal.discount_value) : '');
 
     const { data: itemData } = await supabase
       .from('client_proposal_items')
@@ -342,6 +353,9 @@ const AdminProposalBuilder: React.FC = () => {
       status,
       notes: adminNotes || null,
       client_message: clientMessage || null,
+      payment_structure: paymentStructure,
+      discount_type: discountType !== 'none' ? discountType : null,
+      discount_value: discountType !== 'none' && discountValue ? parseFloat(discountValue) : null,
       updated_at: now,
       ...(status === 'sent' ? { sent_at: now } : {}),
     };
@@ -428,6 +442,13 @@ const AdminProposalBuilder: React.FC = () => {
   const oneTimeTotal = items.reduce((s, i) => s + (i.amount_cents || 0), 0);
   const setupTotal = items.reduce((s, i) => s + (i.setup_fee_cents || 0), 0);
   const monthlyTotal = items.reduce((s, i) => s + (i.monthly_price_cents || 0), 0);
+  const rawUpfrontTotal = oneTimeTotal + setupTotal;
+  const discountCents = discountType === 'percentage' && discountValue
+    ? Math.round(rawUpfrontTotal * (parseFloat(discountValue) / 100))
+    : discountType === 'fixed' && discountValue
+    ? Math.round(parseFloat(discountValue) * 100)
+    : 0;
+  const upfrontAfterDiscount = Math.max(0, rawUpfrontTotal - discountCents);
 
   // ─── Render ───────────────────────────────────────────────────────────────
 
@@ -441,7 +462,7 @@ const AdminProposalBuilder: React.FC = () => {
     );
   }
 
-  const isReadOnly = currentStatus === 'approved' || currentStatus === 'declined';
+  const isReadOnly = currentStatus === 'approved' || currentStatus === 'declined' || currentStatus === 'retracted' || currentStatus === 'complete';
 
   return (
     <AdminLayout>
@@ -579,6 +600,75 @@ const AdminProposalBuilder: React.FC = () => {
                     placeholder="Notes for your reference…"
                     className="w-full p-2 border border-slate-300 rounded-lg text-sm resize-none bg-amber-50 border-amber-200 disabled:opacity-70"
                   />
+                </div>
+              </div>
+            </div>
+
+            {/* Payment Options */}
+            <div className="bg-white rounded-xl border border-slate-200 p-5 shadow-sm">
+              <h2 className="text-sm font-bold text-slate-700 uppercase tracking-wider mb-4">Payment Options</h2>
+              <div className="space-y-4">
+                {/* Payment Structure */}
+                <div>
+                  <label className="block text-sm font-semibold text-slate-700 mb-2 flex items-center gap-1.5">
+                    <CreditCard className="w-3.5 h-3.5" /> Payment Structure
+                  </label>
+                  <div className="grid grid-cols-2 gap-2">
+                    <button
+                      type="button"
+                      onClick={() => !isReadOnly && setPaymentStructure('full')}
+                      disabled={isReadOnly}
+                      className={`py-2 px-3 text-xs font-semibold rounded-lg border transition-colors ${paymentStructure === 'full' ? 'bg-indigo-600 text-white border-indigo-600' : 'bg-white text-slate-600 border-slate-200 hover:bg-slate-50'} disabled:opacity-60 disabled:cursor-default`}
+                    >
+                      Full Payment
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => !isReadOnly && setPaymentStructure('split_50_50')}
+                      disabled={isReadOnly}
+                      className={`py-2 px-3 text-xs font-semibold rounded-lg border transition-colors ${paymentStructure === 'split_50_50' ? 'bg-indigo-600 text-white border-indigo-600' : 'bg-white text-slate-600 border-slate-200 hover:bg-slate-50'} disabled:opacity-60 disabled:cursor-default`}
+                    >
+                      50/50 Split
+                    </button>
+                  </div>
+                  {paymentStructure === 'split_50_50' && (
+                    <p className="text-xs text-indigo-600 mt-2 leading-relaxed">
+                      Client pays 50% deposit on approval. Balance invoice is sent when you mark the project complete.
+                    </p>
+                  )}
+                </div>
+                {/* Discount */}
+                <div>
+                  <label className="block text-sm font-semibold text-slate-700 mb-2 flex items-center gap-1.5">
+                    <Percent className="w-3.5 h-3.5" /> Discount
+                  </label>
+                  <select
+                    value={discountType}
+                    onChange={e => { setDiscountType(e.target.value as 'none' | 'percentage' | 'fixed'); setDiscountValue(''); }}
+                    disabled={isReadOnly}
+                    className="w-full p-2 border border-slate-300 rounded-lg text-sm disabled:bg-slate-50"
+                  >
+                    <option value="none">No Discount</option>
+                    <option value="percentage">Percentage Off (%)</option>
+                    <option value="fixed">Fixed Amount Off ($)</option>
+                  </select>
+                  {discountType !== 'none' && (
+                    <div className="mt-2 flex items-center gap-2">
+                      <span className="text-slate-500 text-sm font-semibold w-5 text-center">
+                        {discountType === 'percentage' ? '%' : '$'}
+                      </span>
+                      <input
+                        type="number"
+                        min="0"
+                        step={discountType === 'percentage' ? '1' : '0.01'}
+                        value={discountValue}
+                        onChange={e => setDiscountValue(e.target.value)}
+                        disabled={isReadOnly}
+                        placeholder={discountType === 'percentage' ? 'e.g. 10' : 'e.g. 100.00'}
+                        className="flex-1 p-2 border border-slate-300 rounded-lg text-sm disabled:bg-slate-50"
+                      />
+                    </div>
+                  )}
                 </div>
               </div>
             </div>
@@ -909,13 +999,43 @@ const AdminProposalBuilder: React.FC = () => {
                     <span className="font-semibold">{formatCents(monthlyTotal)}/mo</span>
                   </div>
                 )}
+                {discountCents > 0 && (
+                  <div className="flex justify-between text-sm text-emerald-700">
+                    <span className="flex items-center gap-1">
+                      <Percent className="w-3.5 h-3.5" />
+                      Discount {discountType === 'percentage' ? `(${discountValue}%)` : ''}
+                    </span>
+                    <span className="font-semibold">-{formatCents(discountCents)}</span>
+                  </div>
+                )}
                 {(oneTimeTotal + setupTotal + monthlyTotal) === 0 && (
                   <p className="text-slate-400 text-xs">Add items to see pricing.</p>
                 )}
-                {(oneTimeTotal + setupTotal + monthlyTotal) > 0 && (
-                  <div className="border-t border-slate-200 pt-2 mt-2 flex justify-between font-bold text-slate-900">
-                    <span>Total Due Today</span>
-                    <span>{formatCents(oneTimeTotal + setupTotal + (monthlyTotal > 0 ? monthlyTotal : 0))}</span>
+                {(rawUpfrontTotal + monthlyTotal) > 0 && (
+                  <div className="border-t border-slate-200 pt-2 mt-2 space-y-1">
+                    {paymentStructure === 'split_50_50' && upfrontAfterDiscount > 0 ? (
+                      <>
+                        <div className="flex justify-between text-sm text-indigo-700 font-semibold">
+                          <span>50% Deposit (on approval)</span>
+                          <span>{formatCents(Math.round(upfrontAfterDiscount / 2))}</span>
+                        </div>
+                        <div className="flex justify-between text-sm text-slate-600">
+                          <span>50% Balance (on completion)</span>
+                          <span>{formatCents(upfrontAfterDiscount - Math.round(upfrontAfterDiscount / 2))}</span>
+                        </div>
+                        {monthlyTotal > 0 && (
+                          <div className="flex justify-between text-sm text-slate-600">
+                            <span>Monthly Recurring</span>
+                            <span>{formatCents(monthlyTotal)}/mo</span>
+                          </div>
+                        )}
+                      </>
+                    ) : (
+                      <div className="flex justify-between font-bold text-slate-900">
+                        <span>Total Due Today</span>
+                        <span>{formatCents(upfrontAfterDiscount + (monthlyTotal > 0 ? monthlyTotal : 0))}</span>
+                      </div>
+                    )}
                   </div>
                 )}
               </div>
