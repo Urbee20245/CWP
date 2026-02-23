@@ -51,6 +51,7 @@ const ProposalListView: React.FC<{ proposals: ClientProposal[]; onSelect: (id: s
     declined: 'bg-red-100 text-red-700',
     revised: 'bg-amber-100 text-amber-700',
     retracted: 'bg-slate-100 text-slate-500',
+    complete: 'bg-teal-100 text-teal-700',
   };
 
   return (
@@ -110,6 +111,13 @@ const ProposalDetailView: React.FC<{
   const oneTimeTotal = items.reduce((s, i) => s + (i.amount_cents || 0), 0);
   const setupTotal = items.reduce((s, i) => s + (i.setup_fee_cents || 0), 0);
   const monthlyTotal = items.reduce((s, i) => s + (i.monthly_price_cents || 0), 0);
+  const rawUpfront = oneTimeTotal + setupTotal;
+  const discountCents = proposal.discount_type === 'percentage' && proposal.discount_value
+    ? Math.round(rawUpfront * (proposal.discount_value / 100))
+    : proposal.discount_type === 'fixed' && proposal.discount_value
+    ? Math.round(proposal.discount_value * 100)
+    : 0;
+  const upfrontAfterDiscount = Math.max(0, rawUpfront - discountCents);
 
   return (
     <div className="max-w-3xl mx-auto px-4 py-10">
@@ -192,9 +200,36 @@ const ProposalDetailView: React.FC<{
               <span className="font-semibold text-slate-900">{formatCents(monthlyTotal)}/mo</span>
             </div>
           )}
-          <div className="border-t border-slate-300 pt-3 flex justify-between">
-            <span className="font-bold text-slate-900">Total Due Today</span>
-            <span className="font-bold text-slate-900 text-lg">{formatCents(oneTimeTotal + setupTotal + (monthlyTotal > 0 ? monthlyTotal : 0))}</span>
+          {discountCents > 0 && (
+            <div className="flex justify-between text-sm text-emerald-700">
+              <span>Discount Applied</span>
+              <span className="font-semibold">-{formatCents(discountCents)}</span>
+            </div>
+          )}
+          <div className="border-t border-slate-300 pt-3">
+            {proposal.payment_structure === 'split_50_50' && upfrontAfterDiscount > 0 ? (
+              <div className="space-y-1">
+                <div className="flex justify-between text-sm font-semibold text-indigo-700">
+                  <span>50% Deposit Due Now</span>
+                  <span>{formatCents(Math.round(upfrontAfterDiscount / 2))}</span>
+                </div>
+                <div className="flex justify-between text-sm text-slate-600">
+                  <span>50% Balance Due on Completion</span>
+                  <span>{formatCents(upfrontAfterDiscount - Math.round(upfrontAfterDiscount / 2))}</span>
+                </div>
+                {monthlyTotal > 0 && (
+                  <div className="flex justify-between text-sm text-slate-600 mt-1 pt-1 border-t border-slate-200">
+                    <span>Monthly Recurring (starts after project)</span>
+                    <span className="font-semibold">{formatCents(monthlyTotal)}/mo</span>
+                  </div>
+                )}
+              </div>
+            ) : (
+              <div className="flex justify-between">
+                <span className="font-bold text-slate-900">Total Due Today</span>
+                <span className="font-bold text-slate-900 text-lg">{formatCents(upfrontAfterDiscount + (monthlyTotal > 0 ? monthlyTotal : 0))}</span>
+              </div>
+            )}
           </div>
         </div>
       </div>
@@ -204,7 +239,11 @@ const ProposalDetailView: React.FC<{
         <div className="bg-emerald-50 border border-emerald-200 rounded-2xl p-6 text-center">
           <CheckCircle2 className="w-10 h-10 text-emerald-500 mx-auto mb-3" />
           <h3 className="font-bold text-emerald-800 text-lg mb-1">Thank you! We've received your response.</h3>
-          <p className="text-emerald-700 text-sm">Your team has been notified and will follow up with you shortly.</p>
+          {proposal.payment_structure === 'split_50_50' ? (
+            <p className="text-emerald-700 text-sm">A 50% deposit invoice has been sent to your email. We'll get started once it's paid!</p>
+          ) : (
+            <p className="text-emerald-700 text-sm">Your team has been notified and will follow up with you shortly.</p>
+          )}
         </div>
       ) : proposal.status === 'sent' ? (
         <div className="space-y-4">
@@ -267,6 +306,15 @@ const ProposalDetailView: React.FC<{
           <p className="text-amber-700 text-sm mt-1">We'll follow up with you shortly.</p>
           {proposal.client_response && (
             <p className="text-slate-600 text-sm mt-3 italic">"{proposal.client_response}"</p>
+          )}
+        </div>
+      ) : proposal.status === 'complete' ? (
+        <div className="bg-teal-50 border border-teal-200 rounded-2xl p-6 text-center">
+          <CheckCircle2 className="w-10 h-10 text-teal-500 mx-auto mb-2" />
+          <h3 className="font-bold text-teal-800 text-lg">Project Complete</h3>
+          <p className="text-teal-700 text-sm mt-1">Your project has been completed. Thank you for your business!</p>
+          {proposal.subscription_start_date && (
+            <p className="text-teal-600 text-sm mt-2">Your subscription starts on {formatDate(proposal.subscription_start_date)}.</p>
           )}
         </div>
       ) : null}
@@ -377,6 +425,16 @@ const ClientProposalReview: React.FC = () => {
     if (updateErr) {
       setError('Failed to save your response. Please try again.');
     } else {
+      // If approved and 50/50, trigger deposit invoice creation (non-fatal)
+      if (status === 'approved' && selectedProposal.payment_structure === 'split_50_50') {
+        try {
+          await supabase.functions.invoke('stripe-api/create-proposal-deposit-invoice', {
+            body: { client_id: selectedProposal.client_id, proposal_id: selectedProposal.id },
+          });
+        } catch (e) {
+          console.warn('[ClientProposalReview] Deposit invoice creation failed (non-fatal):', e);
+        }
+      }
       setResponded(true);
       setSelectedProposal(prev => prev ? { ...prev, status, client_response: responseText } : prev);
     }

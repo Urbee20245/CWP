@@ -32,7 +32,7 @@ serve(async (req) => {
   );
 
   try {
-    const { client_id, price_id, line_items, due_date, deposit_details, milestone_details, project_id, amount_cents, description, success_url, cancel_url, setup_fee_price_id } = await req.json();
+    const { client_id, price_id, line_items, due_date, deposit_details, milestone_details, project_id, amount_cents, description, success_url, cancel_url, setup_fee_price_id, proposal_id } = await req.json();
 
     if (path !== '/create-portal-session' && !client_id) {
       return errorResponse('Client ID is required.', 400);
@@ -407,6 +407,188 @@ serve(async (req) => {
         });
       }
       
+      // ── Proposal 50/50: deposit invoice (50% of proposal total) ─────────
+      case '/create-proposal-deposit-invoice': {
+        if (!proposal_id) return errorResponse('proposal_id is required.', 400);
+
+        // Fetch proposal + items
+        const { data: proposal, error: propErr } = await supabaseAdmin
+          .from('client_proposals')
+          .select('id, title, client_id, payment_structure, discount_type, discount_value')
+          .eq('id', proposal_id)
+          .single();
+        if (propErr || !proposal) return errorResponse('Proposal not found.', 404);
+
+        const { data: propItems, error: itemsErr } = await supabaseAdmin
+          .from('client_proposal_items')
+          .select('amount_cents, setup_fee_cents')
+          .eq('proposal_id', proposal_id);
+        if (itemsErr) return errorResponse('Failed to fetch proposal items.', 500);
+
+        // Total = one-time + setup fees (monthly excluded — not collected upfront)
+        const rawTotal = (propItems || []).reduce(
+          (s: number, i: any) => s + (i.amount_cents || 0) + (i.setup_fee_cents || 0),
+          0
+        );
+
+        // Apply proposal discount
+        let discountCents = 0;
+        if (proposal.discount_type === 'percentage' && proposal.discount_value) {
+          discountCents = Math.round(rawTotal * (proposal.discount_value / 100));
+        } else if (proposal.discount_type === 'fixed' && proposal.discount_value) {
+          discountCents = Math.round(proposal.discount_value * 100);
+        }
+        const totalAfterDiscount = Math.max(0, rawTotal - discountCents);
+        const depositCents = Math.round(totalAfterDiscount / 2);
+
+        if (depositCents <= 0) return errorResponse('Proposal total is zero — cannot create deposit invoice.', 400);
+
+        const customerId = await ensureStripeCustomer();
+        const invoiceLabel = `Deposit — ${proposal.title}`;
+
+        // Create invoice
+        const inv = await stripe.invoices.create({
+          customer: customerId,
+          collection_method: 'send_invoice',
+          days_until_due: 0,
+          description: invoiceLabel,
+        });
+
+        const priceId = await createAdHocPrice(invoiceLabel, depositCents);
+        await stripe.invoiceItems.create({ customer: customerId, price: priceId, invoice: inv.id });
+
+        const finalized = await stripe.invoices.sendInvoice(inv.id);
+
+        // Store invoice record with label
+        const { data: invoiceRow, error: invoiceInsertErr } = await supabaseAdmin
+          .from('invoices')
+          .insert({
+            client_id: proposal.client_id,
+            stripe_invoice_id: finalized.id,
+            status: finalized.status,
+            hosted_invoice_url: finalized.hosted_invoice_url,
+            pdf_url: finalized.invoice_pdf,
+            amount_due: finalized.amount_due,
+            currency: finalized.currency,
+            due_date: finalized.due_date ? new Date(finalized.due_date * 1000).toISOString() : null,
+            label: invoiceLabel,
+          })
+          .select('id')
+          .single();
+
+        if (invoiceInsertErr) console.error('[stripe-api] Failed to insert deposit invoice:', invoiceInsertErr);
+
+        // Link invoice to proposal
+        await supabaseAdmin
+          .from('client_proposals')
+          .update({ deposit_invoice_id: invoiceRow?.id ?? null })
+          .eq('id', proposal_id);
+
+        return jsonResponse({
+          invoice_id: finalized.id,
+          supabase_invoice_id: invoiceRow?.id,
+          hosted_url: finalized.hosted_invoice_url,
+          status: finalized.status,
+          deposit_cents: depositCents,
+        });
+      }
+
+      // ── Proposal 50/50: balance invoice (remaining 50%) ──────────────────
+      case '/create-proposal-balance-invoice': {
+        if (!proposal_id) return errorResponse('proposal_id is required.', 400);
+
+        const { data: proposal, error: propErr } = await supabaseAdmin
+          .from('client_proposals')
+          .select('id, title, client_id, deposit_invoice_id, payment_structure, discount_type, discount_value')
+          .eq('id', proposal_id)
+          .single();
+        if (propErr || !proposal) return errorResponse('Proposal not found.', 404);
+
+        const { data: propItems, error: itemsErr } = await supabaseAdmin
+          .from('client_proposal_items')
+          .select('amount_cents, setup_fee_cents, monthly_price_cents, billing_type')
+          .eq('proposal_id', proposal_id);
+        if (itemsErr) return errorResponse('Failed to fetch proposal items.', 500);
+
+        const rawTotal = (propItems || []).reduce(
+          (s: number, i: any) => s + (i.amount_cents || 0) + (i.setup_fee_cents || 0),
+          0
+        );
+
+        let discountCents = 0;
+        if (proposal.discount_type === 'percentage' && proposal.discount_value) {
+          discountCents = Math.round(rawTotal * (proposal.discount_value / 100));
+        } else if (proposal.discount_type === 'fixed' && proposal.discount_value) {
+          discountCents = Math.round(proposal.discount_value * 100);
+        }
+        const totalAfterDiscount = Math.max(0, rawTotal - discountCents);
+        const balanceCents = totalAfterDiscount - Math.round(totalAfterDiscount / 2); // exact remainder
+
+        if (balanceCents <= 0) return errorResponse('Balance amount is zero.', 400);
+
+        const customerId = await ensureStripeCustomer();
+        const invoiceLabel = `Balance Due — ${proposal.title}`;
+
+        const inv = await stripe.invoices.create({
+          customer: customerId,
+          collection_method: 'send_invoice',
+          days_until_due: 0,
+          description: invoiceLabel,
+        });
+
+        const priceId = await createAdHocPrice(invoiceLabel, balanceCents);
+        await stripe.invoiceItems.create({ customer: customerId, price: priceId, invoice: inv.id });
+
+        const finalized = await stripe.invoices.sendInvoice(inv.id);
+
+        // Determine subscription_start_date (30 days from today) if proposal has subscription items
+        const hasSubscription = (propItems || []).some(
+          (i: any) => i.billing_type === 'subscription' || i.billing_type === 'setup_plus_subscription' || i.monthly_price_cents
+        );
+        const subscriptionStartDate = hasSubscription
+          ? new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString().split('T')[0]
+          : null;
+
+        const { data: invoiceRow, error: invoiceInsertErr } = await supabaseAdmin
+          .from('invoices')
+          .insert({
+            client_id: proposal.client_id,
+            stripe_invoice_id: finalized.id,
+            status: finalized.status,
+            hosted_invoice_url: finalized.hosted_invoice_url,
+            pdf_url: finalized.invoice_pdf,
+            amount_due: finalized.amount_due,
+            currency: finalized.currency,
+            due_date: finalized.due_date ? new Date(finalized.due_date * 1000).toISOString() : null,
+            label: invoiceLabel,
+          })
+          .select('id')
+          .single();
+
+        if (invoiceInsertErr) console.error('[stripe-api] Failed to insert balance invoice:', invoiceInsertErr);
+
+        const completedAt = new Date().toISOString();
+        await supabaseAdmin
+          .from('client_proposals')
+          .update({
+            balance_invoice_id: invoiceRow?.id ?? null,
+            status: 'complete',
+            completed_at: completedAt,
+            ...(subscriptionStartDate ? { subscription_start_date: subscriptionStartDate } : {}),
+          })
+          .eq('id', proposal_id);
+
+        return jsonResponse({
+          invoice_id: finalized.id,
+          supabase_invoice_id: invoiceRow?.id,
+          hosted_url: finalized.hosted_invoice_url,
+          status: finalized.status,
+          balance_cents: balanceCents,
+          completed_at: completedAt,
+          subscription_start_date: subscriptionStartDate,
+        });
+      }
+
       case '/create-milestone-invoice': {
         if (!milestone_details || !milestone_details.milestone_id || !milestone_details.amount_cents || !milestone_details.description) {
             return errorResponse('Milestone details are required.', 400);

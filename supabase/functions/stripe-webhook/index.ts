@@ -197,6 +197,26 @@ serve(async (req) => {
                     .eq('id', milestoneId);
                 console.log(`[stripe-webhook] Milestone ${milestoneId} marked as PAID.`);
             }
+
+            // 3. Check if this invoice is a proposal deposit invoice — mark deposit_paid = true
+            const { data: invoiceRow } = await supabaseAdmin
+                .from('invoices')
+                .select('id')
+                .eq('stripe_invoice_id', invoice.id)
+                .single();
+
+            if (invoiceRow?.id) {
+                const { data: proposalRow } = await supabaseAdmin
+                    .from('client_proposals')
+                    .update({ deposit_paid: true })
+                    .eq('deposit_invoice_id', invoiceRow.id)
+                    .select('id')
+                    .single();
+
+                if (proposalRow) {
+                    console.log(`[stripe-webhook] Proposal ${proposalRow.id} deposit_paid set to true.`);
+                }
+            }
             
         } else if (event.type === 'invoice.payment_failed') {
             // 1. Check if this invoice was for a DEPOSIT

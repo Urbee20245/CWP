@@ -3,7 +3,8 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import { useParams, Link, useNavigate } from 'react-router-dom';
 import { supabase } from '../integrations/supabase/client';
-import { Loader2, Briefcase, FileText, DollarSign, Plus, CreditCard, Zap, ExternalLink, ShieldCheck, Lock, Trash2, Send, AlertCircle, MessageSquare, Phone, CheckCircle2, Pause, Play, Clock, Download, Edit, Bell, BellOff, Users, Percent, Calendar, X, AlertTriangle, Eye, XCircle, Key, Globe, Copy } from 'lucide-react';
+import { Loader2, Briefcase, FileText, DollarSign, Plus, CreditCard, Zap, ExternalLink, ShieldCheck, Lock, Trash2, Send, AlertCircle, MessageSquare, Phone, CheckCircle2, Pause, Play, Clock, Download, Edit, Bell, BellOff, Users, Percent, Calendar, X, AlertTriangle, Eye, XCircle, Key, Globe, Copy, CheckSquare, Tag } from 'lucide-react';
+import { ClientProposal } from '../types/proposals';
 import AdminLayout from '../components/AdminLayout';
 import { Profile } from '../types/auth';
 import { AdminService } from '../services/adminService'; // Use AdminService for admin functions
@@ -39,12 +40,13 @@ interface InvoiceSummary {
   amount_due: number;
   status: string;
   hosted_invoice_url: string;
-  pdf_url: string | null; // Added pdf_url
+  pdf_url: string | null;
   created_at: string;
-  last_reminder_sent_at: string | null; // New field
-  disable_reminders: boolean; // New field
-  stripe_invoice_id: string; // ADDED for audit/resend verification
-  discounts: InvoiceDiscount[]; // NEW FIELD
+  last_reminder_sent_at: string | null;
+  disable_reminders: boolean;
+  stripe_invoice_id: string;
+  label: string | null;
+  discounts: InvoiceDiscount[];
 }
 
 interface SubscriptionSummary {
@@ -120,6 +122,7 @@ interface Client {
     calendar_id: string;
     updated_at: string;
   }[] | null;
+  proposals: ClientProposal[];
 }
 
 interface BillingProduct {
@@ -190,6 +193,10 @@ const AdminClientDetail: React.FC = () => {
   const [retractInvoiceReason, setRetractInvoiceReason] = useState('');
   const [retractToast, setRetractToast] = useState<{ type: 'success' | 'warning'; message: string } | null>(null);
 
+  // Proposal / Mark-as-Complete state
+  const [markCompleteProposalId, setMarkCompleteProposalId] = useState<string | null>(null);
+  const [isMarkingComplete, setIsMarkingComplete] = useState(false);
+
   const fetchClientData = useCallback(async () => {
     if (!id) return;
     setFetchError(null);
@@ -225,15 +232,17 @@ const AdminClientDetail: React.FC = () => {
         { data: addonRequestsData },
         { data: discountsData },
         { data: remindersData },
+        { data: proposalsData },
     ] = await Promise.all([
         supabase.from('projects').select('id, title, status, progress_percent').eq('client_id', id).order('created_at', { ascending: false }),
-        supabase.from('invoices').select('id, amount_due, status, hosted_invoice_url, pdf_url, created_at, last_reminder_sent_at, disable_reminders, stripe_invoice_id').eq('client_id', id).order('created_at', { ascending: false }),
+        supabase.from('invoices').select('id, amount_due, status, hosted_invoice_url, pdf_url, created_at, last_reminder_sent_at, disable_reminders, stripe_invoice_id, label').eq('client_id', id).order('created_at', { ascending: false }),
         supabase.from('subscriptions').select('id, stripe_price_id, status, current_period_end, cancel_at_period_end').eq('client_id', id).order('created_at', { ascending: false }),
         supabase.from('deposits').select('id, amount_cents, status, stripe_invoice_id, applied_to_invoice_id, created_at').eq('client_id', id).order('created_at', { ascending: false }),
         supabase.from('service_pause_logs').select('id, action, internal_note, client_acknowledged, created_at').eq('client_id', id).order('created_at', { ascending: false }),
         supabase.from('client_addon_requests').select('id, addon_key, addon_name, status, notes, requested_at').eq('client_id', id).order('requested_at', { ascending: false }),
         supabase.from('invoice_discounts').select('*'),
         supabase.from('client_reminders').select('*, profiles(full_name)').eq('client_id', id).order('reminder_date', { ascending: true }),
+        supabase.from('client_proposals').select('id, title, status, payment_structure, deposit_paid, deposit_invoice_id, balance_invoice_id, completed_at, subscription_start_date, discount_type, discount_value, sent_at, approved_at, created_at').eq('client_id', id).order('created_at', { ascending: false }),
     ]);
     
     const allDiscounts = ensureArray(discountsData) as InvoiceDiscount[];
@@ -252,6 +261,7 @@ const AdminClientDetail: React.FC = () => {
         pause_logs: ensureArray(pauseLogsData) as PauseLog[],
         addon_requests: ensureArray(addonRequestsData) as AddonRequest[],
         reminders: ensureArray(remindersData) as ClientReminder[],
+        proposals: ensureArray(proposalsData) as ClientProposal[],
         client_google_calendar: ensureArray(clientData.client_google_calendar),
     };
     
@@ -746,6 +756,30 @@ const AdminClientDetail: React.FC = () => {
     }
   };
 
+  const handleMarkProposalComplete = async (proposalId: string) => {
+    if (!client) return;
+    setIsMarkingComplete(true);
+    try {
+      const { data, error } = await supabase.functions.invoke('stripe-api/create-proposal-balance-invoice', {
+        body: { client_id: client.id, proposal_id: proposalId },
+      });
+      if (error) throw error;
+      const result = typeof data === 'string' ? JSON.parse(data) : data;
+      if (result?.error) throw new Error(result.error);
+      setRetractToast({
+        type: 'success',
+        message: `Project marked complete! Balance invoice sent.${result.subscription_start_date ? ` Subscription starts ${result.subscription_start_date}.` : ''}`,
+      });
+      setTimeout(() => setRetractToast(null), 8000);
+      setMarkCompleteProposalId(null);
+      fetchClientData();
+    } catch (e: any) {
+      alert(`Failed to mark complete: ${e.message}`);
+    } finally {
+      setIsMarkingComplete(false);
+    }
+  };
+
   const handleResetCalendar = async () => {
     if (!client || !client.client_google_calendar) return;
     if (!window.confirm("Are you sure you want to completely reset this client's Google Calendar integration? This will delete their stored credentials.")) return;
@@ -782,6 +816,7 @@ const AdminClientDetail: React.FC = () => {
       case 'approved': return 'bg-emerald-100 text-emerald-800';
       case 'declined': return 'bg-red-100 text-red-800';
       case 'retracted': return 'bg-slate-100 text-slate-500';
+      case 'complete': return 'bg-teal-100 text-teal-800';
       default: return 'bg-slate-100 text-slate-800';
     }
   };
@@ -1641,15 +1676,23 @@ const AdminClientDetail: React.FC = () => {
                       <div className="space-y-3">
                         {client.invoices && client.invoices.length > 0 ? (
                           client.invoices.sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime()).map(invoice => (
-                            <div key={invoice.id} className="text-sm p-3 bg-slate-50 rounded-lg border border-slate-100">
+                            <div key={invoice.id} className={`text-sm p-3 rounded-lg border ${invoice.status === 'retracted' ? 'bg-slate-50 border-slate-200 opacity-60' : 'bg-slate-50 border-slate-100'}`}>
                               {/* Main row */}
                               <div className="flex flex-col md:flex-row justify-between items-start md:items-center">
                                 <div className="flex-1 min-w-0">
                                     <div className="flex items-center gap-2 mb-1">
-                                        <span className="font-medium text-slate-900">${(invoice.amount_due / 100).toFixed(2)} USD</span>
-                                        <span className={`px-2 py-0.5 rounded-full text-xs font-semibold ${getStatusColor(invoice.status)}`}>
-                                          {invoice.status}
+                                        <span className={`font-medium ${invoice.status === 'retracted' ? 'text-slate-400 line-through' : 'text-slate-900'}`}>
+                                          ${(invoice.amount_due / 100).toFixed(2)} USD
                                         </span>
+                                        <span className={`px-2 py-0.5 rounded-full text-xs font-semibold ${getStatusColor(invoice.status)}`}>
+                                          {invoice.status === 'retracted' ? 'Retracted' : invoice.status}
+                                        </span>
+                                        {invoice.label && (
+                                            <span className="px-2 py-0.5 rounded-full text-xs font-semibold bg-indigo-50 text-indigo-700 flex items-center gap-1">
+                                                <Tag className="w-3 h-3" />
+                                                {invoice.label}
+                                            </span>
+                                        )}
                                         {isDepositInvoice(invoice.stripe_invoice_id) && (
                                             <span className="px-2 py-0.5 rounded-full text-xs font-semibold bg-blue-100 text-blue-800">
                                                 Deposit
@@ -1777,6 +1820,96 @@ const AdminClientDetail: React.FC = () => {
                         )}
                       </div>
                     </div>
+
+                    {/* Proposals Summary */}
+                    {client.proposals && client.proposals.length > 0 && (
+                      <div className="bg-white p-6 rounded-xl shadow-lg border border-slate-100">
+                        <h2 className="text-xl font-bold mb-4 flex items-center gap-2 text-slate-900 border-b border-slate-100 pb-4">
+                          <FileText className="w-5 h-5 text-indigo-600" /> Proposals ({client.proposals.length})
+                        </h2>
+                        <div className="space-y-3">
+                          {client.proposals.map(proposal => {
+                            const canMarkComplete =
+                              proposal.status === 'approved' &&
+                              proposal.payment_structure === 'split_50_50' &&
+                              proposal.deposit_paid &&
+                              !proposal.completed_at;
+                            return (
+                              <div key={proposal.id} className="text-sm p-3 bg-slate-50 rounded-lg border border-slate-100">
+                                <div className="flex items-start justify-between gap-2 flex-wrap">
+                                  <div className="flex-1 min-w-0">
+                                    <div className="flex items-center gap-2 flex-wrap mb-1">
+                                      <span className="font-medium text-slate-900 truncate">{proposal.title}</span>
+                                      <span className={`px-2 py-0.5 rounded-full text-xs font-semibold ${getStatusColor(proposal.status)}`}>
+                                        {proposal.status}
+                                      </span>
+                                      {proposal.payment_structure === 'split_50_50' && (
+                                        <span className="px-2 py-0.5 rounded-full text-xs font-semibold bg-indigo-50 text-indigo-700">
+                                          50/50 Split
+                                        </span>
+                                      )}
+                                      {proposal.deposit_paid && (
+                                        <span className="px-2 py-0.5 rounded-full text-xs font-semibold bg-emerald-50 text-emerald-700 flex items-center gap-1">
+                                          <CheckSquare className="w-3 h-3" /> Deposit Paid
+                                        </span>
+                                      )}
+                                    </div>
+                                    <p className="text-xs text-slate-500">
+                                      {proposal.sent_at
+                                        ? `Sent ${new Date(proposal.sent_at).toLocaleDateString()}`
+                                        : `Created ${new Date(proposal.created_at).toLocaleDateString()}`}
+                                      {proposal.completed_at && ` · Completed ${new Date(proposal.completed_at).toLocaleDateString()}`}
+                                      {proposal.subscription_start_date && ` · Sub starts ${proposal.subscription_start_date}`}
+                                    </p>
+                                  </div>
+                                  <div className="flex items-center gap-2 flex-shrink-0">
+                                    <a
+                                      href={`/admin/proposals/${proposal.id}`}
+                                      className="p-1.5 text-indigo-500 hover:text-indigo-700 hover:bg-indigo-50 rounded-lg transition-colors"
+                                      title="View Proposal"
+                                    >
+                                      <Eye className="w-4 h-4" />
+                                    </a>
+                                    {canMarkComplete && (
+                                      <button
+                                        onClick={() => setMarkCompleteProposalId(proposal.id)}
+                                        className="flex items-center gap-1.5 px-3 py-1.5 bg-teal-600 text-white text-xs font-semibold rounded-lg hover:bg-teal-700 transition-colors"
+                                      >
+                                        <CheckSquare className="w-3.5 h-3.5" /> Mark Complete
+                                      </button>
+                                    )}
+                                  </div>
+                                </div>
+                                {/* Inline Mark-Complete confirm */}
+                                {markCompleteProposalId === proposal.id && (
+                                  <div className="mt-3 pt-3 border-t border-teal-200">
+                                    <p className="text-sm font-semibold text-slate-800 mb-2">
+                                      Mark project complete? This will send the 50% balance invoice to the client.
+                                    </p>
+                                    <div className="flex gap-2">
+                                      <button
+                                        onClick={() => handleMarkProposalComplete(proposal.id)}
+                                        disabled={isMarkingComplete}
+                                        className="px-4 py-1.5 bg-teal-600 text-white rounded-lg text-sm font-semibold hover:bg-teal-700 transition-colors disabled:opacity-50 flex items-center gap-1.5"
+                                      >
+                                        {isMarkingComplete ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <CheckSquare className="w-3.5 h-3.5" />}
+                                        Confirm
+                                      </button>
+                                      <button
+                                        onClick={() => setMarkCompleteProposalId(null)}
+                                        className="px-4 py-1.5 border border-slate-300 text-slate-600 rounded-lg text-sm font-semibold hover:bg-slate-100 transition-colors"
+                                      >
+                                        Cancel
+                                      </button>
+                                    </div>
+                                  </div>
+                                )}
+                              </div>
+                            );
+                          })}
+                        </div>
+                      </div>
+                    )}
                 </div>
               </div>
             )}
