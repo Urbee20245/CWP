@@ -3,7 +3,7 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import { useParams, Link, useNavigate } from 'react-router-dom';
 import { supabase } from '../integrations/supabase/client';
-import { Loader2, Briefcase, FileText, DollarSign, Plus, CreditCard, Zap, ExternalLink, ShieldCheck, Lock, Trash2, Send, AlertCircle, MessageSquare, Phone, CheckCircle2, Pause, Play, Clock, Download, Edit, Bell, BellOff, Users, Percent, Calendar, X, AlertTriangle, Eye, XCircle } from 'lucide-react';
+import { Loader2, Briefcase, FileText, DollarSign, Plus, CreditCard, Zap, ExternalLink, ShieldCheck, Lock, Trash2, Send, AlertCircle, MessageSquare, Phone, CheckCircle2, Pause, Play, Clock, Download, Edit, Bell, BellOff, Users, Percent, Calendar, X, AlertTriangle, Eye, XCircle, Key, Globe, Copy } from 'lucide-react';
 import AdminLayout from '../components/AdminLayout';
 import { Profile } from '../types/auth';
 import { AdminService } from '../services/adminService'; // Use AdminService for admin functions
@@ -138,7 +138,7 @@ const AdminClientDetail: React.FC = () => {
   const { user, profile: adminProfile } = useAuth();
   const [client, setClient] = useState<Client | null>(null);
   const [isLoading, setIsLoading] = useState(true);
-  const [activeTab, setActiveTab] = useState<'projects' | 'billing' | 'reminders' | 'addons' | 'sms'>('billing'); // Default to billing
+  const [activeTab, setActiveTab] = useState<'projects' | 'billing' | 'reminders' | 'addons' | 'sms' | 'website'>('billing'); // Default to billing
   const [fetchError, setFetchError] = useState<string | null>(null); // New state for fetch errors
 
   // Dialog State
@@ -172,6 +172,18 @@ const AdminClientDetail: React.FC = () => {
   const [newReminderNote, setNewReminderNote] = useState('');
   const [newReminderDate, setNewReminderDate] = useState('');
   const [saveError, setSaveError] = useState<string | null>(null); // ADDED missing state
+
+  // Domain credentials state
+  const [domainCreds, setDomainCreds] = useState<{
+    registrar_name: string | null;
+    login_url: string | null;
+    username: string | null;
+    password: string | null;
+    notes: string | null;
+    updated_at: string | null;
+  } | null>(null);
+  const [showDomainPassword, setShowDomainPassword] = useState(false);
+  const [copiedField, setCopiedField] = useState<string | null>(null);
 
   // Invoice retract state
   const [retractInvoiceConfirmId, setRetractInvoiceConfirmId] = useState<string | null>(null);
@@ -245,6 +257,15 @@ const AdminClientDetail: React.FC = () => {
     
     setClient(mergedClient);
     setAdminNotes(mergedClient.notes || '');
+
+    // Fetch domain credentials separately
+    const { data: credsData } = await supabase
+      .from('client_domain_credentials')
+      .select('registrar_name, login_url, username, password, notes, updated_at')
+      .eq('client_id', id)
+      .maybeSingle();
+    setDomainCreds(credsData || null);
+
     setIsLoading(false);
   }, [id]);
 
@@ -898,6 +919,7 @@ const AdminClientDetail: React.FC = () => {
             { id: 'billing', label: 'Billing' },
             { id: 'addons', label: 'Add-on Requests' },
             { id: 'sms', label: 'SMS Inbox' },
+            { id: 'website', label: '🔑 Domain Creds' },
           ].map(tab => (
             <button
               key={tab.id}
@@ -1197,6 +1219,86 @@ const AdminClientDetail: React.FC = () => {
                 clientName={client.business_name}
                 clientPhone={client.phone}
               />
+            )}
+
+            {activeTab === 'website' && (
+              <div className="bg-white p-6 rounded-xl shadow-lg border border-slate-100">
+                <h2 className="text-xl font-bold mb-2 flex items-center gap-2 text-slate-900 border-b border-slate-100 pb-4">
+                  <Key className="w-5 h-5 text-indigo-500" /> Domain Registrar Credentials
+                </h2>
+                <p className="text-sm text-slate-500 mb-6">Submitted by the client for DNS setup. Treat this information as sensitive.</p>
+                {domainCreds && (domainCreds.registrar_name || domainCreds.username) ? (
+                  <div className="space-y-4">
+                    {domainCreds.updated_at && (
+                      <p className="text-xs text-slate-400">Last updated: {format(new Date(domainCreds.updated_at), 'MMM d, yyyy h:mm a')}</p>
+                    )}
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                      <div>
+                        <label className="block text-xs font-semibold text-slate-500 uppercase tracking-wide mb-1">Registrar</label>
+                        <p className="text-sm text-slate-900 bg-slate-50 rounded-lg px-3 py-2 border border-slate-200">{domainCreds.registrar_name || '—'}</p>
+                      </div>
+                      <div>
+                        <label className="block text-xs font-semibold text-slate-500 uppercase tracking-wide mb-1">Login URL</label>
+                        <div className="flex items-center gap-2">
+                          <p className="text-sm text-indigo-600 bg-slate-50 rounded-lg px-3 py-2 border border-slate-200 flex-1 truncate">{domainCreds.login_url || '—'}</p>
+                          {domainCreds.login_url && (
+                            <a href={domainCreds.login_url} target="_blank" rel="noreferrer" className="text-indigo-500 hover:text-indigo-700">
+                              <ExternalLink className="w-4 h-4" />
+                            </a>
+                          )}
+                        </div>
+                      </div>
+                      <div>
+                        <label className="block text-xs font-semibold text-slate-500 uppercase tracking-wide mb-1">Username / Email</label>
+                        <div className="flex items-center gap-2">
+                          <p className="text-sm text-slate-900 bg-slate-50 rounded-lg px-3 py-2 border border-slate-200 flex-1">{domainCreds.username || '—'}</p>
+                          {domainCreds.username && (
+                            <button
+                              onClick={() => { navigator.clipboard.writeText(domainCreds.username!); setCopiedField('username'); setTimeout(() => setCopiedField(null), 2000); }}
+                              className="text-slate-400 hover:text-indigo-600"
+                              title="Copy"
+                            >
+                              {copiedField === 'username' ? <CheckCircle2 className="w-4 h-4 text-emerald-500" /> : <Copy className="w-4 h-4" />}
+                            </button>
+                          )}
+                        </div>
+                      </div>
+                      <div>
+                        <label className="block text-xs font-semibold text-slate-500 uppercase tracking-wide mb-1">Password</label>
+                        <div className="flex items-center gap-2">
+                          <p className="text-sm text-slate-900 bg-slate-50 rounded-lg px-3 py-2 border border-slate-200 flex-1 font-mono">
+                            {showDomainPassword ? domainCreds.password || '—' : '••••••••••••'}
+                          </p>
+                          <button onClick={() => setShowDomainPassword(v => !v)} className="text-slate-400 hover:text-indigo-600" title="Show/Hide">
+                            <Eye className="w-4 h-4" />
+                          </button>
+                          {domainCreds.password && (
+                            <button
+                              onClick={() => { navigator.clipboard.writeText(domainCreds.password!); setCopiedField('password'); setTimeout(() => setCopiedField(null), 2000); }}
+                              className="text-slate-400 hover:text-indigo-600"
+                              title="Copy"
+                            >
+                              {copiedField === 'password' ? <CheckCircle2 className="w-4 h-4 text-emerald-500" /> : <Copy className="w-4 h-4" />}
+                            </button>
+                          )}
+                        </div>
+                      </div>
+                    </div>
+                    {domainCreds.notes && (
+                      <div>
+                        <label className="block text-xs font-semibold text-slate-500 uppercase tracking-wide mb-1">Notes</label>
+                        <p className="text-sm text-slate-700 bg-amber-50 border border-amber-200 rounded-lg px-3 py-2 whitespace-pre-wrap">{domainCreds.notes}</p>
+                      </div>
+                    )}
+                  </div>
+                ) : (
+                  <div className="text-center py-12">
+                    <Globe className="w-12 h-12 text-slate-200 mx-auto mb-3" />
+                    <p className="text-slate-500 font-medium">No domain credentials submitted yet</p>
+                    <p className="text-slate-400 text-sm mt-1">The client hasn't filled in their domain registrar info yet.</p>
+                  </div>
+                )}
+              </div>
             )}
 
             {activeTab === 'projects' && (
