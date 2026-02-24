@@ -14,8 +14,13 @@ const ProtectedRoute: React.FC<ProtectedRouteProps> = ({ allowedRoles }) => {
   const location = useLocation();
   const navigate = useNavigate();
 
-  // STEP 1: Show simple loading UI while session is resolving (Step 3 & 5)
-  if (isLoading) {
+  // STEP 1: Show loading UI while the initial session is resolving.
+  // Guard: only block rendering when we don't yet have a user object.
+  // If a user is already established, any subsequent isLoading=true event
+  // (e.g. background JWT rotation, TOKEN_REFRESHED, or an unexpected
+  // SIGNED_IN replay) must NOT replace <Outlet /> with a spinner — doing so
+  // unmounts the current page component and destroys all its React state.
+  if (isLoading && !user) {
     return (
       <div className="min-h-[80vh] flex items-center justify-center pt-20">
         <Loader2 className="w-8 h-8 animate-spin text-indigo-600" />
