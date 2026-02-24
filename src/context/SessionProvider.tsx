@@ -93,9 +93,15 @@ const SessionProvider: React.FC<SessionProviderProps> = ({ children }) => {
       async (event, session) => {
         if (!initialized) return; // Skip until initial session is loaded
 
-        setIsLoading(true);
-
-        if (event === 'SIGNED_IN' || event === 'TOKEN_REFRESHED') {
+        if (event === 'SIGNED_IN') {
+          // Full sign-in: show loading gate while we fetch the user's profile.
+          setIsLoading(true);
+          await loadSession(session);
+        } else if (event === 'TOKEN_REFRESHED') {
+          // Background JWT rotation — update user silently.
+          // Do NOT touch isLoading: setting it true would cause ProtectedRoute to
+          // unmount the current page and destroy all its state (e.g. selectedClientId
+          // in AdminWebsiteBuilder) for the duration of the profile re-fetch.
           await loadSession(session);
         } else if (event === 'SIGNED_OUT') {
           setUser(null);
