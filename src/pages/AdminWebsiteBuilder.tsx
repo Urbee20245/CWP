@@ -419,7 +419,8 @@ Keep responses concise and actionable. Respond in 1-3 sentences max unless detai
   };
 
   const isFormValid = form.business_name && form.industry && form.services_offered && form.location;
-  const previewUrl  = brief?.client_slug ? `/site/${brief.client_slug}` : null;
+  const slug = brief?.client_slug || (brief as any)?.slug;
+  const previewUrl  = slug ? `/site/${slug}?preview=1` : null;
   const hasWebsite  = brief?.generation_status === 'complete' && !!brief.website_json;
   const pageCount   = brief?.website_json?.pages?.length ?? 0;
 
