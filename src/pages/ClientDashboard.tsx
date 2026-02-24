@@ -84,7 +84,10 @@ const ClientDashboard: React.FC = () => {
     };
 
     if (profile) fetchClientData();
-  }, [profile]);
+  // Use profile.id (stable primitive) so this only re-runs when the user
+  // actually changes, not on every profile object re-creation (e.g. tab focus).
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [profile?.id]);
 
   const getProgressColor = (percent: number) => {
     if (percent === 100) return 'bg-emerald-500';
