@@ -161,8 +161,8 @@ const AdminWebsiteBuilder: React.FC = () => {
 
   // ── Load brief ───────────────────────────────────────────────────────────
 
-  const loadBrief = useCallback(async (clientId: string) => {
-    if (!clientId) return;
+  const loadBrief = useCallback(async (clientId: string): Promise<ReturnType<typeof normaliseBrief> | null> => {
+    if (!clientId) return null;
     setLoadingBrief(true);
     setGenError(null);
 
@@ -237,6 +237,7 @@ const AdminWebsiteBuilder: React.FC = () => {
       : null);
     setShowPassword(false);
     setLoadingBrief(false);
+    return data ? normaliseBrief(data) : null;
   }, [clients]);
 
   useEffect(() => {
@@ -270,8 +271,14 @@ const AdminWebsiteBuilder: React.FC = () => {
         art_direction:    f.art_direction,
         pages_to_generate: Array.from(selectedPages),
       });
-      await loadBrief(selectedClientId);
-      setPanelState('chat');
+      const loadedBrief = await loadBrief(selectedClientId);
+      if (loadedBrief?.generation_status === 'complete' && loadedBrief?.website_json) {
+        setPanelState('chat');
+      } else {
+        const errMsg = loadedBrief?.generation_error || 'Website was not saved. Please try again.';
+        setGenError(errMsg);
+        setPanelState('brief-form');
+      }
     } catch (err: any) {
       setGenError(err.message || 'Generation failed. Please try again.');
       setPanelState('brief-form');
@@ -1244,3 +1251,4 @@ Keep responses concise and actionable. Respond in 1-3 sentences max unless detai
 };
 
 export default AdminWebsiteBuilder;
+
