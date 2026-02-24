@@ -300,15 +300,28 @@ serve(async (req) => {
                 console.log(`[stripe-webhook] Deposit ${depositRecord.id} recorded as PAID.`);
             }
             
-            // 3. Update project status
+            // 3. Update project status + SLA dates
+            const { data: projectForSla } = await supabaseAdmin
+                .from('projects')
+                .select('sla_days')
+                .eq('id', projectId)
+                .single();
+
+            const slaStart = new Date().toISOString();
+            const slaDue = projectForSla?.sla_days
+                ? new Date(Date.now() + projectForSla.sla_days * 24 * 60 * 60 * 1000).toISOString()
+                : null;
+
             await supabaseAdmin
                 .from('projects')
-                .update({ 
+                .update({
                     deposit_paid: true,
-                    status: 'active' // Auto-activate project
+                    status: 'active',
+                    sla_start_date: slaStart,
+                    ...(slaDue ? { sla_due_date: slaDue } : {}),
                 })
                 .eq('id', projectId);
-            console.log(`[stripe-webhook] Project ${projectId} auto-activated.`);
+            console.log(`[stripe-webhook] Project ${projectId} auto-activated via checkout with SLA start ${slaStart}.`);
         }
         
         // Fall through to general success handling
