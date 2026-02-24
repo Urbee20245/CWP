@@ -642,6 +642,77 @@ const ClientBilling: React.FC = () => {
                             Invoices reflect services provided or in progress, including project milestones and one-time fees.
                         </p>
 
+                        {/* Deposit Due Banner */}
+                        {invoices
+                          .filter(inv =>
+                            (inv.invoice_type === 'deposit' || inv.label?.startsWith('Deposit —')) &&
+                            (inv.status === 'open' || inv.status === 'draft') &&
+                            inv.hosted_invoice_url
+                          )
+                          .map(inv => (
+                            <div key={inv.id} className="mb-4 p-4 bg-indigo-600 rounded-xl flex items-center justify-between gap-4">
+                              <div>
+                                <p className="text-xs font-semibold text-indigo-200 uppercase tracking-wide">
+                                  ACTION REQUIRED
+                                </p>
+                                <p className="text-white font-bold text-base mt-0.5">
+                                  {inv.label || 'Project Deposit Due'}
+                                </p>
+                                <p className="text-indigo-200 text-sm mt-0.5">
+                                  A deposit of <strong className="text-white">
+                                    ${(inv.amount_due / 100).toFixed(2)}
+                                  </strong> is required before work can begin.
+                                </p>
+                              </div>
+                              <a
+                                href={inv.hosted_invoice_url}
+                                target="_blank"
+                                rel="noreferrer"
+                                className="flex-shrink-0 flex items-center gap-2 px-4 py-2 bg-white text-indigo-600 font-bold rounded-lg hover:bg-indigo-50 transition-colors text-sm"
+                              >
+                                <DollarSign className="w-4 h-4" />
+                                Pay ${(inv.amount_due / 100).toFixed(2)} Now
+                              </a>
+                            </div>
+                          ))
+                        }
+
+                        {/* Balance Due Banner */}
+                        {invoices
+                          .filter(inv =>
+                            (inv.invoice_type === 'balance' || inv.label?.startsWith('Balance Due —')) &&
+                            (inv.status === 'open' || inv.status === 'draft') &&
+                            inv.hosted_invoice_url
+                          )
+                          .map(inv => (
+                            <div key={inv.id} className="mb-4 p-4 bg-amber-500 rounded-xl flex items-center justify-between gap-4">
+                              <div>
+                                <p className="text-xs font-semibold text-amber-100 uppercase tracking-wide">
+                                  BALANCE DUE
+                                </p>
+                                <p className="text-white font-bold text-base mt-0.5">
+                                  {inv.label || 'Project Balance Due'}
+                                </p>
+                                <p className="text-amber-100 text-sm mt-0.5">
+                                  Your project is complete. Please pay the remaining balance of{' '}
+                                  <strong className="text-white">
+                                    ${(inv.amount_due / 100).toFixed(2)}
+                                  </strong>.
+                                </p>
+                              </div>
+                              <a
+                                href={inv.hosted_invoice_url}
+                                target="_blank"
+                                rel="noreferrer"
+                                className="flex-shrink-0 flex items-center gap-2 px-4 py-2 bg-white text-amber-600 font-bold rounded-lg hover:bg-amber-50 transition-colors text-sm"
+                              >
+                                <DollarSign className="w-4 h-4" />
+                                Pay ${(inv.amount_due / 100).toFixed(2)} Now
+                              </a>
+                            </div>
+                          ))
+                        }
+
                         {invoices.length === 0 ? (
                             <div className="text-center p-8 bg-slate-50 rounded-lg">
                                 <p className="text-slate-500">No invoices found.</p>
