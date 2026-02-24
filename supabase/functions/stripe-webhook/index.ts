@@ -199,6 +199,13 @@ serve(async (req) => {
                         })
                         .eq('id', depositData.project_id);
                     console.log(`[stripe-webhook] Project ${depositData.project_id} auto-activated with SLA start ${slaStartDate}.`);
+
+                    // Sync deposit_paid back to the linked proposal
+                    await supabaseAdmin
+                        .from('client_proposals')
+                        .update({ deposit_paid: true })
+                        .eq('project_id', depositData.project_id);
+                    console.log(`[stripe-webhook] client_proposals.deposit_paid synced for project ${depositData.project_id}.`);
                 }
             }
             
@@ -322,6 +329,13 @@ serve(async (req) => {
                 })
                 .eq('id', projectId);
             console.log(`[stripe-webhook] Project ${projectId} auto-activated via checkout with SLA start ${slaStart}.`);
+
+            // Sync deposit_paid back to the linked proposal
+            await supabaseAdmin
+                .from('client_proposals')
+                .update({ deposit_paid: true })
+                .eq('project_id', projectId);
+            console.log(`[stripe-webhook] client_proposals.deposit_paid synced via checkout for project ${projectId}.`);
         }
         
         // Fall through to general success handling

@@ -1834,6 +1834,11 @@ const AdminClientDetail: React.FC = () => {
                               proposal.payment_structure === 'split_50_50' &&
                               proposal.deposit_paid &&
                               !proposal.completed_at;
+                            const awaitingDeposit =
+                              proposal.status === 'approved' &&
+                              proposal.payment_structure === 'split_50_50' &&
+                              !proposal.deposit_paid &&
+                              !proposal.completed_at;
                             return (
                               <div key={proposal.id} className="text-sm p-3 bg-slate-50 rounded-lg border border-slate-100">
                                 <div className="flex items-start justify-between gap-2 flex-wrap">
@@ -1874,6 +1879,15 @@ const AdminClientDetail: React.FC = () => {
                                       <button
                                         onClick={() => setMarkCompleteProposalId(proposal.id)}
                                         className="flex items-center gap-1.5 px-3 py-1.5 bg-teal-600 text-white text-xs font-semibold rounded-lg hover:bg-teal-700 transition-colors"
+                                      >
+                                        <CheckSquare className="w-3.5 h-3.5" /> Mark Complete
+                                      </button>
+                                    )}
+                                    {awaitingDeposit && (
+                                      <button
+                                        disabled
+                                        title="Waiting for deposit payment"
+                                        className="flex items-center gap-1.5 px-3 py-1.5 bg-slate-200 text-slate-400 text-xs font-semibold rounded-lg cursor-not-allowed"
                                       >
                                         <CheckSquare className="w-3.5 h-3.5" /> Mark Complete
                                       </button>

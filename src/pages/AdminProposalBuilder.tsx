@@ -222,6 +222,7 @@ const AdminProposalBuilder: React.FC = () => {
 
   // ── Payment & discount ──
   const [paymentStructure, setPaymentStructure] = useState<'full' | 'split_50_50'>('full');
+  const [hasAutoSetPaymentStructure, setHasAutoSetPaymentStructure] = useState(false);
   const [discountType, setDiscountType] = useState<'none' | 'percentage' | 'fixed'>('none');
   const [discountValue, setDiscountValue] = useState('');
 
@@ -301,6 +302,14 @@ const AdminProposalBuilder: React.FC = () => {
     fetchCatalog();
     if (isEditMode) fetchProposal();
   }, [fetchCatalog, fetchProposal, isEditMode]);
+
+  // Auto-default payment structure to split_50_50 when the first item is added (new proposals only)
+  useEffect(() => {
+    if (!isEditMode && !hasAutoSetPaymentStructure && items.length > 0) {
+      setPaymentStructure('split_50_50');
+      setHasAutoSetPaymentStructure(true);
+    }
+  }, [items.length, isEditMode, hasAutoSetPaymentStructure]);
 
   // ─── Item helpers ─────────────────────────────────────────────────────────
 
