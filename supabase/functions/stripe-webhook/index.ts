@@ -174,17 +174,31 @@ serve(async (req) => {
             
             if (depositData) {
                 console.log(`[stripe-webhook] Deposit ${depositData.id} marked as PAID.`);
-                
-                // If deposit is linked to a project, update project status
+
+                // If deposit is linked to a project, update project status + SLA dates
                 if (depositData.project_id) {
+                    // Fetch sla_days to compute due date
+                    const { data: projectData } = await supabaseAdmin
+                        .from('projects')
+                        .select('sla_days')
+                        .eq('id', depositData.project_id)
+                        .single();
+
+                    const slaStartDate = new Date().toISOString();
+                    const slaDueDate = projectData?.sla_days
+                        ? new Date(Date.now() + projectData.sla_days * 24 * 60 * 60 * 1000).toISOString()
+                        : null;
+
                     await supabaseAdmin
                         .from('projects')
-                        .update({ 
+                        .update({
                             deposit_paid: true,
-                            status: 'active' // Auto-activate project
+                            status: 'active',
+                            sla_start_date: slaStartDate,
+                            ...(slaDueDate ? { sla_due_date: slaDueDate } : {}),
                         })
                         .eq('id', depositData.project_id);
-                    console.log(`[stripe-webhook] Project ${depositData.project_id} auto-activated.`);
+                    console.log(`[stripe-webhook] Project ${depositData.project_id} auto-activated with SLA start ${slaStartDate}.`);
                 }
             }
             
@@ -286,15 +300,28 @@ serve(async (req) => {
                 console.log(`[stripe-webhook] Deposit ${depositRecord.id} recorded as PAID.`);
             }
             
-            // 3. Update project status
+            // 3. Update project status + SLA dates
+            const { data: projectForSla } = await supabaseAdmin
+                .from('projects')
+                .select('sla_days')
+                .eq('id', projectId)
+                .single();
+
+            const slaStart = new Date().toISOString();
+            const slaDue = projectForSla?.sla_days
+                ? new Date(Date.now() + projectForSla.sla_days * 24 * 60 * 60 * 1000).toISOString()
+                : null;
+
             await supabaseAdmin
                 .from('projects')
-                .update({ 
+                .update({
                     deposit_paid: true,
-                    status: 'active' // Auto-activate project
+                    status: 'active',
+                    sla_start_date: slaStart,
+                    ...(slaDue ? { sla_due_date: slaDue } : {}),
                 })
                 .eq('id', projectId);
-            console.log(`[stripe-webhook] Project ${projectId} auto-activated.`);
+            console.log(`[stripe-webhook] Project ${projectId} auto-activated via checkout with SLA start ${slaStart}.`);
         }
         
         // Fall through to general success handling

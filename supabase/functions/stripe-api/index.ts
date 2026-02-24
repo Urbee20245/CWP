@@ -411,10 +411,10 @@ serve(async (req) => {
       case '/create-proposal-deposit-invoice': {
         if (!proposal_id) return errorResponse('proposal_id is required.', 400);
 
-        // Fetch proposal + items
+        // Fetch proposal + items (include notes/client_message for project description)
         const { data: proposal, error: propErr } = await supabaseAdmin
           .from('client_proposals')
-          .select('id, title, client_id, payment_structure, discount_type, discount_value')
+          .select('id, title, client_id, payment_structure, discount_type, discount_value, notes, client_message')
           .eq('id', proposal_id)
           .single();
         if (propErr || !proposal) return errorResponse('Proposal not found.', 404);
@@ -478,11 +478,182 @@ serve(async (req) => {
 
         if (invoiceInsertErr) console.error('[stripe-api] Failed to insert deposit invoice:', invoiceInsertErr);
 
-        // Link invoice to proposal
+        // ── Auto-create project card, deposit record, and milestones ────────
+        let newProjectId: string | null = null;
+        try {
+          // 1. Create project row (status: awaiting_deposit)
+          const projectDescription = (proposal as any).client_message || (proposal as any).notes || null;
+          const { data: newProject, error: projectErr } = await supabaseAdmin
+            .from('projects')
+            .insert({
+              client_id: proposal.client_id,
+              title: proposal.title,
+              description: projectDescription,
+              status: 'awaiting_deposit',
+              progress_percent: 0,
+              required_deposit_cents: depositCents,
+              deposit_paid: false,
+              proposal_id: proposal.id,
+            })
+            .select('id')
+            .single();
+
+          if (projectErr) {
+            console.error('[stripe-api] Failed to create project for proposal:', projectErr);
+          } else if (newProject) {
+            newProjectId = newProject.id;
+
+            // 2. Create deposit record linked to both project and Stripe invoice
+            const { error: depositErr } = await supabaseAdmin
+              .from('deposits')
+              .insert({
+                client_id: proposal.client_id,
+                project_id: newProjectId,
+                amount_cents: depositCents,
+                status: 'pending',
+                stripe_invoice_id: finalized.id,
+              });
+            if (depositErr) console.error('[stripe-api] Failed to create deposit record:', depositErr);
+
+            // 3. Create two milestone rows
+            const { error: milestoneErr } = await supabaseAdmin
+              .from('milestones')
+              .insert([
+                {
+                  project_id: newProjectId,
+                  name: 'Deposit (50%)',
+                  amount_cents: depositCents,
+                  status: 'pending',
+                  order_index: 1,
+                },
+                {
+                  project_id: newProjectId,
+                  name: 'Balance Due (50%)',
+                  amount_cents: depositCents,
+                  status: 'pending',
+                  order_index: 2,
+                },
+              ]);
+            if (milestoneErr) console.error('[stripe-api] Failed to create milestones:', milestoneErr);
+          }
+        } catch (projectCreationErr) {
+          console.error('[stripe-api] Unexpected error during project creation:', projectCreationErr);
+        }
+
+        // Link invoice + project to proposal
         await supabaseAdmin
           .from('client_proposals')
-          .update({ deposit_invoice_id: invoiceRow?.id ?? null })
+          .update({
+            deposit_invoice_id: invoiceRow?.id ?? null,
+            ...(newProjectId ? { project_id: newProjectId } : {}),
+          })
           .eq('id', proposal_id);
+
+        // ── Send approval email to client ────────────────────────────────────
+        try {
+          const clientEmail = client.billing_email || (client as any).profiles?.email;
+          if (clientEmail) {
+            const siteUrl = Deno.env.get('SITE_URL') || 'https://portal.customwebsitesplus.com';
+            const portalUrl = `${siteUrl}/client/billing`;
+            const depositFormatted = new Intl.NumberFormat('en-US', {
+              style: 'currency',
+              currency: 'USD',
+            }).format(depositCents / 100);
+            const clientName = client.business_name || 'there';
+            const proposalTitle = proposal.title;
+
+            const approvalHtml = `
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Proposal Approved</title>
+</head>
+<body style="margin:0;padding:0;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;background:#F4F6FA;">
+  <table width="100%" cellpadding="0" cellspacing="0" style="background:#F4F6FA;padding:40px 16px;">
+    <tr>
+      <td align="center">
+        <table width="600" cellpadding="0" cellspacing="0" style="background:#ffffff;border-radius:16px;overflow:hidden;box-shadow:0 4px 24px rgba(0,0,0,0.08);">
+          <!-- Header -->
+          <tr>
+            <td style="background:linear-gradient(135deg,#7C3AED 0%,#4F46E5 100%);padding:36px 40px;text-align:center;">
+              <h1 style="color:#ffffff;margin:0;font-size:24px;font-weight:700;letter-spacing:-0.5px;">Custom Websites Plus</h1>
+              <p style="color:rgba(255,255,255,0.85);margin:8px 0 0;font-size:15px;">✅ Your proposal has been approved!</p>
+            </td>
+          </tr>
+          <!-- Body -->
+          <tr>
+            <td style="padding:40px 40px 32px;">
+              <p style="margin:0 0 8px;font-size:18px;font-weight:700;color:#1E293B;">Hi ${clientName},</p>
+              <p style="margin:0 0 24px;font-size:15px;color:#475569;line-height:1.6;">
+                Great news — your proposal <strong>${proposalTitle}</strong> has been approved and we're ready to get started!
+              </p>
+
+              <!-- Deposit info box -->
+              <div style="background:#F5F3FF;border:1px solid #DDD6FE;border-radius:12px;padding:24px;margin-bottom:28px;">
+                <p style="margin:0 0 6px;font-size:12px;font-weight:700;color:#7C3AED;text-transform:uppercase;letter-spacing:0.5px;">Deposit Required to Begin</p>
+                <p style="margin:0 0 12px;font-size:28px;font-weight:800;color:#1E293B;">${depositFormatted}</p>
+                <p style="margin:0;font-size:14px;color:#64748B;line-height:1.6;">
+                  This is a 50% deposit. Work will begin as soon as your deposit is received.<br />
+                  The remaining 50% balance will be due upon project completion.
+                </p>
+              </div>
+
+              <!-- CTA Button -->
+              <table width="100%" cellpadding="0" cellspacing="0">
+                <tr>
+                  <td align="center">
+                    <a href="${portalUrl}"
+                       style="display:inline-block;background:#7C3AED;color:#ffffff;font-size:16px;font-weight:700;
+                              text-decoration:none;padding:16px 40px;border-radius:12px;letter-spacing:-0.2px;">
+                      Pay Deposit &amp; Begin Project →
+                    </a>
+                  </td>
+                </tr>
+              </table>
+
+              <p style="margin:24px 0 0;font-size:14px;color:#64748B;line-height:1.6;text-align:center;">
+                Log in to your client portal to view your project status and pay your deposit.
+              </p>
+            </td>
+          </tr>
+          <!-- Footer -->
+          <tr>
+            <td style="background:#F8FAFC;border-top:1px solid #E2E8F0;padding:24px 40px;text-align:center;">
+              <p style="margin:0;font-size:12px;color:#94A3B8;">
+                Custom Websites Plus · Questions? Reply to this email or visit your client portal.<br />
+                <a href="${portalUrl}" style="color:#7C3AED;">${portalUrl}</a>
+              </p>
+            </td>
+          </tr>
+        </table>
+      </td>
+    </tr>
+  </table>
+</body>
+</html>`.trim();
+
+            await fetch(`${Deno.env.get('SUPABASE_URL')}/functions/v1/send-email`, {
+              method: 'POST',
+              headers: {
+                'Authorization': `Bearer ${Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')}`,
+                'Content-Type': 'application/json',
+              },
+              body: JSON.stringify({
+                to_email: clientEmail,
+                subject: '✅ Proposal Approved — Deposit Required to Begin',
+                html_body: approvalHtml,
+                client_id: proposal.client_id,
+                sent_by: 'system',
+              }),
+            });
+            console.log(`[stripe-api] Approval email dispatched to ${clientEmail}`);
+          }
+        } catch (emailErr) {
+          // Non-fatal: email failure should not block the response
+          console.error('[stripe-api] Failed to send approval email (non-fatal):', emailErr);
+        }
 
         return jsonResponse({
           invoice_id: finalized.id,
@@ -490,6 +661,7 @@ serve(async (req) => {
           hosted_url: finalized.hosted_invoice_url,
           status: finalized.status,
           deposit_cents: depositCents,
+          project_id: newProjectId,
         });
       }
 
@@ -499,7 +671,7 @@ serve(async (req) => {
 
         const { data: proposal, error: propErr } = await supabaseAdmin
           .from('client_proposals')
-          .select('id, title, client_id, deposit_invoice_id, payment_structure, discount_type, discount_value')
+          .select('id, title, client_id, deposit_invoice_id, payment_structure, discount_type, discount_value, project_id')
           .eq('id', proposal_id)
           .single();
         if (propErr || !proposal) return errorResponse('Proposal not found.', 404);
@@ -577,6 +749,24 @@ serve(async (req) => {
             ...(subscriptionStartDate ? { subscription_start_date: subscriptionStartDate } : {}),
           })
           .eq('id', proposal_id);
+
+        // ── Update linked project + Balance Due milestone ────────────────────
+        const linkedProjectId = (proposal as any).project_id as string | null;
+        if (linkedProjectId) {
+          await supabaseAdmin
+            .from('projects')
+            .update({ status: 'completed' })
+            .eq('id', linkedProjectId);
+
+          // Set the "Balance Due (50%)" milestone (order_index=2) to 'due'
+          await supabaseAdmin
+            .from('milestones')
+            .update({ status: 'due' })
+            .eq('project_id', linkedProjectId)
+            .eq('order_index', 2);
+
+          console.log(`[stripe-api] Project ${linkedProjectId} marked completed; Balance Due milestone set to 'due'.`);
+        }
 
         return jsonResponse({
           invoice_id: finalized.id,
