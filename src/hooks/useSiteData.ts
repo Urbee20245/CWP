@@ -24,7 +24,7 @@ export interface UseSiteDataResult {
  * - If the `cal_com` premium feature is enabled, also fetches the
  *   Cal.com booking link from `client_cal_calendar`.
  */
-export function useSiteData(slug: string | undefined): UseSiteDataResult {
+export function useSiteData(slug: string | undefined, isPreview = false): UseSiteDataResult {
   const [status, setStatus] = useState<SiteStatus>('loading');
   const [siteData, setSiteData] = useState<SiteData | null>(null);
 
@@ -43,7 +43,7 @@ export function useSiteData(slug: string | undefined): UseSiteDataResult {
       const { data, error } = await supabase
         .from('website_briefs')
         .select('website_json, is_published, premium_features, client_id')
-        .eq('slug', slug)
+        .or(`slug.eq.${slug},client_slug.eq.${slug}`)
         .maybeSingle();
 
       if (cancelled) return;
@@ -53,7 +53,7 @@ export function useSiteData(slug: string | undefined): UseSiteDataResult {
         return;
       }
 
-      if (!data.is_published) {
+      if (!data.is_published && !isPreview) {
         setStatus('coming_soon');
         return;
       }
@@ -92,7 +92,7 @@ export function useSiteData(slug: string | undefined): UseSiteDataResult {
     return () => {
       cancelled = true;
     };
-  }, [slug]);
+  }, [slug, isPreview]);
 
   return { status, siteData };
 }

@@ -1,5 +1,5 @@
 import React, { useEffect } from 'react';
-import { useParams } from 'react-router-dom';
+import { useParams, useSearchParams } from 'react-router-dom';
 import { Loader2, Globe, Clock } from 'lucide-react';
 import SiteRendererComponent from '../components/website-builder/SiteRenderer';
 import { useSiteData } from '../hooks/useSiteData';
@@ -45,7 +45,9 @@ const SiteNotFound: React.FC = () => (
  */
 const SiteRenderer: React.FC = () => {
   const { slug, page } = useParams<{ slug: string; page?: string }>();
-  const { status, siteData } = useSiteData(slug);
+  const [searchParams] = useSearchParams();
+  const isPreview = searchParams.get('preview') === '1';
+  const { status, siteData } = useSiteData(slug, isPreview);
 
   // Resolve the page to display from the URL param
   const currentPageId = (() => {
