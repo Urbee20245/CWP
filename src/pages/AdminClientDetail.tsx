@@ -197,6 +197,9 @@ const AdminClientDetail: React.FC = () => {
   const [markCompleteProposalId, setMarkCompleteProposalId] = useState<string | null>(null);
   const [isMarkingComplete, setIsMarkingComplete] = useState(false);
 
+  // Proposal / Backfill deposit invoice state
+  const [backfillingDepositProposalId, setBackfillingDepositProposalId] = useState<string | null>(null);
+
   const fetchClientData = useCallback(async () => {
     if (!id) return;
     setFetchError(null);
@@ -777,6 +780,26 @@ const AdminClientDetail: React.FC = () => {
       alert(`Failed to mark complete: ${e.message}`);
     } finally {
       setIsMarkingComplete(false);
+    }
+  };
+
+  const handleBackfillDepositInvoice = async (proposalId: string) => {
+    if (!client) return;
+    setBackfillingDepositProposalId(proposalId);
+    try {
+      const { data, error } = await supabase.functions.invoke('stripe-api/create-proposal-deposit-invoice', {
+        body: { client_id: client.id, proposal_id: proposalId },
+      });
+      if (error) throw error;
+      const result = typeof data === 'string' ? JSON.parse(data) : data;
+      if (result?.error) throw new Error(result.error);
+      setRetractToast({ type: 'success', message: 'Deposit invoice created and sent to client.' });
+      setTimeout(() => setRetractToast(null), 8000);
+      fetchClientData();
+    } catch (e: any) {
+      alert(`Failed to create deposit invoice: ${e.message}`);
+    } finally {
+      setBackfillingDepositProposalId(null);
     }
   };
 
@@ -1839,6 +1862,10 @@ const AdminClientDetail: React.FC = () => {
                               proposal.payment_structure === 'split_50_50' &&
                               !proposal.deposit_paid &&
                               !proposal.completed_at;
+                            const needsDepositBackfill =
+                              proposal.status === 'approved' &&
+                              proposal.payment_structure === 'split_50_50' &&
+                              !proposal.deposit_invoice_id;
                             return (
                               <div key={proposal.id} className="text-sm p-3 bg-slate-50 rounded-lg border border-slate-100">
                                 <div className="flex items-start justify-between gap-2 flex-wrap">
@@ -1890,6 +1917,19 @@ const AdminClientDetail: React.FC = () => {
                                         className="flex items-center gap-1.5 px-3 py-1.5 bg-slate-200 text-slate-400 text-xs font-semibold rounded-lg cursor-not-allowed"
                                       >
                                         <CheckSquare className="w-3.5 h-3.5" /> Mark Complete
+                                      </button>
+                                    )}
+                                    {needsDepositBackfill && (
+                                      <button
+                                        onClick={() => handleBackfillDepositInvoice(proposal.id)}
+                                        disabled={backfillingDepositProposalId === proposal.id}
+                                        title="Create the missing deposit invoice for this approved proposal"
+                                        className="flex items-center gap-1.5 px-3 py-1.5 bg-amber-500 text-white text-xs font-semibold rounded-lg hover:bg-amber-600 transition-colors disabled:opacity-50"
+                                      >
+                                        {backfillingDepositProposalId === proposal.id
+                                          ? <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                                          : <AlertTriangle className="w-3.5 h-3.5" />}
+                                        Create Missing Deposit Invoice
                                       </button>
                                     )}
                                   </div>
