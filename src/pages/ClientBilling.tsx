@@ -17,6 +17,8 @@ interface Invoice {
   hosted_invoice_url: string;
   pdf_url: string | null;
   created_at: string;
+  label: string | null;
+  invoice_type: string | null;
 }
 
 interface Subscription {
@@ -110,7 +112,7 @@ const ClientBilling: React.FC = () => {
     // 2. Fetch invoices for that client ID (exclude retracted — clients should never see these)
     const { data: invoicesData, error: invoicesError } = await supabase
       .from('invoices')
-      .select('id, amount_due, status, hosted_invoice_url, pdf_url, created_at')
+      .select('id, amount_due, status, hosted_invoice_url, pdf_url, created_at, label, invoice_type')
       .eq('client_id', clientId)
       .neq('status', 'retracted')
       .order('created_at', { ascending: false });
@@ -309,6 +311,16 @@ const ClientBilling: React.FC = () => {
   const unappliedDeposits = deposits.filter(d => d.status === 'paid' && !d.applied_to_invoice_id);
   const totalUnappliedCredit = unappliedDeposits.reduce((sum, d) => sum + d.amount_cents, 0) / 100;
 
+  // Project invoice banners
+  const unpaidDepositInvoice = invoices.find(
+    inv => inv.status !== 'paid' && inv.status !== 'retracted' &&
+      (inv.invoice_type === 'deposit' || (inv.label && inv.label.startsWith('Deposit —')))
+  ) || null;
+  const unpaidBalanceInvoice = invoices.find(
+    inv => inv.status !== 'paid' && inv.status !== 'retracted' &&
+      (inv.invoice_type === 'balance' || (inv.label && inv.label.startsWith('Balance Due —')))
+  ) || null;
+
   if (isClientRecordMissing) {
       return (
           <ClientLayout>
@@ -335,8 +347,66 @@ const ClientBilling: React.FC = () => {
               <Loader2 className="w-6 h-6 animate-spin text-indigo-600" />
             </div>
         ) : (
+            <div className="space-y-6">
+
+            {/* Deposit Due Banner */}
+            {unpaidDepositInvoice && (
+              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 p-5 bg-indigo-600 rounded-xl shadow-lg text-white">
+                <div className="flex items-start gap-3">
+                  <CreditCard className="w-6 h-6 flex-shrink-0 mt-0.5" />
+                  <div>
+                    <p className="font-bold text-lg leading-tight">Project Deposit Due</p>
+                    <p className="text-indigo-200 text-sm mt-0.5">
+                      {unpaidDepositInvoice.label || 'Deposit invoice ready for payment'}
+                    </p>
+                  </div>
+                </div>
+                <div className="flex items-center gap-4 flex-shrink-0">
+                  <span className="text-2xl font-bold">${(unpaidDepositInvoice.amount_due / 100).toFixed(2)}</span>
+                  {unpaidDepositInvoice.hosted_invoice_url && (
+                    <a
+                      href={unpaidDepositInvoice.hosted_invoice_url}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="px-5 py-2.5 bg-white text-indigo-700 font-bold rounded-lg hover:bg-indigo-50 transition-colors text-sm"
+                    >
+                      Pay Now
+                    </a>
+                  )}
+                </div>
+              </div>
+            )}
+
+            {/* Balance Due Banner */}
+            {unpaidBalanceInvoice && (
+              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 p-5 bg-amber-500 rounded-xl shadow-lg text-white">
+                <div className="flex items-start gap-3">
+                  <CheckCircle2 className="w-6 h-6 flex-shrink-0 mt-0.5" />
+                  <div>
+                    <p className="font-bold text-lg leading-tight">Balance Due — Project Complete</p>
+                    <p className="text-amber-100 text-sm mt-0.5">
+                      {unpaidBalanceInvoice.label || 'Your project is complete — final balance ready'}
+                    </p>
+                  </div>
+                </div>
+                <div className="flex items-center gap-4 flex-shrink-0">
+                  <span className="text-2xl font-bold">${(unpaidBalanceInvoice.amount_due / 100).toFixed(2)}</span>
+                  {unpaidBalanceInvoice.hosted_invoice_url && (
+                    <a
+                      href={unpaidBalanceInvoice.hosted_invoice_url}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="px-5 py-2.5 bg-white text-amber-700 font-bold rounded-lg hover:bg-amber-50 transition-colors text-sm"
+                    >
+                      Pay Now
+                    </a>
+                  )}
+                </div>
+              </div>
+            )}
+
             <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
-                
+
                 {/* Subscription Status & Credit */}
                 <div className="lg:col-span-1 space-y-6">
                     <div className="bg-white rounded-xl shadow-lg border border-slate-100 p-6 h-fit">
@@ -581,6 +651,7 @@ const ClientBilling: React.FC = () => {
                                 <table className="min-w-full divide-y divide-slate-200">
                                     <thead>
                                         <tr>
+                                            <th className="px-4 py-3 text-left text-xs font-medium text-slate-500 uppercase tracking-wider">Description</th>
                                             <th className="px-4 py-3 text-left text-xs font-medium text-slate-500 uppercase tracking-wider">Date</th>
                                             <th className="px-4 py-3 text-left text-xs font-medium text-slate-500 uppercase tracking-wider">Amount</th>
                                             <th className="px-4 py-3 text-left text-xs font-medium text-slate-500 uppercase tracking-wider">Status</th>
@@ -590,7 +661,10 @@ const ClientBilling: React.FC = () => {
                                     <tbody className="bg-white divide-y divide-slate-100">
                                         {invoices.map((invoice) => (
                                             <tr key={invoice.id} className="hover:bg-slate-50">
-                                                <td className="px-4 py-4 whitespace-nowrap text-sm text-slate-600">{format(new Date(invoice.created_at), 'MMM dd, yyyy')}</td>
+                                                <td className="px-4 py-4 text-sm text-slate-700 font-medium max-w-xs">
+                                                    {invoice.label || 'Invoice'}
+                                                </td>
+                                                <td className="px-4 py-4 whitespace-nowrap text-sm text-slate-500">{format(new Date(invoice.created_at), 'MMM dd, yyyy')}</td>
                                                 <td className="px-4 py-4 whitespace-nowrap text-sm font-medium text-slate-900">${(invoice.amount_due / 100).toFixed(2)} USD</td>
                                                 <td className="px-4 py-4 whitespace-nowrap">
                                                     <span className={`px-2 py-0.5 rounded-full text-xs font-semibold ${getStatusColor(invoice.status)}`}>
@@ -658,9 +732,10 @@ const ClientBilling: React.FC = () => {
                     </div>
                 </div>
             </div>
+            </div>
         )}
       </div>
-      
+
       {/* Cancellation Modal */}
       {cancellationTarget && (
           <CancelSubscriptionModal
