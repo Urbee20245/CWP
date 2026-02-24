@@ -46,7 +46,10 @@ export type PageId =
   | 'faq'
   | 'testimonials'
   | 'pricing'
-  | 'blog';
+  | 'blog'
+  | 'portfolio'
+  | 'menu'
+  | 'team';
 
 export type SectionType =
   | 'hero'
@@ -59,7 +62,13 @@ export type SectionType =
   | 'stats'
   | 'gallery'
   | 'pricing_cards'
-  | 'blog_preview';
+  | 'blog_preview'
+  | 'team'
+  | 'menu_section'
+  | 'process'
+  | 'features'
+  | 'cta_banner'
+  | 'map_location';
 
 export type GenerationStatus = 'draft' | 'generating' | 'complete' | 'error';
 
@@ -113,6 +122,9 @@ export const ALL_PAGE_OPTIONS: PageOption[] = [
   { id: 'testimonials', name: 'Testimonials',  slug: 'testimonials',description: 'Reviews & social proof' },
   { id: 'pricing',      name: 'Pricing',       slug: 'pricing',     description: 'Packages & tier cards' },
   { id: 'blog',         name: 'Blog',          slug: 'blog',        description: 'AI-generated articles (premium)' },
+  { id: 'portfolio',    name: 'Portfolio',     slug: 'portfolio',   description: 'Showcase of work & projects' },
+  { id: 'menu',         name: 'Menu',          slug: 'menu',        description: 'Food/drink menu (restaurants)' },
+  { id: 'team',         name: 'Our Team',      slug: 'team',        description: 'Team bios & profiles' },
 ];
 
 // ─── Premium Features ─────────────────────────────────────────────────────────
@@ -265,3 +277,4 @@ export const PREMIUM_FEATURE_GROUPS: PremiumFeatureGroup[] = [
   'Widgets & Chatbots',
   'Client Portal',
 ];
+
