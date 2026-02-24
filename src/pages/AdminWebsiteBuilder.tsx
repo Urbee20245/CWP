@@ -224,7 +224,11 @@ const AdminWebsiteBuilder: React.FC = () => {
       setPanelState('type-picker');
     }
 
-    // Load registrar creds
+    // Clear loading now — panelState and brief are both settled.
+    // Creds are a secondary fetch that must not delay the panel transition.
+    setLoadingBrief(false);
+
+    // Load registrar creds (non-blocking for panel state)
     const { data: credsData } = await supabase
       .from('client_domain_credentials')
       .select('registrar_name, login_url, username, password, notes')
@@ -236,7 +240,6 @@ const AdminWebsiteBuilder: React.FC = () => {
           username: credsData.username, password: credsData.password, notes: credsData.notes }
       : null);
     setShowPassword(false);
-    setLoadingBrief(false);
     return data ? normaliseBrief(data) : null;
   }, [clients]);
 
@@ -433,10 +436,14 @@ Keep responses concise and actionable. Respond in 1-3 sentences max unless detai
 
   // ── Derived panel state ───────────────────────────────────────────────────
 
-  // If a new client is selected without a brief, go to type-picker
+  // While loading the brief for a freshly-selected client, default to
+  // type-picker so there is no stale panel from the previous client.
+  // Exception: if we are mid-generation the brief is being RE-fetched after
+  // the generate call — keep the current panelState (e.g. 'generating') so
+  // the UI doesn't flicker back to 'type-picker'.
   const effectivePanelState: LeftPanelState =
-    !selectedClientId ? 'type-picker'
-    : loadingBrief    ? 'type-picker'
+    !selectedClientId            ? 'type-picker'
+    : (loadingBrief && !isGenerating) ? 'type-picker'
     : panelState;
 
   // ─────────────────────────────────────────────────────────────────────────
