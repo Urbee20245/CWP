@@ -416,23 +416,24 @@ const ClientProposalReview: React.FC = () => {
     if (status === 'approved') patch.approved_at = new Date().toISOString();
     if (status === 'declined') patch.declined_at = new Date().toISOString();
 
-    const { error: updateErr } = await supabase
+    const { data: updatedRows, error: updateErr } = await supabase
       .from('client_proposals')
       .update(patch)
       .eq('id', selectedProposal.id)
-      .eq('status', 'sent'); // RLS-safe guard
+      .eq('status', 'sent') // RLS-safe guard
+      .select('id');
 
-    if (updateErr) {
-      setError('Failed to save your response. Please try again.');
+    if (updateErr || !updatedRows?.length) {
+      setError('Unable to submit response. This proposal may no longer be active.');
     } else {
       // If approved and 50/50, trigger deposit invoice creation (non-fatal)
       if (status === 'approved' && selectedProposal.payment_structure === 'split_50_50') {
-        try {
-          await supabase.functions.invoke('stripe-api/create-proposal-deposit-invoice', {
-            body: { client_id: selectedProposal.client_id, proposal_id: selectedProposal.id },
-          });
-        } catch (e) {
-          console.warn('[ClientProposalReview] Deposit invoice creation failed (non-fatal):', e);
+        const { data: invokeData, error: invokeError } = await supabase.functions.invoke(
+          'stripe-api/create-proposal-deposit-invoice',
+          { body: { client_id: selectedProposal.client_id, proposal_id: selectedProposal.id } },
+        );
+        if (invokeError) {
+          console.error('[ClientProposalReview] Deposit invoice creation failed:', invokeError);
         }
       }
       setResponded(true);
