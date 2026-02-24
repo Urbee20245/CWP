@@ -1,74 +1,93 @@
-import React from 'react';
+import React, { Suspense } from 'react';
 import { BrowserRouter, Routes, Route, useLocation, Navigate } from 'react-router-dom';
 import Header from './components/Header';
 import Footer from './components/Footer';
 import VoiceAgent from './components/VoiceAgent';
-import Home from '@/src/pages/Home';
-import JetLocalOptimizerPage from './components/JetLocalOptimizerPage';
-import JetVizPage from './components/JetVizPage';
-import JetSuitePage from './components/JetSuitePage';
-import ServicesPage from './components/ServicesPage';
-import ContactPage from './components/ContactPage';
-import ProcessPage from './components/ProcessPage';
 import SessionProvider from './src/context/SessionProvider';
 import ProtectedRoute from './src/components/ProtectedRoute';
-import AdminDashboard from './src/pages/AdminDashboard';
-import AdminClientList from './src/pages/AdminClientList';
-import AdminProjectList from './src/pages/AdminProjectList';
-import ClientDashboard from './src/pages/ClientDashboard';
-import AdminClientDetail from './src/pages/AdminClientDetail';
-import AdminProjectDetail from './src/pages/AdminProjectDetail';
-import ClientProjectDetail from './src/pages/ClientProjectDetail';
-import ClientBilling from './src/pages/ClientBilling';
-import BackOfficeRedirect from './src/pages/BackOfficeRedirect';
-import AdminBillingProducts from './src/pages/AdminBillingProducts';
-import AdminRevenueDashboard from './src/pages/AdminRevenueDashboard';
-import AdminSettingsPage from './src/pages/AdminSettingsPage';
-import AdminDocumentGenerator from './src/pages/AdminDocumentGenerator';
-import AdminEmailGenerator from './src/pages/AdminEmailGenerator';
-import AdminTwilioSettings from './src/pages/AdminTwilioSettings';
-import AdminVoiceManagement from './src/pages/AdminVoiceManagement';
-import AdminAgentSettings from './src/pages/AdminAgentSettings';
-import AdminRetellCallScheduling from './src/pages/AdminRetellCallScheduling';
-import NotFoundPage from './src/pages/NotFoundPage';
 import ErrorBoundary from './src/components/ErrorBoundary';
 import GlobalLoading from './src/components/GlobalLoading';
 import { useAuth } from './src/hooks/useAuth';
-import LoginPage from './src/pages/Login';
-import ClientProfile from './src/pages/ClientProfile';
-import PrivacyPolicy from './src/pages/PrivacyPolicy';
-import TermsAndConditions from './src/pages/TermsAndConditions';
-import ClientAddons from './src/pages/ClientAddons';
-import AdminAddonCatalog from './src/pages/AdminAddonCatalog';
-import AdminEmailDraft from './src/pages/AdminEmailDraft';
-import AdminAppointmentManagement from './src/pages/AdminAppointmentManagement';
-import ClientAppointmentBooking from './src/pages/ClientAppointmentBooking';
-import ClientJetSuitePage from './src/pages/ClientJetSuitePage';
-import AdminProfile from './src/pages/AdminProfile';
-import AdminUserManagement from './src/pages/AdminUserManagement';
-import AdminInbox from './src/pages/AdminInbox';
-import ClientHelpPage from './src/pages/ClientHelpPage';
-import ClientMessagingCompliance from './src/pages/ClientMessagingCompliance';
-import AdminA2PAutomation from './src/pages/AdminA2PAutomation';
-import ClientSettings from './src/pages/ClientSettings'; // NEW IMPORT
-import ClientLeads from './src/pages/ClientLeads';
-import TwilioConnectCallback from './src/pages/TwilioConnectCallback';
-import AdminWebsiteBuilder from './src/pages/AdminWebsiteBuilder';
-import AdminBlogManager from './src/pages/AdminBlogManager';
-import AdminSiteImport from './src/pages/AdminSiteImport';
-import ClientWebsite from './src/pages/ClientWebsite';
-import PublicSite from './src/pages/PublicSite';
-import SiteRendererPage from './src/pages/SiteRenderer';
-import BlogListingPage from './src/pages/BlogListingPage';
-import BlogPostPage from './src/pages/BlogPostPage';
-import CustomDomainSite from './src/pages/CustomDomainSite';
-import CustomDomainAdmin from './src/pages/CustomDomainAdmin';
-import AdminProposalList from './src/pages/AdminProposalList';
-import AdminProposalBuilder from './src/pages/AdminProposalBuilder';
-import ClientProposalReview from './src/pages/ClientProposalReview';
-import GemOnboarding from './src/pages/GemOnboarding';
-import AdminOnboardingManager from './src/pages/AdminOnboardingManager';
-import ClientNewRequest from './src/pages/ClientNewRequest';
+import { Loader2 } from 'lucide-react';
+
+// ─── Lazy-loaded page components ──────────────────────────────────────────────
+// Splitting every route into its own chunk reduces the initial bundle size.
+// Pages are loaded on first navigation and then cached by the browser.
+
+// Public pages
+const Home = React.lazy(() => import('@/src/pages/Home'));
+const ServicesPage = React.lazy(() => import('./components/ServicesPage'));
+const ProcessPage = React.lazy(() => import('./components/ProcessPage'));
+const ContactPage = React.lazy(() => import('./components/ContactPage'));
+const JetSuitePage = React.lazy(() => import('./components/JetSuitePage'));
+const JetVizPage = React.lazy(() => import('./components/JetVizPage'));
+const JetLocalOptimizerPage = React.lazy(() => import('./components/JetLocalOptimizerPage'));
+const PrivacyPolicy = React.lazy(() => import('./src/pages/PrivacyPolicy'));
+const TermsAndConditions = React.lazy(() => import('./src/pages/TermsAndConditions'));
+const LoginPage = React.lazy(() => import('./src/pages/Login'));
+const GemOnboarding = React.lazy(() => import('./src/pages/GemOnboarding'));
+
+// Admin pages
+const AdminDashboard = React.lazy(() => import('./src/pages/AdminDashboard'));
+const AdminClientList = React.lazy(() => import('./src/pages/AdminClientList'));
+const AdminProjectList = React.lazy(() => import('./src/pages/AdminProjectList'));
+const AdminClientDetail = React.lazy(() => import('./src/pages/AdminClientDetail'));
+const AdminProjectDetail = React.lazy(() => import('./src/pages/AdminProjectDetail'));
+const AdminBillingProducts = React.lazy(() => import('./src/pages/AdminBillingProducts'));
+const AdminRevenueDashboard = React.lazy(() => import('./src/pages/AdminRevenueDashboard'));
+const AdminSettingsPage = React.lazy(() => import('./src/pages/AdminSettingsPage'));
+const AdminDocumentGenerator = React.lazy(() => import('./src/pages/AdminDocumentGenerator'));
+const AdminEmailGenerator = React.lazy(() => import('./src/pages/AdminEmailGenerator'));
+const AdminTwilioSettings = React.lazy(() => import('./src/pages/AdminTwilioSettings'));
+const AdminVoiceManagement = React.lazy(() => import('./src/pages/AdminVoiceManagement'));
+const AdminAgentSettings = React.lazy(() => import('./src/pages/AdminAgentSettings'));
+const AdminRetellCallScheduling = React.lazy(() => import('./src/pages/AdminRetellCallScheduling'));
+const AdminAddonCatalog = React.lazy(() => import('./src/pages/AdminAddonCatalog'));
+const AdminEmailDraft = React.lazy(() => import('./src/pages/AdminEmailDraft'));
+const AdminAppointmentManagement = React.lazy(() => import('./src/pages/AdminAppointmentManagement'));
+const AdminProfile = React.lazy(() => import('./src/pages/AdminProfile'));
+const AdminUserManagement = React.lazy(() => import('./src/pages/AdminUserManagement'));
+const AdminInbox = React.lazy(() => import('./src/pages/AdminInbox'));
+const AdminA2PAutomation = React.lazy(() => import('./src/pages/AdminA2PAutomation'));
+const AdminWebsiteBuilder = React.lazy(() => import('./src/pages/AdminWebsiteBuilder'));
+const AdminBlogManager = React.lazy(() => import('./src/pages/AdminBlogManager'));
+const AdminSiteImport = React.lazy(() => import('./src/pages/AdminSiteImport'));
+const AdminProposalList = React.lazy(() => import('./src/pages/AdminProposalList'));
+const AdminProposalBuilder = React.lazy(() => import('./src/pages/AdminProposalBuilder'));
+const AdminOnboardingManager = React.lazy(() => import('./src/pages/AdminOnboardingManager'));
+
+// Client pages
+const ClientDashboard = React.lazy(() => import('./src/pages/ClientDashboard'));
+const ClientProjectDetail = React.lazy(() => import('./src/pages/ClientProjectDetail'));
+const ClientBilling = React.lazy(() => import('./src/pages/ClientBilling'));
+const ClientProfile = React.lazy(() => import('./src/pages/ClientProfile'));
+const ClientAddons = React.lazy(() => import('./src/pages/ClientAddons'));
+const ClientAppointmentBooking = React.lazy(() => import('./src/pages/ClientAppointmentBooking'));
+const ClientJetSuitePage = React.lazy(() => import('./src/pages/ClientJetSuitePage'));
+const ClientHelpPage = React.lazy(() => import('./src/pages/ClientHelpPage'));
+const ClientMessagingCompliance = React.lazy(() => import('./src/pages/ClientMessagingCompliance'));
+const ClientSettings = React.lazy(() => import('./src/pages/ClientSettings'));
+const ClientLeads = React.lazy(() => import('./src/pages/ClientLeads'));
+const ClientWebsite = React.lazy(() => import('./src/pages/ClientWebsite'));
+const ClientProposalReview = React.lazy(() => import('./src/pages/ClientProposalReview'));
+const ClientNewRequest = React.lazy(() => import('./src/pages/ClientNewRequest'));
+const TwilioConnectCallback = React.lazy(() => import('./src/pages/TwilioConnectCallback'));
+
+// Shared / utility pages
+const BackOfficeRedirect = React.lazy(() => import('./src/pages/BackOfficeRedirect'));
+const NotFoundPage = React.lazy(() => import('./src/pages/NotFoundPage'));
+const SiteRendererPage = React.lazy(() => import('./src/pages/SiteRenderer'));
+const BlogListingPage = React.lazy(() => import('./src/pages/BlogListingPage'));
+const BlogPostPage = React.lazy(() => import('./src/pages/BlogPostPage'));
+const CustomDomainSite = React.lazy(() => import('./src/pages/CustomDomainSite'));
+const CustomDomainAdmin = React.lazy(() => import('./src/pages/CustomDomainAdmin'));
+
+// ─── Suspense fallback ─────────────────────────────────────────────────────────
+const PageLoader: React.FC = () => (
+  <div className="min-h-[60vh] flex items-center justify-center">
+    <Loader2 className="w-8 h-8 animate-spin text-indigo-600" />
+  </div>
+);
 
 // Returns true when the app is loaded from a client's custom domain
 // (not the main CWP domain, localhost, or a Vercel preview URL)
@@ -92,82 +111,84 @@ const AppContent: React.FC = () => {
   return (
     <div className="min-h-screen bg-slate-50 font-sans selection:bg-blue-100 selection:text-blue-900">
       {showGlobalComponents && <Header />}
-      
-      <Routes>
-        <Route path="/" element={<Home />} />
-        <Route path="/services" element={<ServicesPage />} />
-        <Route path="/process" element={<ProcessPage />} />
-        <Route path="/contact" element={<ContactPage />} />
-        <Route path="/jetsuite" element={<JetSuitePage />} />
-        <Route path="/jetviz" element={<JetVizPage />} />
-        <Route path="/jet-local-optimizer" element={<JetLocalOptimizerPage />} />
-        <Route path="/privacy-policy" element={<PrivacyPolicy />} />
-        <Route path="/terms-and-conditions" element={<TermsAndConditions />} />
-        <Route path="/login" element={<LoginPage />} />
-        <Route path="/onboarding" element={<GemOnboarding />} />
-        <Route path="/back-office" element={<ProtectedRoute allowedRoles={['admin', 'client']} />}>
-          <Route index element={<BackOfficeRedirect />} />
-        </Route>
 
-        <Route path="/admin/*" element={<ProtectedRoute allowedRoles={['admin']} />}>
-          <Route index element={<Navigate to="dashboard" replace />} />
-          <Route path="dashboard" element={<AdminDashboard />} />
-          <Route path="profile" element={<AdminProfile />} />
-          <Route path="users" element={<AdminUserManagement />} />
-          <Route path="inbox" element={<AdminInbox />} />
-          <Route path="clients" element={<AdminClientList />} />
-          <Route path="clients/:id" element={<AdminClientDetail />} />
-          <Route path="projects" element={<AdminProjectList />} />
-          <Route path="projects/:id" element={<AdminProjectDetail />} />
-          <Route path="voice" element={<AdminVoiceManagement />} />
-          <Route path="agent-settings" element={<AdminAgentSettings />} />
-          <Route path="call-scheduling" element={<AdminRetellCallScheduling />} />
-          <Route path="appointments" element={<AdminAppointmentManagement />} />
-          <Route path="billing/products" element={<AdminBillingProducts />} />
-          <Route path="billing/revenue" element={<AdminRevenueDashboard />} />
-          <Route path="settings" element={<AdminSettingsPage />} />
-          <Route path="settings/twilio" element={<AdminTwilioSettings />} />
-          <Route path="ai-docs" element={<AdminDocumentGenerator />} />
-          <Route path="ai-email" element={<AdminEmailGenerator />} />
-          <Route path="email-draft" element={<AdminEmailDraft />} />
-          <Route path="addons/catalog" element={<AdminAddonCatalog />} />
-          <Route path="a2p-automation" element={<AdminA2PAutomation />} />
-          <Route path="website-builder" element={<AdminWebsiteBuilder />} />
-          <Route path="site-import" element={<AdminSiteImport />} />
-          <Route path="blog-manager" element={<AdminBlogManager />} />
-          <Route path="proposals" element={<AdminProposalList />} />
-          <Route path="proposals/new" element={<AdminProposalBuilder />} />
-          <Route path="proposals/:id" element={<AdminProposalBuilder />} />
-          <Route path="onboarding" element={<AdminOnboardingManager />} />
-        </Route>
+      <Suspense fallback={<PageLoader />}>
+        <Routes>
+          <Route path="/" element={<Home />} />
+          <Route path="/services" element={<ServicesPage />} />
+          <Route path="/process" element={<ProcessPage />} />
+          <Route path="/contact" element={<ContactPage />} />
+          <Route path="/jetsuite" element={<JetSuitePage />} />
+          <Route path="/jetviz" element={<JetVizPage />} />
+          <Route path="/jet-local-optimizer" element={<JetLocalOptimizerPage />} />
+          <Route path="/privacy-policy" element={<PrivacyPolicy />} />
+          <Route path="/terms-and-conditions" element={<TermsAndConditions />} />
+          <Route path="/login" element={<LoginPage />} />
+          <Route path="/onboarding" element={<GemOnboarding />} />
+          <Route path="/back-office" element={<ProtectedRoute allowedRoles={['admin', 'client']} />}>
+            <Route index element={<BackOfficeRedirect />} />
+          </Route>
 
-        <Route path="/client/*" element={<ProtectedRoute allowedRoles={['client']} />}>
-          <Route path="dashboard" element={<ClientDashboard />} />
-          <Route path="leads" element={<ClientLeads />} />
-          <Route path="settings" element={<ClientSettings />} />
-          <Route path="twilio-callback" element={<TwilioConnectCallback />} />
-          <Route path="messaging-compliance" element={<ClientMessagingCompliance />} />
-          <Route path="projects/:id" element={<ClientProjectDetail />} />
-          <Route path="appointments" element={<ClientAppointmentBooking />} />
-          <Route path="billing" element={<ClientBilling />} />
-          <Route path="profile" element={<ClientProfile />} />
-          <Route path="addons" element={<ClientAddons />} />
-          <Route path="jetsuite" element={<ClientJetSuitePage />} />
-          <Route path="help" element={<ClientHelpPage />} />
-          <Route path="website" element={<ClientWebsite />} />
-          <Route path="proposals" element={<ClientProposalReview />} />
-          <Route path="proposals/:id" element={<ClientProposalReview />} />
-          <Route path="new-request" element={<ClientNewRequest />} />
-        </Route>
+          <Route path="/admin/*" element={<ProtectedRoute allowedRoles={['admin']} />}>
+            <Route index element={<Navigate to="dashboard" replace />} />
+            <Route path="dashboard" element={<AdminDashboard />} />
+            <Route path="profile" element={<AdminProfile />} />
+            <Route path="users" element={<AdminUserManagement />} />
+            <Route path="inbox" element={<AdminInbox />} />
+            <Route path="clients" element={<AdminClientList />} />
+            <Route path="clients/:id" element={<AdminClientDetail />} />
+            <Route path="projects" element={<AdminProjectList />} />
+            <Route path="projects/:id" element={<AdminProjectDetail />} />
+            <Route path="voice" element={<AdminVoiceManagement />} />
+            <Route path="agent-settings" element={<AdminAgentSettings />} />
+            <Route path="call-scheduling" element={<AdminRetellCallScheduling />} />
+            <Route path="appointments" element={<AdminAppointmentManagement />} />
+            <Route path="billing/products" element={<AdminBillingProducts />} />
+            <Route path="billing/revenue" element={<AdminRevenueDashboard />} />
+            <Route path="settings" element={<AdminSettingsPage />} />
+            <Route path="settings/twilio" element={<AdminTwilioSettings />} />
+            <Route path="ai-docs" element={<AdminDocumentGenerator />} />
+            <Route path="ai-email" element={<AdminEmailGenerator />} />
+            <Route path="email-draft" element={<AdminEmailDraft />} />
+            <Route path="addons/catalog" element={<AdminAddonCatalog />} />
+            <Route path="a2p-automation" element={<AdminA2PAutomation />} />
+            <Route path="website-builder" element={<AdminWebsiteBuilder />} />
+            <Route path="site-import" element={<AdminSiteImport />} />
+            <Route path="blog-manager" element={<AdminBlogManager />} />
+            <Route path="proposals" element={<AdminProposalList />} />
+            <Route path="proposals/new" element={<AdminProposalBuilder />} />
+            <Route path="proposals/:id" element={<AdminProposalBuilder />} />
+            <Route path="onboarding" element={<AdminOnboardingManager />} />
+          </Route>
 
-        <Route path="/site/:slug" element={<SiteRendererPage />} />
-        <Route path="/site/:slug/blog" element={<BlogListingPage />} />
-        <Route path="/site/:slug/blog/:post" element={<BlogPostPage />} />
-        <Route path="/site/:slug/:page" element={<SiteRendererPage />} />
+          <Route path="/client/*" element={<ProtectedRoute allowedRoles={['client']} />}>
+            <Route path="dashboard" element={<ClientDashboard />} />
+            <Route path="leads" element={<ClientLeads />} />
+            <Route path="settings" element={<ClientSettings />} />
+            <Route path="twilio-callback" element={<TwilioConnectCallback />} />
+            <Route path="messaging-compliance" element={<ClientMessagingCompliance />} />
+            <Route path="projects/:id" element={<ClientProjectDetail />} />
+            <Route path="appointments" element={<ClientAppointmentBooking />} />
+            <Route path="billing" element={<ClientBilling />} />
+            <Route path="profile" element={<ClientProfile />} />
+            <Route path="addons" element={<ClientAddons />} />
+            <Route path="jetsuite" element={<ClientJetSuitePage />} />
+            <Route path="help" element={<ClientHelpPage />} />
+            <Route path="website" element={<ClientWebsite />} />
+            <Route path="proposals" element={<ClientProposalReview />} />
+            <Route path="proposals/:id" element={<ClientProposalReview />} />
+            <Route path="new-request" element={<ClientNewRequest />} />
+          </Route>
 
-        <Route path="*" element={<NotFoundPage />} />
-      </Routes>
-      
+          <Route path="/site/:slug" element={<SiteRendererPage />} />
+          <Route path="/site/:slug/blog" element={<BlogListingPage />} />
+          <Route path="/site/:slug/blog/:post" element={<BlogPostPage />} />
+          <Route path="/site/:slug/:page" element={<SiteRendererPage />} />
+
+          <Route path="*" element={<NotFoundPage />} />
+        </Routes>
+      </Suspense>
+
       {showGlobalComponents && <Footer />}
       {showGlobalComponents && <VoiceAgent />}
     </div>
@@ -180,14 +201,16 @@ const App: React.FC = () => {
     return (
       <ErrorBoundary>
         <BrowserRouter>
-          <Routes>
-            <Route path="/back-office/*" element={<CustomDomainAdmin />} />
-            <Route path="/back-office" element={<CustomDomainAdmin />} />
-            <Route path="/blog/:post" element={<CustomDomainSite />} />
-            <Route path="/blog" element={<CustomDomainSite />} />
-            <Route path="/:page" element={<CustomDomainSite />} />
-            <Route path="/" element={<CustomDomainSite />} />
-          </Routes>
+          <Suspense fallback={<PageLoader />}>
+            <Routes>
+              <Route path="/back-office/*" element={<CustomDomainAdmin />} />
+              <Route path="/back-office" element={<CustomDomainAdmin />} />
+              <Route path="/blog/:post" element={<CustomDomainSite />} />
+              <Route path="/blog" element={<CustomDomainSite />} />
+              <Route path="/:page" element={<CustomDomainSite />} />
+              <Route path="/" element={<CustomDomainSite />} />
+            </Routes>
+          </Suspense>
         </BrowserRouter>
       </ErrorBoundary>
     );

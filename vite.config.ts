@@ -30,6 +30,23 @@ export default defineConfig(({ mode }) => {
         alias: {
           '@': path.resolve(__dirname, '.'),
         }
-      }
+      },
+      build: {
+        // Slightly higher warning limit — large pages like AdminClientDetail
+        // are expected to exceed the default 500 kB threshold.
+        chunkSizeWarningLimit: 600,
+        rollupOptions: {
+          output: {
+            // Split heavy vendor libraries into separate cacheable chunks.
+            // Browsers cache these independently, so app code changes don't
+            // bust the vendor cache (and vice-versa), speeding up repeat visits.
+            manualChunks: {
+              'vendor-react': ['react', 'react-dom', 'react-router-dom'],
+              'vendor-supabase': ['@supabase/supabase-js'],
+              'vendor-ui': ['lucide-react', 'date-fns'],
+            },
+          },
+        },
+      },
     };
 });

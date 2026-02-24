@@ -1,6 +1,6 @@
 "use client";
 
-import React, { createContext, useState, useEffect, useCallback } from 'react';
+import React, { createContext, useState, useEffect, useCallback, useRef } from 'react';
 import { Session, User } from '@supabase/supabase-js';
 import { supabase } from '../integrations/supabase/client';
 import { AuthContextType, Profile } from '../types/auth';
@@ -23,7 +23,7 @@ const checkDevAdminBypass = (user: User | null, fetchedProfile: Profile | null):
             // Profile exists, use it
             return fetchedProfile;
         }
-        
+
         if (DEV_FORCE_ROLE) {
             console.warn(`Dev Admin Bypass Active: Profile missing. Forcing role to '${DEV_FORCE_ROLE}'.`);
             return {
@@ -45,6 +45,10 @@ const SessionProvider: React.FC<SessionProviderProps> = ({ children }) => {
   const [profile, setProfile] = useState<Profile | null>(null);
   const [isLoading, setIsLoading] = useState(true);
 
+  // Ref tracks the currently-authenticated user ID so auth event handlers
+  // can check it without a stale closure on `user` state.
+  const currentUserIdRef = useRef<string | null>(null);
+
   const fetchProfile = useCallback(async (userId: string): Promise<Profile | null> => {
     // Use maybeSingle() to handle cases where a user exists but no profile record has been created yet.
     const { data, error } = await supabase
@@ -57,7 +61,7 @@ const SessionProvider: React.FC<SessionProviderProps> = ({ children }) => {
       console.error('Error fetching profile:', error);
       return null;
     }
-    
+
     return data as Profile | null;
   }, []);
 
@@ -65,17 +69,19 @@ const SessionProvider: React.FC<SessionProviderProps> = ({ children }) => {
     try {
         if (session?.user) {
             setUser(session.user);
-            
+            currentUserIdRef.current = session.user.id;
+
             // 1. Fetch profile from Supabase
             const fetchedProfile = await fetchProfile(session.user.id);
-            
+
             // 2. Apply dev-admin bypass logic
             const finalProfile = checkDevAdminBypass(session.user, fetchedProfile);
-            
+
             setProfile(finalProfile);
         } else {
             setUser(null);
             setProfile(null);
+            currentUserIdRef.current = null;
         }
     } catch (e) {
         console.error("Error during session loading:", e);
@@ -94,7 +100,15 @@ const SessionProvider: React.FC<SessionProviderProps> = ({ children }) => {
         if (!initialized) return; // Skip until initial session is loaded
 
         if (event === 'SIGNED_IN') {
-          // Full sign-in: show loading gate while we fetch the user's profile.
+          // If the same user is already loaded (e.g. returning to a tab after the
+          // browser auto-refreshed the token), skip the full profile re-fetch.
+          // This prevents dashboards from unmounting and re-fetching all their data
+          // just because the user switched away and came back.
+          if (currentUserIdRef.current && currentUserIdRef.current === session?.user?.id) {
+            setIsLoading(false);
+            return;
+          }
+          // Genuinely new sign-in: show loading gate while we fetch the profile.
           setIsLoading(true);
           await loadSession(session);
         } else if (event === 'TOKEN_REFRESHED') {
@@ -102,10 +116,14 @@ const SessionProvider: React.FC<SessionProviderProps> = ({ children }) => {
           // Do NOT touch isLoading: setting it true would cause ProtectedRoute to
           // unmount the current page and destroy all its state (e.g. selectedClientId
           // in AdminWebsiteBuilder) for the duration of the profile re-fetch.
-          await loadSession(session);
+          if (session?.user) {
+            setUser(session.user);
+            currentUserIdRef.current = session.user.id;
+          }
         } else if (event === 'SIGNED_OUT') {
           setUser(null);
           setProfile(null);
+          currentUserIdRef.current = null;
           setIsLoading(false);
         } else {
           setIsLoading(false);
@@ -128,6 +146,7 @@ const SessionProvider: React.FC<SessionProviderProps> = ({ children }) => {
     await supabase.auth.signOut();
     setUser(null);
     setProfile(null);
+    currentUserIdRef.current = null;
   };
 
   const isAdmin = profile?.role === 'admin';
