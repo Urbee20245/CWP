@@ -83,11 +83,11 @@ function isCustomDomain(): boolean {
 
 const AppContent: React.FC = () => {
   const location = useLocation();
-  const { isLoading } = useAuth();
+  const { isLoading, user } = useAuth();
   const isBackOfficeRoute = location.pathname.startsWith('/admin') || location.pathname.startsWith('/client') || location.pathname.startsWith('/back-office') || location.pathname === '/login' || location.pathname.startsWith('/site/') || location.pathname === '/onboarding';
   const showGlobalComponents = !isBackOfficeRoute;
 
-  if (isLoading) return <GlobalLoading />;
+  if (isLoading && !user) return <GlobalLoading />;
 
   return (
     <div className="min-h-screen bg-slate-50 font-sans selection:bg-blue-100 selection:text-blue-900">
