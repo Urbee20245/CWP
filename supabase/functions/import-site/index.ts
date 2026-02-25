@@ -3,20 +3,17 @@ export const config = {
 };
 
 import { serve } from "https://deno.land/std@0.190.0/http/server.ts";
-import Anthropic from 'https://esm.sh/@anthropic-ai/sdk@0.39.0';
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2';
 import { unzipSync, strFromU8 } from 'https://esm.sh/fflate@0.8.2';
 import { handleCors, jsonResponse, errorResponse } from '../_shared/utils.ts';
+import {
+  generateWithProvider,
+  AI_PROVIDERS,
+  DEFAULT_PROVIDER_ID,
+} from '../_shared/ai-providers.ts';
 
-const ANTHROPIC_API_KEY = Deno.env.get('ANTHROPIC_API_KEY');
 const SUPABASE_URL = Deno.env.get('SUPABASE_URL')!;
 const SUPABASE_SERVICE_ROLE_KEY = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!;
-
-if (!ANTHROPIC_API_KEY) {
-  throw new Error('ANTHROPIC_API_KEY is not set.');
-}
-
-const anthropic = new Anthropic({ apiKey: ANTHROPIC_API_KEY });
 
 // ─── Slug helpers ─────────────────────────────────────────────────────────────
 
@@ -49,7 +46,31 @@ async function makeUniqueSlug(
   }
 }
 
-// ─── HTML extraction helpers ──────────────────────────────────────────────────
+// ─── Enhanced content extraction types ───────────────────────────────────────
+
+interface CSSRule {
+  selector: string;
+  properties: Record<string, string>;
+}
+
+interface ColorPalette {
+  primary: string[];
+  background: string[];
+  text: string[];
+  all: string[];
+}
+
+interface FontDefinition {
+  family: string;
+  weights: string[];
+  source: 'google' | 'css' | 'inline';
+}
+
+interface SpacingValue {
+  property: string;
+  value: string;
+  frequency: number;
+}
 
 interface ExtractedContent {
   title: string;
@@ -66,7 +87,16 @@ interface ExtractedContent {
   emailAddresses: string[];
   addresses: string[];
   rawText: string;
+  // Enhanced design fields
+  cssRules: CSSRule[];
+  colorPalette: ColorPalette;
+  fontDefinitions: FontDefinition[];
+  dominantSpacing: SpacingValue[];
+  inlineStyleSample: string[];
+  layoutHints: string[];
 }
+
+// ─── HTML / CSS extraction helpers ───────────────────────────────────────────
 
 function stripTags(html: string): string {
   return html
@@ -104,7 +134,6 @@ function extractMeta(html: string, name: string): string {
   );
   const m = html.match(regex);
   if (m) return m[1];
-  // Also try reversed attribute order
   const regex2 = new RegExp(
     `<meta[^>]+content=["']([^"']+)["'][^>]+(?:name|property)=["']${name}["']`,
     'i',
@@ -113,50 +142,65 @@ function extractMeta(html: string, name: string): string {
   return m2 ? m2[1] : '';
 }
 
-function extractColors(html: string): string[] {
-  const colors = new Set<string>();
-  // Hex colors
-  const hexMatches = html.matchAll(/#([0-9a-f]{6}|[0-9a-f]{3})\b/gi);
-  for (const m of hexMatches) {
-    const c = m[0].toLowerCase();
-    // Skip very common irrelevant colors
-    if (!['#ffffff', '#000000', '#fff', '#000', '#cccccc', '#ccc', '#eeeeee', '#eee'].includes(c)) {
-      colors.add(c.length === 4 ? `#${m[1][0]}${m[1][0]}${m[1][1]}${m[1][1]}${m[1][2]}${m[1][2]}` : c);
-    }
+/** Normalize any color value to lowercase hex or rgb string */
+function normalizeColor(raw: string): string | null {
+  const trimmed = raw.trim().toLowerCase();
+  // Skip pure black/white/transparent
+  if (['#fff', '#ffffff', '#000', '#000000', 'transparent', 'inherit', 'initial'].includes(trimmed)) {
+    return null;
   }
-  // rgb/rgba
-  const rgbMatches = html.matchAll(/rgb[a]?\(\s*(\d+)\s*,\s*(\d+)\s*,\s*(\d+)/gi);
-  for (const m of rgbMatches) {
-    const r = parseInt(m[1]), g = parseInt(m[2]), b = parseInt(m[3]);
-    if (r === 255 && g === 255 && b === 255) continue;
-    if (r === 0 && g === 0 && b === 0) continue;
-    colors.add(`#${r.toString(16).padStart(2, '0')}${g.toString(16).padStart(2, '0')}${b.toString(16).padStart(2, '0')}`);
+  // Expand 3-char hex
+  if (/^#[0-9a-f]{3}$/.test(trimmed)) {
+    return `#${trimmed[1]}${trimmed[1]}${trimmed[2]}${trimmed[2]}${trimmed[3]}${trimmed[3]}`;
   }
-  return Array.from(colors).slice(0, 10);
+  if (/^#[0-9a-f]{6}$/.test(trimmed)) return trimmed;
+  return null;
 }
 
-function extractFonts(html: string): string[] {
+function extractColors(source: string): string[] {
+  const colors = new Set<string>();
+  // Hex
+  for (const m of source.matchAll(/#([0-9a-f]{6}|[0-9a-f]{3})\b/gi)) {
+    const n = normalizeColor(m[0].toLowerCase());
+    if (n) colors.add(n);
+  }
+  // rgb/rgba
+  for (const m of source.matchAll(/rgba?\(\s*(\d+)\s*,\s*(\d+)\s*,\s*(\d+)/gi)) {
+    const [r, g, b] = [parseInt(m[1]), parseInt(m[2]), parseInt(m[3])];
+    if (r === 255 && g === 255 && b === 255) continue;
+    if (r === 0 && g === 0 && b === 0) continue;
+    colors.add(`#${r.toString(16).padStart(2,'0')}${g.toString(16).padStart(2,'0')}${b.toString(16).padStart(2,'0')}`);
+  }
+  return Array.from(colors);
+}
+
+function extractFonts(source: string): string[] {
   const fonts = new Set<string>();
-  // Google Fonts
-  const gfMatches = html.matchAll(/family=([A-Za-z+]+)/gi);
-  for (const m of gfMatches) fonts.add(m[1].replace(/\+/g, ' '));
-  // font-family CSS
-  const cssMatches = html.matchAll(/font-family\s*:\s*["']?([A-Za-z][A-Za-z\s]+?)["']?\s*[,;}/]/gi);
-  for (const m of cssMatches) fonts.add(m[1].trim());
-  return Array.from(fonts).slice(0, 5);
+  for (const m of source.matchAll(/family=([A-Za-z+:]+)/gi)) {
+    fonts.add(m[1].split(':')[0].replace(/\+/g, ' '));
+  }
+  for (const m of source.matchAll(/font-family\s*:\s*["']?([A-Za-z][A-Za-z\s-]+?)["']?\s*[,;}/]/gi)) {
+    const f = m[1].trim();
+    if (!['serif', 'sans-serif', 'monospace', 'cursive', 'fantasy'].includes(f.toLowerCase())) {
+      fonts.add(f);
+    }
+  }
+  return Array.from(fonts).slice(0, 8);
 }
 
 function extractPhone(text: string): string[] {
   const phones = new Set<string>();
-  const matches = text.matchAll(/(?:\+?1[-.\s]?)?\(?\d{3}\)?[-.\s]?\d{3}[-.\s]?\d{4}/g);
-  for (const m of matches) phones.add(m[0].trim());
+  for (const m of text.matchAll(/(?:\+?1[-.\s]?)?\(?\d{3}\)?[-.\s]?\d{3}[-.\s]?\d{4}/g)) {
+    phones.add(m[0].trim());
+  }
   return Array.from(phones).slice(0, 3);
 }
 
 function extractEmails(text: string): string[] {
   const emails = new Set<string>();
-  const matches = text.matchAll(/[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}/g);
-  for (const m of matches) emails.add(m[0]);
+  for (const m of text.matchAll(/[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}/g)) {
+    emails.add(m[0]);
+  }
   return Array.from(emails).slice(0, 3);
 }
 
@@ -171,6 +215,122 @@ function extractNavLinks(html: string): string[] {
     if (text && text.length > 1 && text.length < 30) linkTexts.push(text);
   }
   return [...new Set(linkTexts)].slice(0, 15);
+}
+
+/**
+ * Parse CSS text into a list of rules with selector + properties.
+ * Only captures rules that contain design-relevant properties.
+ */
+function parseCSSRules(cssText: string): CSSRule[] {
+  const rules: CSSRule[] = [];
+  // Match selector { ... } blocks (non-nested)
+  const ruleRegex = /([^{}@][^{}]*?)\{([^{}]*)\}/g;
+  let match;
+  while ((match = ruleRegex.exec(cssText)) !== null) {
+    const selector = match[1].trim();
+    const body = match[2];
+    if (!selector || selector.length > 200) continue;
+
+    const properties: Record<string, string> = {};
+    const propRegex = /([\w-]+)\s*:\s*([^;]+);/g;
+    let pm;
+    while ((pm = propRegex.exec(body)) !== null) {
+      const prop = pm[1].trim().toLowerCase();
+      const val = pm[2].trim();
+      // Only keep design-relevant properties
+      if (
+        prop.includes('color') ||
+        prop.includes('background') ||
+        prop.includes('font') ||
+        prop.includes('border') ||
+        prop.includes('padding') ||
+        prop.includes('margin') ||
+        prop.includes('gap') ||
+        prop.includes('display') ||
+        prop.includes('flex') ||
+        prop.includes('grid') ||
+        prop.includes('width') ||
+        prop.includes('height') ||
+        prop.includes('radius') ||
+        prop.includes('shadow') ||
+        prop.includes('opacity') ||
+        prop.includes('transform') ||
+        prop.includes('transition') ||
+        prop.includes('animation') ||
+        prop.includes('letter-spacing') ||
+        prop.includes('line-height') ||
+        prop.includes('text-align') ||
+        prop.includes('text-transform')
+      ) {
+        properties[prop] = val;
+      }
+    }
+
+    if (Object.keys(properties).length > 0) {
+      rules.push({ selector, properties });
+    }
+  }
+  return rules.slice(0, 300); // cap for token budget
+}
+
+/**
+ * Build a color palette from CSS rules, categorizing by usage context.
+ */
+function buildColorPalette(rules: CSSRule[], rawColors: string[]): ColorPalette {
+  const primary: Set<string> = new Set();
+  const background: Set<string> = new Set();
+  const text: Set<string> = new Set();
+
+  for (const rule of rules) {
+    for (const [prop, val] of Object.entries(rule.properties)) {
+      const colors = extractColors(val);
+      if (prop === 'color') colors.forEach(c => text.add(c));
+      else if (prop.includes('background')) colors.forEach(c => background.add(c));
+      else if (prop.includes('border') || prop.includes('outline')) colors.forEach(c => primary.add(c));
+    }
+  }
+
+  // Use raw colors as fallback for primary
+  rawColors.slice(0, 5).forEach(c => primary.add(c));
+
+  return {
+    primary: Array.from(primary).slice(0, 5),
+    background: Array.from(background).slice(0, 5),
+    text: Array.from(text).slice(0, 5),
+    all: [...new Set([...primary, ...background, ...text])].slice(0, 15),
+  };
+}
+
+/**
+ * Extract inline style attributes from HTML elements for design analysis.
+ */
+function extractInlineStyles(html: string): string[] {
+  const styles: string[] = [];
+  const regex = /style=["']([^"']{10,300})["']/gi;
+  let m;
+  while ((m = regex.exec(html)) !== null) {
+    styles.push(m[1].trim());
+  }
+  return [...new Set(styles)].slice(0, 30);
+}
+
+/**
+ * Detect layout hints from HTML structure (flex/grid usage, column count, etc).
+ */
+function detectLayoutHints(html: string): string[] {
+  const hints: string[] = [];
+  if (/display\s*:\s*flex|flexbox/i.test(html)) hints.push('uses-flexbox');
+  if (/display\s*:\s*grid/i.test(html)) hints.push('uses-css-grid');
+  if (/grid-template-columns/i.test(html)) {
+    const gtcMatch = html.match(/grid-template-columns\s*:\s*([^;}"']+)/i);
+    if (gtcMatch) hints.push(`grid-columns: ${gtcMatch[1].trim()}`);
+  }
+  if (/class=["'][^"']*col-\d/i.test(html)) hints.push('uses-column-classes');
+  if (/class=["'][^"']*container/i.test(html)) hints.push('uses-container-class');
+  if (/class=["'][^"']*section/i.test(html)) hints.push('uses-section-class');
+  if (/class=["'][^"']*hero/i.test(html)) hints.push('has-hero-section');
+  if (/class=["'][^"']*card/i.test(html)) hints.push('uses-card-pattern');
+  return [...new Set(hints)];
 }
 
 /** Detect backend/dynamic features from HTML markup */
@@ -189,7 +349,7 @@ function detectBackendFeatures(html: string): string[] {
   return [...new Set(features)];
 }
 
-function parseHtml(html: string): ExtractedContent {
+function parseHtml(html: string, cssTexts: string[] = []): ExtractedContent {
   const title = (() => {
     const m = html.match(/<title[^>]*>([\s\S]*?)<\/title>/i);
     return m ? stripTags(m[1]).trim() : '';
@@ -198,6 +358,64 @@ function parseHtml(html: string): ExtractedContent {
   const metaDescription =
     extractMeta(html, 'description') ||
     extractMeta(html, 'og:description');
+
+  // Extract inline <style> blocks from HTML
+  const inlineStyleBlocks: string[] = [];
+  const styleBlockRegex = /<style[^>]*>([\s\S]*?)<\/style>/gi;
+  let sm;
+  while ((sm = styleBlockRegex.exec(html)) !== null) {
+    inlineStyleBlocks.push(sm[1]);
+  }
+
+  // Combine all CSS sources
+  const allCss = [...inlineStyleBlocks, ...cssTexts].join('\n');
+
+  const rawColors = extractColors(html + '\n' + allCss);
+  const cssRules = parseCSSRules(allCss);
+  const colorPalette = buildColorPalette(cssRules, rawColors);
+  const inlineStyleSample = extractInlineStyles(html);
+  const layoutHints = detectLayoutHints(html + '\n' + allCss);
+
+  // Build font definitions with weight info
+  const fontFamilies = extractFonts(html + '\n' + allCss);
+  const fontDefinitions: FontDefinition[] = fontFamilies.map(family => {
+    const weightMatches: string[] = [];
+    const wRegex = new RegExp(`font-family[^;]*${family.split(' ')[0]}[^}]*font-weight\\s*:\\s*([\\d\\w]+)`, 'gi');
+    let wm;
+    while ((wm = wRegex.exec(allCss)) !== null) {
+      weightMatches.push(wm[1]);
+    }
+    // Google fonts weight from URL
+    const gfWeights: string[] = [];
+    const gfRegex = new RegExp(`family=${family.replace(' ', '\\+')}:([\\d,wght@]+)`, 'gi');
+    let gm;
+    while ((gm = gfRegex.exec(html)) !== null) gfWeights.push(gm[1]);
+
+    return {
+      family,
+      weights: [...new Set([...weightMatches, ...gfWeights])].slice(0, 5),
+      source: html.includes('fonts.googleapis.com') ? 'google' : 'css',
+    };
+  });
+
+  // Detect dominant spacing values
+  const spacingMap: Record<string, number> = {};
+  for (const rule of cssRules) {
+    for (const [prop, val] of Object.entries(rule.properties)) {
+      if (['padding', 'margin', 'gap', 'padding-top', 'padding-bottom',
+           'padding-left', 'padding-right', 'margin-top', 'margin-bottom'].includes(prop)) {
+        const key = `${prop}: ${val}`;
+        spacingMap[key] = (spacingMap[key] || 0) + 1;
+      }
+    }
+  }
+  const dominantSpacing: SpacingValue[] = Object.entries(spacingMap)
+    .sort((a, b) => b[1] - a[1])
+    .slice(0, 10)
+    .map(([key, freq]) => {
+      const [property, value] = key.split(': ');
+      return { property, value, frequency: freq };
+    });
 
   return {
     title,
@@ -208,12 +426,18 @@ function parseHtml(html: string): ExtractedContent {
     paragraphs: extractTagContent(html, 'p').slice(0, 20),
     navLinks: extractNavLinks(html),
     listItems: extractTagContent(html, 'li').slice(0, 20),
-    colors: extractColors(html),
-    fonts: extractFonts(html),
+    colors: rawColors.slice(0, 10),
+    fonts: fontFamilies.slice(0, 5),
     phoneNumbers: extractPhone(html),
     emailAddresses: extractEmails(html),
     addresses: [],
     rawText: stripTags(html).slice(0, 8000),
+    cssRules,
+    colorPalette,
+    fontDefinitions,
+    dominantSpacing,
+    inlineStyleSample,
+    layoutHints,
   };
 }
 
@@ -226,7 +450,14 @@ function mergeExtracted(pages: ExtractedContent[]): ExtractedContent {
     listItems: [], colors: [], fonts: [], phoneNumbers: [],
     emailAddresses: [], addresses: [],
     rawText: '',
+    cssRules: [],
+    colorPalette: { primary: [], background: [], text: [], all: [] },
+    fontDefinitions: [],
+    dominantSpacing: [],
+    inlineStyleSample: [],
+    layoutHints: [],
   };
+
   for (const p of pages) {
     merged.h1s.push(...p.h1s);
     merged.h2s.push(...p.h2s);
@@ -239,20 +470,44 @@ function mergeExtracted(pages: ExtractedContent[]): ExtractedContent {
     merged.phoneNumbers.push(...p.phoneNumbers);
     merged.emailAddresses.push(...p.emailAddresses);
     merged.rawText += p.rawText + '\n\n';
+    merged.cssRules.push(...p.cssRules);
+    merged.colorPalette.primary.push(...p.colorPalette.primary);
+    merged.colorPalette.background.push(...p.colorPalette.background);
+    merged.colorPalette.text.push(...p.colorPalette.text);
+    merged.colorPalette.all.push(...p.colorPalette.all);
+    merged.fontDefinitions.push(...p.fontDefinitions);
+    merged.dominantSpacing.push(...p.dominantSpacing);
+    merged.inlineStyleSample.push(...p.inlineStyleSample);
+    merged.layoutHints.push(...p.layoutHints);
   }
+
+  // De-duplicate and cap
+  const dedupeAndCap = <T>(arr: T[], n: number): T[] => [...new Set(arr)].slice(0, n);
+
   return {
     ...merged,
-    h1s: [...new Set(merged.h1s)].slice(0, 8),
-    h2s: [...new Set(merged.h2s)].slice(0, 15),
-    h3s: [...new Set(merged.h3s)].slice(0, 20),
-    paragraphs: [...new Set(merged.paragraphs)].slice(0, 30),
-    navLinks: [...new Set(merged.navLinks)].slice(0, 15),
-    listItems: [...new Set(merged.listItems)].slice(0, 25),
-    colors: [...new Set(merged.colors)].slice(0, 10),
-    fonts: [...new Set(merged.fonts)].slice(0, 5),
-    phoneNumbers: [...new Set(merged.phoneNumbers)].slice(0, 3),
-    emailAddresses: [...new Set(merged.emailAddresses)].slice(0, 3),
+    h1s: dedupeAndCap(merged.h1s, 8),
+    h2s: dedupeAndCap(merged.h2s, 15),
+    h3s: dedupeAndCap(merged.h3s, 20),
+    paragraphs: dedupeAndCap(merged.paragraphs, 30),
+    navLinks: dedupeAndCap(merged.navLinks, 15),
+    listItems: dedupeAndCap(merged.listItems, 25),
+    colors: dedupeAndCap(merged.colors, 10),
+    fonts: dedupeAndCap(merged.fonts, 8),
+    phoneNumbers: dedupeAndCap(merged.phoneNumbers, 3),
+    emailAddresses: dedupeAndCap(merged.emailAddresses, 3),
     rawText: merged.rawText.slice(0, 12000),
+    cssRules: merged.cssRules.slice(0, 300),
+    colorPalette: {
+      primary: dedupeAndCap(merged.colorPalette.primary, 5),
+      background: dedupeAndCap(merged.colorPalette.background, 5),
+      text: dedupeAndCap(merged.colorPalette.text, 5),
+      all: dedupeAndCap(merged.colorPalette.all, 15),
+    },
+    fontDefinitions: merged.fontDefinitions.slice(0, 6),
+    dominantSpacing: merged.dominantSpacing.slice(0, 10),
+    inlineStyleSample: dedupeAndCap(merged.inlineStyleSample, 20),
+    layoutHints: dedupeAndCap(merged.layoutHints, 10),
   };
 }
 
@@ -262,6 +517,7 @@ async function scrapeUrl(url: string): Promise<{ content: ExtractedContent; back
   const normalizedUrl = url.startsWith('http') ? url : `https://${url}`;
   const baseUrl = new URL(normalizedUrl);
   const allHtml: string[] = [];
+  const allCssTexts: string[] = [];
   const visited = new Set<string>();
   const backendFeatures = new Set<string>();
 
@@ -281,16 +537,50 @@ async function scrapeUrl(url: string): Promise<{ content: ExtractedContent; back
     }
   };
 
+  const fetchCss = async (cssUrl: string): Promise<string> => {
+    try {
+      const res = await fetch(cssUrl, {
+        headers: { 'User-Agent': 'Mozilla/5.0 CWP-SiteImporter/1.0' },
+        redirect: 'follow',
+        signal: AbortSignal.timeout(8000),
+      });
+      if (!res.ok) return '';
+      const ct = res.headers.get('content-type') || '';
+      if (!ct.includes('css') && !ct.includes('text')) return '';
+      return await res.text();
+    } catch {
+      return '';
+    }
+  };
+
   // Fetch main page
   const mainHtml = await fetchPage(normalizedUrl);
   if (!mainHtml) throw new Error(`Could not fetch URL: ${normalizedUrl}`);
   allHtml.push(mainHtml);
   visited.add(normalizedUrl);
 
-  // Detect backend features from main page
   detectBackendFeatures(mainHtml).forEach(f => backendFeatures.add(f));
 
-  // Find same-origin links (discover inner pages: about, services, contact, etc.)
+  // Extract and fetch ALL linked CSS files (not just first 5)
+  const cssLinkRegex = /<link[^>]+rel=["']stylesheet["'][^>]+href=["']([^"']+)["']|<link[^>]+href=["']([^"']+)["'][^>]+rel=["']stylesheet["']/gi;
+  const cssUrls: string[] = [];
+  let cssMatch;
+  while ((cssMatch = cssLinkRegex.exec(mainHtml)) !== null) {
+    const href = cssMatch[1] || cssMatch[2];
+    if (!href || href.startsWith('data:')) continue;
+    if (href.includes('fonts.googleapis.com')) continue; // skip font API calls
+    try {
+      const full = new URL(href, baseUrl).toString();
+      cssUrls.push(full);
+    } catch { /* skip */ }
+  }
+
+  // Fetch up to 10 CSS files for thorough style extraction
+  const cssPromises = cssUrls.slice(0, 10).map(u => fetchCss(u));
+  const cssResults = await Promise.all(cssPromises);
+  allCssTexts.push(...cssResults.filter(Boolean));
+
+  // Discover inner pages
   const priorityPaths = ['about', 'services', 'contact', 'gallery', 'faq', 'pricing'];
   const linkRegex = /href=["']([^"'#?]+)["']/gi;
   const discovered: string[] = [];
@@ -303,7 +593,7 @@ async function scrapeUrl(url: string): Promise<{ content: ExtractedContent; back
       if (full.startsWith(baseUrl.origin) && !visited.has(full)) {
         const pathLower = new URL(full).pathname.toLowerCase();
         if (priorityPaths.some(p => pathLower.includes(p))) {
-          discovered.unshift(full); // priority pages first
+          discovered.unshift(full);
         } else {
           discovered.push(full);
         }
@@ -324,7 +614,7 @@ async function scrapeUrl(url: string): Promise<{ content: ExtractedContent; back
     }
   }
 
-  const contents = allHtml.map(parseHtml);
+  const contents = allHtml.map(html => parseHtml(html, allCssTexts));
   return {
     content: mergeExtracted(contents),
     backendFeatures: Array.from(backendFeatures),
@@ -344,7 +634,6 @@ function extractZip(zipBytes: Uint8Array): { content: ExtractedContent; backendF
   const htmlFiles = Object.entries(unzipped)
     .filter(([name]) => name.endsWith('.html') || name.endsWith('.htm'))
     .sort(([a], [b]) => {
-      // Prioritize index.html and root-level files
       const aDepth = a.split('/').length;
       const bDepth = b.split('/').length;
       if (aDepth !== bDepth) return aDepth - bDepth;
@@ -358,35 +647,79 @@ function extractZip(zipBytes: Uint8Array): { content: ExtractedContent; backendF
     throw new Error('No HTML files found in ZIP.');
   }
 
-  const allHtml: string[] = [];
   const backendFeatures = new Set<string>();
 
+  // Extract ALL CSS files (no artificial limit)
+  const cssFiles = Object.entries(unzipped).filter(([name]) => name.endsWith('.css'));
+  const allCssTexts = cssFiles.map(([, b]) => strFromU8(b));
+
+  const allHtml: string[] = [];
   for (const [, bytes] of htmlFiles) {
     const html = strFromU8(bytes);
     allHtml.push(html);
     detectBackendFeatures(html).forEach(f => backendFeatures.add(f));
   }
 
-  // Check CSS files for colors/fonts
-  const cssFiles = Object.entries(unzipped)
-    .filter(([name]) => name.endsWith('.css'))
-    .slice(0, 5);
-  const combinedCss = cssFiles.map(([, b]) => strFromU8(b)).join('\n');
-
-  const mainContent = mergeExtracted(allHtml.map(parseHtml));
-  // Supplement colors/fonts from CSS
-  mainContent.colors.push(...extractColors(combinedCss));
-  mainContent.fonts.push(...extractFonts(combinedCss));
-  mainContent.colors = [...new Set(mainContent.colors)].slice(0, 10);
-  mainContent.fonts = [...new Set(mainContent.fonts)].slice(0, 5);
-
-  return { content: mainContent, backendFeatures: Array.from(backendFeatures) };
+  const contents = allHtml.map(html => parseHtml(html, allCssTexts));
+  return { content: mergeExtracted(contents), backendFeatures: Array.from(backendFeatures) };
 }
 
-// ─── Claude AI: generate website_json from extracted content ─────────────────
+// ─── GitHub ZIP fetcher ───────────────────────────────────────────────────────
 
-const CLAUDE_SYSTEM = `You are an expert web designer migrating an existing website into the CWP platform's structured JSON format.
-Your job is to analyse the extracted content from the source site and produce a complete, accurate website_json object.
+async function fetchGithubZip(rawUrl: string): Promise<Uint8Array> {
+  const normalized = rawUrl.trim().replace(/\.git$/, '').replace(/\/$/, '');
+  let urlObj: URL;
+  try {
+    urlObj = new URL(normalized.startsWith('http') ? normalized : `https://${normalized}`);
+  } catch {
+    throw new Error('Invalid GitHub URL provided.');
+  }
+
+  if (!urlObj.hostname.includes('github.com')) {
+    throw new Error('URL must be a github.com repository URL.');
+  }
+
+  const parts = urlObj.pathname.split('/').filter(Boolean);
+  if (parts.length < 2) {
+    throw new Error('Invalid GitHub URL. Expected https://github.com/owner/repo');
+  }
+
+  const owner = parts[0];
+  const repo  = parts[1];
+
+  let explicitBranch: string | null = null;
+  if (parts[2] === 'tree' && parts[3]) {
+    explicitBranch = parts[3];
+  }
+
+  const branchesToTry = explicitBranch ? [explicitBranch] : ['main', 'master'];
+
+  for (const branch of branchesToTry) {
+    const zipUrl = `https://github.com/${owner}/${repo}/archive/refs/heads/${branch}.zip`;
+    try {
+      const res = await fetch(zipUrl, {
+        headers: { 'User-Agent': 'CWP-SiteImporter/1.0' },
+        redirect: 'follow',
+        signal: AbortSignal.timeout(30000),
+      });
+      if (res.ok) {
+        return new Uint8Array(await res.arrayBuffer());
+      }
+    } catch {
+      /* try next */
+    }
+  }
+
+  throw new Error(
+    `Could not download the GitHub repository. Ensure the repository is public and the URL is correct (tried branches: ${branchesToTry.join(', ')}).`,
+  );
+}
+
+// ─── System prompt: design-preserving migration ───────────────────────────────
+
+const DESIGN_PRESERVATION_SYSTEM = `You are migrating an existing website into the CWP platform's structured JSON format with EXACT design fidelity.
+
+CRITICAL GOAL: Pixel-perfect recreation — not interpretation or improvement.
 
 OUTPUT FORMAT: Return ONLY a valid JSON object — no markdown, no explanation, no code fences.
 
@@ -396,7 +729,7 @@ SCHEMA:
     "business_name": string,
     "phone": string,
     "address": string,
-    "primary_color": string,        // dominant brand hex color from source
+    "primary_color": string,        // exact hex from colorPalette.primary[0]
     "font_heading": "Inter" | "Playfair Display" | "Montserrat" | "Raleway",
     "font_body": "Inter" | "Lato" | "Open Sans",
     "logo_url": "",
@@ -404,7 +737,7 @@ SCHEMA:
   },
   "pages": [
     {
-      "id": string,                 // one of: home, about, services, contact, gallery, faq, testimonials, pricing, blog
+      "id": string,                 // home | about | services | contact | gallery | faq | testimonials | pricing | blog
       "name": string,
       "slug": string,               // "" for home, "about" for about, etc.
       "seo": { "title": string, "meta_description": string, "keywords": string[] },
@@ -444,66 +777,100 @@ CONTENT REQUIREMENTS:
 - pricing_cards: { heading, subtext, tiers: [{ name, price, period, description, features, cta_text, highlighted }] }
 - blog_preview: { heading, subtext }
 
-MIGRATION RULES:
-- Use real content from the source site wherever possible — do NOT fabricate business info
-- Use the detected primary brand color as primary_color
-- Map detected font families to the closest available CWP font
-- The home page is always required; include about, services, contact if content exists
-- Infer page structure from nav links and headings
-- For services: extract real service names and descriptions from the source content
-- For contact_cta: use real phone numbers and email addresses found on the site
-- Fill editable_fields with dot-paths clients should be able to update (phone, email, hours, service descriptions)
-- Return ONLY the JSON object.`;
+DESIGN PRESERVATION RULES (MANDATORY):
+1. PRIMARY COLOR: Use the EXACT hex from colorPalette.primary[0]. Never substitute or "improve" it.
+2. FONTS: Map detected font families to the closest available CWP font:
+   - Sans-serif (Inter, Roboto, Open Sans, Lato, Nunito, Poppins → "Inter" or "Open Sans")
+   - Display/Decorative (Playfair, Merriweather, Lora, Georgia → "Playfair Display")
+   - Geometric (Montserrat, Futura, Raleway, Oswald → "Montserrat" or "Raleway")
+3. LAYOUT: Match the column count and structure from layoutHints. If source uses 3-column cards, use three_column_cards variant.
+4. SECTIONS: Include EVERY section that exists in the source. Do NOT add sections that don't exist. Do NOT remove sections that do.
+5. CONTENT: Use real text from the source site. Do not fabricate or "improve" copy.
+6. SPACING: Preserve visual hierarchy — if source has large headings, choose variants with prominent headings.
+7. HERO BACKGROUND: If source uses a dark hero, set background_style to "dark". Light source → "light". Gradient → "gradient".
+
+VALIDATION CHECKLIST (verify before returning JSON):
+✓ primary_color matches colorPalette.primary[0] exactly
+✓ All source nav sections are represented as pages
+✓ No extra pages or sections added beyond source
+✓ Font selections reflect source typography
+✓ Phone/email populated from extracted data
+✓ Hero style (dark/light/gradient) matches source`;
+
+// ─── Generate website JSON via chosen AI provider ─────────────────────────────
 
 async function generateWebsiteJson(
   content: ExtractedContent,
   tone: string,
+  providerId: string,
   primaryColorHint?: string,
 ): Promise<any> {
-  const colorList = content.colors.join(', ') || 'not detected';
-  const fontList = content.fonts.join(', ') || 'not detected';
+  const colorList = content.colorPalette.all.join(', ') || content.colors.join(', ') || 'not detected';
+  const fontList = content.fontDefinitions.length > 0
+    ? content.fontDefinitions.map(f => `${f.family}${f.weights.length ? ` (weights: ${f.weights.join(',')})` : ''}`).join(', ')
+    : content.fonts.join(', ') || 'not detected';
 
-  const userPrompt = `Migrate this existing website into the CWP website_json format.
+  // Summarize CSS rules for token efficiency
+  const cssRuleSummary = content.cssRules
+    .filter(r => Object.values(r.properties).some(v => v.match(/#[0-9a-f]{3,6}|rgb/i)))
+    .slice(0, 40)
+    .map(r => `${r.selector} { ${Object.entries(r.properties).map(([k,v]) => `${k}:${v}`).join('; ')} }`)
+    .join('\n');
 
-EXTRACTED SITE CONTENT:
-Business/Site Title: ${content.title}
+  const userPrompt = `Migrate this existing website into the CWP website_json format with EXACT design fidelity.
+
+═══ COLOR SYSTEM ═══
+colorPalette.primary (use for primary_color): ${content.colorPalette.primary.join(', ') || 'not detected'}
+colorPalette.background: ${content.colorPalette.background.join(', ') || 'not detected'}
+colorPalette.text: ${content.colorPalette.text.join(', ') || 'not detected'}
+All detected colors: ${colorList}
+${primaryColorHint ? `Admin override color: ${primaryColorHint}` : ''}
+
+═══ TYPOGRAPHY ═══
+Detected fonts: ${fontList}
+Note: Map to closest CWP font. Preserve heading vs body font roles.
+
+═══ LAYOUT HINTS ═══
+${content.layoutHints.join(', ') || 'standard layout'}
+
+═══ DOMINANT SPACING PATTERNS ═══
+${content.dominantSpacing.slice(0, 6).map(s => `${s.property}: ${s.value} (used ${s.frequency}x)`).join('\n') || 'not detected'}
+
+═══ CSS RULES SAMPLE (for design reference) ═══
+${cssRuleSummary || 'not available'}
+
+═══ INLINE STYLE SAMPLE ═══
+${content.inlineStyleSample.slice(0, 10).join('\n') || 'none'}
+
+═══ SITE CONTENT ═══
+Title: ${content.title}
 Meta Description: ${content.metaDescription}
 
-H1 Headings: ${content.h1s.join(' | ') || 'none'}
-H2 Headings: ${content.h2s.join(' | ') || 'none'}
-H3 Headings: ${content.h3s.join(' | ') || 'none'}
+H1: ${content.h1s.join(' | ') || 'none'}
+H2: ${content.h2s.join(' | ') || 'none'}
+H3: ${content.h3s.join(' | ') || 'none'}
 
-Navigation Links (page structure): ${content.navLinks.join(', ') || 'none'}
+Navigation (page structure): ${content.navLinks.join(', ') || 'none'}
 
 Key Paragraphs:
 ${content.paragraphs.slice(0, 15).map((p, i) => `${i + 1}. ${p}`).join('\n')}
 
 List Items (services, features, etc.):
-${content.listItems.slice(0, 15).map((l, i) => `- ${l}`).join('\n')}
+${content.listItems.slice(0, 15).map(l => `- ${l}`).join('\n')}
 
-Detected Phone Numbers: ${content.phoneNumbers.join(', ') || 'none'}
-Detected Email Addresses: ${content.emailAddresses.join(', ') || 'none'}
-Detected Brand Colors: ${colorList}${primaryColorHint ? ` (admin override: ${primaryColorHint})` : ''}
-Detected Fonts: ${fontList}
+Phone: ${content.phoneNumbers.join(', ') || 'none'}
+Email: ${content.emailAddresses.join(', ') || 'none'}
 
 Raw Text Sample:
-${content.rawText.slice(0, 4000)}
+${content.rawText.slice(0, 3000)}
 
 Desired Tone: ${tone}
 
-Generate the complete website_json now. Use as much real content from the source as possible.
-Primary color to use: ${primaryColorHint || content.colors[0] || '#4F46E5'}`;
+Generate the complete website_json now. Use real content from the source. Primary color must be: ${primaryColorHint || content.colorPalette.primary[0] || content.colors[0] || '#4F46E5'}`;
 
-  const message = await anthropic.messages.create({
-    model: 'claude-opus-4-5',
-    max_tokens: 8192,
-    system: CLAUDE_SYSTEM,
-    messages: [{ role: 'user', content: userPrompt }],
-  });
+  const rawText = await generateWithProvider(providerId, userPrompt, DESIGN_PRESERVATION_SYSTEM);
 
-  const rawText = (message.content[0] as any)?.text?.trim() || '';
-
-  // Strip any accidental markdown fences
+  // Strip accidental markdown fences
   const cleaned = rawText
     .replace(/^```json\s*/i, '')
     .replace(/^```\s*/i, '')
@@ -511,67 +878,6 @@ Primary color to use: ${primaryColorHint || content.colors[0] || '#4F46E5'}`;
     .trim();
 
   return JSON.parse(cleaned);
-}
-
-// ─── GitHub ZIP fetcher ───────────────────────────────────────────────────────
-
-/**
- * Given a public GitHub repo URL (e.g. https://github.com/owner/repo or
- * https://github.com/owner/repo/tree/branch), fetches the repository ZIP.
- * Tries "main" then "master" when no branch is specified.
- */
-async function fetchGithubZip(rawUrl: string): Promise<Uint8Array> {
-  // Normalise: strip trailing slashes and .git
-  const normalized = rawUrl.trim().replace(/\.git$/, '').replace(/\/$/, '');
-  let urlObj: URL;
-  try {
-    urlObj = new URL(normalized.startsWith('http') ? normalized : `https://${normalized}`);
-  } catch {
-    throw new Error('Invalid GitHub URL provided.');
-  }
-
-  if (!urlObj.hostname.includes('github.com')) {
-    throw new Error('URL must be a github.com repository URL.');
-  }
-
-  const parts = urlObj.pathname.split('/').filter(Boolean);
-  if (parts.length < 2) {
-    throw new Error('Invalid GitHub URL. Expected https://github.com/owner/repo');
-  }
-
-  const owner = parts[0];
-  const repo  = parts[1];
-
-  // Detect explicit branch from /tree/<branch> path segments
-  let explicitBranch: string | null = null;
-  if (parts[2] === 'tree' && parts[3]) {
-    explicitBranch = parts[3];
-  }
-
-  const branchesToTry = explicitBranch
-    ? [explicitBranch]
-    : ['main', 'master'];
-
-  for (const branch of branchesToTry) {
-    const zipUrl = `https://github.com/${owner}/${repo}/archive/refs/heads/${branch}.zip`;
-    try {
-      const res = await fetch(zipUrl, {
-        headers: { 'User-Agent': 'CWP-SiteImporter/1.0' },
-        redirect: 'follow',
-        signal: AbortSignal.timeout(30000),
-      });
-      if (res.ok) {
-        const buffer = await res.arrayBuffer();
-        return new Uint8Array(buffer);
-      }
-    } catch {
-      /* try next branch */
-    }
-  }
-
-  throw new Error(
-    `Could not download the GitHub repository. Ensure the repository is public and the URL is correct (tried branches: ${branchesToTry.join(', ')}).`,
-  );
 }
 
 // ─── Main handler ─────────────────────────────────────────────────────────────
@@ -594,7 +900,7 @@ serve(async (req) => {
 
   const {
     client_id,
-    source_type, // "url" | "zip" | "github"
+    source_type,
     url,
     zip_base64,
     github_url,
@@ -603,6 +909,7 @@ serve(async (req) => {
     premium_features,
     tone = 'Professional',
     primary_color,
+    ai_provider = DEFAULT_PROVIDER_ID,
   } = body;
 
   if (!client_id) return errorResponse('client_id is required.', 400);
@@ -613,7 +920,11 @@ serve(async (req) => {
   if (source_type === 'zip' && !zip_base64) return errorResponse('zip_base64 is required when source_type is "zip".', 400);
   if (source_type === 'github' && !github_url) return errorResponse('github_url is required when source_type is "github".', 400);
 
-  console.log(`[import-site] client_id=${client_id} source_type=${source_type} url=${url || github_url || '(zip)'}`);
+  // Resolve provider config (fall back to default if unknown)
+  const providerConfig = AI_PROVIDERS[ai_provider] || AI_PROVIDERS[DEFAULT_PROVIDER_ID];
+  const resolvedProviderId = providerConfig.id;
+
+  console.log(`[import-site] client_id=${client_id} source_type=${source_type} ai_provider=${resolvedProviderId} model=${providerConfig.model}`);
 
   // Mark as generating
   await supabaseAdmin
@@ -644,13 +955,11 @@ serve(async (req) => {
       extractedContent = result.content;
       backendFeatures = result.backendFeatures;
     } else if (source_type === 'github') {
-      // Fetch ZIP directly from GitHub and extract
       const zipBytes = await fetchGithubZip(github_url);
       const result = extractZip(zipBytes);
       extractedContent = result.content;
       backendFeatures = result.backendFeatures;
     } else {
-      // Decode base64 ZIP
       let zipBytes: Uint8Array;
       try {
         const binary = atob(zip_base64);
@@ -664,19 +973,25 @@ serve(async (req) => {
       backendFeatures = result.backendFeatures;
     }
 
-    console.log(`[import-site] Extracted title="${extractedContent.title}" pages=${extractedContent.navLinks.length} colors=${extractedContent.colors[0]}`);
+    console.log(
+      `[import-site] Extracted title="${extractedContent.title}" ` +
+      `colors=${extractedContent.colorPalette.primary[0] || extractedContent.colors[0]} ` +
+      `fonts=${extractedContent.fonts.join(',')} ` +
+      `cssRules=${extractedContent.cssRules.length} ` +
+      `layoutHints=${extractedContent.layoutHints.join(',')}`
+    );
 
-    // ── 2. Generate website_json via Claude ───────────────────────────────────
+    // ── 2. Generate website_json via chosen AI provider ───────────────────────
     let websiteJson: any;
     try {
-      websiteJson = await generateWebsiteJson(extractedContent, tone, primary_color);
+      websiteJson = await generateWebsiteJson(extractedContent, tone, resolvedProviderId, primary_color);
     } catch (e: any) {
-      console.error('[import-site] Claude parse error:', e.message);
+      console.error(`[import-site] ${providerConfig.name} parse error:`, e.message);
       await supabaseAdmin
         .from('website_briefs')
-        .update({ generation_status: 'error', generation_error: 'AI returned invalid JSON. Please try again.' })
+        .update({ generation_status: 'error', generation_error: `AI (${providerConfig.name}) returned invalid JSON. Please try again.` })
         .eq('client_id', client_id);
-      return errorResponse('AI returned invalid JSON. Please try again.', 500);
+      return errorResponse(`AI (${providerConfig.name}) returned invalid JSON. Please try again.`, 500);
     }
 
     // ── 3. Validate and normalise ─────────────────────────────────────────────
@@ -688,9 +1003,14 @@ serve(async (req) => {
       return errorResponse('AI response was missing required fields.', 500);
     }
 
-    // Ensure global fallbacks
+    // Ensure global fallbacks — prefer extracted palette over AI guess
     websiteJson.global.phone = websiteJson.global.phone || extractedContent.phoneNumbers[0] || '';
-    websiteJson.global.primary_color = primary_color || websiteJson.global.primary_color || extractedContent.colors[0] || '#4F46E5';
+    websiteJson.global.primary_color =
+      primary_color ||
+      extractedContent.colorPalette.primary[0] ||
+      websiteJson.global.primary_color ||
+      extractedContent.colors[0] ||
+      '#4F46E5';
     websiteJson.global.logo_url = websiteJson.global.logo_url || '';
     websiteJson.global.hero_image_url = websiteJson.global.hero_image_url || '';
 
@@ -723,7 +1043,6 @@ serve(async (req) => {
     // ── 5. Save to website_briefs ─────────────────────────────────────────────
     const businessName = websiteJson.global.business_name || extractedContent.title || 'Imported Site';
     const navText = extractedContent.navLinks.join(', ');
-    const pagesText = websiteJson.pages.map((p: any) => p.name).join(', ');
 
     const { error: saveError } = await supabaseAdmin
       .from('website_briefs')
@@ -750,7 +1069,9 @@ serve(async (req) => {
     }
 
     console.log(
-      `[import-site] Success client_id=${client_id} slug="${clientSlug}" pages=${websiteJson.pages.length} backend_features=${backendFeatures.join(',')}`,
+      `[import-site] Success client_id=${client_id} slug="${clientSlug}" ` +
+      `pages=${websiteJson.pages.length} provider=${resolvedProviderId} ` +
+      `backend_features=${backendFeatures.join(',')}`
     );
 
     return jsonResponse({
@@ -760,6 +1081,8 @@ serve(async (req) => {
       backend_features: backendFeatures,
       pages_imported: websiteJson.pages.length,
       business_name: businessName,
+      ai_provider: resolvedProviderId,
+      ai_model: providerConfig.model,
     });
   } catch (error: any) {
     console.error('[import-site] Unhandled error:', error.message);

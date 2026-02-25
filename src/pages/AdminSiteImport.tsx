@@ -99,6 +99,68 @@ const statusBadge = (status: GenerationStatus) => {
 
 const TONES = ['Professional', 'Friendly', 'Bold', 'Luxurious'] as const;
 
+// ─── AI Provider Options ────────────────────────────────────────────────────────
+
+interface AIProviderOption {
+  id: string;
+  label: string;
+  description: string;
+  badge?: string;
+  badgeColor?: string;
+}
+
+const AI_PROVIDER_OPTIONS: AIProviderOption[] = [
+  {
+    id: 'claude-opus-4-5',
+    label: 'Claude Opus 4.5',
+    description: 'Best quality — highest fidelity design replication',
+    badge: '$15/1M',
+    badgeColor: 'bg-purple-100 text-purple-700',
+  },
+  {
+    id: 'claude-sonnet-4-5',
+    label: 'Claude Sonnet 4.5',
+    description: 'Fast & balanced — great for most imports',
+    badge: '$3/1M',
+    badgeColor: 'bg-indigo-100 text-indigo-700',
+  },
+  {
+    id: 'gemini-2-flash',
+    label: 'Gemini 2.0 Flash',
+    description: 'Google AI — ideal for Gemini-built sites, free tier',
+    badge: 'Free',
+    badgeColor: 'bg-emerald-100 text-emerald-700',
+  },
+  {
+    id: 'gemini-2-pro',
+    label: 'Gemini 2.0 Pro',
+    description: 'Google AI advanced — superior visual understanding',
+    badge: '$1.25/1M',
+    badgeColor: 'bg-teal-100 text-teal-700',
+  },
+  {
+    id: 'deepseek-v3',
+    label: 'DeepSeek v3',
+    description: 'Cost-effective — good for content-heavy sites',
+    badge: '$0.27/1M',
+    badgeColor: 'bg-sky-100 text-sky-700',
+  },
+  {
+    id: 'gpt-4o',
+    label: 'GPT-4o',
+    description: 'OpenAI — strong reasoning and layout analysis',
+    badge: '$5/1M',
+    badgeColor: 'bg-green-100 text-green-700',
+  },
+  {
+    id: 'gpt-4-turbo',
+    label: 'GPT-4 Turbo',
+    description: 'OpenAI — high capacity for complex sites',
+    badge: '$10/1M',
+    badgeColor: 'bg-lime-100 text-lime-700',
+  },
+];
+
 // ─── Component ─────────────────────────────────────────────────────────────────
 
 const AdminSiteImport: React.FC = () => {
@@ -122,6 +184,7 @@ const AdminSiteImport: React.FC = () => {
   const [toneInput, setToneInput] = useState<typeof TONES[number]>('Professional');
   const [primaryColorInput, setPrimaryColorInput] = useState('#4F46E5');
   const [overridePrimaryColor, setOverridePrimaryColor] = useState(false);
+  const [selectedProvider, setSelectedProvider] = useState('claude-opus-4-5');
   const [selectedPremiumFeatures, setSelectedPremiumFeatures] = useState<Set<PremiumFeatureId>>(new Set());
   const [collapsedFeatureGroups, setCollapsedFeatureGroups] = useState<Record<string, boolean>>({});
 
@@ -250,6 +313,7 @@ const AdminSiteImport: React.FC = () => {
         tone: toneInput,
         primary_color: overridePrimaryColor ? primaryColorInput : undefined,
         premium_features: Array.from(selectedPremiumFeatures),
+        ai_provider: selectedProvider,
       };
 
       if (importSource === 'url') {
@@ -303,7 +367,7 @@ const AdminSiteImport: React.FC = () => {
             Site Import
           </h1>
           <p className="text-slate-500 mt-1">
-            Migrate any existing website into CWP. Point to a live URL, paste a GitHub repository link, or upload a ZIP export — Claude AI extracts the content and rebuilds it in the CWP format.
+            Migrate any existing website into CWP. Point to a live URL, paste a GitHub repository link, or upload a ZIP export — your chosen AI provider extracts the content and rebuilds it in the CWP format with exact design fidelity.
           </p>
         </div>
 
@@ -518,6 +582,39 @@ const AdminSiteImport: React.FC = () => {
                     />
                   </div>
 
+                  {/* AI Provider selector */}
+                  <div>
+                    <label className="block text-sm font-medium text-slate-700 mb-1">
+                      AI Provider
+                    </label>
+                    <select
+                      className="w-full border border-slate-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                      value={selectedProvider}
+                      onChange={e => setSelectedProvider(e.target.value)}
+                      disabled={step === 'importing'}
+                    >
+                      {AI_PROVIDER_OPTIONS.map(p => (
+                        <option key={p.id} value={p.id}>
+                          {p.label}{p.badge ? ` — ${p.badge}` : ''}
+                        </option>
+                      ))}
+                    </select>
+                    {/* Description of selected provider */}
+                    {(() => {
+                      const opt = AI_PROVIDER_OPTIONS.find(p => p.id === selectedProvider);
+                      return opt ? (
+                        <div className="mt-2 flex items-center gap-2">
+                          {opt.badge && (
+                            <span className={`text-xs font-semibold px-2 py-0.5 rounded-full ${opt.badgeColor}`}>
+                              {opt.badge}
+                            </span>
+                          )}
+                          <p className="text-xs text-slate-400">{opt.description}</p>
+                        </div>
+                      ) : null;
+                    })()}
+                  </div>
+
                   <div>
                     <label className="block text-sm font-medium text-slate-700 mb-1">Brand Tone</label>
                     <select
@@ -529,7 +626,7 @@ const AdminSiteImport: React.FC = () => {
                       {TONES.map(t => <option key={t} value={t}>{t}</option>)}
                     </select>
                     <p className="text-xs text-slate-400 mt-1">
-                      Tone guidance passed to Claude when regenerating copy.
+                      Tone guidance passed to the AI when regenerating copy.
                     </p>
                   </div>
 
@@ -572,7 +669,7 @@ const AdminSiteImport: React.FC = () => {
                       </div>
                     ) : (
                       <p className="text-xs text-slate-400">
-                        Claude AI will auto-detect the brand color from the imported site. Enable the override above to force a specific color instead.
+                        The AI will auto-detect the brand color from the imported site. Enable the override above to force a specific color instead.
                       </p>
                     )}
                   </div>
@@ -696,10 +793,10 @@ const AdminSiteImport: React.FC = () => {
                 <p className="text-slate-700 font-semibold text-lg">Importing your site...</p>
                 <div className="mt-6 space-y-2 text-left w-full max-w-sm mx-auto">
                   {[
-                    importSource === 'url' ? 'Crawling pages...' : importSource === 'github' ? 'Fetching GitHub repository...' : 'Extracting ZIP contents...',
-                    'Parsing HTML structure...',
-                    'Extracting colors, fonts & content...',
-                    'Claude AI mapping to CWP format...',
+                    importSource === 'url' ? 'Crawling pages & CSS...' : importSource === 'github' ? 'Fetching GitHub repository...' : 'Extracting ZIP contents...',
+                    'Parsing HTML structure & inline styles...',
+                    'Extracting full color palette, fonts & layout...',
+                    `${AI_PROVIDER_OPTIONS.find(p => p.id === selectedProvider)?.label || 'AI'} mapping to CWP format...`,
                     'Saving to database...',
                   ].map((step, i) => (
                     <div key={i} className="flex items-center gap-3 text-sm text-slate-500">
@@ -831,9 +928,24 @@ const AdminSiteImport: React.FC = () => {
                   <div className="grid grid-cols-2 gap-x-6 gap-y-2 text-sm text-slate-600">
                     <span><span className="font-medium text-slate-700">Business:</span> {result.website_json?.global?.business_name}</span>
                     <span><span className="font-medium text-slate-700">Font:</span> {result.website_json?.global?.font_heading}</span>
-                    <span><span className="font-medium text-slate-700">Color:</span> {result.website_json?.global?.primary_color}</span>
+                    <span>
+                      <span className="font-medium text-slate-700">Color:</span>{' '}
+                      {result.website_json?.global?.primary_color && (
+                        <span className="inline-flex items-center gap-1.5">
+                          <span
+                            className="inline-block w-3 h-3 rounded-full border border-slate-300"
+                            style={{ backgroundColor: result.website_json.global.primary_color }}
+                          />
+                          {result.website_json.global.primary_color}
+                        </span>
+                      )}
+                    </span>
                     <span><span className="font-medium text-slate-700">Phone:</span> {result.website_json?.global?.phone || '—'}</span>
                     <span className="col-span-2"><span className="font-medium text-slate-700">Address:</span> {result.website_json?.global?.address || '—'}</span>
+                    <span className="col-span-2">
+                      <span className="font-medium text-slate-700">AI Provider:</span>{' '}
+                      {AI_PROVIDER_OPTIONS.find(p => p.id === selectedProvider)?.label || selectedProvider}
+                    </span>
                   </div>
                 </div>
 
