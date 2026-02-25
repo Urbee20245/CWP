@@ -193,6 +193,14 @@ const AdminClientDetail: React.FC = () => {
   const [retractInvoiceReason, setRetractInvoiceReason] = useState('');
   const [retractToast, setRetractToast] = useState<{ type: 'success' | 'warning'; message: string } | null>(null);
 
+  // Invoice delete state (retracted only)
+  const [deleteInvoiceConfirmId, setDeleteInvoiceConfirmId] = useState<string | null>(null);
+  const [isDeletingInvoice, setIsDeletingInvoice] = useState(false);
+
+  // Proposal delete state (retracted only)
+  const [deleteProposalConfirmId, setDeleteProposalConfirmId] = useState<string | null>(null);
+  const [isDeletingProposal, setIsDeletingProposal] = useState(false);
+
   // Proposal / Mark-as-Complete state
   const [markCompleteProposalId, setMarkCompleteProposalId] = useState<string | null>(null);
   const [isMarkingComplete, setIsMarkingComplete] = useState(false);
@@ -756,6 +764,38 @@ const AdminClientDetail: React.FC = () => {
       alert(`Failed to retract invoice: ${e.message}`);
     } finally {
       setIsProcessing(false);
+    }
+  };
+
+  const handleDeleteRetractedInvoice = async (invoiceId: string) => {
+    setIsDeletingInvoice(true);
+    try {
+      const { error } = await supabase.from('invoices').delete().eq('id', invoiceId);
+      if (error) throw error;
+      setDeleteInvoiceConfirmId(null);
+      setRetractToast({ type: 'success', message: 'Retracted invoice deleted.' });
+      setTimeout(() => setRetractToast(null), 4000);
+      fetchClientData();
+    } catch (e: any) {
+      alert(`Failed to delete invoice: ${e.message}`);
+    } finally {
+      setIsDeletingInvoice(false);
+    }
+  };
+
+  const handleDeleteRetractedProposal = async (proposalId: string) => {
+    setIsDeletingProposal(true);
+    try {
+      const { error } = await supabase.from('client_proposals').delete().eq('id', proposalId);
+      if (error) throw error;
+      setDeleteProposalConfirmId(null);
+      setRetractToast({ type: 'success', message: 'Retracted proposal deleted.' });
+      setTimeout(() => setRetractToast(null), 4000);
+      fetchClientData();
+    } catch (e: any) {
+      alert(`Failed to delete proposal: ${e.message}`);
+    } finally {
+      setIsDeletingProposal(false);
     }
   };
 
@@ -1828,6 +1868,16 @@ const AdminClientDetail: React.FC = () => {
                                     <ExternalLink className="w-3.5 h-3.5" />
                                   </a>
                                 ) : null}
+                                {invoice.status === 'retracted' && (
+                                  <button
+                                    onClick={() => setDeleteInvoiceConfirmId(invoice.id)}
+                                    disabled={isProcessing}
+                                    className="p-1.5 text-slate-400 hover:text-red-600 hover:bg-red-50 rounded-lg transition-colors disabled:opacity-40"
+                                    title="Delete retracted invoice"
+                                  >
+                                    <Trash2 className="w-3.5 h-3.5" />
+                                  </button>
+                                )}
                               </div>
                             </div>
                             {retractInvoiceConfirmId === invoice.id && (
@@ -1852,6 +1902,27 @@ const AdminClientDetail: React.FC = () => {
                                   </button>
                                   <button
                                     onClick={() => setRetractInvoiceConfirmId(null)}
+                                    className="px-4 py-1.5 border border-slate-200 text-slate-600 rounded-lg text-xs font-bold hover:bg-slate-100 transition-colors"
+                                  >
+                                    Cancel
+                                  </button>
+                                </div>
+                              </div>
+                            )}
+                            {deleteInvoiceConfirmId === invoice.id && (
+                              <div className="mx-3 mb-3 pt-3 border-t border-red-200">
+                                <p className="text-xs font-bold text-slate-700 mb-2">Permanently delete this retracted invoice? This cannot be undone.</p>
+                                <div className="flex gap-2">
+                                  <button
+                                    onClick={() => handleDeleteRetractedInvoice(invoice.id)}
+                                    disabled={isDeletingInvoice}
+                                    className="px-4 py-1.5 bg-red-600 text-white rounded-lg text-xs font-bold hover:bg-red-700 transition-colors disabled:opacity-40 flex items-center gap-1.5"
+                                  >
+                                    {isDeletingInvoice ? <Loader2 className="w-3 h-3 animate-spin" /> : <Trash2 className="w-3 h-3" />}
+                                    Delete
+                                  </button>
+                                  <button
+                                    onClick={() => setDeleteInvoiceConfirmId(null)}
                                     className="px-4 py-1.5 border border-slate-200 text-slate-600 rounded-lg text-xs font-bold hover:bg-slate-100 transition-colors"
                                   >
                                     Cancel
@@ -1922,6 +1993,15 @@ const AdminClientDetail: React.FC = () => {
                                 <a href={`/admin/proposals/${proposal.id}`} className="p-1.5 text-indigo-400 hover:text-indigo-600 hover:bg-indigo-50 rounded-lg transition-colors" title="View Proposal">
                                   <Eye className="w-4 h-4" />
                                 </a>
+                                {proposal.status === 'retracted' && (
+                                  <button
+                                    onClick={() => setDeleteProposalConfirmId(proposal.id)}
+                                    className="p-1.5 text-slate-400 hover:text-red-600 hover:bg-red-50 rounded-lg transition-colors"
+                                    title="Delete retracted proposal"
+                                  >
+                                    <Trash2 className="w-3.5 h-3.5" />
+                                  </button>
+                                )}
                                 {canMarkComplete && (
                                   <button onClick={() => setMarkCompleteProposalId(proposal.id)} className="flex items-center gap-1.5 px-3 py-1.5 bg-teal-600 text-white text-xs font-bold rounded-lg hover:bg-teal-700 transition-colors">
                                     <CheckSquare className="w-3.5 h-3.5" /> Mark Complete
@@ -1949,6 +2029,20 @@ const AdminClientDetail: React.FC = () => {
                                     Confirm
                                   </button>
                                   <button onClick={() => setMarkCompleteProposalId(null)} className="px-4 py-1.5 border border-slate-200 text-slate-600 rounded-lg text-xs font-bold hover:bg-slate-100 transition-colors">
+                                    Cancel
+                                  </button>
+                                </div>
+                              </div>
+                            )}
+                            {deleteProposalConfirmId === proposal.id && (
+                              <div className="mt-3 pt-3 border-t border-red-200">
+                                <p className="text-xs font-bold text-slate-700 mb-2">Permanently delete this retracted proposal? This cannot be undone.</p>
+                                <div className="flex gap-2">
+                                  <button onClick={() => handleDeleteRetractedProposal(proposal.id)} disabled={isDeletingProposal} className="px-4 py-1.5 bg-red-600 text-white rounded-lg text-xs font-bold hover:bg-red-700 transition-colors disabled:opacity-40 flex items-center gap-1.5">
+                                    {isDeletingProposal ? <Loader2 className="w-3 h-3 animate-spin" /> : <Trash2 className="w-3 h-3" />}
+                                    Delete
+                                  </button>
+                                  <button onClick={() => setDeleteProposalConfirmId(null)} className="px-4 py-1.5 border border-slate-200 text-slate-600 rounded-lg text-xs font-bold hover:bg-slate-100 transition-colors">
                                     Cancel
                                   </button>
                                 </div>
