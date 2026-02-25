@@ -1,0 +1,46 @@
+name: Deploy Edge Functions
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'supabase/functions/claude-admin-assistant/**'
+      - 'supabase/functions/website-chat/**'
+      - 'supabase/functions/generate-website/**'
+      - 'supabase/functions/regenerate-section/**'
+      - 'supabase/functions/_shared/**'
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: supabase/setup-cli@v1
+        with:
+          version: latest
+
+      - name: Deploy changed functions
+        env:
+          SUPABASE_ACCESS_TOKEN: ${{ secrets.SUPABASE_ACCESS_TOKEN }}
+        run: |
+          PROJECT_REF=nvgumhlewbqynrhlkqhx
+
+          # Detect which function directories changed
+          CHANGED=$(git diff --name-only HEAD~1 HEAD 2>/dev/null || git diff --name-only $(git hash-object -t tree /dev/null) HEAD)
+
+          deploy_if_changed() {
+            FUNC=$1
+            FLAG=$2
+            if echo "$CHANGED" | grep -qE "supabase/functions/(${FUNC}|_shared)/"; then
+              echo "Deploying $FUNC..."
+              supabase functions deploy $FUNC --project-ref $PROJECT_REF $FLAG
+            else
+              echo "Skipping $FUNC (no changes)"
+            fi
+          }
+
+          deploy_if_changed "claude-admin-assistant" ""
+          deploy_if_changed "website-chat" "--no-verify-jwt"
+          deploy_if_changed "generate-website" ""
+          deploy_if_changed "regenerate-section" ""
