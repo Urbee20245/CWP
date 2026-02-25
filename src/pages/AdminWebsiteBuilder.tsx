@@ -6,7 +6,7 @@ import {
   Globe, Loader2, AlertTriangle, CheckCircle, Eye, Copy, EyeOff,
   RefreshCw, Wand2, ChevronDown, FileText, Check, Link, Save, Info, Key,
   Sparkles, Send, ExternalLink, Settings, ToggleLeft, ToggleRight, X,
-  MessageSquare, ChevronRight, Zap,
+  MessageSquare, ChevronRight, Zap, Image, Link2, Upload,
 } from 'lucide-react';
 import { supabase } from '../integrations/supabase/client';
 import { AdminService } from '../services/adminService';
@@ -29,7 +29,8 @@ interface ChatMessage {
   ts: number;
 }
 
-type LeftPanelState = 'type-picker' | 'brief-form' | 'generating' | 'chat';
+type LeftPanelState = 'type-picker' | 'brief-form' | 'clone' | 'generating' | 'chat';
+type CloneMode = 'url' | 'image';
 type RightView = 'build' | 'pages';
 
 // ─── Constants ───────────────────────────────────────────────────────────────
@@ -121,6 +122,23 @@ const AdminWebsiteBuilder: React.FC = () => {
   const [isChatLoading, setIsChatLoading] = useState(false);
   const chatEndRef                    = useRef<HTMLDivElement>(null);
   const chatInputRef                  = useRef<HTMLTextAreaElement>(null);
+
+  // Clone
+  const [generatingLabel, setGeneratingLabel] = useState('Building your website...');
+  const [cloneMode, setCloneMode] = useState<CloneMode>('url');
+  const [cloneUrl, setCloneUrl] = useState('');
+  const [cloneImage, setCloneImage] = useState<File | null>(null);
+  const [cloneImagePreview, setCloneImagePreview] = useState<string | null>(null);
+  const [cloneForm, setCloneForm] = useState({
+    business_name: '',
+    industry: '',
+    location: '',
+    services_offered: '',
+    tone: 'Professional' as typeof TONES[number],
+    primary_color: '#4F46E5',
+  });
+  const [cloneError, setCloneError] = useState<string | null>(null);
+  const cloneFileInputRef = useRef<HTMLInputElement>(null);
 
   // Publish
   const [isTogglingPublish, setIsTogglingPublish] = useState(false);
@@ -260,6 +278,7 @@ const AdminWebsiteBuilder: React.FC = () => {
     const f = overrideForm || form;
     setIsGenerating(true);
     setGenError(null);
+    setGeneratingLabel('Building your website...');
     setPanelState('generating');
 
     try {
@@ -289,6 +308,79 @@ const AdminWebsiteBuilder: React.FC = () => {
       setIsGenerating(false);
     }
   }, [selectedClientId, form, selectedPages, loadBrief]);
+
+  // ── Clone ─────────────────────────────────────────────────────────────────
+
+  const handleCloneImageChange = (file: File) => {
+    setCloneImage(file);
+    const reader = new FileReader();
+    reader.onload = (e) => setCloneImagePreview(e.target?.result as string);
+    reader.readAsDataURL(file);
+  };
+
+  const handleClone = useCallback(async () => {
+    if (!selectedClientId) return;
+    setCloneError(null);
+    setIsGenerating(true);
+    setGeneratingLabel(cloneMode === 'image' ? 'Analysing design & cloning...' : 'Scraping site & cloning...');
+    setPanelState('generating');
+
+    try {
+      if (cloneMode === 'url') {
+        if (!cloneUrl.trim()) throw new Error('Please enter a domain or URL to clone.');
+        await AdminService.cloneWebsiteFromUrl({
+          client_id: selectedClientId,
+          url: cloneUrl.trim(),
+          tone: form.tone,
+          primary_color: form.primary_color !== '#4F46E5' ? form.primary_color : undefined,
+        });
+      } else {
+        if (!cloneImage) throw new Error('Please upload a screenshot image.');
+        if (!cloneForm.business_name || !cloneForm.industry || !cloneForm.services_offered || !cloneForm.location) {
+          throw new Error('Please fill in all required business fields.');
+        }
+
+        // Convert image to base64
+        const imageBase64 = await new Promise<string>((resolve, reject) => {
+          const reader = new FileReader();
+          reader.onload = (e) => {
+            const result = e.target?.result as string;
+            // Strip the data URL prefix (e.g. "data:image/jpeg;base64,")
+            resolve(result.split(',')[1]);
+          };
+          reader.onerror = reject;
+          reader.readAsDataURL(cloneImage);
+        });
+
+        await AdminService.cloneWebsiteFromImage({
+          client_id: selectedClientId,
+          image_base64: imageBase64,
+          image_mime_type: cloneImage.type || 'image/jpeg',
+          business_name: cloneForm.business_name,
+          industry: cloneForm.industry,
+          services_offered: cloneForm.services_offered,
+          location: cloneForm.location,
+          tone: cloneForm.tone,
+          primary_color: cloneForm.primary_color,
+          pages_to_generate: Array.from(selectedPages),
+        });
+      }
+
+      const loadedBrief = await loadBrief(selectedClientId);
+      if (loadedBrief?.generation_status === 'complete' && loadedBrief?.website_json) {
+        setPanelState('chat');
+      } else {
+        const errMsg = loadedBrief?.generation_error || 'Website was not saved. Please try again.';
+        setCloneError(errMsg);
+        setPanelState('clone');
+      }
+    } catch (err: any) {
+      setCloneError(err.message || 'Cloning failed. Please try again.');
+      setPanelState('clone');
+    } finally {
+      setIsGenerating(false);
+    }
+  }, [selectedClientId, cloneMode, cloneUrl, cloneImage, cloneForm, form, selectedPages, loadBrief]);
 
   // ── Publish toggle ────────────────────────────────────────────────────────
 
@@ -438,12 +530,12 @@ Keep responses concise and actionable. Respond in 1-3 sentences max unless detai
 
   // While loading the brief for a freshly-selected client, default to
   // type-picker so there is no stale panel from the previous client.
-  // Exception: if we are mid-generation the brief is being RE-fetched after
-  // the generate call — keep the current panelState (e.g. 'generating') so
+  // Exception: if we are mid-generation (or in clone flow) the brief is being
+  // RE-fetched after the generate call — keep the current panelState so
   // the UI doesn't flicker back to 'type-picker'.
   const effectivePanelState: LeftPanelState =
-    !selectedClientId            ? 'type-picker'
-    : (loadingBrief && !isGenerating) ? 'type-picker'
+    !selectedClientId                           ? 'type-picker'
+    : (loadingBrief && !isGenerating && panelState !== 'clone') ? 'type-picker'
     : panelState;
 
   // ─────────────────────────────────────────────────────────────────────────
@@ -595,6 +687,23 @@ Keep responses concise and actionable. Respond in 1-3 sentences max unless detai
                           <span className="text-xs text-slate-400 leading-snug">{type.desc}</span>
                         </button>
                       ))}
+
+                      {/* Clone Existing Website card — spans full width */}
+                      <button
+                        onClick={() => {
+                          setCloneError(null);
+                          setPanelState('clone');
+                        }}
+                        className="col-span-2 flex items-center gap-3 p-3.5 rounded-xl bg-indigo-950/60 border border-indigo-800 hover:border-indigo-500 hover:bg-indigo-900/40 transition-all text-left group"
+                      >
+                        <span className="w-10 h-10 rounded-lg bg-indigo-800/60 flex items-center justify-center flex-shrink-0">
+                          <Image className="w-5 h-5 text-indigo-300" />
+                        </span>
+                        <div>
+                          <span className="text-sm font-semibold text-indigo-200 group-hover:text-white transition-colors block">Clone a Website</span>
+                          <span className="text-xs text-indigo-400 leading-snug">Upload a screenshot or enter a domain to copy the look</span>
+                        </div>
+                      </button>
                     </div>
                   </>
                 )}
@@ -772,6 +881,281 @@ Keep responses concise and actionable. Respond in 1-3 sentences max unless detai
               </div>
             )}
 
+            {/* ── State 2b: Clone Panel ────────────────────────────────── */}
+            {effectivePanelState === 'clone' && (
+              <div className="flex-1 overflow-y-auto flex flex-col">
+                <div className="p-5 space-y-4 flex-1">
+                  {/* Back */}
+                  <button
+                    onClick={() => setPanelState('type-picker')}
+                    className="flex items-center gap-1.5 text-xs text-slate-400 hover:text-slate-200 transition-colors"
+                  >
+                    <ChevronRight className="w-3.5 h-3.5 rotate-180" /> Back
+                  </button>
+
+                  <div>
+                    <h2 className="text-white font-semibold text-base flex items-center gap-2">
+                      <Image className="w-4 h-4 text-indigo-400" /> Clone a Website
+                    </h2>
+                    <p className="text-slate-400 text-xs mt-0.5">Mirror the look of an existing site</p>
+                  </div>
+
+                  {cloneError && (
+                    <div className="flex items-start gap-2 p-3 bg-red-950/50 border border-red-800 rounded-xl text-xs text-red-400">
+                      <AlertTriangle className="w-4 h-4 flex-shrink-0 mt-0.5" />
+                      <span>{cloneError}</span>
+                    </div>
+                  )}
+
+                  {/* Mode tabs */}
+                  <div className="flex items-center bg-slate-800 border border-slate-700 rounded-lg p-0.5">
+                    <button
+                      onClick={() => setCloneMode('url')}
+                      className={`flex-1 flex items-center justify-center gap-1.5 py-2 rounded-md text-xs font-medium transition-colors ${
+                        cloneMode === 'url'
+                          ? 'bg-indigo-600 text-white'
+                          : 'text-slate-400 hover:text-slate-200'
+                      }`}
+                    >
+                      <Link2 className="w-3.5 h-3.5" /> By URL / Domain
+                    </button>
+                    <button
+                      onClick={() => setCloneMode('image')}
+                      className={`flex-1 flex items-center justify-center gap-1.5 py-2 rounded-md text-xs font-medium transition-colors ${
+                        cloneMode === 'image'
+                          ? 'bg-indigo-600 text-white'
+                          : 'text-slate-400 hover:text-slate-200'
+                      }`}
+                    >
+                      <Upload className="w-3.5 h-3.5" /> Screenshot
+                    </button>
+                  </div>
+
+                  {/* ── URL mode ── */}
+                  {cloneMode === 'url' && (
+                    <div className="space-y-3">
+                      <div>
+                        <label className="block text-xs font-medium text-slate-300 mb-1.5">
+                          Website URL or Domain *
+                        </label>
+                        <input
+                          type="text"
+                          className="w-full bg-slate-800 border border-slate-700 text-slate-100 placeholder-slate-500 rounded-lg px-3 py-2 text-sm font-mono focus:outline-none focus:ring-1 focus:ring-indigo-500 focus:border-indigo-500 transition-colors"
+                          value={cloneUrl}
+                          onChange={e => setCloneUrl(e.target.value)}
+                          placeholder="https://example.com"
+                        />
+                        <p className="text-xs text-slate-500 mt-1">
+                          We'll scrape the site's content and design, then rebuild it on CWP.
+                        </p>
+                      </div>
+
+                      <div>
+                        <label className="block text-xs font-medium text-slate-300 mb-1.5">Brand Tone</label>
+                        <div className="flex flex-wrap gap-2">
+                          {TONES.map(t => (
+                            <button
+                              key={t}
+                              type="button"
+                              onClick={() => setForm(f => ({ ...f, tone: t }))}
+                              className={`px-3 py-1.5 rounded-full text-xs font-medium border transition-colors ${
+                                form.tone === t
+                                  ? 'bg-indigo-600 border-indigo-500 text-white'
+                                  : 'bg-slate-800 border-slate-700 text-slate-400 hover:border-slate-500 hover:text-slate-300'
+                              }`}
+                            >
+                              {t}
+                            </button>
+                          ))}
+                        </div>
+                      </div>
+                    </div>
+                  )}
+
+                  {/* ── Screenshot mode ── */}
+                  {cloneMode === 'image' && (
+                    <div className="space-y-3">
+                      {/* Image upload area */}
+                      <div>
+                        <label className="block text-xs font-medium text-slate-300 mb-1.5">
+                          Website Screenshot *
+                        </label>
+                        <input
+                          ref={cloneFileInputRef}
+                          type="file"
+                          accept="image/*"
+                          className="hidden"
+                          onChange={e => {
+                            const file = e.target.files?.[0];
+                            if (file) handleCloneImageChange(file);
+                          }}
+                        />
+                        {cloneImagePreview ? (
+                          <div className="relative rounded-xl overflow-hidden border border-slate-700 bg-slate-800">
+                            <img
+                              src={cloneImagePreview}
+                              alt="Website screenshot preview"
+                              className="w-full object-cover max-h-40"
+                            />
+                            <button
+                              onClick={() => {
+                                setCloneImage(null);
+                                setCloneImagePreview(null);
+                                if (cloneFileInputRef.current) cloneFileInputRef.current.value = '';
+                              }}
+                              className="absolute top-2 right-2 w-6 h-6 bg-slate-900/80 border border-slate-700 rounded-full flex items-center justify-center text-slate-400 hover:text-white transition-colors"
+                            >
+                              <X className="w-3.5 h-3.5" />
+                            </button>
+                          </div>
+                        ) : (
+                          <button
+                            onClick={() => cloneFileInputRef.current?.click()}
+                            className="w-full flex flex-col items-center justify-center gap-2 p-6 rounded-xl bg-slate-800 border border-dashed border-slate-600 hover:border-indigo-500 hover:bg-slate-750 transition-all text-center"
+                          >
+                            <Upload className="w-6 h-6 text-slate-500" />
+                            <span className="text-xs text-slate-400">Click to upload screenshot</span>
+                            <span className="text-xs text-slate-600">PNG, JPG, WEBP — max 10MB</span>
+                          </button>
+                        )}
+                      </div>
+
+                      {/* Business fields */}
+                      <div>
+                        <label className="block text-xs font-medium text-slate-300 mb-1.5">Business Name *</label>
+                        <input
+                          type="text"
+                          className="w-full bg-slate-800 border border-slate-700 text-slate-100 placeholder-slate-500 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-1 focus:ring-indigo-500 focus:border-indigo-500 transition-colors"
+                          value={cloneForm.business_name}
+                          onChange={e => setCloneForm(f => ({ ...f, business_name: e.target.value }))}
+                          placeholder="Acme Plumbing Co."
+                        />
+                      </div>
+
+                      <div>
+                        <label className="block text-xs font-medium text-slate-300 mb-1.5">Industry *</label>
+                        <input
+                          type="text"
+                          className="w-full bg-slate-800 border border-slate-700 text-slate-100 placeholder-slate-500 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-1 focus:ring-indigo-500 focus:border-indigo-500 transition-colors"
+                          value={cloneForm.industry}
+                          onChange={e => setCloneForm(f => ({ ...f, industry: e.target.value }))}
+                          placeholder="Plumbing, HVAC, Design..."
+                        />
+                      </div>
+
+                      <div>
+                        <label className="block text-xs font-medium text-slate-300 mb-1.5">Location *</label>
+                        <input
+                          type="text"
+                          className="w-full bg-slate-800 border border-slate-700 text-slate-100 placeholder-slate-500 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-1 focus:ring-indigo-500 focus:border-indigo-500 transition-colors"
+                          value={cloneForm.location}
+                          onChange={e => setCloneForm(f => ({ ...f, location: e.target.value }))}
+                          placeholder="Atlanta, GA"
+                        />
+                      </div>
+
+                      <div>
+                        <label className="block text-xs font-medium text-slate-300 mb-1.5">Services Offered *</label>
+                        <textarea
+                          className="w-full bg-slate-800 border border-slate-700 text-slate-100 placeholder-slate-500 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-1 focus:ring-indigo-500 focus:border-indigo-500 transition-colors resize-none"
+                          rows={2}
+                          value={cloneForm.services_offered}
+                          onChange={e => setCloneForm(f => ({ ...f, services_offered: e.target.value }))}
+                          placeholder="Emergency repairs, installations..."
+                        />
+                      </div>
+
+                      {/* Tone */}
+                      <div>
+                        <label className="block text-xs font-medium text-slate-300 mb-1.5">Brand Tone</label>
+                        <div className="flex flex-wrap gap-2">
+                          {TONES.map(t => (
+                            <button
+                              key={t}
+                              type="button"
+                              onClick={() => setCloneForm(f => ({ ...f, tone: t }))}
+                              className={`px-3 py-1.5 rounded-full text-xs font-medium border transition-colors ${
+                                cloneForm.tone === t
+                                  ? 'bg-indigo-600 border-indigo-500 text-white'
+                                  : 'bg-slate-800 border-slate-700 text-slate-400 hover:border-slate-500 hover:text-slate-300'
+                              }`}
+                            >
+                              {t}
+                            </button>
+                          ))}
+                        </div>
+                      </div>
+
+                      {/* Color override */}
+                      <div>
+                        <label className="block text-xs font-medium text-slate-300 mb-1.5">
+                          Brand Color <span className="text-slate-500 font-normal">(optional — AI will extract from screenshot)</span>
+                        </label>
+                        <div className="flex items-center gap-2">
+                          <input
+                            type="color"
+                            className="w-9 h-9 rounded-lg border border-slate-700 bg-slate-800 cursor-pointer p-0.5"
+                            value={cloneForm.primary_color}
+                            onChange={e => setCloneForm(f => ({ ...f, primary_color: e.target.value }))}
+                          />
+                          <input
+                            type="text"
+                            className="flex-1 bg-slate-800 border border-slate-700 text-slate-100 placeholder-slate-500 rounded-lg px-3 py-2 text-sm font-mono focus:outline-none focus:ring-1 focus:ring-indigo-500 transition-colors"
+                            value={cloneForm.primary_color}
+                            onChange={e => setCloneForm(f => ({ ...f, primary_color: e.target.value }))}
+                            maxLength={7}
+                          />
+                        </div>
+                      </div>
+
+                      {/* Pages */}
+                      <div>
+                        <label className="block text-xs font-medium text-slate-300 mb-2">Pages to Generate</label>
+                        <div className="flex flex-wrap gap-1.5">
+                          {ALL_PAGE_OPTIONS.map(option => {
+                            const isSelected = selectedPages.has(option.id);
+                            const isLocked = option.locked;
+                            return (
+                              <button
+                                key={option.id}
+                                type="button"
+                                onClick={() => !isLocked && togglePage(option.id)}
+                                disabled={isLocked}
+                                className={`px-3 py-1.5 rounded-full text-xs font-medium border transition-colors ${
+                                  isSelected
+                                    ? 'bg-indigo-600 border-indigo-500 text-white'
+                                    : 'bg-slate-800 border-slate-700 text-slate-400 hover:border-slate-500 hover:text-slate-300'
+                                } ${isLocked ? 'opacity-70 cursor-default' : 'cursor-pointer'}`}
+                              >
+                                {option.name}
+                                {isLocked && <span className="ml-1 text-indigo-300 opacity-60">●</span>}
+                              </button>
+                            );
+                          })}
+                        </div>
+                      </div>
+                    </div>
+                  )}
+                </div>
+
+                {/* Clone button — sticky at bottom */}
+                <div className="flex-none p-4 border-t border-slate-800 bg-slate-900">
+                  <button
+                    onClick={handleClone}
+                    disabled={
+                      isGenerating || !selectedClientId ||
+                      (cloneMode === 'url' && !cloneUrl.trim()) ||
+                      (cloneMode === 'image' && (!cloneImage || !cloneForm.business_name || !cloneForm.industry || !cloneForm.services_offered || !cloneForm.location))
+                    }
+                    className="w-full flex items-center justify-center gap-2 px-4 py-3 bg-indigo-600 hover:bg-indigo-500 disabled:opacity-40 disabled:cursor-not-allowed text-white font-semibold rounded-xl transition-colors text-sm"
+                  >
+                    <Image className="w-4 h-4" />
+                    {cloneMode === 'url' ? 'Clone Website' : `Clone Design (${selectedPages.size} page${selectedPages.size !== 1 ? 's' : ''})`}
+                  </button>
+                </div>
+              </div>
+            )}
+
             {/* ── State 3: Generating ───────────────────────────────────── */}
             {effectivePanelState === 'generating' && (
               <div className="flex-1 flex flex-col items-center justify-center text-center p-8 gap-5">
@@ -782,7 +1166,7 @@ Keep responses concise and actionable. Respond in 1-3 sentences max unless detai
                   <Sparkles className="absolute -top-1 -right-1 w-4 h-4 text-indigo-400 animate-pulse" />
                 </div>
                 <div>
-                  <p className="text-white font-semibold text-base">Building your website...</p>
+                  <p className="text-white font-semibold text-base">{generatingLabel}</p>
                   <p className="text-slate-400 text-sm mt-1">This takes about 30–60 seconds</p>
                 </div>
                 <div className="flex flex-wrap gap-1.5 justify-center">
