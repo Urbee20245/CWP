@@ -55,6 +55,7 @@ const AdminSiteImport = React.lazy(() => import('./src/pages/AdminSiteImport'));
 const AdminProposalList = React.lazy(() => import('./src/pages/AdminProposalList'));
 const AdminProposalBuilder = React.lazy(() => import('./src/pages/AdminProposalBuilder'));
 const AdminOnboardingManager = React.lazy(() => import('./src/pages/AdminOnboardingManager'));
+const AdminClaudeAssistant = React.lazy(() => import('./src/pages/AdminClaudeAssistant'));
 
 // Client pages
 const ClientDashboard = React.lazy(() => import('./src/pages/ClientDashboard'));
@@ -159,6 +160,7 @@ const AppContent: React.FC = () => {
             <Route path="proposals/new" element={<AdminProposalBuilder />} />
             <Route path="proposals/:id" element={<AdminProposalBuilder />} />
             <Route path="onboarding" element={<AdminOnboardingManager />} />
+            <Route path="claude" element={<AdminClaudeAssistant />} />
           </Route>
 
           <Route path="/client/*" element={<ProtectedRoute allowedRoles={['client']} />}>
