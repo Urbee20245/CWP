@@ -356,10 +356,20 @@ export const AdminService = {
 
   /**
    * Send a message to the Claude admin assistant.
-   * Pass `confirmed_operation` when resuming after an admin approved/rejected a proposed DB change.
+   * Pass `confirmed_operation` when resuming after an admin approved/rejected a proposed DB change or file write.
+   * Pass `session_context` to scope actions to CWP, a specific client, or all clients.
+   * Pass `model` to select the Claude model (defaults to claude-sonnet-4-5).
    */
   callClaudeAssistant: async (payload: {
     messages: Array<{ role: string; content: string }>;
-    confirmed_operation?: { approved: boolean; operation: any; tool_id: string } | null;
+    confirmed_operation?: { approved: boolean; operation: any; tool_id: string; type?: string } | null;
+    session_context?: {
+      type: 'cwp' | 'client' | 'all_clients';
+      label: string;
+      repo?: string;
+      clientId?: string;
+      clientSlug?: string;
+    } | null;
+    model?: string;
   }) => invokeEdgeFunction('claude-admin-assistant', payload),
 };

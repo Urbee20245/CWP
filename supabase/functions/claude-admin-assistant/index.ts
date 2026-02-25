@@ -5,11 +5,22 @@ import { handleCors, jsonResponse, errorResponse } from '../_shared/utils.ts';
 
 const ANTHROPIC_API_KEY = Deno.env.get('ANTHROPIC_API_KEY') ?? '';
 const GITHUB_TOKEN = Deno.env.get('GITHUB_TOKEN') ?? '';
-const SUPABASE_URL = Deno.env.get('SUPABASE_URL') ?? '';
-const SUPABASE_SERVICE_ROLE_KEY = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') ?? '';
+const SUPABASE_URL = Deno.env.get('SUPABASE_URL')!;
+const SUPABASE_ANON_KEY = Deno.env.get('SUPABASE_ANON_KEY')!;
+const SUPABASE_SERVICE_ROLE_KEY = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!;
 const GITHUB_REPO = 'Urbee20245/CWP';
 
 const anthropic = new Anthropic({ apiKey: ANTHROPIC_API_KEY });
+
+// ─── Session context type ────────────────────────────────────────────────────
+
+interface SessionContext {
+  type: 'cwp' | 'client' | 'all_clients';
+  label: string;
+  repo?: string;
+  clientId?: string;
+  clientSlug?: string;
+}
 
 // ─── Tool definitions ──────────────────────────────────────────────────────────
 
@@ -108,24 +119,79 @@ const TOOLS: Anthropic.Messages.Tool[] = [
       required: [],
     },
   },
+  {
+    name: 'generate_feature_code',
+    description: 'Generate code (React components, edge functions, SQL migrations, or configuration files) for a requested feature. Returns the code as a string with file path suggestions.',
+    input_schema: {
+      type: 'object',
+      properties: {
+        feature_description: { type: 'string', description: 'What feature to build' },
+        target: {
+          type: 'string',
+          enum: ['cwp', 'client_site', 'supabase_function', 'database_migration'],
+          description: 'What type of code to generate',
+        },
+        context_files: {
+          type: 'array',
+          items: { type: 'string' },
+          description: 'Relevant file paths to read first for context',
+        },
+      },
+      required: ['feature_description', 'target'],
+    },
+  },
+  {
+    name: 'write_file_to_github',
+    description: 'Create or update a file in the CWP GitHub repository. Always requires admin confirmation before executing.',
+    input_schema: {
+      type: 'object',
+      properties: {
+        path: { type: 'string', description: 'Full file path in the repo (e.g. src/pages/NewFeature.tsx)' },
+        content: { type: 'string', description: 'File content to write' },
+        commit_message: { type: 'string', description: 'Git commit message' },
+        description: { type: 'string', description: 'Human-readable description of what this change does' },
+      },
+      required: ['path', 'content', 'commit_message', 'description'],
+    },
+  },
+  {
+    name: 'check_tool_versions',
+    description: 'Check the latest available versions of Supabase CLI and Claude Code from public registries.',
+    input_schema: { type: 'object', properties: {}, required: [] },
+  },
 ];
 
-// ─── System prompt ──────────────────────────────────────────────────────────────
+// ─── System prompt builder ───────────────────────────────────────────────────
 
-const SYSTEM_PROMPT = `You are an intelligent admin assistant for CWP (Custom Websites Plus), a SaaS platform for web agencies.
+function buildSystemPrompt(sessionContext?: SessionContext | null): string {
+  return `You are the CWP All-in-One Code Builder — an expert admin assistant AND full-stack developer for CWP (Custom Website Plus), a multi-tenant SaaS platform.
 
-You have two main capabilities:
-1. **Supabase database access** – query clients, projects, billing, appointments, and more.
-2. **GitHub repository access** – browse and read files in the CWP codebase (Urbee20245/CWP), view issues.
+${sessionContext ? `## Current Session Context
+You are currently working on: **${sessionContext.label}** (type: ${sessionContext.type})
+${sessionContext.clientId ? `Client ID: ${sessionContext.clientId}, Slug: ${sessionContext.clientSlug}` : ''}
+Keep all actions, queries, and code generation scoped to this context unless the admin says otherwise.
+` : ''}
 
-Key database tables include: profiles, clients, projects, appointments, billing_products, subscriptions, invoices, website_briefs, sms_messages, blog_posts, voice_integrations, addons.
+## Your Capabilities
+1. **Database Access** — Query any table, propose changes (require approval)
+2. **GitHub Access** — Read any file, list directories, view issues
+3. **Code Generation** — Generate React components, edge functions, SQL migrations, config files
+4. **File Writing** — Write generated code directly to GitHub (requires approval)
+5. **Feature Building** — Plan and implement complete features end-to-end
 
-Guidelines:
-- Be concise and helpful. Use markdown for formatting when returning data.
-- Always query before proposing updates — confirm you have the right record.
-- When proposing a database change, write a clear, specific description of the change.
-- Never expose raw tokens, passwords, or secrets.
-- If asked to modify multiple records, propose them one at a time so the admin can review each.`;
+## Platform Stack
+- Frontend: React 18 + TypeScript + Tailwind CSS + Vite → Vercel
+- Backend: Supabase (PostgreSQL + 55+ Deno Edge Functions)
+- Integrations: Stripe, Twilio, Retell, Cal.com, Resend
+- Repo: Urbee20245/CWP
+
+## Rules
+- ALWAYS read relevant existing files before generating new code
+- ALWAYS use the confirmation flow for database writes and file writes
+- NEVER expose API keys, secrets, or tokens in responses
+- For client-scoped tasks, always filter by the session client ID
+- When building multi-step features, outline the plan first, then execute step by step`;
+}
 
 // ─── Tool executors ─────────────────────────────────────────────────────────────
 
@@ -199,6 +265,65 @@ async function executeDbChange(supabaseAdmin: any, operation: any) {
   throw new Error(`Unknown operation: ${op}`);
 }
 
+async function executeFileWrite(input: any) {
+  const { path, content, commit_message } = input;
+  // First, try to get the current SHA if file exists
+  const getUrl = `https://api.github.com/repos/${GITHUB_REPO}/contents/${path}`;
+  const getRes = await fetch(getUrl, {
+    headers: {
+      Authorization: `Bearer ${GITHUB_TOKEN}`,
+      Accept: 'application/vnd.github.v3+json',
+      'User-Agent': 'CWP-Admin-Assistant',
+    },
+  });
+
+  let sha: string | undefined;
+  if (getRes.ok) {
+    const existing = await getRes.json();
+    sha = existing.sha;
+  }
+
+  // Encode content to base64
+  const encoder = new TextEncoder();
+  const bytes = encoder.encode(content);
+  let binary = '';
+  for (let i = 0; i < bytes.length; i++) {
+    binary += String.fromCharCode(bytes[i]);
+  }
+  const base64Content = btoa(binary);
+
+  const putBody: any = {
+    message: commit_message,
+    content: base64Content,
+  };
+  if (sha) putBody.sha = sha;
+
+  const putRes = await fetch(getUrl, {
+    method: 'PUT',
+    headers: {
+      Authorization: `Bearer ${GITHUB_TOKEN}`,
+      Accept: 'application/vnd.github.v3+json',
+      'Content-Type': 'application/json',
+      'User-Agent': 'CWP-Admin-Assistant',
+    },
+    body: JSON.stringify(putBody),
+  });
+
+  if (!putRes.ok) {
+    const errText = await putRes.text();
+    throw new Error(`GitHub write failed: ${putRes.status} — ${errText}`);
+  }
+
+  const result = await putRes.json();
+  return {
+    success: true,
+    path,
+    sha: result.content?.sha,
+    commit: result.commit?.sha,
+    url: result.content?.html_url,
+  };
+}
+
 async function githubListDirectory(path: string) {
   const url = `https://api.github.com/repos/${GITHUB_REPO}/contents/${path}`;
   const res = await fetch(url, {
@@ -234,7 +359,6 @@ async function githubGetFile(path: string) {
   const data = await res.json();
   if (data.encoding === 'base64') {
     const content = atob(data.content.replace(/\n/g, ''));
-    // Truncate large files to avoid token overflow
     const truncated = content.length > 20000;
     return { path, content: truncated ? content.slice(0, 20000) + '\n\n[... file truncated at 20k chars ...]' : content, size: data.size };
   }
@@ -265,13 +389,108 @@ async function githubGetIssues(limit = 10, state: 'open' | 'closed' | 'all' = 'o
   };
 }
 
-async function executeTool(name: string, input: any, supabaseAdmin: any): Promise<any> {
+async function generateFeatureCode(input: any, model: string) {
+  const { feature_description, target, context_files = [] } = input;
+
+  // Read context files from GitHub
+  const contextParts: string[] = [];
+  for (const filePath of context_files.slice(0, 5)) {
+    const fileData = await githubGetFile(filePath);
+    if ('content' in fileData) {
+      contextParts.push(`### ${filePath}\n\`\`\`\n${fileData.content}\n\`\`\``);
+    }
+  }
+
+  const contextSection = contextParts.length > 0
+    ? `## Reference Files\n${contextParts.join('\n\n')}\n\n`
+    : '';
+
+  const codeGenSystemPrompt = `You are an expert TypeScript/React developer working on CWP (Custom Website Plus). The platform uses: React 18, TypeScript, Tailwind CSS, Vite, Supabase (PostgreSQL + Edge Functions in Deno), Lucide icons, Vercel hosting. Generate production-ready code only. No placeholders. No TODOs unless genuinely complex. Follow existing patterns in the codebase. Always include proper TypeScript types. For React components: use functional components, hooks, existing AdminLayout wrapper for admin pages. For edge functions: use Deno, import from esm.sh, include CORS handling via _shared/utils.ts, include proper error handling. For SQL: use IF NOT EXISTS, include RLS policies, use snake_case for columns.`;
+
+  const userPrompt = `${contextSection}## Task
+Generate ${target} code for: ${feature_description}
+
+Respond with a JSON object in this exact format:
+{
+  "code": "<the complete code>",
+  "suggested_path": "<file path suggestion>",
+  "description": "<brief description of what was generated>",
+  "next_steps": ["<step 1>", "<step 2>"]
+}`;
+
+  const response = await anthropic.messages.create({
+    model: model,
+    max_tokens: 8000,
+    system: codeGenSystemPrompt,
+    messages: [{ role: 'user', content: userPrompt }],
+  });
+
+  const text = response.content
+    .filter((b): b is Anthropic.Messages.TextBlock => b.type === 'text')
+    .map((b) => b.text)
+    .join('');
+
+  // Try to parse JSON response
+  try {
+    const jsonMatch = text.match(/\{[\s\S]*\}/);
+    if (jsonMatch) {
+      return JSON.parse(jsonMatch[0]);
+    }
+  } catch {
+    // fallback
+  }
+
+  return {
+    code: text,
+    suggested_path: `src/components/${feature_description.replace(/\s+/g, '')}.tsx`,
+    description: feature_description,
+    next_steps: ['Review the generated code', 'Test in development', 'Deploy when ready'],
+  };
+}
+
+async function checkToolVersions() {
+  const results: any = {};
+
+  try {
+    const supabaseRes = await fetch('https://api.github.com/repos/supabase/cli/releases/latest', {
+      headers: { 'User-Agent': 'CWP-Admin-Assistant', Accept: 'application/vnd.github.v3+json' },
+    });
+    if (supabaseRes.ok) {
+      const data = await supabaseRes.json();
+      results.supabase_cli_latest = data.tag_name?.replace(/^v/, '') ?? 'unknown';
+    } else {
+      results.supabase_cli_latest = 'unavailable';
+    }
+  } catch {
+    results.supabase_cli_latest = 'unavailable';
+  }
+
+  try {
+    const claudeRes = await fetch('https://registry.npmjs.org/claude-code/latest', {
+      headers: { 'User-Agent': 'CWP-Admin-Assistant' },
+    });
+    if (claudeRes.ok) {
+      const data = await claudeRes.json();
+      results.claude_code_latest = data.version ?? 'unknown';
+    } else {
+      results.claude_code_latest = 'unavailable';
+    }
+  } catch {
+    results.claude_code_latest = 'unavailable';
+  }
+
+  return results;
+}
+
+async function executeTool(name: string, input: any, supabaseAdmin: any, model: string): Promise<any> {
   switch (name) {
     case 'list_tables':            return await listTables();
     case 'query_database':         return await queryDatabase(supabaseAdmin, input);
     case 'github_list_directory':  return await githubListDirectory(input.path ?? '');
     case 'github_get_file':        return await githubGetFile(input.path);
     case 'github_get_issues':      return await githubGetIssues(input.limit, input.state);
+    case 'generate_feature_code':  return await generateFeatureCode(input, model);
+    case 'check_tool_versions':    return await checkToolVersions();
     default: return { error: `Unknown tool: ${name}` };
   }
 }
@@ -283,42 +502,65 @@ serve(async (req) => {
   if (cors) return cors;
 
   try {
-    // Verify admin JWT
+    // ── Auth: verify user JWT using anon key client (NOT service role) ──────
     const authHeader = req.headers.get('Authorization');
     if (!authHeader) return errorResponse('Unauthorized', 401);
 
-    const supabaseAdmin = createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY);
-    const token = authHeader.replace('Bearer ', '');
-    const { data: { user }, error: authError } = await supabaseAdmin.auth.getUser(token);
-    if (authError || !user) return errorResponse('Unauthorized', 401);
+    const userClient = createClient(SUPABASE_URL, SUPABASE_ANON_KEY, {
+      global: { headers: { Authorization: authHeader } },
+    });
+    const { data: { user }, error: authError } = await userClient.auth.getUser();
+    if (authError || !user) return errorResponse('Invalid or expired token', 401);
 
-    const { data: profile } = await supabaseAdmin
-      .from('profiles')
-      .select('role')
-      .eq('id', user.id)
-      .single();
-
-    if (profile?.role !== 'admin') return errorResponse('Forbidden: admin access required', 403);
+    // Use service role for everything else
+    const adminClient = createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY);
+    const { data: profile } = await adminClient.from('profiles').select('role').eq('id', user.id).single();
+    if (profile?.role !== 'admin') return errorResponse('Admin access required', 403);
 
     const body = await req.json();
-    const { messages: inputMessages = [], confirmed_operation } = body;
+    const {
+      messages: inputMessages = [],
+      confirmed_operation,
+      session_context,
+      model: requestedModel,
+    } = body;
 
-    // Build message history, ensuring valid alternation
+    const model = requestedModel ?? 'claude-sonnet-4-5';
+    const sessionContext: SessionContext | null = session_context ?? null;
+
+    // Build message history
     let messages: Anthropic.Messages.MessageParam[] = [...inputMessages];
 
-    // If admin approved/rejected a proposed DB change, resolve the pending tool_use
+    // If admin approved/rejected a proposed DB change or file write, resolve the pending tool_use
     if (confirmed_operation?.tool_id) {
       let toolResultContent: string;
-      if (confirmed_operation.approved) {
-        try {
-          const result = await executeDbChange(supabaseAdmin, confirmed_operation.operation);
-          toolResultContent = JSON.stringify({ success: true, ...result });
-        } catch (e: any) {
-          toolResultContent = JSON.stringify({ success: false, error: e.message });
+
+      if (confirmed_operation.type === 'file_write') {
+        // File write confirmation
+        if (confirmed_operation.approved) {
+          try {
+            const result = await executeFileWrite(confirmed_operation.operation);
+            toolResultContent = JSON.stringify({ success: true, ...result });
+          } catch (e: any) {
+            toolResultContent = JSON.stringify({ success: false, error: e.message });
+          }
+        } else {
+          toolResultContent = JSON.stringify({ success: false, rejected_by_admin: true, message: 'Admin chose not to write this file.' });
         }
       } else {
-        toolResultContent = JSON.stringify({ success: false, rejected_by_admin: true, message: 'Admin chose not to apply this change.' });
+        // Database change confirmation
+        if (confirmed_operation.approved) {
+          try {
+            const result = await executeDbChange(adminClient, confirmed_operation.operation);
+            toolResultContent = JSON.stringify({ success: true, ...result });
+          } catch (e: any) {
+            toolResultContent = JSON.stringify({ success: false, error: e.message });
+          }
+        } else {
+          toolResultContent = JSON.stringify({ success: false, rejected_by_admin: true, message: 'Admin chose not to apply this change.' });
+        }
       }
+
       messages.push({
         role: 'user',
         content: [{ type: 'tool_result', tool_use_id: confirmed_operation.tool_id, content: toolResultContent }],
@@ -327,17 +569,17 @@ serve(async (req) => {
 
     // Agentic loop — up to 10 Claude turns
     const toolCallHistory: Array<{ tool: string; input: any; result: any }> = [];
+    const systemPrompt = buildSystemPrompt(sessionContext);
 
     for (let turn = 0; turn < 10; turn++) {
       const response = await anthropic.messages.create({
-        model: 'claude-sonnet-4-5',
+        model,
         max_tokens: 4096,
-        system: SYSTEM_PROMPT,
+        system: systemPrompt,
         tools: TOOLS,
         messages,
       });
 
-      // Append Claude's response to history
       messages.push({ role: 'assistant', content: response.content });
 
       if (response.stop_reason === 'end_turn') {
@@ -356,7 +598,6 @@ serve(async (req) => {
 
           // propose_database_change → pause for admin confirmation
           if (block.name === 'propose_database_change') {
-            // Extract any text Claude produced before the tool call
             const precedingText = response.content
               .filter((b): b is Anthropic.Messages.TextBlock => b.type === 'text')
               .map((b) => b.text)
@@ -365,14 +606,33 @@ serve(async (req) => {
 
             return jsonResponse({
               type: 'confirmation_required',
+              confirmation_type: 'database',
               operation: block.input,
               tool_id: block.id,
               preceding_text: precedingText,
-              messages,  // full history so frontend can resume
+              messages,
             });
           }
 
-          const result = await executeTool(block.name, block.input, supabaseAdmin);
+          // write_file_to_github → pause for admin confirmation
+          if (block.name === 'write_file_to_github') {
+            const precedingText = response.content
+              .filter((b): b is Anthropic.Messages.TextBlock => b.type === 'text')
+              .map((b) => b.text)
+              .join('\n')
+              .trim();
+
+            return jsonResponse({
+              type: 'confirmation_required',
+              confirmation_type: 'file_write',
+              operation: block.input,
+              tool_id: block.id,
+              preceding_text: precedingText,
+              messages,
+            });
+          }
+
+          const result = await executeTool(block.name, block.input, adminClient, model);
           toolCallHistory.push({ tool: block.name, input: block.input, result });
           toolResults.push({
             type: 'tool_result',
