@@ -309,9 +309,10 @@ export const AdminService = {
    */
   importSite: async (payload: {
     client_id: string;
-    source_type: 'url' | 'zip';
+    source_type: 'url' | 'zip' | 'github';
     url?: string;
     zip_base64?: string;
+    github_url?: string;
     slug?: string;
     custom_domain?: string;
     tone?: string;

@@ -7,7 +7,7 @@ import {
   Globe, Link, Upload, FileArchive, ChevronDown, ChevronRight, FileText,
   Check, Save, Info, Calendar, Phone, FileText as FormIcon, Shield,
   Sparkles, MessageSquare, LayoutDashboard, ArrowRight, ToggleLeft,
-  ToggleRight, AlertCircle, Code2, Database, Search,
+  ToggleRight, AlertCircle, Code2, Database, Search, Github, X,
 } from 'lucide-react';
 import { supabase } from '../integrations/supabase/client';
 import { AdminService } from '../services/adminService';
@@ -25,7 +25,7 @@ interface Client {
   billing_email: string;
 }
 
-type ImportSource = 'url' | 'zip';
+type ImportSource = 'url' | 'github' | 'zip';
 
 type ImportStep = 'configure' | 'importing' | 'done';
 
@@ -111,6 +111,7 @@ const AdminSiteImport: React.FC = () => {
   // ── Import source ──────────────────────────────────────────────────────────
   const [importSource, setImportSource] = useState<ImportSource>('url');
   const [urlInput, setUrlInput] = useState('');
+  const [githubUrlInput, setGithubUrlInput] = useState('');
   const [zipFile, setZipFile] = useState<File | null>(null);
   const [isDragging, setIsDragging] = useState(false);
   const zipInputRef = useRef<HTMLInputElement>(null);
@@ -120,6 +121,7 @@ const AdminSiteImport: React.FC = () => {
   const [customDomainInput, setCustomDomainInput] = useState('');
   const [toneInput, setToneInput] = useState<typeof TONES[number]>('Professional');
   const [primaryColorInput, setPrimaryColorInput] = useState('#4F46E5');
+  const [overridePrimaryColor, setOverridePrimaryColor] = useState(false);
   const [selectedPremiumFeatures, setSelectedPremiumFeatures] = useState<Set<PremiumFeatureId>>(new Set());
   const [collapsedFeatureGroups, setCollapsedFeatureGroups] = useState<Record<string, boolean>>({});
 
@@ -226,7 +228,11 @@ const AdminSiteImport: React.FC = () => {
   // ── Validate before importing ──────────────────────────────────────────────
   const canImport =
     !!selectedClientId &&
-    (importSource === 'url' ? urlInput.trim().length > 4 : !!zipFile);
+    (importSource === 'url'
+      ? urlInput.trim().length > 4
+      : importSource === 'github'
+      ? githubUrlInput.trim().includes('github.com')
+      : !!zipFile);
 
   // ── Handle import ──────────────────────────────────────────────────────────
   const handleImport = async () => {
@@ -242,12 +248,14 @@ const AdminSiteImport: React.FC = () => {
         slug: slugInput.trim() || undefined,
         custom_domain: customDomainInput.trim() || undefined,
         tone: toneInput,
-        primary_color: primaryColorInput,
+        primary_color: overridePrimaryColor ? primaryColorInput : undefined,
         premium_features: Array.from(selectedPremiumFeatures),
       };
 
       if (importSource === 'url') {
         payload.url = urlInput.trim();
+      } else if (importSource === 'github') {
+        payload.github_url = githubUrlInput.trim();
       } else {
         payload.zip_base64 = await fileToBase64(zipFile!);
       }
@@ -295,7 +303,7 @@ const AdminSiteImport: React.FC = () => {
             Site Import
           </h1>
           <p className="text-slate-500 mt-1">
-            Migrate an existing Hostinger site into CWP. Upload a ZIP export or point to a live URL — Claude AI extracts the content and rebuilds it in the CWP format.
+            Migrate any existing website into CWP. Point to a live URL, paste a GitHub repository link, or upload a ZIP export — Claude AI extracts the content and rebuilds it in the CWP format.
           </p>
         </div>
 
@@ -345,12 +353,12 @@ const AdminSiteImport: React.FC = () => {
                 <div className="px-6 pb-6 border-t border-slate-100 pt-4">
                   {/* Tabs */}
                   <div className="flex rounded-xl border border-slate-200 overflow-hidden mb-5">
-                    {(['url', 'zip'] as ImportSource[]).map(src => (
+                    {(['url', 'github', 'zip'] as ImportSource[]).map(src => (
                       <button
                         key={src}
                         onClick={() => { setImportSource(src); setImportError(null); }}
                         disabled={step === 'importing'}
-                        className={`flex-1 flex items-center justify-center gap-2 py-2.5 text-sm font-medium transition-colors ${
+                        className={`flex-1 flex items-center justify-center gap-1.5 py-2.5 text-xs font-medium transition-colors ${
                           importSource === src
                             ? 'bg-indigo-600 text-white'
                             : 'text-slate-600 hover:bg-slate-50'
@@ -358,6 +366,8 @@ const AdminSiteImport: React.FC = () => {
                       >
                         {src === 'url'
                           ? <><Globe className="w-3.5 h-3.5" /> Live URL</>
+                          : src === 'github'
+                          ? <><Github className="w-3.5 h-3.5" /> GitHub</>
                           : <><FileArchive className="w-3.5 h-3.5" /> Upload ZIP</>
                         }
                       </button>
@@ -373,13 +383,36 @@ const AdminSiteImport: React.FC = () => {
                       <input
                         type="url"
                         className="w-full border border-slate-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500 font-mono"
-                        placeholder="https://oldsite.com"
+                        placeholder="https://clientsite.com"
                         value={urlInput}
                         onChange={e => setUrlInput(e.target.value)}
                         disabled={step === 'importing'}
                       />
                       <p className="text-xs text-slate-400 mt-2">
-                        CWP will crawl the main page and up to 4 sub-pages (about, services, contact, etc.) to extract content.
+                        CWP will crawl the main page and up to 4 sub-pages (about, services, contact, etc.) to extract content. Works with any live website — Hostinger, Squarespace, Wix, etc.
+                      </p>
+                    </div>
+                  )}
+
+                  {/* GitHub input */}
+                  {importSource === 'github' && (
+                    <div>
+                      <label className="block text-sm font-medium text-slate-700 mb-1">
+                        GitHub Repository URL
+                      </label>
+                      <input
+                        type="url"
+                        className="w-full border border-slate-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500 font-mono"
+                        placeholder="https://github.com/owner/repository"
+                        value={githubUrlInput}
+                        onChange={e => setGithubUrlInput(e.target.value)}
+                        disabled={step === 'importing'}
+                      />
+                      <p className="text-xs text-slate-400 mt-2">
+                        Paste the public GitHub repository URL. CWP downloads the ZIP automatically and extracts HTML files. Supports{' '}
+                        <span className="font-medium text-slate-500">main</span> and{' '}
+                        <span className="font-medium text-slate-500">master</span> branches, or specify a branch via{' '}
+                        <span className="font-mono text-slate-500">/tree/branch-name</span> in the URL.
                       </p>
                     </div>
                   )}
@@ -415,7 +448,7 @@ const AdminSiteImport: React.FC = () => {
                           <>
                             <Upload className="w-6 h-6 text-slate-400" />
                             <p className="text-sm text-slate-600 font-medium">Drop ZIP here or click to browse</p>
-                            <p className="text-xs text-slate-400">HTML/CSS/JS export from Hostinger, WordPress, or any site builder</p>
+                            <p className="text-xs text-slate-400">HTML/CSS/JS export from any site builder or file manager</p>
                           </>
                         )}
                       </div>
@@ -431,7 +464,7 @@ const AdminSiteImport: React.FC = () => {
                         }}
                       />
                       <p className="text-xs text-slate-400 mt-2">
-                        Export your site from Hostinger File Manager as a ZIP. HTML files inside will be parsed automatically.
+                        Export your site as a ZIP from Hostinger File Manager, GitHub (Download ZIP), or any hosting provider. HTML files inside will be parsed automatically.
                       </p>
                     </div>
                   )}
@@ -501,25 +534,47 @@ const AdminSiteImport: React.FC = () => {
                   </div>
 
                   <div>
-                    <label className="block text-sm font-medium text-slate-700 mb-1">
-                      Primary Brand Color <span className="text-slate-400 font-normal">(optional — auto-detected)</span>
+                    <label className="block text-sm font-medium text-slate-700 mb-2">
+                      Primary Brand Color
                     </label>
-                    <div className="flex items-center gap-3">
-                      <input
-                        type="color"
-                        className="w-10 h-10 rounded-lg border border-slate-300 cursor-pointer"
-                        value={primaryColorInput}
-                        onChange={e => setPrimaryColorInput(e.target.value)}
-                        disabled={step === 'importing'}
-                      />
-                      <span className="text-sm text-slate-500 font-mono">{primaryColorInput}</span>
-                      <button
-                        onClick={() => setPrimaryColorInput('#4F46E5')}
-                        className="text-xs text-slate-400 hover:text-slate-600 underline"
-                      >
-                        Reset
-                      </button>
-                    </div>
+                    {/* Override toggle */}
+                    <button
+                      type="button"
+                      onClick={() => setOverridePrimaryColor(p => !p)}
+                      disabled={step === 'importing'}
+                      className={`flex items-center gap-2 text-sm px-3 py-1.5 rounded-lg border transition-colors mb-3 ${
+                        overridePrimaryColor
+                          ? 'border-indigo-300 bg-indigo-50 text-indigo-700'
+                          : 'border-slate-200 bg-slate-50 text-slate-500 hover:bg-slate-100'
+                      }`}
+                    >
+                      {overridePrimaryColor
+                        ? <><Check className="w-3.5 h-3.5" /> Override color</>
+                        : <><X className="w-3.5 h-3.5" /> Auto-detect color</>
+                      }
+                    </button>
+                    {overridePrimaryColor ? (
+                      <div className="flex items-center gap-3">
+                        <input
+                          type="color"
+                          className="w-10 h-10 rounded-lg border border-slate-300 cursor-pointer"
+                          value={primaryColorInput}
+                          onChange={e => setPrimaryColorInput(e.target.value)}
+                          disabled={step === 'importing'}
+                        />
+                        <span className="text-sm text-slate-500 font-mono">{primaryColorInput}</span>
+                        <button
+                          onClick={() => setPrimaryColorInput('#4F46E5')}
+                          className="text-xs text-slate-400 hover:text-slate-600 underline"
+                        >
+                          Reset
+                        </button>
+                      </div>
+                    ) : (
+                      <p className="text-xs text-slate-400">
+                        Claude AI will auto-detect the brand color from the imported site. Enable the override above to force a specific color instead.
+                      </p>
+                    )}
                   </div>
                 </div>
               )}
@@ -641,7 +696,7 @@ const AdminSiteImport: React.FC = () => {
                 <p className="text-slate-700 font-semibold text-lg">Importing your site...</p>
                 <div className="mt-6 space-y-2 text-left w-full max-w-sm mx-auto">
                   {[
-                    importSource === 'url' ? 'Crawling pages...' : 'Extracting ZIP contents...',
+                    importSource === 'url' ? 'Crawling pages...' : importSource === 'github' ? 'Fetching GitHub repository...' : 'Extracting ZIP contents...',
                     'Parsing HTML structure...',
                     'Extracting colors, fonts & content...',
                     'Claude AI mapping to CWP format...',
@@ -684,10 +739,10 @@ const AdminSiteImport: React.FC = () => {
                 </p>
                 <div className="mt-6 grid grid-cols-1 sm:grid-cols-2 gap-4 w-full max-w-md text-left">
                   {[
-                    { icon: <Globe className="w-4 h-4 text-indigo-500" />, title: 'Angular / Next.js / React / Vue / Vite', text: 'Static build output (dist/ or build/) → ZIP and upload' },
-                    { icon: <Link className="w-4 h-4 text-emerald-500" />, title: 'Live Hostinger Site', text: 'Paste the public URL — CWP crawls pages automatically' },
-                    { icon: <FileArchive className="w-4 h-4 text-amber-500" />, title: 'WordPress Export', text: 'Export as ZIP from Hostinger File Manager' },
-                    { icon: <Code2 className="w-4 h-4 text-purple-500" />, title: 'Express / NestJS Backend', text: 'Backend docs generated automatically after import' },
+                    { icon: <Link className="w-4 h-4 text-emerald-500" />, title: 'Live Website URL', text: 'Paste any public URL — Hostinger, Squarespace, Wix, etc. CWP crawls pages automatically' },
+                    { icon: <Github className="w-4 h-4 text-slate-700" />, title: 'GitHub Repository', text: 'Paste a github.com repo URL — CWP downloads and extracts the ZIP automatically' },
+                    { icon: <FileArchive className="w-4 h-4 text-amber-500" />, title: 'ZIP Upload', text: 'Export from Hostinger File Manager, download from GitHub, or export from WordPress' },
+                    { icon: <Code2 className="w-4 h-4 text-purple-500" />, title: 'Static Build Output', text: 'Angular / React / Vue / Next.js — ZIP the dist/ or build/ folder and upload' },
                   ].map((item, i) => (
                     <div key={i} className="p-3 bg-slate-50 rounded-xl border border-slate-100">
                       <div className="flex items-center gap-2 mb-1">

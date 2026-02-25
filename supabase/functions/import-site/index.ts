@@ -513,6 +513,67 @@ Primary color to use: ${primaryColorHint || content.colors[0] || '#4F46E5'}`;
   return JSON.parse(cleaned);
 }
 
+// ─── GitHub ZIP fetcher ───────────────────────────────────────────────────────
+
+/**
+ * Given a public GitHub repo URL (e.g. https://github.com/owner/repo or
+ * https://github.com/owner/repo/tree/branch), fetches the repository ZIP.
+ * Tries "main" then "master" when no branch is specified.
+ */
+async function fetchGithubZip(rawUrl: string): Promise<Uint8Array> {
+  // Normalise: strip trailing slashes and .git
+  const normalized = rawUrl.trim().replace(/\.git$/, '').replace(/\/$/, '');
+  let urlObj: URL;
+  try {
+    urlObj = new URL(normalized.startsWith('http') ? normalized : `https://${normalized}`);
+  } catch {
+    throw new Error('Invalid GitHub URL provided.');
+  }
+
+  if (!urlObj.hostname.includes('github.com')) {
+    throw new Error('URL must be a github.com repository URL.');
+  }
+
+  const parts = urlObj.pathname.split('/').filter(Boolean);
+  if (parts.length < 2) {
+    throw new Error('Invalid GitHub URL. Expected https://github.com/owner/repo');
+  }
+
+  const owner = parts[0];
+  const repo  = parts[1];
+
+  // Detect explicit branch from /tree/<branch> path segments
+  let explicitBranch: string | null = null;
+  if (parts[2] === 'tree' && parts[3]) {
+    explicitBranch = parts[3];
+  }
+
+  const branchesToTry = explicitBranch
+    ? [explicitBranch]
+    : ['main', 'master'];
+
+  for (const branch of branchesToTry) {
+    const zipUrl = `https://github.com/${owner}/${repo}/archive/refs/heads/${branch}.zip`;
+    try {
+      const res = await fetch(zipUrl, {
+        headers: { 'User-Agent': 'CWP-SiteImporter/1.0' },
+        redirect: 'follow',
+        signal: AbortSignal.timeout(30000),
+      });
+      if (res.ok) {
+        const buffer = await res.arrayBuffer();
+        return new Uint8Array(buffer);
+      }
+    } catch {
+      /* try next branch */
+    }
+  }
+
+  throw new Error(
+    `Could not download the GitHub repository. Ensure the repository is public and the URL is correct (tried branches: ${branchesToTry.join(', ')}).`,
+  );
+}
+
 // ─── Main handler ─────────────────────────────────────────────────────────────
 
 serve(async (req) => {
@@ -533,9 +594,10 @@ serve(async (req) => {
 
   const {
     client_id,
-    source_type, // "url" | "zip"
+    source_type, // "url" | "zip" | "github"
     url,
     zip_base64,
+    github_url,
     slug: requestedSlug,
     custom_domain,
     premium_features,
@@ -544,13 +606,14 @@ serve(async (req) => {
   } = body;
 
   if (!client_id) return errorResponse('client_id is required.', 400);
-  if (!source_type || !['url', 'zip'].includes(source_type)) {
-    return errorResponse('source_type must be "url" or "zip".', 400);
+  if (!source_type || !['url', 'zip', 'github'].includes(source_type)) {
+    return errorResponse('source_type must be "url", "zip", or "github".', 400);
   }
   if (source_type === 'url' && !url) return errorResponse('url is required when source_type is "url".', 400);
   if (source_type === 'zip' && !zip_base64) return errorResponse('zip_base64 is required when source_type is "zip".', 400);
+  if (source_type === 'github' && !github_url) return errorResponse('github_url is required when source_type is "github".', 400);
 
-  console.log(`[import-site] client_id=${client_id} source_type=${source_type} url=${url || '(zip)'}`);
+  console.log(`[import-site] client_id=${client_id} source_type=${source_type} url=${url || github_url || '(zip)'}`);
 
   // Mark as generating
   await supabaseAdmin
@@ -578,6 +641,12 @@ serve(async (req) => {
 
     if (source_type === 'url') {
       const result = await scrapeUrl(url);
+      extractedContent = result.content;
+      backendFeatures = result.backendFeatures;
+    } else if (source_type === 'github') {
+      // Fetch ZIP directly from GitHub and extract
+      const zipBytes = await fetchGithubZip(github_url);
+      const result = extractZip(zipBytes);
       extractedContent = result.content;
       backendFeatures = result.backendFeatures;
     } else {
