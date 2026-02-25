@@ -1652,16 +1652,8 @@ const AdminClientDetail: React.FC = () => {
 
                   </div>{/* end left billing col */}
 
-                  {/* RIGHT col: Create Invoice + Deposit History */}
+                  {/* RIGHT col: Deposit History */}
                   <div className="space-y-5">
-
-                    <CreateInvoiceForm
-                      clientId={client.id}
-                      oneTimeProducts={oneTimeProducts}
-                      onInvoiceCreated={fetchClientData}
-                      isProcessing={isProcessing}
-                      setIsProcessing={setIsProcessing}
-                    />
 
                     {/* Deposit History */}
                     <div className="overflow-hidden rounded-2xl border border-slate-200 shadow-sm">
@@ -1721,6 +1713,15 @@ const AdminClientDetail: React.FC = () => {
 
                   </div>{/* end right billing col */}
                 </div>{/* end two-col grid */}
+
+                {/* Create One-Time Invoice — full width */}
+                <CreateInvoiceForm
+                  clientId={client.id}
+                  oneTimeProducts={oneTimeProducts}
+                  onInvoiceCreated={fetchClientData}
+                  isProcessing={isProcessing}
+                  setIsProcessing={setIsProcessing}
+                />
 
                 {/* Invoice History — full width */}
                 <div className="overflow-hidden rounded-2xl border border-slate-200 shadow-sm">
