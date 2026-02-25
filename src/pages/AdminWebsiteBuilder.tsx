@@ -216,6 +216,11 @@ const AdminWebsiteBuilder: React.FC = () => {
 
       setCustomDomainInput(nb.custom_domain || '');
 
+      // Restore the provider that was last used for this site
+      if (nb.ai_provider) {
+        setSelectedProvider(nb.ai_provider);
+      }
+
       // Determine panel state from brief
       if (nb.generation_status === 'complete' && nb.website_json) {
         setPanelState('chat');
@@ -582,6 +587,17 @@ Keep responses concise and actionable. Respond in 1-3 sentences max unless detai
           {/* Right side — only shown when site exists */}
           {hasWebsite && (
             <div className="ml-auto flex items-center gap-2">
+              {/* AI provider badge */}
+              {(() => {
+                const opt = getProviderOption(brief?.ai_provider || selectedProvider);
+                return opt ? (
+                  <span className={`hidden sm:flex items-center gap-1.5 text-xs px-2.5 py-1 rounded-full border font-medium ${opt.badgeColor || 'bg-slate-800 border-slate-700 text-slate-300'}`}>
+                    <Sparkles className="w-3 h-3" />
+                    {opt.label}
+                  </span>
+                ) : null;
+              })()}
+
               {/* Page count badge */}
               <span className="hidden sm:flex items-center gap-1.5 text-xs bg-slate-800 border border-slate-700 text-slate-300 px-2.5 py-1 rounded-full">
                 <FileText className="w-3.5 h-3.5" />
@@ -1473,6 +1489,28 @@ Keep responses concise and actionable. Respond in 1-3 sentences max unless detai
                           value={settingsForm.art_direction}
                           onChange={e => setSettingsForm(f => ({ ...f, art_direction: e.target.value }))}
                         />
+                      </div>
+
+                      {/* AI Provider selector for regeneration */}
+                      <div>
+                        <label className="block text-xs font-medium text-slate-400 mb-1">AI Model for Regeneration</label>
+                        <select
+                          className="w-full bg-slate-800 border border-slate-700 text-slate-100 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-1 focus:ring-indigo-500 transition-colors"
+                          value={selectedProvider}
+                          onChange={e => setSelectedProvider(e.target.value)}
+                        >
+                          {AI_PROVIDER_OPTIONS.map(p => (
+                            <option key={p.id} value={p.id}>
+                              {p.label}{p.badge ? ` — ${p.badge}` : ''}
+                            </option>
+                          ))}
+                        </select>
+                        {(() => {
+                          const opt = getProviderOption(selectedProvider);
+                          return opt ? (
+                            <p className="text-xs text-slate-500 mt-1">{opt.description}</p>
+                          ) : null;
+                        })()}
                       </div>
 
                       <div className="flex items-center gap-2">
