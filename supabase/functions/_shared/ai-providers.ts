@@ -88,7 +88,7 @@ export const AI_PROVIDERS: Record<string, AIProviderConfig> = {
     costPer1MOutput: 15.00,
     supportsVision: true,
   },
-  // OpenRouter variants — same models but routed through openrouter.ai
+  // OpenRouter variants — same models routed through openrouter.ai (one API key for all)
   'or-claude-opus-4-5': {
     id: 'or-claude-opus-4-5',
     name: 'Claude Opus 4.5 (via OpenRouter)',
@@ -97,6 +97,16 @@ export const AI_PROVIDERS: Record<string, AIProviderConfig> = {
     maxTokens: 8192,
     costPer1MInput: 15.00,
     costPer1MOutput: 75.00,
+    supportsVision: true,
+  },
+  'or-claude-sonnet-4-5': {
+    id: 'or-claude-sonnet-4-5',
+    name: 'Claude Sonnet 4.5 (via OpenRouter)',
+    provider: 'openrouter',
+    model: 'anthropic/claude-sonnet-4-5',
+    maxTokens: 8192,
+    costPer1MInput: 3.00,
+    costPer1MOutput: 15.00,
     supportsVision: true,
   },
   'or-gemini-2-flash': {
@@ -108,6 +118,16 @@ export const AI_PROVIDERS: Record<string, AIProviderConfig> = {
     costPer1MInput: 0.00,
     costPer1MOutput: 0.00,
     supportsVision: true,
+  },
+  'or-deepseek-v3': {
+    id: 'or-deepseek-v3',
+    name: 'DeepSeek v3 (via OpenRouter)',
+    provider: 'openrouter',
+    model: 'deepseek/deepseek-chat',
+    maxTokens: 8192,
+    costPer1MInput: 0.27,
+    costPer1MOutput: 1.10,
+    supportsVision: false,
   },
 };
 

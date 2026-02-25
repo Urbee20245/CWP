@@ -16,6 +16,8 @@ import {
   PremiumFeatureId, PREMIUM_FEATURE_OPTIONS, PREMIUM_FEATURE_GROUPS,
   PremiumFeatureGroup, GenerationStatus,
 } from '../types/website';
+import { AI_PROVIDER_OPTIONS, DEFAULT_PROVIDER_ID, getProviderOption } from '../constants/aiProviders';
+import ProvisioningProgress, { useProvisioningSteps } from '../components/ProvisioningProgress';
 
 // ─── Types ─────────────────────────────────────────────────────────────────────
 
@@ -99,68 +101,6 @@ const statusBadge = (status: GenerationStatus) => {
 
 const TONES = ['Professional', 'Friendly', 'Bold', 'Luxurious'] as const;
 
-// ─── AI Provider Options ────────────────────────────────────────────────────────
-
-interface AIProviderOption {
-  id: string;
-  label: string;
-  description: string;
-  badge?: string;
-  badgeColor?: string;
-}
-
-const AI_PROVIDER_OPTIONS: AIProviderOption[] = [
-  {
-    id: 'claude-opus-4-5',
-    label: 'Claude Opus 4.5',
-    description: 'Best quality — highest fidelity design replication',
-    badge: '$15/1M',
-    badgeColor: 'bg-purple-100 text-purple-700',
-  },
-  {
-    id: 'claude-sonnet-4-5',
-    label: 'Claude Sonnet 4.5',
-    description: 'Fast & balanced — great for most imports',
-    badge: '$3/1M',
-    badgeColor: 'bg-indigo-100 text-indigo-700',
-  },
-  {
-    id: 'gemini-2-flash',
-    label: 'Gemini 2.0 Flash',
-    description: 'Google AI — ideal for Gemini-built sites, free tier',
-    badge: 'Free',
-    badgeColor: 'bg-emerald-100 text-emerald-700',
-  },
-  {
-    id: 'gemini-2-pro',
-    label: 'Gemini 2.0 Pro',
-    description: 'Google AI advanced — superior visual understanding',
-    badge: '$1.25/1M',
-    badgeColor: 'bg-teal-100 text-teal-700',
-  },
-  {
-    id: 'deepseek-v3',
-    label: 'DeepSeek v3',
-    description: 'Cost-effective — good for content-heavy sites',
-    badge: '$0.27/1M',
-    badgeColor: 'bg-sky-100 text-sky-700',
-  },
-  {
-    id: 'gpt-4o',
-    label: 'GPT-4o',
-    description: 'OpenAI — strong reasoning and layout analysis',
-    badge: '$5/1M',
-    badgeColor: 'bg-green-100 text-green-700',
-  },
-  {
-    id: 'gpt-4-turbo',
-    label: 'GPT-4 Turbo',
-    description: 'OpenAI — high capacity for complex sites',
-    badge: '$10/1M',
-    badgeColor: 'bg-lime-100 text-lime-700',
-  },
-];
-
 // ─── Component ─────────────────────────────────────────────────────────────────
 
 const AdminSiteImport: React.FC = () => {
@@ -184,7 +124,7 @@ const AdminSiteImport: React.FC = () => {
   const [toneInput, setToneInput] = useState<typeof TONES[number]>('Professional');
   const [primaryColorInput, setPrimaryColorInput] = useState('#4F46E5');
   const [overridePrimaryColor, setOverridePrimaryColor] = useState(false);
-  const [selectedProvider, setSelectedProvider] = useState('claude-opus-4-5');
+  const [selectedProvider, setSelectedProvider] = useState(DEFAULT_PROVIDER_ID);
   const [selectedPremiumFeatures, setSelectedPremiumFeatures] = useState<Set<PremiumFeatureId>>(new Set());
   const [collapsedFeatureGroups, setCollapsedFeatureGroups] = useState<Record<string, boolean>>({});
 
@@ -213,6 +153,27 @@ const AdminSiteImport: React.FC = () => {
   const toggleSection = (k: string) => setOpenSections(p => ({ ...p, [k]: !p[k] }));
   const toggleFeatureGroup = (g: string) =>
     setCollapsedFeatureGroups(p => ({ ...p, [g]: !p[g] }));
+
+  // ── Provisioning progress (autonomous mode) ────────────────────────────────
+  const isImporting = step === 'importing';
+  const { steps: provisioningSteps, clear: clearProvisioning } = useProvisioningSteps(
+    selectedClientId || null,
+    isImporting,
+  );
+  const [showProvisioningPanel, setShowProvisioningPanel] = useState(false);
+
+  // Show provisioning panel as soon as any resources arrive
+  useEffect(() => {
+    if (provisioningSteps.length > 0) setShowProvisioningPanel(true);
+  }, [provisioningSteps.length]);
+
+  // Hide panel on new import start
+  useEffect(() => {
+    if (step === 'importing') {
+      setShowProvisioningPanel(false);
+      clearProvisioning();
+    }
+  }, [step]);
 
   // ── Load clients ───────────────────────────────────────────────────────────
   useEffect(() => {
@@ -601,7 +562,7 @@ const AdminSiteImport: React.FC = () => {
                     </select>
                     {/* Description of selected provider */}
                     {(() => {
-                      const opt = AI_PROVIDER_OPTIONS.find(p => p.id === selectedProvider);
+                      const opt = getProviderOption(selectedProvider);
                       return opt ? (
                         <div className="mt-2 flex items-center gap-2">
                           {opt.badge && (
@@ -784,30 +745,52 @@ const AdminSiteImport: React.FC = () => {
 
             {/* Importing progress */}
             {step === 'importing' && (
-              <div className="bg-white rounded-2xl border border-slate-200 shadow-sm p-16 flex flex-col items-center text-center">
-                <div className="relative mb-6">
-                  <div className="w-16 h-16 rounded-full bg-indigo-50 flex items-center justify-center">
+              <div className="space-y-4">
+                <div className="bg-white rounded-2xl border border-slate-200 shadow-sm p-12 flex flex-col items-center text-center">
+                  <div className="w-16 h-16 rounded-full bg-indigo-50 flex items-center justify-center mb-5">
                     <Loader2 className="w-8 h-8 animate-spin text-indigo-600" />
                   </div>
-                </div>
-                <p className="text-slate-700 font-semibold text-lg">Importing your site...</p>
-                <div className="mt-6 space-y-2 text-left w-full max-w-sm mx-auto">
-                  {[
-                    importSource === 'url' ? 'Crawling pages & CSS...' : importSource === 'github' ? 'Fetching GitHub repository...' : 'Extracting ZIP contents...',
-                    'Parsing HTML structure & inline styles...',
-                    'Extracting full color palette, fonts & layout...',
-                    `${AI_PROVIDER_OPTIONS.find(p => p.id === selectedProvider)?.label || 'AI'} mapping to CWP format...`,
-                    'Saving to database...',
-                  ].map((step, i) => (
-                    <div key={i} className="flex items-center gap-3 text-sm text-slate-500">
-                      <div className="w-5 h-5 rounded-full bg-indigo-100 flex items-center justify-center flex-shrink-0">
-                        <span className="text-xs font-bold text-indigo-600">{i + 1}</span>
+                  <p className="text-slate-700 font-semibold text-lg">Importing your site...</p>
+                  <p className="text-slate-400 text-sm mt-1">
+                    Using {getProviderOption(selectedProvider)?.label || 'AI'}
+                  </p>
+                  <div className="mt-6 space-y-2 text-left w-full max-w-sm mx-auto">
+                    {[
+                      importSource === 'url' ? 'Crawling pages & CSS...' : importSource === 'github' ? 'Fetching GitHub repository...' : 'Extracting ZIP contents...',
+                      'Parsing HTML structure & inline styles...',
+                      'Extracting full color palette, fonts & layout...',
+                      `${getProviderOption(selectedProvider)?.label || 'AI'} mapping to CWP format...`,
+                      'Saving to database...',
+                    ].map((s, i) => (
+                      <div key={i} className="flex items-center gap-3 text-sm text-slate-500">
+                        <div className="w-5 h-5 rounded-full bg-indigo-100 flex items-center justify-center flex-shrink-0">
+                          <span className="text-xs font-bold text-indigo-600">{i + 1}</span>
+                        </div>
+                        {s}
                       </div>
-                      {step}
-                    </div>
-                  ))}
+                    ))}
+                  </div>
                 </div>
+
+                {/* Autonomous provisioning panel — appears if Claude is provisioning infrastructure */}
+                {showProvisioningPanel && (
+                  <ProvisioningProgress
+                    steps={provisioningSteps}
+                    aiProviderLabel={getProviderOption(selectedProvider)?.label}
+                    isActive={isImporting}
+                  />
+                )}
               </div>
+            )}
+
+            {/* Post-import provisioning panel (if resources were created) */}
+            {step !== 'importing' && showProvisioningPanel && provisioningSteps.length > 0 && (
+              <ProvisioningProgress
+                steps={provisioningSteps}
+                aiProviderLabel={getProviderOption(selectedProvider)?.label}
+                isActive={false}
+                onDismiss={() => setShowProvisioningPanel(false)}
+              />
             )}
 
             {/* Error state */}
@@ -944,7 +927,7 @@ const AdminSiteImport: React.FC = () => {
                     <span className="col-span-2"><span className="font-medium text-slate-700">Address:</span> {result.website_json?.global?.address || '—'}</span>
                     <span className="col-span-2">
                       <span className="font-medium text-slate-700">AI Provider:</span>{' '}
-                      {AI_PROVIDER_OPTIONS.find(p => p.id === selectedProvider)?.label || selectedProvider}
+                      {getProviderOption(selectedProvider)?.label || selectedProvider}
                     </span>
                   </div>
                 </div>

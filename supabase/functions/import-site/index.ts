@@ -11,6 +11,9 @@ import {
   AI_PROVIDERS,
   DEFAULT_PROVIDER_ID,
 } from '../_shared/ai-providers.ts';
+import {
+  generateWithSupabaseAutonomy,
+} from '../_shared/supabase-tools.ts';
 
 const SUPABASE_URL = Deno.env.get('SUPABASE_URL')!;
 const SUPABASE_SERVICE_ROLE_KEY = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!;
@@ -982,16 +985,66 @@ serve(async (req) => {
     );
 
     // ── 2. Generate website_json via chosen AI provider ───────────────────────
+    //
+    // Autonomous provisioning mode: when the selected provider is Anthropic-based
+    // AND the source site has backend features, run an agentic loop that both
+    // creates the needed Supabase infrastructure AND generates the website_json
+    // in a single unified conversation.
+    const isAnthropicProvider = providerConfig.provider === 'anthropic' ||
+      (providerConfig.provider === 'openrouter' && providerConfig.model.startsWith('anthropic/'));
+    const useAutonomous = isAnthropicProvider && backendFeatures.length > 0;
+
     let websiteJson: any;
     try {
-      websiteJson = await generateWebsiteJson(extractedContent, tone, resolvedProviderId, primary_color);
+      if (useAutonomous) {
+        console.log(`[import-site] Using autonomous provisioning for backend features: ${backendFeatures.join(',')}`);
+
+        // Build an enriched prompt for the agentic loop
+        const colorList = extractedContent.colorPalette.all.join(', ') || extractedContent.colors.join(', ') || 'not detected';
+        const fontList = extractedContent.fonts.join(', ') || 'not detected';
+        const autonomousPrompt = `Migrate this website into CWP. It has the following backend features that need Supabase infrastructure: ${backendFeatures.join(', ')}.
+
+DETECTED BACKEND FEATURES:
+${backendFeatures.map(f => `- ${f}`).join('\n')}
+
+SITE CONTENT:
+Title: ${extractedContent.title}
+Colors: ${colorList}
+Fonts: ${fontList}
+Nav: ${extractedContent.navLinks.join(', ')}
+H1s: ${extractedContent.h1s.join(' | ')}
+Phone: ${extractedContent.phoneNumbers.join(', ')}
+Email: ${extractedContent.emailAddresses.join(', ')}
+Primary color: ${primary_color || extractedContent.colorPalette.primary[0] || extractedContent.colors[0] || '#4F46E5'}
+Tone: ${tone}
+
+Raw text sample:
+${extractedContent.rawText.slice(0, 2000)}
+
+First, provision all required Supabase infrastructure using the available tools. Then call provision_complete with the full website_json.`;
+
+        // Use the actual Anthropic model ID (strip openrouter prefix if needed)
+        const anthropicModel = providerConfig.provider === 'openrouter'
+          ? providerConfig.model.replace('anthropic/', '')
+          : providerConfig.model;
+
+        websiteJson = await generateWithSupabaseAutonomy(
+          autonomousPrompt,
+          supabaseAdmin,
+          client_id,
+          anthropicModel,
+        );
+      } else {
+        // Standard non-agentic generation
+        websiteJson = await generateWebsiteJson(extractedContent, tone, resolvedProviderId, primary_color);
+      }
     } catch (e: any) {
-      console.error(`[import-site] ${providerConfig.name} parse error:`, e.message);
+      console.error(`[import-site] ${providerConfig.name} generation error:`, e.message);
       await supabaseAdmin
         .from('website_briefs')
-        .update({ generation_status: 'error', generation_error: `AI (${providerConfig.name}) returned invalid JSON. Please try again.` })
+        .update({ generation_status: 'error', generation_error: `AI (${providerConfig.name}) error: ${e.message}` })
         .eq('client_id', client_id);
-      return errorResponse(`AI (${providerConfig.name}) returned invalid JSON. Please try again.`, 500);
+      return errorResponse(`AI (${providerConfig.name}) error: ${e.message}`, 500);
     }
 
     // ── 3. Validate and normalise ─────────────────────────────────────────────
@@ -1083,6 +1136,7 @@ serve(async (req) => {
       business_name: businessName,
       ai_provider: resolvedProviderId,
       ai_model: providerConfig.model,
+      autonomous_provisioning: useAutonomous,
     });
   } catch (error: any) {
     console.error('[import-site] Unhandled error:', error.message);

@@ -13,6 +13,7 @@ import { AdminService } from '../services/adminService';
 import {
   WebsiteBrief, GenerationStatus, ALL_PAGE_OPTIONS, PageId,
 } from '../types/website';
+import { AI_PROVIDER_OPTIONS, DEFAULT_PROVIDER_ID, getProviderOption } from '../constants/aiProviders';
 
 // ─── Types ───────────────────────────────────────────────────────────────────
 
@@ -164,6 +165,9 @@ const AdminWebsiteBuilder: React.FC = () => {
   // Settings — edit-brief within settings panel
   const [settingsForm, setSettingsForm] = useState({ ...form });
 
+  // AI provider selection
+  const [selectedProvider, setSelectedProvider] = useState(DEFAULT_PROVIDER_ID);
+
   // ── Load clients ─────────────────────────────────────────────────────────
 
   useEffect(() => {
@@ -292,6 +296,7 @@ const AdminWebsiteBuilder: React.FC = () => {
         primary_color:    f.primary_color,
         art_direction:    f.art_direction,
         pages_to_generate: Array.from(selectedPages),
+        ai_provider:      selectedProvider,
       });
       const loadedBrief = await loadBrief(selectedClientId);
       if (loadedBrief?.generation_status === 'complete' && loadedBrief?.website_json) {
@@ -823,6 +828,28 @@ Keep responses concise and actionable. Respond in 1-3 sentences max unless detai
                         maxLength={7}
                       />
                     </div>
+                  </div>
+
+                  {/* AI Provider */}
+                  <div>
+                    <label className="block text-xs font-medium text-slate-300 mb-1.5">AI Provider</label>
+                    <select
+                      className="w-full bg-slate-800 border border-slate-700 text-slate-100 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-1 focus:ring-indigo-500 transition-colors"
+                      value={selectedProvider}
+                      onChange={e => setSelectedProvider(e.target.value)}
+                    >
+                      {AI_PROVIDER_OPTIONS.map(p => (
+                        <option key={p.id} value={p.id}>
+                          {p.label}{p.badge ? ` — ${p.badge}` : ''}
+                        </option>
+                      ))}
+                    </select>
+                    {(() => {
+                      const opt = getProviderOption(selectedProvider);
+                      return opt ? (
+                        <p className="text-xs text-slate-500 mt-1.5">{opt.description}</p>
+                      ) : null;
+                    })()}
                   </div>
 
                   {/* Design Notes */}

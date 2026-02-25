@@ -281,6 +281,7 @@ export const AdminService = {
     art_direction?: string;
     pages_to_generate?: string[];
     premium_features?: string[];
+    ai_provider?: string;
   }) => invokeEdgeFunction('generate-website', payload),
 
   /** Publish or unpublish a client's website. */
