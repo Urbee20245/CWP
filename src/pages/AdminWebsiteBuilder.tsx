@@ -6,7 +6,7 @@ import {
   Globe, Loader2, AlertTriangle, CheckCircle, Eye, Copy, EyeOff,
   RefreshCw, Wand2, ChevronDown, FileText, Check, Link, Save, Info, Key,
   Sparkles, Send, ExternalLink, Settings, ToggleLeft, ToggleRight, X,
-  MessageSquare, ChevronRight, Zap, Image, Link2, Upload,
+  MessageSquare, ChevronRight, Zap, Image, Link2, Upload, Bot,
 } from 'lucide-react';
 import { supabase } from '../integrations/supabase/client';
 import { AdminService } from '../services/adminService';
@@ -121,6 +121,7 @@ const AdminWebsiteBuilder: React.FC = () => {
   const [messages, setMessages]       = useState<ChatMessage[]>([]);
   const [chatInput, setChatInput]     = useState('');
   const [isChatLoading, setIsChatLoading] = useState(false);
+  const [chatProvider, setChatProvider] = useState(DEFAULT_PROVIDER_ID);
   const chatEndRef                    = useRef<HTMLDivElement>(null);
   const chatInputRef                  = useRef<HTMLTextAreaElement>(null);
 
@@ -474,7 +475,7 @@ Keep responses concise and actionable. Respond in 1-3 sentences max unless detai
       ];
 
       const { data, error } = await supabase.functions.invoke('website-chat', {
-        body: { system: systemPrompt, messages: conversationHistory },
+        body: { system: systemPrompt, messages: conversationHistory, provider: chatProvider },
       });
       if (error) throw error;
       const reply = data?.reply || "I couldn't process that request.";
@@ -1287,6 +1288,18 @@ Keep responses concise and actionable. Respond in 1-3 sentences max unless detai
                 {/* Chat input */}
                 <div className="flex-none p-3 border-t border-slate-800">
                   <div className="flex items-end gap-2 bg-slate-800 border border-slate-700 rounded-xl p-2 focus-within:border-indigo-500 transition-colors">
+                    <div className="flex items-center gap-1 flex-none">
+                      <Bot className="w-3.5 h-3.5 text-slate-500 flex-none" />
+                      <select
+                        value={chatProvider}
+                        onChange={e => setChatProvider(e.target.value)}
+                        className="bg-slate-700 border border-slate-600 text-slate-300 text-xs rounded px-1.5 py-1 focus:outline-none focus:border-indigo-500 cursor-pointer max-w-[110px]"
+                      >
+                        {AI_PROVIDER_OPTIONS.map(p => (
+                          <option key={p.id} value={p.id}>{p.label}</option>
+                        ))}
+                      </select>
+                    </div>
                     <textarea
                       ref={chatInputRef}
                       className="flex-1 bg-transparent text-slate-100 placeholder-slate-500 text-sm resize-none focus:outline-none leading-relaxed min-h-[36px] max-h-[100px]"

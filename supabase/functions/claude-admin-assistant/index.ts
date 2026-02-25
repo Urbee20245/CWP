@@ -418,16 +418,32 @@ Respond with a JSON object in this exact format:
   "next_steps": ["<step 1>", "<step 2>"]
 }`;
 
-  const response = await anthropic.messages.create({
-    model: model,
-    max_tokens: 8000,
-    system: codeGenSystemPrompt,
-    messages: [{ role: 'user', content: userPrompt }],
+  const response = await fetch('https://api.anthropic.com/v1/messages', {
+    method: 'POST',
+    headers: {
+      'x-api-key': ANTHROPIC_API_KEY,
+      'anthropic-version': '2023-06-01',
+      'content-type': 'application/json',
+    },
+    body: JSON.stringify({
+      model,
+      max_tokens: 4000,
+      system: codeGenSystemPrompt,
+      messages: [{ role: 'user', content: userPrompt }],
+    }),
+    signal: AbortSignal.timeout(100_000),
   });
 
-  const text = response.content
-    .filter((b): b is Anthropic.Messages.TextBlock => b.type === 'text')
-    .map((b) => b.text)
+  if (!response.ok) {
+    const err = await response.text();
+    throw new Error(`Anthropic API error ${response.status}: ${err}`);
+  }
+
+  const responseData = await response.json();
+
+  const text = (responseData.content as Array<{ type: string; text?: string }>)
+    .filter((b) => b.type === 'text')
+    .map((b) => b.text ?? '')
     .join('');
 
   // Try to parse JSON response
@@ -567,14 +583,19 @@ serve(async (req) => {
       });
     }
 
-    // Agentic loop — up to 10 Claude turns
+    // Agentic loop — up to 5 Claude turns
     const toolCallHistory: Array<{ tool: string; input: any; result: any }> = [];
     const systemPrompt = buildSystemPrompt(sessionContext);
 
-    for (let turn = 0; turn < 10; turn++) {
+    const timeoutPromise = new Promise<Response>((resolve) =>
+      setTimeout(() => resolve(errorResponse('Request timed out — try a simpler query or break it into steps.', 504)), 120_000)
+    );
+
+    const workPromise = (async () => {
+    for (let turn = 0; turn < 5; turn++) {
       const response = await anthropic.messages.create({
         model,
-        max_tokens: 4096,
+        max_tokens: 2048,
         system: systemPrompt,
         tools: TOOLS,
         messages,
@@ -646,6 +667,9 @@ serve(async (req) => {
     }
 
     return errorResponse('Reached maximum tool-use turns without completing.', 500);
+    })();
+
+    return await Promise.race([workPromise, timeoutPromise]);
 
   } catch (error: any) {
     console.error('[claude-admin-assistant] Error:', error.message);
