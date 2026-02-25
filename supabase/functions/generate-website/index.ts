@@ -214,6 +214,7 @@ Return ONLY the complete JSON object — no markdown, no explanation.`;
 
     const { error: saveError } = await db.from('website_briefs').update({
       website_json: websiteJson, client_slug, generation_status: 'complete', generation_error: null,
+      ai_provider: resolvedProviderId,
     }).eq('client_id', client_id);
 
     if (saveError) {

@@ -89,6 +89,8 @@ export interface WebsiteBrief {
   custom_domain: string | null;
   is_published: boolean;
   premium_features: PremiumFeatureId[];
+  /** ID of the AI provider last used to generate/edit this site */
+  ai_provider: string | null;
   created_at: string;
   updated_at: string;
 }
