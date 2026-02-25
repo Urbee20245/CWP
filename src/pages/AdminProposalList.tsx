@@ -4,7 +4,7 @@ import React, { useState, useEffect, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
 import AdminLayout from '../components/AdminLayout';
 import { supabase } from '../integrations/supabase/client';
-import { Loader2, FilePlus2, ChevronRight, Filter, XCircle } from 'lucide-react';
+import { Loader2, FilePlus2, ChevronRight, Filter, XCircle, Trash2 } from 'lucide-react';
 import { ClientProposal } from '../types/proposals';
 
 const STATUS_OPTIONS = ['all', 'draft', 'sent', 'approved', 'declined', 'revised', 'retracted'] as const;
@@ -43,6 +43,10 @@ const AdminProposalList: React.FC = () => {
   const [retractReason, setRetractReason] = useState('');
   const [isRetracting, setIsRetracting] = useState(false);
   const [retractToast, setRetractToast] = useState<string | null>(null);
+
+  // Delete state (retracted proposals only)
+  const [deleteConfirmId, setDeleteConfirmId] = useState<string | null>(null);
+  const [isDeleting, setIsDeleting] = useState(false);
 
   const fetchProposals = useCallback(async () => {
     setIsLoading(true);
@@ -85,6 +89,21 @@ const AdminProposalList: React.FC = () => {
       alert('Failed to retract proposal. Please try again.');
     }
     setIsRetracting(false);
+  };
+
+  const handleDeleteProposal = async (proposalId: string) => {
+    setIsDeleting(true);
+    const { error } = await supabase.from('client_proposals').delete().eq('id', proposalId);
+    if (!error) {
+      setRetractToast('Proposal deleted successfully');
+      setTimeout(() => setRetractToast(null), 4000);
+      setDeleteConfirmId(null);
+      fetchProposals();
+    } else {
+      console.error('[AdminProposalList] delete error:', error);
+      alert('Failed to delete proposal. Please try again.');
+    }
+    setIsDeleting(false);
   };
 
   const filtered = statusFilter === 'all'
@@ -206,6 +225,18 @@ const AdminProposalList: React.FC = () => {
                               <XCircle className="w-4 h-4" />
                             </button>
                           )}
+                          {proposal.status === 'retracted' && (
+                            <button
+                              onClick={e => {
+                                e.stopPropagation();
+                                setDeleteConfirmId(proposal.id);
+                              }}
+                              title="Delete retracted proposal"
+                              className="text-slate-400 hover:text-red-600 transition-colors"
+                            >
+                              <Trash2 className="w-4 h-4" />
+                            </button>
+                          )}
                           <ChevronRight className="w-4 h-4 text-slate-400" />
                         </div>
                       </td>
@@ -234,6 +265,31 @@ const AdminProposalList: React.FC = () => {
                               </button>
                               <button
                                 onClick={() => setRetractConfirmId(null)}
+                                className="px-4 py-1.5 border border-slate-300 text-slate-600 rounded-lg text-sm font-semibold hover:bg-slate-100 transition-colors"
+                              >
+                                Cancel
+                              </button>
+                            </div>
+                          </div>
+                        </td>
+                      </tr>
+                    )}
+                    {deleteConfirmId === proposal.id && (
+                      <tr>
+                        <td colSpan={6} className="px-5 py-4 bg-red-50 border-b border-red-100">
+                          <div className="flex flex-col gap-3">
+                            <p className="text-sm font-semibold text-slate-800">Permanently delete this retracted proposal? This cannot be undone.</p>
+                            <div className="flex gap-2">
+                              <button
+                                onClick={() => handleDeleteProposal(proposal.id)}
+                                disabled={isDeleting}
+                                className="px-4 py-1.5 bg-red-600 text-white rounded-lg text-sm font-semibold hover:bg-red-700 transition-colors disabled:opacity-50 flex items-center gap-1.5"
+                              >
+                                {isDeleting ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Trash2 className="w-3.5 h-3.5" />}
+                                Confirm Delete
+                              </button>
+                              <button
+                                onClick={() => setDeleteConfirmId(null)}
                                 className="px-4 py-1.5 border border-slate-300 text-slate-600 rounded-lg text-sm font-semibold hover:bg-slate-100 transition-colors"
                               >
                                 Cancel
