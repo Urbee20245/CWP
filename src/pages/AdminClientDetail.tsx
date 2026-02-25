@@ -993,158 +993,171 @@ const AdminClientDetail: React.FC = () => {
           ))}
         </div>
 
-        <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
-          
-          <div className="lg:col-span-1 space-y-8">
-            
-            <div className="bg-white p-6 rounded-xl shadow-lg border border-slate-100">
-                <h2 className="text-xl font-bold mb-4 flex items-center gap-2 text-slate-900 border-b border-slate-100 pb-4">
-                    <ShieldCheck className="w-5 h-5 text-indigo-600" /> Service Control
-                </h2>
-                
-                <div className="mb-4 p-3 rounded-lg border border-slate-200">
-                    <p className="text-xs text-slate-500 uppercase font-semibold mb-1">Current Service Status</p>
-                    <span className={`px-3 py-1 rounded-full text-sm font-bold ${getStatusColor(client.service_status)}`}>
-                        {client.service_status.replace('_', ' ')}
-                    </span>
+        <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+
+          <div className="lg:col-span-1 space-y-4">
+
+            {/* Service Control */}
+            <div className="overflow-hidden rounded-2xl border border-slate-200 shadow-sm">
+              <div className="bg-gradient-to-r from-slate-900 to-slate-800 px-5 py-3.5 flex items-center gap-2.5">
+                <ShieldCheck className="w-4 h-4 text-indigo-400" />
+                <h2 className="text-xs font-bold text-white tracking-widest uppercase">Service Control</h2>
+              </div>
+              <div className="bg-white p-5 space-y-4">
+                <div className="flex items-center justify-between px-3 py-2.5 rounded-xl bg-slate-50 border border-slate-100">
+                  <span className="text-xs font-semibold text-slate-500 uppercase tracking-wide">Status</span>
+                  <span className={`px-3 py-1 rounded-full text-xs font-bold ${getStatusColor(client.service_status)}`}>
+                    {client.service_status.replace('_', ' ')}
+                  </span>
                 </div>
-                
                 {client.service_status === 'paused' && client.cancellation_effective_date && (
-                    <div className="mb-4 p-3 bg-red-50 border border-red-200 rounded-lg">
-                        <p className="text-xs text-red-800 uppercase font-semibold mb-1">Cancellation Details</p>
-                        <p className="text-sm text-red-700">Effective Date: {format(new Date(client.cancellation_effective_date), 'MMM dd, yyyy')}</p>
-                        <p className="text-xs text-red-600 mt-1">Reason: {client.cancellation_reason || 'N/A'}</p>
-                    </div>
+                  <div className="p-3 bg-red-50 border border-red-200 rounded-xl">
+                    <p className="text-xs text-red-800 font-bold uppercase tracking-wide mb-1">Cancellation</p>
+                    <p className="text-sm text-red-700">Effective: {format(new Date(client.cancellation_effective_date), 'MMM dd, yyyy')}</p>
+                    <p className="text-xs text-red-500 mt-0.5">Reason: {client.cancellation_reason || 'N/A'}</p>
+                  </div>
                 )}
-                
-                <div className="space-y-3 mb-4">
-                    <textarea
-                        className="w-full p-2 border border-slate-300 rounded-lg text-sm resize-none focus:border-indigo-500 outline-none"
-                        value={serviceActionNote}
-                        onChange={(e) => setServiceActionNote(e.target.value)}
-                        placeholder="Internal note for pause/resume action (optional)"
-                        rows={2}
-                        disabled={isServiceUpdating}
-                    />
-                    <div className="flex gap-3 flex-wrap">
-                        {client.service_status !== 'paused' ? (
-                            <button 
-                                onClick={() => handleServiceStatusUpdate('paused')}
-                                disabled={isServiceUpdating || client.service_status === 'completed'}
-                                className="flex-1 py-2 bg-amber-600 text-white rounded-lg text-sm font-semibold hover:bg-amber-700 transition-colors disabled:opacity-50 flex items-center justify-center gap-2"
-                            >
-                                <Pause className="w-4 h-4" /> Pause Work
-                            </button>
-                        ) : (
-                            <button 
-                                onClick={() => handleServiceStatusUpdate('active')}
-                                disabled={isServiceUpdating}
-                                className="flex-1 py-2 bg-emerald-600 text-white rounded-lg text-sm font-semibold hover:bg-emerald-700 transition-colors disabled:opacity-50 flex items-center justify-center gap-2"
-                            >
-                                <Play className="w-4 h-4" /> Resume Work
-                            </button>
-                        )}
-                        <button 
-                            onClick={() => handleServiceStatusUpdate('completed')}
-                            disabled={isServiceUpdating || client.service_status === 'completed'}
-                            className="flex-1 py-2 bg-blue-600 text-white rounded-lg text-sm font-semibold hover:bg-blue-700 transition-colors disabled:opacity-50"
-                        >
-                            Complete
-                        </button>
-                    </div>
+                <textarea
+                  className="w-full p-3 border border-slate-200 rounded-xl text-sm resize-none focus:border-indigo-400 focus:ring-2 focus:ring-indigo-50 outline-none transition-all bg-slate-50 placeholder:text-slate-400"
+                  value={serviceActionNote}
+                  onChange={(e) => setServiceActionNote(e.target.value)}
+                  placeholder="Internal note (optional)"
+                  rows={2}
+                  disabled={isServiceUpdating}
+                />
+                <div className="flex gap-2">
+                  {client.service_status !== 'paused' ? (
+                    <button
+                      onClick={() => handleServiceStatusUpdate('paused')}
+                      disabled={isServiceUpdating || client.service_status === 'completed'}
+                      className="flex-1 py-2 bg-amber-500 text-white rounded-xl text-xs font-bold hover:bg-amber-600 transition-colors disabled:opacity-40 flex items-center justify-center gap-1.5 shadow-sm"
+                    >
+                      <Pause className="w-3.5 h-3.5" /> Pause
+                    </button>
+                  ) : (
+                    <button
+                      onClick={() => handleServiceStatusUpdate('active')}
+                      disabled={isServiceUpdating}
+                      className="flex-1 py-2 bg-emerald-500 text-white rounded-xl text-xs font-bold hover:bg-emerald-600 transition-colors disabled:opacity-40 flex items-center justify-center gap-1.5 shadow-sm"
+                    >
+                      <Play className="w-3.5 h-3.5" /> Resume
+                    </button>
+                  )}
+                  <button
+                    onClick={() => handleServiceStatusUpdate('completed')}
+                    disabled={isServiceUpdating || client.service_status === 'completed'}
+                    className="flex-1 py-2 bg-blue-500 text-white rounded-xl text-xs font-bold hover:bg-blue-600 transition-colors disabled:opacity-40 shadow-sm"
+                  >
+                    Complete
+                  </button>
                 </div>
-                
-                <h3 className="text-sm font-bold text-slate-900 mb-3 border-t border-slate-100 pt-4 flex items-center gap-2">
-                    <Clock className="w-4 h-4 text-slate-500" /> Service History
-                </h3>
-                <div className="max-h-40 overflow-y-auto space-y-2">
+                <div className="border-t border-slate-100 pt-4">
+                  <p className="text-xs font-bold text-slate-400 uppercase tracking-widest mb-3 flex items-center gap-1.5">
+                    <Clock className="w-3.5 h-3.5" /> Service History
+                  </p>
+                  <div className="max-h-36 overflow-y-auto space-y-2">
                     {client.pause_logs && client.pause_logs.length > 0 ? (
-                        client.pause_logs.map(log => (
-                            <div key={log.id} className={`p-2 rounded-lg text-xs border ${log.action === 'paused' ? 'bg-amber-50 border-amber-200' : 'bg-emerald-50 border-emerald-200'}`}>
-                                <div className="flex justify-between items-center">
-                                    <span className="font-bold uppercase">{log.action}</span>
-                                    <span className="text-slate-500">{new Date(log.created_at).toLocaleDateString()}</span>
-                                </div>
-                                {log.internal_note && <p className="text-slate-700 mt-1 italic">Note: {log.internal_note}</p>}
-                                <div className="flex items-center gap-1 mt-1">
-                                    <CheckCircle2 className={`w-3 h-3 ${log.client_acknowledged ? 'text-emerald-600' : 'text-slate-400'}`} />
-                                    <span className="text-slate-600">{log.client_acknowledged ? 'Client Acknowledged' : 'Awaiting Client Ack'}</span>
-                                </div>
-                            </div>
-                        ))
+                      client.pause_logs.map(log => (
+                        <div key={log.id} className={`p-2.5 rounded-xl text-xs border ${log.action === 'paused' ? 'bg-amber-50 border-amber-200' : 'bg-emerald-50 border-emerald-200'}`}>
+                          <div className="flex justify-between items-center mb-0.5">
+                            <span className="font-bold uppercase">{log.action}</span>
+                            <span className="text-slate-400">{new Date(log.created_at).toLocaleDateString()}</span>
+                          </div>
+                          {log.internal_note && <p className="text-slate-600 italic">{log.internal_note}</p>}
+                          <div className="flex items-center gap-1 mt-1">
+                            <CheckCircle2 className={`w-3 h-3 ${log.client_acknowledged ? 'text-emerald-500' : 'text-slate-300'}`} />
+                            <span className="text-slate-500">{log.client_acknowledged ? 'Acknowledged' : 'Awaiting ack'}</span>
+                          </div>
+                        </div>
+                      ))
                     ) : (
-                        <p className="text-xs text-slate-500">No service history recorded.</p>
+                      <p className="text-xs text-slate-400 text-center py-2">No history recorded</p>
                     )}
+                  </div>
                 </div>
-            </div>
-            
-            <div className="bg-white p-6 rounded-xl shadow-lg border border-slate-100">
-                <h2 className="text-xl font-bold mb-4 flex items-center gap-2 text-slate-900 border-b border-slate-100 pb-4">
-                    <Calendar className="w-5 h-5 text-purple-600" /> Google Calendar
-                </h2>
-                {calendarStatus ? (
-                    <div className="space-y-3">
-                        <div className="flex items-center gap-2 text-emerald-600 font-semibold">
-                            <CheckCircle2 className="w-5 h-5" />
-                            <span>Connected</span>
-                        </div>
-                        <p className="text-sm text-slate-600">Calendar ID: <span className="font-mono text-xs bg-slate-100 p-1 rounded">{calendarStatus.calendar_id}</span></p>
-                        <p className="text-xs text-slate-500">Last updated: {format(new Date(calendarStatus.updated_at), 'MMM dd, yyyy')}</p>
-                        <div className="flex gap-2 pt-2 border-t border-slate-100">
-                            <button
-                                onClick={handleDisconnectCalendar}
-                                disabled={isProcessing}
-                                className="flex-shrink-0 px-3 py-1 bg-white text-emerald-600 rounded-lg text-xs font-semibold hover:bg-emerald-100 transition-colors disabled:opacity-50 flex items-center justify-center gap-2"
-                            >
-                                {isProcessing ? <Loader2 className="w-4 h-4 animate-spin" /> : <X className="w-4 h-4" />}
-                                Disconnect
-                            </button>
-                            <button
-                                onClick={handleResetCalendar}
-                                disabled={isProcessing}
-                                className="flex-shrink-0 px-3 py-1 bg-red-500 text-white rounded-lg text-xs font-semibold hover:bg-red-600 transition-colors disabled:opacity-50 flex items-center justify-center gap-2"
-                            >
-                                {isProcessing ? <Loader2 className="w-4 h-4 animate-spin" /> : <Trash2 className="w-4 h-4" />}
-                                Reset
-                            </button>
-                        </div>
-                    </div>
-                ) : (
-                    <div className="space-y-3">
-                        <div className="flex items-center gap-2 text-red-600 font-semibold">
-                            <AlertTriangle className="w-5 h-5" />
-                            <span>Not Connected</span>
-                        </div>
-                        <p className="text-sm text-slate-500">
-                            Client has not connected their Google Calendar. Automated appointment booking is disabled.
-                        </p>
-                    </div>
-                )}
+              </div>
             </div>
 
-            <div className="bg-white p-6 rounded-xl shadow-lg border border-slate-100">
-                <h2 className="text-xl font-bold mb-4 flex items-center gap-2 text-slate-900 border-b border-slate-100 pb-4">
-                    <FileText className="w-5 h-5 text-slate-500" /> Internal Notes
-                </h2>
-                <textarea
-                    className="w-full h-40 p-3 border border-slate-300 rounded-lg text-sm resize-none focus:border-indigo-500 outline-none"
-                    value={adminNotes}
-                    onChange={(e) => setAdminNotes(e.target.value)}
-                    placeholder="Add internal notes here..."
-                />
-                <button 
-                    onClick={handleSaveNotes}
-                    disabled={isServiceUpdating}
-                    className="mt-3 w-full py-2 bg-indigo-600 text-white rounded-lg text-sm font-semibold hover:bg-indigo-700 transition-colors disabled:opacity-50"
-                >
-                    {isServiceUpdating ? 'Saving...' : 'Save Notes'}
-                </button>
+            {/* Google Calendar */}
+            <div className="overflow-hidden rounded-2xl border border-slate-200 shadow-sm">
+              <div className="bg-gradient-to-r from-slate-900 to-slate-800 px-5 py-3.5 flex items-center gap-2.5">
+                <Calendar className="w-4 h-4 text-purple-400" />
+                <h2 className="text-xs font-bold text-white tracking-widest uppercase">Google Calendar</h2>
+              </div>
+              <div className="bg-white p-5">
+                {calendarStatus ? (
+                  <div className="space-y-3">
+                    <div className="flex items-center gap-2 px-3 py-2.5 bg-emerald-50 border border-emerald-200 rounded-xl">
+                      <CheckCircle2 className="w-4 h-4 text-emerald-500 flex-shrink-0" />
+                      <span className="text-sm font-semibold text-emerald-700">Connected</span>
+                    </div>
+                    <p className="text-xs text-slate-500 font-medium">Calendar ID</p>
+                    <p className="font-mono text-xs bg-slate-50 px-3 py-2 rounded-lg border border-slate-200 break-all">{calendarStatus.calendar_id}</p>
+                    <p className="text-xs text-slate-400">Updated: {format(new Date(calendarStatus.updated_at), 'MMM dd, yyyy')}</p>
+                    <div className="flex gap-2 pt-1">
+                      <button
+                        onClick={handleDisconnectCalendar}
+                        disabled={isProcessing}
+                        className="flex-1 px-3 py-2 bg-slate-100 text-slate-700 rounded-xl text-xs font-bold hover:bg-slate-200 transition-colors disabled:opacity-40 flex items-center justify-center gap-1.5"
+                      >
+                        {isProcessing ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <X className="w-3.5 h-3.5" />}
+                        Disconnect
+                      </button>
+                      <button
+                        onClick={handleResetCalendar}
+                        disabled={isProcessing}
+                        className="flex-1 px-3 py-2 bg-red-500 text-white rounded-xl text-xs font-bold hover:bg-red-600 transition-colors disabled:opacity-40 flex items-center justify-center gap-1.5"
+                      >
+                        {isProcessing ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Trash2 className="w-3.5 h-3.5" />}
+                        Reset
+                      </button>
+                    </div>
+                  </div>
+                ) : (
+                  <div className="flex items-start gap-3 px-3 py-3 bg-red-50 border border-red-200 rounded-xl">
+                    <AlertTriangle className="w-4 h-4 text-red-400 flex-shrink-0 mt-0.5" />
+                    <div>
+                      <p className="text-sm font-semibold text-red-700">Not Connected</p>
+                      <p className="text-xs text-red-500 mt-0.5">Automated booking disabled.</p>
+                    </div>
+                  </div>
+                )}
+              </div>
             </div>
-            
-            {/* Admin-only Leads API Management */}
+
+            {/* Internal Notes */}
+            <div className="overflow-hidden rounded-2xl border border-slate-200 shadow-sm">
+              <div className="bg-gradient-to-r from-slate-900 to-slate-800 px-5 py-3.5 flex items-center gap-2.5">
+                <FileText className="w-4 h-4 text-slate-400" />
+                <h2 className="text-xs font-bold text-white tracking-widest uppercase">Internal Notes</h2>
+              </div>
+              <div className="bg-white p-5 space-y-3">
+                <textarea
+                  className="w-full h-32 p-3 border border-slate-200 rounded-xl text-sm resize-none focus:border-indigo-400 focus:ring-2 focus:ring-indigo-50 outline-none transition-all bg-slate-50 placeholder:text-slate-400"
+                  value={adminNotes}
+                  onChange={(e) => setAdminNotes(e.target.value)}
+                  placeholder="Add internal notes here..."
+                />
+                <button
+                  onClick={handleSaveNotes}
+                  disabled={isServiceUpdating}
+                  className="w-full py-2.5 bg-gradient-to-r from-indigo-600 to-indigo-700 text-white rounded-xl text-xs font-bold hover:from-indigo-700 hover:to-indigo-800 transition-all disabled:opacity-40 shadow-sm"
+                >
+                  {isServiceUpdating ? 'Saving...' : 'Save Notes'}
+                </button>
+              </div>
+            </div>
+
+            {/* Leads API */}
             {client && (
-              <div className="bg-white p-6 rounded-xl shadow-lg border border-slate-100">
-                <AdminClientLeadsPanel clientId={client.id} />
+              <div className="overflow-hidden rounded-2xl border border-slate-200 shadow-sm">
+                <div className="bg-gradient-to-r from-slate-900 to-slate-800 px-5 py-3.5 flex items-center gap-2.5">
+                  <Users className="w-4 h-4 text-emerald-400" />
+                  <h2 className="text-xs font-bold text-white tracking-widest uppercase">Leads API</h2>
+                </div>
+                <div className="bg-white p-5">
+                  <AdminClientLeadsPanel clientId={client.id} />
+                </div>
               </div>
             )}
           </div>
@@ -1405,566 +1418,548 @@ const AdminClientDetail: React.FC = () => {
             )}
 
             {activeTab === 'billing' && (
-              <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+              <div className="space-y-5">
 
-                <div className="space-y-6">
-                    <div className="bg-white p-6 rounded-xl shadow-lg border border-slate-100">
-                      <h2 className="text-xl font-bold mb-4 flex items-center gap-2 text-slate-900">
-                        <CreditCard className="w-5 h-5 text-indigo-600" /> Stripe Customer
-                      </h2>
-                      {client.stripe_customer_id ? (
-                        <>
-                          <p className="text-sm text-emerald-600 font-semibold mb-4">✅ Customer ID Linked</p>
-                          <p className="text-xs text-slate-500 truncate mb-4">ID: {client.stripe_customer_id}</p>
-                          <button 
-                            onClick={handlePortalSession}
-                            disabled={isProcessing}
-                            className="w-full py-2 bg-purple-600 text-white rounded-lg text-sm font-semibold hover:bg-purple-700 transition-colors disabled:opacity-50 flex items-center justify-center gap-2"
-                          >
-                            <ExternalLink className="w-4 h-4" /> Manage Portal
-                          </button>
-                        </>
-                      ) : (
-                        <>
-                          <p className="text-sm text-amber-600 font-semibold mb-4">⚠️ Customer ID Missing</p>
-                          <p className="text-xs text-slate-500 mb-4">Customer will be created automatically upon first invoice/subscription.</p>
-                          <button 
-                            onClick={handleCreateCustomer}
-                            disabled={isProcessing}
-                            className="w-full py-2 bg-indigo-600 text-white rounded-lg text-sm font-semibold hover:bg-indigo-700 transition-colors disabled:opacity-50 flex items-center justify-center gap-2"
-                          >
-                            {isProcessing ? <Loader2 className="w-4 h-4 animate-spin" /> : <Plus className="w-4 h-4" />}
-                            Create Stripe Customer Now
-                          </button>
-                        </>
-                      )}
+                {/* Stripe Customer — full-width banner */}
+                <div className="overflow-hidden rounded-2xl border border-slate-200 shadow-sm">
+                  <div className="bg-gradient-to-r from-slate-900 to-slate-800 px-5 py-3.5 flex items-center justify-between gap-3">
+                    <div className="flex items-center gap-2.5">
+                      <CreditCard className="w-4 h-4 text-indigo-400" />
+                      <h2 className="text-xs font-bold text-white tracking-widest uppercase">Stripe Customer</h2>
                     </div>
-
-                    <div className="bg-white p-6 rounded-xl shadow-lg border border-slate-100">
-                      <h2 className="text-xl font-bold mb-4 flex items-center gap-2 text-slate-900 border-b border-slate-100 pb-4">
-                        <Zap className="w-5 h-5 text-amber-600" /> Maintenance Subscriptions
-                      </h2>
-                      
-                      {currentSubscription ? (
-                        <div className="p-4 bg-emerald-50 border border-emerald-200 rounded-lg mb-4">
-                            <p className="font-bold text-emerald-800">{getPlanName(currentSubscription.stripe_price_id)}</p>
-                            <p className="text-sm text-emerald-700">Status: {currentSubscription.status}</p>
-                            <p className="text-xs text-emerald-600">Renews: {currentSubscription.current_period_end ? new Date(currentSubscription.current_period_end).toLocaleDateString() : 'N/A'}</p>
-                            {currentSubscription.cancel_at_period_end && (
-                                <p className="text-xs text-red-600 font-semibold mt-2">Cancellation pending at period end.</p>
-                            )}
+                    {client.stripe_customer_id && (
+                      <span className="text-xs font-mono text-slate-400 truncate max-w-[180px] hidden sm:block">{client.stripe_customer_id}</span>
+                    )}
+                  </div>
+                  <div className="bg-white px-5 py-4 flex items-center justify-between flex-wrap gap-3">
+                    {client.stripe_customer_id ? (
+                      <>
+                        <div className="flex items-center gap-2">
+                          <div className="w-2 h-2 rounded-full bg-emerald-400 flex-shrink-0" />
+                          <span className="text-sm font-semibold text-slate-700">Customer linked to Stripe</span>
                         </div>
-                      ) : (
-                        <p className="text-slate-500 text-sm mb-4">No active maintenance subscription.</p>
-                      )}
+                        <button
+                          onClick={handlePortalSession}
+                          disabled={isProcessing}
+                          className="px-4 py-2 bg-gradient-to-r from-violet-600 to-purple-600 text-white rounded-xl text-xs font-bold hover:from-violet-700 hover:to-purple-700 transition-all disabled:opacity-40 flex items-center gap-2 shadow-sm"
+                        >
+                          <ExternalLink className="w-3.5 h-3.5" /> Manage Stripe Portal
+                        </button>
+                      </>
+                    ) : (
+                      <>
+                        <div className="flex items-center gap-2">
+                          <div className="w-2 h-2 rounded-full bg-amber-400 flex-shrink-0" />
+                          <span className="text-sm font-semibold text-slate-700">No Stripe customer — auto-created on first charge</span>
+                        </div>
+                        <button
+                          onClick={handleCreateCustomer}
+                          disabled={isProcessing}
+                          className="px-4 py-2 bg-gradient-to-r from-indigo-600 to-indigo-700 text-white rounded-xl text-xs font-bold hover:from-indigo-700 hover:to-indigo-800 transition-all disabled:opacity-40 flex items-center gap-2 shadow-sm"
+                        >
+                          {isProcessing ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Plus className="w-3.5 h-3.5" />}
+                          Create Customer Now
+                        </button>
+                      </>
+                    )}
+                  </div>
+                </div>
 
-                      <h3 className="font-bold text-sm mb-2">Start New Subscription</h3>
-                      <select
-                        value={selectedSubscriptionPriceId}
-                        onChange={(e) => setSelectedSubscriptionPriceId(e.target.value)}
-                        className="w-full p-2 border border-slate-300 rounded-lg text-sm mb-3"
-                        disabled={isProcessing || !client.stripe_customer_id}
-                      >
-                        <option value="">Select a plan...</option>
-                        {subscriptionProducts.map(product => (
-                          <option key={product.stripe_price_id} value={product.stripe_price_id}>
-                            {product.name} (${(product.monthly_price_cents! / 100).toFixed(2)}{product.billing_type === 'yearly' ? '/yr' : '/mo'})
-                          </option>
-                        ))}
-                      </select>
-                      <button 
-                        onClick={handleStartSubscription}
-                        disabled={isProcessing || !selectedSubscriptionPriceId || !client.stripe_customer_id}
-                        className="w-full py-2 bg-emerald-600 text-white rounded-lg text-sm font-semibold hover:bg-emerald-700 transition-colors disabled:opacity-50 flex items-center justify-center gap-2"
-                      >
-                        {isProcessing ? <Loader2 className="w-4 h-4 animate-spin" /> : <Plus className="w-4 h-4" />}
-                        Start Subscription
-                      </button>
-                    </div>
-                    
-                    <div className="bg-white p-6 rounded-xl shadow-lg border border-slate-100">
-                        <h2 className="text-xl font-bold mb-4 flex items-center gap-2 text-slate-900 border-b border-slate-100 pb-4">
-                            <Percent className="w-5 h-5 text-purple-600" /> Apply Discount to Invoice
-                        </h2>
-                        <form onSubmit={handleApplyDiscount} className="space-y-4">
-                            
-                            {discountError && (
-                                <div className="p-3 mb-4 bg-red-100 border border-red-300 text-red-800 rounded-lg text-sm flex items-center gap-2">
-                                    <AlertTriangle className="w-4 h-4" />
-                                    {discountError}
-                                </div>
+                {/* Two-column action grid */}
+                <div className="grid grid-cols-1 lg:grid-cols-2 gap-5">
+
+                  {/* LEFT col */}
+                  <div className="space-y-5">
+
+                    {/* Maintenance Subscriptions */}
+                    <div className="overflow-hidden rounded-2xl border border-slate-200 shadow-sm">
+                      <div className="bg-gradient-to-r from-slate-900 to-slate-800 px-5 py-3.5 flex items-center gap-2.5">
+                        <Zap className="w-4 h-4 text-amber-400" />
+                        <h2 className="text-xs font-bold text-white tracking-widest uppercase">Maintenance Subscription</h2>
+                      </div>
+                      <div className="bg-white p-5 space-y-4">
+                        {currentSubscription ? (
+                          <div className="p-3.5 bg-emerald-50 border border-emerald-200 rounded-xl">
+                            <p className="font-bold text-emerald-800 text-sm">{getPlanName(currentSubscription.stripe_price_id)}</p>
+                            <div className="flex items-center gap-2 mt-1.5 text-xs text-emerald-700 flex-wrap">
+                              <span className="font-medium">Status: {currentSubscription.status}</span>
+                              <span className="text-emerald-400">·</span>
+                              <span>Renews: {currentSubscription.current_period_end ? new Date(currentSubscription.current_period_end).toLocaleDateString() : 'N/A'}</span>
+                            </div>
+                            {currentSubscription.cancel_at_period_end && (
+                              <p className="text-xs text-red-600 font-bold mt-2 flex items-center gap-1">
+                                <AlertTriangle className="w-3 h-3" /> Cancellation pending at period end
+                              </p>
                             )}
-                            
-                            <div>
-                                <label className="block text-sm font-medium text-slate-700 mb-1">Select Open Invoice *</label>
-                                <select
-                                    value={discountForm.invoiceId}
-                                    onChange={(e) => setDiscountForm(prev => ({ ...prev, invoiceId: e.target.value }))}
-                                    className="w-full p-2 border border-slate-300 rounded-lg text-sm"
-                                    required
-                                    disabled={isProcessing || openInvoices.length === 0}
-                                >
-                                    <option value="">-- Select Invoice --</option>
-                                    {openInvoices.map(invoice => (
-                                        <option key={invoice.id} value={invoice.id}>
-                                            {invoice.status.toUpperCase()} - ${(invoice.amount_due || 0) / 100} (ID: {invoice.id.substring(0, 8)})
-                                        </option>
-                                    ))}
-                                </select>
-                                {openInvoices.length === 0 && <p className="text-xs text-red-500 mt-1">No open invoices available for discount.</p>}
-                            </div>
-                            
-                            <div className="grid grid-cols-3 gap-4">
-                                <div className="col-span-1">
-                                    <label className="block text-sm font-medium text-slate-700 mb-1">Discount Type *</label>
-                                    <select
-                                        value={discountForm.discountType}
-                                        onChange={(e) => setDiscountForm(prev => ({ ...prev, discountType: e.target.value as 'percentage' | 'fixed', discountValue: 0 }))}
-                                        className="w-full p-2 border border-slate-300 rounded-lg text-sm"
-                                        disabled={isProcessing}
-                                    >
-                                        <option value="percentage">Percentage (%)</option>
-                                        <option value="fixed">Fixed Amount ($)</option>
-                                    </select>
-                                </div>
-                                <div className="col-span-2">
-                                    <label className="block text-sm font-medium text-slate-700 mb-1">Discount Value *</label>
-                                    <div className="relative">
-                                        <span className="absolute left-3 top-2.5 text-slate-500 text-sm">{discountForm.discountType === 'fixed' ? '$' : '%'}</span>
-                                        <input
-                                            type="number"
-                                            value={discountForm.discountValue || ''}
-                                            onChange={(e) => setDiscountForm(prev => ({ ...prev, discountValue: parseFloat(e.target.value) || 0 }))}
-                                            className={`w-full ${discountForm.discountType === 'fixed' ? 'pl-6' : 'pl-6'} pr-2 py-2 border border-slate-300 rounded-lg text-sm`}
-                                            required
-                                            min="0.01"
-                                            step="0.01"
-                                            max={discountForm.discountType === 'percentage' ? 100 : undefined}
-                                            disabled={isProcessing}
-                                        />
-                                    </div>
-                                </div>
-                            </div>
-                            
-                            <button 
-                                type="submit"
-                                disabled={isProcessing || !discountForm.invoiceId || discountForm.discountValue <= 0}
-                                className="w-full py-2 bg-purple-600 text-white rounded-lg text-sm font-semibold hover:bg-purple-700 transition-colors disabled:opacity-50 flex items-center justify-center gap-2"
-                            >
-                                {isProcessing ? <Loader2 className="w-4 h-4 animate-spin" /> : <DollarSign className="w-4 h-4" />}
-                                Apply Discount & Update Invoice
-                            </button>
-                        </form>
+                          </div>
+                        ) : (
+                          <div className="px-3 py-2.5 bg-slate-50 border border-slate-200 rounded-xl">
+                            <p className="text-xs text-slate-500 font-medium">No active subscription</p>
+                          </div>
+                        )}
+                        <div>
+                          <p className="text-xs font-bold text-slate-400 uppercase tracking-widest mb-2">Start New Subscription</p>
+                          <select
+                            value={selectedSubscriptionPriceId}
+                            onChange={(e) => setSelectedSubscriptionPriceId(e.target.value)}
+                            className="w-full p-2.5 border border-slate-200 rounded-xl text-sm bg-slate-50 focus:border-indigo-400 focus:ring-2 focus:ring-indigo-50 outline-none mb-3 disabled:opacity-40"
+                            disabled={isProcessing || !client.stripe_customer_id}
+                          >
+                            <option value="">Select a plan...</option>
+                            {subscriptionProducts.map(product => (
+                              <option key={product.stripe_price_id} value={product.stripe_price_id}>
+                                {product.name} (${(product.monthly_price_cents! / 100).toFixed(2)}{product.billing_type === 'yearly' ? '/yr' : '/mo'})
+                              </option>
+                            ))}
+                          </select>
+                          <button
+                            onClick={handleStartSubscription}
+                            disabled={isProcessing || !selectedSubscriptionPriceId || !client.stripe_customer_id}
+                            className="w-full py-2.5 bg-gradient-to-r from-emerald-600 to-emerald-700 text-white rounded-xl text-xs font-bold hover:from-emerald-700 hover:to-emerald-800 transition-all disabled:opacity-40 flex items-center justify-center gap-2 shadow-sm"
+                          >
+                            {isProcessing ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Plus className="w-3.5 h-3.5" />}
+                            Start Subscription
+                          </button>
+                        </div>
+                      </div>
                     </div>
                     
-                </div>{/* end left billing col */}
-
-                <div className="space-y-6">
-                    <CreateInvoiceForm
-                        clientId={client.id}
-                        oneTimeProducts={oneTimeProducts}
-                        onInvoiceCreated={fetchClientData}
-                        isProcessing={isProcessing}
-                        setIsProcessing={setIsProcessing}
-                    />
-
-                    <div className="bg-white p-6 rounded-xl shadow-lg border border-slate-100">
-                      <h2 className="text-xl font-bold mb-4 flex items-center gap-2 text-slate-900 border-b border-slate-100 pb-4">
-                        <CreditCard className="w-5 h-5 text-blue-600" /> Collect Deposit
-                      </h2>
-                      <form onSubmit={handleCollectDeposit} className="space-y-3">
-                        <div>
-                          <label className="block text-sm font-medium text-slate-700 mb-1">Amount (USD) *</label>
-                          <div className="relative">
-                            <span className="absolute left-3 top-2.5 text-slate-500 text-sm">$</span>
-                            <input
-                              type="number"
-                              value={depositAmount}
-                              onChange={(e) => setDepositAmount(parseFloat(e.target.value) || '')}
-                              className="w-full pl-6 pr-2 py-2 border border-slate-300 rounded-lg text-sm"
+                    {/* Apply Discount */}
+                    <div className="overflow-hidden rounded-2xl border border-slate-200 shadow-sm">
+                      <div className="bg-gradient-to-r from-slate-900 to-slate-800 px-5 py-3.5 flex items-center gap-2.5">
+                        <Percent className="w-4 h-4 text-purple-400" />
+                        <h2 className="text-xs font-bold text-white tracking-widest uppercase">Apply Discount</h2>
+                      </div>
+                      <div className="bg-white p-5">
+                        <form onSubmit={handleApplyDiscount} className="space-y-4">
+                          {discountError && (
+                            <div className="p-3 bg-red-50 border border-red-200 text-red-700 rounded-xl text-xs flex items-center gap-2">
+                              <AlertTriangle className="w-3.5 h-3.5 flex-shrink-0" />
+                              {discountError}
+                            </div>
+                          )}
+                          <div>
+                            <label className="block text-xs font-bold text-slate-400 uppercase tracking-widest mb-1.5">Select Invoice</label>
+                            <select
+                              value={discountForm.invoiceId}
+                              onChange={(e) => setDiscountForm(prev => ({ ...prev, invoiceId: e.target.value }))}
+                              className="w-full p-2.5 border border-slate-200 rounded-xl text-sm bg-slate-50 focus:border-indigo-400 outline-none disabled:opacity-40"
                               required
-                              min="1"
-                              step="0.01"
-                              placeholder="0.00"
+                              disabled={isProcessing || openInvoices.length === 0}
+                            >
+                              <option value="">-- Select Invoice --</option>
+                              {openInvoices.map(invoice => (
+                                <option key={invoice.id} value={invoice.id}>
+                                  {invoice.status.toUpperCase()} — ${(invoice.amount_due || 0) / 100} (#{invoice.id.substring(0, 8)})
+                                </option>
+                              ))}
+                            </select>
+                            {openInvoices.length === 0 && <p className="text-xs text-amber-600 mt-1.5 flex items-center gap-1"><AlertCircle className="w-3 h-3" /> No open invoices</p>}
+                          </div>
+                          <div className="grid grid-cols-2 gap-3">
+                            <div>
+                              <label className="block text-xs font-bold text-slate-400 uppercase tracking-widest mb-1.5">Type</label>
+                              <select
+                                value={discountForm.discountType}
+                                onChange={(e) => setDiscountForm(prev => ({ ...prev, discountType: e.target.value as 'percentage' | 'fixed', discountValue: 0 }))}
+                                className="w-full p-2.5 border border-slate-200 rounded-xl text-sm bg-slate-50 focus:border-indigo-400 outline-none"
+                                disabled={isProcessing}
+                              >
+                                <option value="percentage">Percent (%)</option>
+                                <option value="fixed">Fixed ($)</option>
+                              </select>
+                            </div>
+                            <div>
+                              <label className="block text-xs font-bold text-slate-400 uppercase tracking-widest mb-1.5">Value</label>
+                              <div className="relative">
+                                <span className="absolute left-3 top-2.5 text-slate-400 text-sm">{discountForm.discountType === 'fixed' ? '$' : '%'}</span>
+                                <input
+                                  type="number"
+                                  value={discountForm.discountValue || ''}
+                                  onChange={(e) => setDiscountForm(prev => ({ ...prev, discountValue: parseFloat(e.target.value) || 0 }))}
+                                  className="w-full pl-7 pr-2 py-2.5 border border-slate-200 rounded-xl text-sm bg-slate-50 focus:border-indigo-400 outline-none"
+                                  required
+                                  min="0.01"
+                                  step="0.01"
+                                  max={discountForm.discountType === 'percentage' ? 100 : undefined}
+                                  disabled={isProcessing}
+                                />
+                              </div>
+                            </div>
+                          </div>
+                          <button
+                            type="submit"
+                            disabled={isProcessing || !discountForm.invoiceId || discountForm.discountValue <= 0}
+                            className="w-full py-2.5 bg-gradient-to-r from-purple-600 to-purple-700 text-white rounded-xl text-xs font-bold hover:from-purple-700 hover:to-purple-800 transition-all disabled:opacity-40 flex items-center justify-center gap-2 shadow-sm"
+                          >
+                            {isProcessing ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <DollarSign className="w-3.5 h-3.5" />}
+                            Apply Discount
+                          </button>
+                        </form>
+                      </div>
+                    </div>
+
+                    {/* Collect Deposit */}
+                    <div className="overflow-hidden rounded-2xl border border-slate-200 shadow-sm">
+                      <div className="bg-gradient-to-r from-slate-900 to-slate-800 px-5 py-3.5 flex items-center gap-2.5">
+                        <CreditCard className="w-4 h-4 text-blue-400" />
+                        <h2 className="text-xs font-bold text-white tracking-widest uppercase">Collect Deposit</h2>
+                      </div>
+                      <div className="bg-white p-5">
+                        <form onSubmit={handleCollectDeposit} className="space-y-3">
+                          <div>
+                            <label className="block text-xs font-bold text-slate-400 uppercase tracking-widest mb-1.5">Amount (USD)</label>
+                            <div className="relative">
+                              <span className="absolute left-3 top-2.5 text-slate-400 text-sm">$</span>
+                              <input
+                                type="number"
+                                value={depositAmount}
+                                onChange={(e) => setDepositAmount(parseFloat(e.target.value) || '')}
+                                className="w-full pl-7 pr-3 py-2.5 border border-slate-200 rounded-xl text-sm bg-slate-50 focus:border-indigo-400 outline-none"
+                                required
+                                min="1"
+                                step="0.01"
+                                placeholder="0.00"
+                                disabled={isProcessing}
+                              />
+                            </div>
+                          </div>
+                          <div>
+                            <label className="block text-xs font-bold text-slate-400 uppercase tracking-widest mb-1.5">Description</label>
+                            <input
+                              type="text"
+                              value={depositDescription}
+                              onChange={(e) => setDepositDescription(e.target.value)}
+                              className="w-full p-2.5 border border-slate-200 rounded-xl text-sm bg-slate-50 focus:border-indigo-400 outline-none"
+                              placeholder="e.g. Project deposit — 50% upfront"
                               disabled={isProcessing}
                             />
                           </div>
-                        </div>
-                        <div>
-                          <label className="block text-sm font-medium text-slate-700 mb-1">Description</label>
-                          <input
-                            type="text"
-                            value={depositDescription}
-                            onChange={(e) => setDepositDescription(e.target.value)}
-                            className="w-full p-2 border border-slate-300 rounded-lg text-sm"
-                            placeholder="e.g. Project deposit — 50% upfront"
-                            disabled={isProcessing}
-                          />
-                        </div>
-                        <button
-                          type="submit"
-                          disabled={isProcessing || !depositAmount || !client.stripe_customer_id}
-                          className="w-full py-2 bg-blue-600 text-white rounded-lg text-sm font-semibold hover:bg-blue-700 transition-colors disabled:opacity-50 flex items-center justify-center gap-2"
-                        >
-                          {isProcessing ? <Loader2 className="w-4 h-4 animate-spin" /> : <DollarSign className="w-4 h-4" />}
-                          Send Deposit Invoice
-                        </button>
-                        {!client.stripe_customer_id && (
-                          <p className="text-xs text-amber-600">A Stripe customer must be created before collecting a deposit.</p>
-                        )}
-                      </form>
+                          <button
+                            type="submit"
+                            disabled={isProcessing || !depositAmount || !client.stripe_customer_id}
+                            className="w-full py-2.5 bg-gradient-to-r from-blue-600 to-blue-700 text-white rounded-xl text-xs font-bold hover:from-blue-700 hover:to-blue-800 transition-all disabled:opacity-40 flex items-center justify-center gap-2 shadow-sm"
+                          >
+                            {isProcessing ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <DollarSign className="w-3.5 h-3.5" />}
+                            Send Deposit Invoice
+                          </button>
+                          {!client.stripe_customer_id && (
+                            <p className="text-xs text-amber-600 flex items-center gap-1"><AlertCircle className="w-3 h-3" /> Stripe customer required first</p>
+                          )}
+                        </form>
+                      </div>
                     </div>
 
-                    <div className="bg-white p-6 rounded-xl shadow-lg border border-slate-100">
-                      <h2 className="text-xl font-bold mb-4 flex items-center gap-2 text-slate-900 border-b border-slate-100 pb-4">
-                        <CreditCard className="w-5 h-5 text-blue-600" /> Deposit History ({client.deposits?.length || 0})
-                      </h2>
-                      <div className="space-y-3">
+                  </div>{/* end left billing col */}
+
+                  {/* RIGHT col: Create Invoice + Deposit History */}
+                  <div className="space-y-5">
+
+                    <CreateInvoiceForm
+                      clientId={client.id}
+                      oneTimeProducts={oneTimeProducts}
+                      onInvoiceCreated={fetchClientData}
+                      isProcessing={isProcessing}
+                      setIsProcessing={setIsProcessing}
+                    />
+
+                    {/* Deposit History */}
+                    <div className="overflow-hidden rounded-2xl border border-slate-200 shadow-sm">
+                      <div className="bg-gradient-to-r from-slate-900 to-slate-800 px-5 py-3.5 flex items-center justify-between">
+                        <div className="flex items-center gap-2.5">
+                          <CreditCard className="w-4 h-4 text-blue-400" />
+                          <h2 className="text-xs font-bold text-white tracking-widest uppercase">Deposit History</h2>
+                        </div>
+                        <span className="text-xs font-bold text-slate-400 bg-slate-700/60 px-2.5 py-1 rounded-full">{client.deposits?.length || 0}</span>
+                      </div>
+                      <div className="bg-white p-4 space-y-2">
                         {client.deposits && client.deposits.length > 0 ? (
                           client.deposits.sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime()).map(deposit => (
-                            <div key={deposit.id} className="flex flex-col md:flex-row justify-between items-start md:items-center text-sm p-3 bg-slate-50 rounded-lg border border-slate-100">
+                            <div key={deposit.id} className="flex items-center justify-between p-3 bg-slate-50 border border-slate-100 rounded-xl hover:border-slate-200 transition-colors">
                               <div className="flex-1 min-w-0">
-                                  <div className="flex items-center gap-2 mb-1">
-                                      <span className="font-medium text-slate-900">${(deposit.amount_cents / 100).toFixed(2)} USD</span>
-                                      <span className={`px-2 py-0.5 rounded-full text-xs font-semibold ${getStatusColor(deposit.status)}`}>
-                                        {deposit.status}
-                                      </span>
-                                      {deposit.applied_to_invoice_id && (
-                                          <span className={`px-2 py-0.5 rounded-full text-xs font-semibold ${getStatusColor('applied')}`}>
-                                              Applied
-                                          </span>
-                                      )}
-                                  </div>
-                                  <div className="flex items-center gap-2 text-xs text-slate-500">
-                                      <span>Created: {format(new Date(deposit.created_at), 'MMM dd, yyyy')}</span>
-                                      {deposit.stripe_invoice_id && (
-                                          <a 
-                                            href={`https://dashboard.stripe.com/invoices/${deposit.stripe_invoice_id}`} 
-                                            target="_blank" 
-                                            rel="noopener noreferrer" 
-                                            className="text-indigo-600 hover:underline flex items-center gap-1"
-                                          >
-                                              View Invoice <ExternalLink className="w-3 h-3" />
-                                          </a>
-                                      )}
-                                  </div>
-                              </div>
-                              <div className="flex items-center gap-2 mt-2 md:mt-0 flex-shrink-0">
-                                  {deposit.status === 'pending' && (
-                                      <button 
-                                          onClick={() => handleDeleteDeposit(deposit.id)}
-                                          disabled={isProcessing}
-                                          className="text-red-500 hover:text-red-700 text-sm flex items-center gap-1"
-                                          title="Delete Pending Deposit"
-                                      >
-                                          <Trash2 className="w-4 h-4" />
-                                      </button>
+                                <div className="flex items-center gap-2 flex-wrap">
+                                  <span className="font-bold text-slate-900 text-sm">${(deposit.amount_cents / 100).toFixed(2)}</span>
+                                  <span className={`px-2 py-0.5 rounded-full text-xs font-semibold ${getStatusColor(deposit.status)}`}>
+                                    {deposit.status}
+                                  </span>
+                                  {deposit.applied_to_invoice_id && (
+                                    <span className="px-2 py-0.5 rounded-full text-xs font-semibold bg-teal-100 text-teal-700">Applied</span>
                                   )}
-                                  {deposit.stripe_invoice_id && (
-                                      <a 
-                                        href={`https://dashboard.stripe.com/invoices/${deposit.stripe_invoice_id}`} 
-                                        target="_blank" 
-                                        rel="noopener noreferrer" 
-                                        className="text-indigo-600 hover:underline flex items-center gap-1"
-                                      >
-                                        <ExternalLink className="w-4 h-4" />
-                                      </a>
-                                  )}
+                                </div>
+                                <p className="text-xs text-slate-400 mt-0.5">{format(new Date(deposit.created_at), 'MMM dd, yyyy')}</p>
                               </div>
-                            </div>
-                          ))
-                        ) : (
-                          <p className="text-slate-500 text-sm">No deposits recorded.</p>
-                        )}
-                      </div>
-                    </div>
-
-                    <div className="bg-white p-6 rounded-xl shadow-lg border border-slate-100">
-                      <h2 className="text-xl font-bold mb-4 flex items-center gap-2 text-slate-900 border-b border-slate-100 pb-4">
-                        <FileText className="w-5 h-5 text-purple-600" /> Invoice History ({client.invoices?.length || 0})
-                      </h2>
-
-                      {/* Retract toast */}
-                      {retractToast && (
-                        <div className={`mb-4 px-4 py-3 text-sm font-medium rounded-lg flex items-start gap-2 ${
-                          retractToast.type === 'success'
-                            ? 'bg-emerald-50 border border-emerald-200 text-emerald-800'
-                            : 'bg-amber-50 border border-amber-200 text-amber-800'
-                        }`}>
-                          <span className={`w-2 h-2 rounded-full flex-shrink-0 mt-1 ${retractToast.type === 'success' ? 'bg-emerald-500' : 'bg-amber-500'}`} />
-                          {retractToast.message}
-                        </div>
-                      )}
-
-                      <div className="space-y-3">
-                        {client.invoices && client.invoices.length > 0 ? (
-                          client.invoices.sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime()).map(invoice => (
-                            <div key={invoice.id} className={`text-sm p-3 rounded-lg border ${invoice.status === 'retracted' ? 'bg-slate-50 border-slate-200 opacity-60' : 'bg-slate-50 border-slate-100'}`}>
-                              {/* Main row */}
-                              <div className="flex flex-col md:flex-row justify-between items-start md:items-center">
-                                <div className="flex-1 min-w-0">
-                                    <div className="flex items-center gap-2 mb-1">
-                                        <span className={`font-medium ${invoice.status === 'retracted' ? 'text-slate-400 line-through' : 'text-slate-900'}`}>
-                                          ${(invoice.amount_due / 100).toFixed(2)} USD
-                                        </span>
-                                        <span className={`px-2 py-0.5 rounded-full text-xs font-semibold ${getStatusColor(invoice.status)}`}>
-                                          {invoice.status === 'retracted' ? 'Retracted' : invoice.status}
-                                        </span>
-                                        {invoice.label && (
-                                            <span className="px-2 py-0.5 rounded-full text-xs font-semibold bg-indigo-50 text-indigo-700 flex items-center gap-1">
-                                                <Tag className="w-3 h-3" />
-                                                {invoice.label}
-                                            </span>
-                                        )}
-                                        {isDepositInvoice(invoice.stripe_invoice_id) && (
-                                            <span className="px-2 py-0.5 rounded-full text-xs font-semibold bg-blue-100 text-blue-800">
-                                                Deposit
-                                            </span>
-                                        )}
-                                        {invoice.discounts && invoice.discounts.length > 0 && (
-                                            <span className="px-2 py-0.5 rounded-full text-xs font-semibold bg-purple-100 text-purple-800 flex items-center gap-1">
-                                                <Percent className="w-3 h-3" />
-                                                Discount Applied
-                                            </span>
-                                        )}
-                                    </div>
-                                    <div className="flex items-center gap-2 text-xs text-slate-500">
-                                        <span>Created: {format(new Date(invoice.created_at), 'MMM dd, yyyy')}</span>
-                                        {invoice.last_reminder_sent_at && (
-                                            <span className="flex items-center gap-1">
-                                                • <Bell className="w-3 h-3 text-amber-500" />
-                                                Last Reminder: {format(new Date(invoice.last_reminder_sent_at), 'MMM dd')}
-                                            </span>
-                                        )}
-                                    </div>
-                                </div>
-                                <div className="flex items-center gap-2 mt-2 md:mt-0 flex-shrink-0">
-                                    <button
-                                        onClick={() => handleToggleReminders(invoice)}
-                                        disabled={isProcessing || invoice.status === 'paid'}
-                                        className={`p-1 rounded-full transition-colors ${invoice.disable_reminders ? 'text-red-500 hover:bg-red-100' : 'text-emerald-500 hover:bg-emerald-100'}`}
-                                        title={invoice.disable_reminders ? 'Enable Reminders' : 'Disable Reminders'}
-                                    >
-                                        {invoice.disable_reminders ? <BellOff className="w-4 h-4" /> : <Bell className="w-4 h-4" />}
-                                    </button>
-
-                                    {(invoice.status === 'open' || invoice.status === 'past_due') && (
-                                        <button
-                                            onClick={() => handleResendInvoice(invoice)}
-                                            disabled={isProcessing}
-                                            className="text-indigo-600 hover:text-indigo-800 text-sm flex items-center gap-1"
-                                        >
-                                            <Send className="w-4 h-4" />
-                                        </button>
-                                    )}
-
-                                    {(invoice.status === 'open' || invoice.status === 'past_due') && (
-                                        <button
-                                            onClick={() => handleMarkInvoiceResolved(invoice.id)}
-                                            disabled={isProcessing}
-                                            className="text-emerald-600 hover:text-emerald-800 text-sm flex items-center gap-1"
-                                            title="Mark as Paid Manually"
-                                        >
-                                            <CheckCircle2 className="w-4 h-4" />
-                                        </button>
-                                    )}
-
-                                    {/* Retract button — only for draft or open */}
-                                    {(invoice.status === 'draft' || invoice.status === 'open') && (
-                                        <button
-                                            onClick={() => {
-                                                setRetractInvoiceConfirmId(invoice.id);
-                                                setRetractInvoiceReason('');
-                                            }}
-                                            disabled={isProcessing}
-                                            title="Retract invoice"
-                                            className="text-rose-400 hover:text-rose-600 transition-colors disabled:opacity-50"
-                                        >
-                                            <XCircle className="w-4 h-4" />
-                                        </button>
-                                    )}
-
-                                    {invoice.pdf_url && invoice.status === 'paid' ? (
-                                        <a
-                                          href={invoice.pdf_url}
-                                          target="_blank"
-                                          rel="noopener noreferrer"
-                                          className="text-emerald-600 hover:underline flex items-center gap-1"
-                                        >
-                                          <Download className="w-4 h-4" />
-                                        </a>
-                                    ) : invoice.status !== 'retracted' ? (
-                                        <a
-                                          href={invoice.hosted_invoice_url}
-                                          target="_blank"
-                                          rel="noopener noreferrer"
-                                          className="text-indigo-600 hover:underline flex items-center gap-1"
-                                        >
-                                          <ExternalLink className="w-4 h-4" />
-                                        </a>
-                                    ) : null}
-                                </div>
-                              </div>
-
-                              {/* Inline retract confirmation */}
-                              {retractInvoiceConfirmId === invoice.id && (
-                                <div className="mt-3 pt-3 border-t border-rose-200">
-                                  <p className="text-sm font-semibold text-slate-800 mb-2">Are you sure you want to retract this invoice?</p>
-                                  <input
-                                    type="text"
-                                    value={retractInvoiceReason}
-                                    onChange={e => setRetractInvoiceReason(e.target.value)}
-                                    placeholder="Reason (optional)"
-                                    className="w-full p-2 border border-slate-300 rounded-lg text-sm mb-2 focus:outline-none focus:border-rose-400"
-                                    autoFocus
-                                  />
-                                  <div className="flex gap-2">
-                                    <button
-                                      onClick={() => handleRetractInvoice(invoice)}
-                                      disabled={isProcessing}
-                                      className="px-4 py-1.5 bg-rose-600 text-white rounded-lg text-sm font-semibold hover:bg-rose-700 transition-colors disabled:opacity-50 flex items-center gap-1.5"
-                                    >
-                                      {isProcessing ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <XCircle className="w-3.5 h-3.5" />}
-                                      Confirm Retract
-                                    </button>
-                                    <button
-                                      onClick={() => setRetractInvoiceConfirmId(null)}
-                                      className="px-4 py-1.5 border border-slate-300 text-slate-600 rounded-lg text-sm font-semibold hover:bg-slate-100 transition-colors"
-                                    >
-                                      Cancel
-                                    </button>
-                                  </div>
-                                </div>
-                              )}
-                            </div>
-                          ))
-                        ) : (
-                          <p className="text-slate-500 text-sm">No invoices found.</p>
-                        )}
-                      </div>
-                    </div>
-
-                    {/* Proposals Summary */}
-                    {client.proposals && client.proposals.length > 0 && (
-                      <div className="bg-white p-6 rounded-xl shadow-lg border border-slate-100">
-                        <h2 className="text-xl font-bold mb-4 flex items-center gap-2 text-slate-900 border-b border-slate-100 pb-4">
-                          <FileText className="w-5 h-5 text-indigo-600" /> Proposals ({client.proposals.length})
-                        </h2>
-                        <div className="space-y-3">
-                          {client.proposals.map(proposal => {
-                            const canMarkComplete =
-                              proposal.status === 'approved' &&
-                              proposal.payment_structure === 'split_50_50' &&
-                              proposal.deposit_paid &&
-                              !proposal.completed_at;
-                            const awaitingDeposit =
-                              proposal.status === 'approved' &&
-                              proposal.payment_structure === 'split_50_50' &&
-                              !proposal.deposit_paid &&
-                              !proposal.completed_at;
-                            const needsDepositBackfill =
-                              proposal.status === 'approved' &&
-                              proposal.payment_structure === 'split_50_50' &&
-                              !proposal.deposit_invoice_id;
-                            return (
-                              <div key={proposal.id} className="text-sm p-3 bg-slate-50 rounded-lg border border-slate-100">
-                                <div className="flex items-start justify-between gap-2 flex-wrap">
-                                  <div className="flex-1 min-w-0">
-                                    <div className="flex items-center gap-2 flex-wrap mb-1">
-                                      <span className="font-medium text-slate-900 truncate">{proposal.title}</span>
-                                      <span className={`px-2 py-0.5 rounded-full text-xs font-semibold ${getStatusColor(proposal.status)}`}>
-                                        {proposal.status}
-                                      </span>
-                                      {proposal.payment_structure === 'split_50_50' && (
-                                        <span className="px-2 py-0.5 rounded-full text-xs font-semibold bg-indigo-50 text-indigo-700">
-                                          50/50 Split
-                                        </span>
-                                      )}
-                                      {proposal.deposit_paid && (
-                                        <span className="px-2 py-0.5 rounded-full text-xs font-semibold bg-emerald-50 text-emerald-700 flex items-center gap-1">
-                                          <CheckSquare className="w-3 h-3" /> Deposit Paid
-                                        </span>
-                                      )}
-                                    </div>
-                                    <p className="text-xs text-slate-500">
-                                      {proposal.sent_at
-                                        ? `Sent ${new Date(proposal.sent_at).toLocaleDateString()}`
-                                        : `Created ${new Date(proposal.created_at).toLocaleDateString()}`}
-                                      {proposal.completed_at && ` · Completed ${new Date(proposal.completed_at).toLocaleDateString()}`}
-                                      {proposal.subscription_start_date && ` · Sub starts ${proposal.subscription_start_date}`}
-                                    </p>
-                                  </div>
-                                  <div className="flex items-center gap-2 flex-shrink-0">
-                                    <a
-                                      href={`/admin/proposals/${proposal.id}`}
-                                      className="p-1.5 text-indigo-500 hover:text-indigo-700 hover:bg-indigo-50 rounded-lg transition-colors"
-                                      title="View Proposal"
-                                    >
-                                      <Eye className="w-4 h-4" />
-                                    </a>
-                                    {canMarkComplete && (
-                                      <button
-                                        onClick={() => setMarkCompleteProposalId(proposal.id)}
-                                        className="flex items-center gap-1.5 px-3 py-1.5 bg-teal-600 text-white text-xs font-semibold rounded-lg hover:bg-teal-700 transition-colors"
-                                      >
-                                        <CheckSquare className="w-3.5 h-3.5" /> Mark Complete
-                                      </button>
-                                    )}
-                                    {awaitingDeposit && (
-                                      <button
-                                        disabled
-                                        title="Waiting for deposit payment"
-                                        className="flex items-center gap-1.5 px-3 py-1.5 bg-slate-200 text-slate-400 text-xs font-semibold rounded-lg cursor-not-allowed"
-                                      >
-                                        <CheckSquare className="w-3.5 h-3.5" /> Mark Complete
-                                      </button>
-                                    )}
-                                    {needsDepositBackfill && (
-                                      <button
-                                        onClick={() => handleBackfillDepositInvoice(proposal.id)}
-                                        disabled={backfillingDepositProposalId === proposal.id}
-                                        title="Create the missing deposit invoice for this approved proposal"
-                                        className="flex items-center gap-1.5 px-3 py-1.5 bg-amber-500 text-white text-xs font-semibold rounded-lg hover:bg-amber-600 transition-colors disabled:opacity-50"
-                                      >
-                                        {backfillingDepositProposalId === proposal.id
-                                          ? <Loader2 className="w-3.5 h-3.5 animate-spin" />
-                                          : <AlertTriangle className="w-3.5 h-3.5" />}
-                                        Create Missing Deposit Invoice
-                                      </button>
-                                    )}
-                                  </div>
-                                </div>
-                                {/* Inline Mark-Complete confirm */}
-                                {markCompleteProposalId === proposal.id && (
-                                  <div className="mt-3 pt-3 border-t border-teal-200">
-                                    <p className="text-sm font-semibold text-slate-800 mb-2">
-                                      Mark project complete? This will send the 50% balance invoice to the client.
-                                    </p>
-                                    <div className="flex gap-2">
-                                      <button
-                                        onClick={() => handleMarkProposalComplete(proposal.id)}
-                                        disabled={isMarkingComplete}
-                                        className="px-4 py-1.5 bg-teal-600 text-white rounded-lg text-sm font-semibold hover:bg-teal-700 transition-colors disabled:opacity-50 flex items-center gap-1.5"
-                                      >
-                                        {isMarkingComplete ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <CheckSquare className="w-3.5 h-3.5" />}
-                                        Confirm
-                                      </button>
-                                      <button
-                                        onClick={() => setMarkCompleteProposalId(null)}
-                                        className="px-4 py-1.5 border border-slate-300 text-slate-600 rounded-lg text-sm font-semibold hover:bg-slate-100 transition-colors"
-                                      >
-                                        Cancel
-                                      </button>
-                                    </div>
-                                  </div>
+                              <div className="flex items-center gap-1.5 flex-shrink-0">
+                                {deposit.status === 'pending' && (
+                                  <button
+                                    onClick={() => handleDeleteDeposit(deposit.id)}
+                                    disabled={isProcessing}
+                                    className="p-1.5 text-red-400 hover:text-red-600 hover:bg-red-50 rounded-lg transition-colors disabled:opacity-40"
+                                    title="Delete"
+                                  >
+                                    <Trash2 className="w-3.5 h-3.5" />
+                                  </button>
+                                )}
+                                {deposit.stripe_invoice_id && (
+                                  <a
+                                    href={`https://dashboard.stripe.com/invoices/${deposit.stripe_invoice_id}`}
+                                    target="_blank"
+                                    rel="noopener noreferrer"
+                                    className="p-1.5 text-indigo-400 hover:text-indigo-600 hover:bg-indigo-50 rounded-lg transition-colors"
+                                    title="View in Stripe"
+                                  >
+                                    <ExternalLink className="w-3.5 h-3.5" />
+                                  </a>
                                 )}
                               </div>
-                            );
-                          })}
-                        </div>
+                            </div>
+                          ))
+                        ) : (
+                          <p className="text-xs text-slate-400 text-center py-4">No deposits recorded</p>
+                        )}
+                      </div>
+                    </div>
+
+                  </div>{/* end right billing col */}
+                </div>{/* end two-col grid */}
+
+                {/* Invoice History — full width */}
+                <div className="overflow-hidden rounded-2xl border border-slate-200 shadow-sm">
+                  <div className="bg-gradient-to-r from-slate-900 to-slate-800 px-5 py-3.5 flex items-center justify-between">
+                    <div className="flex items-center gap-2.5">
+                      <FileText className="w-4 h-4 text-purple-400" />
+                      <h2 className="text-xs font-bold text-white tracking-widest uppercase">Invoice History</h2>
+                    </div>
+                    <span className="text-xs font-bold text-slate-400 bg-slate-700/60 px-2.5 py-1 rounded-full">{client.invoices?.length || 0}</span>
+                  </div>
+                  <div className="bg-white p-4">
+                    {retractToast && (
+                      <div className={`mb-3 px-4 py-3 text-sm font-medium rounded-xl flex items-start gap-2 ${
+                        retractToast.type === 'success'
+                          ? 'bg-emerald-50 border border-emerald-200 text-emerald-800'
+                          : 'bg-amber-50 border border-amber-200 text-amber-800'
+                      }`}>
+                        <span className={`w-2 h-2 rounded-full flex-shrink-0 mt-1 ${retractToast.type === 'success' ? 'bg-emerald-400' : 'bg-amber-400'}`} />
+                        {retractToast.message}
                       </div>
                     )}
+                    <div className="space-y-2">
+                      {client.invoices && client.invoices.length > 0 ? (
+                        client.invoices.sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime()).map(invoice => (
+                          <div key={invoice.id} className={`rounded-xl border transition-colors ${invoice.status === 'retracted' ? 'bg-slate-50 border-slate-100 opacity-60' : 'bg-slate-50 border-slate-100 hover:border-slate-200'}`}>
+                            <div className="flex items-center justify-between p-3 flex-wrap gap-2">
+                              <div className="flex-1 min-w-0">
+                                <div className="flex items-center gap-2 flex-wrap mb-1">
+                                  <span className={`font-bold text-sm ${invoice.status === 'retracted' ? 'text-slate-400 line-through' : 'text-slate-900'}`}>
+                                    ${(invoice.amount_due / 100).toFixed(2)}
+                                  </span>
+                                  <span className={`px-2 py-0.5 rounded-full text-xs font-semibold ${getStatusColor(invoice.status)}`}>
+                                    {invoice.status === 'retracted' ? 'Retracted' : invoice.status}
+                                  </span>
+                                  {invoice.label && (
+                                    <span className="px-2 py-0.5 rounded-full text-xs font-semibold bg-indigo-50 text-indigo-700 flex items-center gap-1">
+                                      <Tag className="w-3 h-3" />{invoice.label}
+                                    </span>
+                                  )}
+                                  {isDepositInvoice(invoice.stripe_invoice_id) && (
+                                    <span className="px-2 py-0.5 rounded-full text-xs font-semibold bg-blue-100 text-blue-800">Deposit</span>
+                                  )}
+                                  {invoice.discounts && invoice.discounts.length > 0 && (
+                                    <span className="px-2 py-0.5 rounded-full text-xs font-semibold bg-purple-100 text-purple-800 flex items-center gap-1">
+                                      <Percent className="w-3 h-3" />Discounted
+                                    </span>
+                                  )}
+                                </div>
+                                <div className="flex items-center gap-2 text-xs text-slate-400">
+                                  <span>{format(new Date(invoice.created_at), 'MMM dd, yyyy')}</span>
+                                  {invoice.last_reminder_sent_at && (
+                                    <span className="flex items-center gap-1">
+                                      · <Bell className="w-3 h-3 text-amber-400" />
+                                      {format(new Date(invoice.last_reminder_sent_at), 'MMM dd')}
+                                    </span>
+                                  )}
+                                </div>
+                              </div>
+                              <div className="flex items-center gap-1 flex-shrink-0">
+                                <button
+                                  onClick={() => handleToggleReminders(invoice)}
+                                  disabled={isProcessing || invoice.status === 'paid'}
+                                  className={`p-1.5 rounded-lg transition-colors disabled:opacity-40 ${invoice.disable_reminders ? 'text-red-400 hover:bg-red-50' : 'text-emerald-500 hover:bg-emerald-50'}`}
+                                  title={invoice.disable_reminders ? 'Enable Reminders' : 'Disable Reminders'}
+                                >
+                                  {invoice.disable_reminders ? <BellOff className="w-3.5 h-3.5" /> : <Bell className="w-3.5 h-3.5" />}
+                                </button>
+                                {(invoice.status === 'open' || invoice.status === 'past_due') && (
+                                  <button
+                                    onClick={() => handleResendInvoice(invoice)}
+                                    disabled={isProcessing}
+                                    className="p-1.5 text-indigo-400 hover:text-indigo-600 hover:bg-indigo-50 rounded-lg transition-colors disabled:opacity-40"
+                                    title="Resend Invoice"
+                                  >
+                                    <Send className="w-3.5 h-3.5" />
+                                  </button>
+                                )}
+                                {(invoice.status === 'open' || invoice.status === 'past_due') && (
+                                  <button
+                                    onClick={() => handleMarkInvoiceResolved(invoice.id)}
+                                    disabled={isProcessing}
+                                    className="p-1.5 text-emerald-500 hover:text-emerald-700 hover:bg-emerald-50 rounded-lg transition-colors disabled:opacity-40"
+                                    title="Mark as Paid"
+                                  >
+                                    <CheckCircle2 className="w-3.5 h-3.5" />
+                                  </button>
+                                )}
+                                {(invoice.status === 'draft' || invoice.status === 'open') && (
+                                  <button
+                                    onClick={() => { setRetractInvoiceConfirmId(invoice.id); setRetractInvoiceReason(''); }}
+                                    disabled={isProcessing}
+                                    className="p-1.5 text-rose-400 hover:text-rose-600 hover:bg-rose-50 rounded-lg transition-colors disabled:opacity-40"
+                                    title="Retract"
+                                  >
+                                    <XCircle className="w-3.5 h-3.5" />
+                                  </button>
+                                )}
+                                {invoice.pdf_url && invoice.status === 'paid' ? (
+                                  <a href={invoice.pdf_url} target="_blank" rel="noopener noreferrer" className="p-1.5 text-emerald-500 hover:text-emerald-700 hover:bg-emerald-50 rounded-lg transition-colors">
+                                    <Download className="w-3.5 h-3.5" />
+                                  </a>
+                                ) : invoice.status !== 'retracted' ? (
+                                  <a href={invoice.hosted_invoice_url} target="_blank" rel="noopener noreferrer" className="p-1.5 text-indigo-400 hover:text-indigo-600 hover:bg-indigo-50 rounded-lg transition-colors">
+                                    <ExternalLink className="w-3.5 h-3.5" />
+                                  </a>
+                                ) : null}
+                              </div>
+                            </div>
+                            {retractInvoiceConfirmId === invoice.id && (
+                              <div className="mx-3 mb-3 pt-3 border-t border-rose-200">
+                                <p className="text-xs font-bold text-slate-700 mb-2">Confirm retract this invoice?</p>
+                                <input
+                                  type="text"
+                                  value={retractInvoiceReason}
+                                  onChange={e => setRetractInvoiceReason(e.target.value)}
+                                  placeholder="Reason (optional)"
+                                  className="w-full p-2 border border-slate-200 rounded-lg text-xs mb-2 outline-none focus:border-rose-400 bg-slate-50"
+                                  autoFocus
+                                />
+                                <div className="flex gap-2">
+                                  <button
+                                    onClick={() => handleRetractInvoice(invoice)}
+                                    disabled={isProcessing}
+                                    className="px-4 py-1.5 bg-rose-600 text-white rounded-lg text-xs font-bold hover:bg-rose-700 transition-colors disabled:opacity-40 flex items-center gap-1.5"
+                                  >
+                                    {isProcessing ? <Loader2 className="w-3 h-3 animate-spin" /> : <XCircle className="w-3 h-3" />}
+                                    Confirm
+                                  </button>
+                                  <button
+                                    onClick={() => setRetractInvoiceConfirmId(null)}
+                                    className="px-4 py-1.5 border border-slate-200 text-slate-600 rounded-lg text-xs font-bold hover:bg-slate-100 transition-colors"
+                                  >
+                                    Cancel
+                                  </button>
+                                </div>
+                              </div>
+                            )}
+                          </div>
+                        ))
+                      ) : (
+                        <p className="text-xs text-slate-400 text-center py-4">No invoices found</p>
+                      )}
+                    </div>
+                  </div>
                 </div>
+
+                {/* Proposals — full width */}
+                {client.proposals && client.proposals.length > 0 && (
+                  <div className="overflow-hidden rounded-2xl border border-slate-200 shadow-sm">
+                    <div className="bg-gradient-to-r from-slate-900 to-slate-800 px-5 py-3.5 flex items-center justify-between">
+                      <div className="flex items-center gap-2.5">
+                        <FileText className="w-4 h-4 text-indigo-400" />
+                        <h2 className="text-xs font-bold text-white tracking-widest uppercase">Proposals</h2>
+                      </div>
+                      <span className="text-xs font-bold text-slate-400 bg-slate-700/60 px-2.5 py-1 rounded-full">{client.proposals.length}</span>
+                    </div>
+                    <div className="bg-white p-4 space-y-2">
+                      {client.proposals.map(proposal => {
+                        const canMarkComplete =
+                          proposal.status === 'approved' &&
+                          proposal.payment_structure === 'split_50_50' &&
+                          proposal.deposit_paid &&
+                          !proposal.completed_at;
+                        const awaitingDeposit =
+                          proposal.status === 'approved' &&
+                          proposal.payment_structure === 'split_50_50' &&
+                          !proposal.deposit_paid &&
+                          !proposal.completed_at;
+                        const needsDepositBackfill =
+                          proposal.status === 'approved' &&
+                          proposal.payment_structure === 'split_50_50' &&
+                          !proposal.deposit_invoice_id;
+                        return (
+                          <div key={proposal.id} className="p-3 bg-slate-50 border border-slate-100 rounded-xl hover:border-slate-200 transition-colors">
+                            <div className="flex items-start justify-between gap-2 flex-wrap">
+                              <div className="flex-1 min-w-0">
+                                <div className="flex items-center gap-2 flex-wrap mb-1">
+                                  <span className="font-bold text-slate-900 text-sm truncate">{proposal.title}</span>
+                                  <span className={`px-2 py-0.5 rounded-full text-xs font-semibold ${getStatusColor(proposal.status)}`}>
+                                    {proposal.status}
+                                  </span>
+                                  {proposal.payment_structure === 'split_50_50' && (
+                                    <span className="px-2 py-0.5 rounded-full text-xs font-semibold bg-indigo-50 text-indigo-700">50/50</span>
+                                  )}
+                                  {proposal.deposit_paid && (
+                                    <span className="px-2 py-0.5 rounded-full text-xs font-semibold bg-emerald-50 text-emerald-700 flex items-center gap-1">
+                                      <CheckSquare className="w-3 h-3" /> Deposit Paid
+                                    </span>
+                                  )}
+                                </div>
+                                <p className="text-xs text-slate-400">
+                                  {proposal.sent_at ? `Sent ${new Date(proposal.sent_at).toLocaleDateString()}` : `Created ${new Date(proposal.created_at).toLocaleDateString()}`}
+                                  {proposal.completed_at && ` · Completed ${new Date(proposal.completed_at).toLocaleDateString()}`}
+                                  {proposal.subscription_start_date && ` · Sub starts ${proposal.subscription_start_date}`}
+                                </p>
+                              </div>
+                              <div className="flex items-center gap-2 flex-shrink-0">
+                                <a href={`/admin/proposals/${proposal.id}`} className="p-1.5 text-indigo-400 hover:text-indigo-600 hover:bg-indigo-50 rounded-lg transition-colors" title="View Proposal">
+                                  <Eye className="w-4 h-4" />
+                                </a>
+                                {canMarkComplete && (
+                                  <button onClick={() => setMarkCompleteProposalId(proposal.id)} className="flex items-center gap-1.5 px-3 py-1.5 bg-teal-600 text-white text-xs font-bold rounded-lg hover:bg-teal-700 transition-colors">
+                                    <CheckSquare className="w-3.5 h-3.5" /> Mark Complete
+                                  </button>
+                                )}
+                                {awaitingDeposit && (
+                                  <button disabled title="Waiting for deposit payment" className="flex items-center gap-1.5 px-3 py-1.5 bg-slate-200 text-slate-400 text-xs font-bold rounded-lg cursor-not-allowed">
+                                    <CheckSquare className="w-3.5 h-3.5" /> Mark Complete
+                                  </button>
+                                )}
+                                {needsDepositBackfill && (
+                                  <button onClick={() => handleBackfillDepositInvoice(proposal.id)} disabled={backfillingDepositProposalId === proposal.id} title="Create missing deposit invoice" className="flex items-center gap-1.5 px-3 py-1.5 bg-amber-500 text-white text-xs font-bold rounded-lg hover:bg-amber-600 transition-colors disabled:opacity-40">
+                                    {backfillingDepositProposalId === proposal.id ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <AlertTriangle className="w-3.5 h-3.5" />}
+                                    Fix Deposit Invoice
+                                  </button>
+                                )}
+                              </div>
+                            </div>
+                            {markCompleteProposalId === proposal.id && (
+                              <div className="mt-3 pt-3 border-t border-teal-200">
+                                <p className="text-xs font-bold text-slate-700 mb-2">Mark complete? This sends the 50% balance invoice.</p>
+                                <div className="flex gap-2">
+                                  <button onClick={() => handleMarkProposalComplete(proposal.id)} disabled={isMarkingComplete} className="px-4 py-1.5 bg-teal-600 text-white rounded-lg text-xs font-bold hover:bg-teal-700 transition-colors disabled:opacity-40 flex items-center gap-1.5">
+                                    {isMarkingComplete ? <Loader2 className="w-3 h-3 animate-spin" /> : <CheckSquare className="w-3 h-3" />}
+                                    Confirm
+                                  </button>
+                                  <button onClick={() => setMarkCompleteProposalId(null)} className="px-4 py-1.5 border border-slate-200 text-slate-600 rounded-lg text-xs font-bold hover:bg-slate-100 transition-colors">
+                                    Cancel
+                                  </button>
+                                </div>
+                              </div>
+                            )}
+                          </div>
+                        );
+                      })}
+                    </div>
+                  </div>
+                )}
+
               </div>
             )}
           </div>
