@@ -349,4 +349,15 @@ export const AdminService = {
     ...payload,
     source_type: 'url',
   }),
+
+  // ── Claude Admin Assistant ──────────────────────────────────────────────────
+
+  /**
+   * Send a message to the Claude admin assistant.
+   * Pass `confirmed_operation` when resuming after an admin approved/rejected a proposed DB change.
+   */
+  callClaudeAssistant: async (payload: {
+    messages: Array<{ role: string; content: string }>;
+    confirmed_operation?: { approved: boolean; operation: any; tool_id: string } | null;
+  }) => invokeEdgeFunction('claude-admin-assistant', payload),
 };

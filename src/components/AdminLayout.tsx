@@ -53,6 +53,7 @@ const AdminLayout: React.FC<AdminLayoutProps> = ({ children }) => {
       icon: Bot,
       collapsible: true,
       items: [
+        { name: 'Claude Assistant', href: '/admin/claude', icon: Bot },
         { name: 'AI Voice', href: '/admin/voice', icon: Phone },
         { name: 'Call Scheduling', href: '/admin/call-scheduling', icon: PhoneCall },
         { name: 'Agent Settings', href: '/admin/agent-settings', icon: Cpu },
