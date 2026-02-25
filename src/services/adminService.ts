@@ -318,4 +318,35 @@ export const AdminService = {
     primary_color?: string;
     premium_features?: string[];
   }) => invokeEdgeFunction('import-site', payload),
+
+  /**
+   * Clone a website's visual look from an uploaded screenshot image via Gemini Vision.
+   * Returns { success, client_slug, website_json }.
+   */
+  cloneWebsiteFromImage: async (payload: {
+    client_id: string;
+    image_base64: string;
+    image_mime_type?: string;
+    business_name: string;
+    industry: string;
+    services_offered: string;
+    location: string;
+    tone?: string;
+    primary_color?: string;
+    pages_to_generate?: string[];
+  }) => invokeEdgeFunction('clone-website-from-image', payload),
+
+  /**
+   * Clone a website's look from a URL/domain using the existing import-site scraper.
+   * Returns { success, client_slug, website_json, backend_features, pages_imported, business_name }.
+   */
+  cloneWebsiteFromUrl: async (payload: {
+    client_id: string;
+    url: string;
+    tone?: string;
+    primary_color?: string;
+  }) => invokeEdgeFunction('import-site', {
+    ...payload,
+    source_type: 'url',
+  }),
 };
