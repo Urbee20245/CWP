@@ -20,7 +20,7 @@
       "has": [
         {
           "type": "host",
-          "value": "(?!www\\.customwebsitesplus\\.com|customwebsitesplus\\.com|.*\\.vercel\\.app).*"
+          "value": "(?!www\\.customwebsitesplus\\.com$)(?!customwebsitesplus\\.com$).+"
         }
       ]
     },
