@@ -162,6 +162,14 @@ verify_jwt = false
 import_map = "./functions/refresh-voice-metrics/deno.json"
 entrypoint = "./functions/refresh-voice-metrics/index.ts"
 
+# ── Static site hosting (public-facing, no auth) ─────────────────────────────
+
+[functions.static-lead-capture]
+verify_jwt = false
+
+[functions.serve-static-site]
+verify_jwt = false
+
 # ── Public-facing (no auth required) ─────────────────────────────────────────
 
 [functions.append-to-google-sheet]

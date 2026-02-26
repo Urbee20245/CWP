@@ -15,6 +15,16 @@
   ],
   "rewrites": [
     {
+      "source": "/(.*)",
+      "destination": "/api/static-proxy",
+      "has": [
+        {
+          "type": "host",
+          "value": "(?!www\\.customwebsitesplus\\.com|customwebsitesplus\\.com|.*\\.vercel\\.app).*"
+        }
+      ]
+    },
+    {
       "source": "/((?!robots\\.txt|sitemap\\.xml).*)",
       "destination": "/index.html"
     }

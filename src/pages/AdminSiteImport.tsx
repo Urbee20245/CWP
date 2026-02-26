@@ -1,6 +1,7 @@
 "use client";
 
 import React, { useState, useEffect, useCallback, useRef } from 'react';
+import JSZip from 'jszip';
 import AdminLayout from '../components/AdminLayout';
 import {
   Download, Loader2, AlertTriangle, CheckCircle, Eye, Copy, ExternalLink,
@@ -8,6 +9,7 @@ import {
   Check, Save, Info, Calendar, Phone, FileText as FormIcon, Shield,
   Sparkles, MessageSquare, LayoutDashboard, ArrowRight, ToggleLeft,
   ToggleRight, AlertCircle, Code2, Database, Search, Github, X,
+  CloudUpload, Zap,
 } from 'lucide-react';
 import { supabase } from '../integrations/supabase/client';
 import { AdminService } from '../services/adminService';
@@ -103,12 +105,29 @@ const TONES = ['Professional', 'Friendly', 'Bold', 'Luxurious'] as const;
 
 // ─── Component ─────────────────────────────────────────────────────────────────
 
+type MainTab = 'import' | 'static-upload';
+
 const AdminSiteImport: React.FC = () => {
+  // ── Main tab ───────────────────────────────────────────────────────────────
+  const [mainTab, setMainTab] = useState<MainTab>('import');
+
   // ── Clients ────────────────────────────────────────────────────────────────
   const [clients, setClients] = useState<Client[]>([]);
   const [selectedClientId, setSelectedClientId] = useState('');
   const [loadingClients, setLoadingClients] = useState(true);
   const [brief, setBrief] = useState<WebsiteBrief | null>(null);
+
+  // ── Static site upload ─────────────────────────────────────────────────────
+  const [staticClientId, setStaticClientId] = useState('');
+  const [staticZipFile, setStaticZipFile] = useState<File | null>(null);
+  const [staticDomain, setStaticDomain] = useState('');
+  const [staticUploading, setStaticUploading] = useState(false);
+  const [staticTotal, setStaticTotal] = useState(0);
+  const [staticProgress, setStaticProgress] = useState(0);
+  const [staticError, setStaticError] = useState<string | null>(null);
+  const [staticSuccess, setStaticSuccess] = useState<string | null>(null);
+  const [staticIsDragging, setStaticIsDragging] = useState(false);
+  const staticZipRef = useRef<HTMLInputElement>(null);
 
   // ── Import source ──────────────────────────────────────────────────────────
   const [importSource, setImportSource] = useState<ImportSource>('url');
@@ -315,6 +334,106 @@ const AdminSiteImport: React.FC = () => {
 
   const previewUrl = result?.client_slug ? `/site/${result.client_slug}` : null;
 
+  // ── Static site upload logic ───────────────────────────────────────────────
+
+  const selectedStaticClient = clients.find(c => c.id === staticClientId);
+
+  const handleStaticZipDrop = (e: React.DragEvent) => {
+    e.preventDefault();
+    setStaticIsDragging(false);
+    const file = e.dataTransfer.files[0];
+    if (file && (file.name.endsWith('.zip') || file.type === 'application/zip')) {
+      setStaticZipFile(file);
+      setStaticError(null);
+      setStaticSuccess(null);
+    }
+  };
+
+  const uploadStaticSite = async () => {
+    if (!staticClientId || !staticZipFile) return;
+    const client = clients.find(c => c.id === staticClientId);
+    if (!client) return;
+
+    // Derive slug from existing brief or from business name
+    const { data: existingBrief } = await supabase
+      .from('website_briefs')
+      .select('client_slug')
+      .eq('client_id', staticClientId)
+      .maybeSingle();
+
+    const clientSlug = existingBrief?.client_slug ||
+      client.business_name.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '');
+
+    setStaticUploading(true);
+    setStaticError(null);
+    setStaticSuccess(null);
+    setStaticProgress(0);
+    setStaticTotal(0);
+
+    try {
+      const zip = await JSZip.loadAsync(staticZipFile);
+      const files = Object.keys(zip.files).filter(name => !zip.files[name].dir);
+      setStaticTotal(files.length);
+
+      let uploaded = 0;
+      for (const name of files) {
+        const content = await zip.files[name].async('blob');
+        // Strip root folder from path if present (dist/index.html → index.html)
+        const cleanPath = name.replace(/^[^/]+\//, '');
+        const storagePath = `${clientSlug}/${cleanPath}`;
+
+        const { error: uploadErr } = await supabase.storage
+          .from('static-sites')
+          .upload(storagePath, content, { upsert: true });
+
+        if (uploadErr) throw new Error(`Upload failed for ${cleanPath}: ${uploadErr.message}`);
+
+        uploaded++;
+        setStaticProgress(uploaded);
+      }
+
+      // Upsert the website_briefs row
+      const updatePayload: Record<string, any> = {
+        site_type: 'static',
+        static_dist_path: `${clientSlug}/`,
+        is_published: true,
+        client_slug: clientSlug,
+      };
+      if (staticDomain.trim()) updatePayload.custom_domain = staticDomain.trim();
+
+      const { data: existing } = await supabase
+        .from('website_briefs')
+        .select('id')
+        .eq('client_id', staticClientId)
+        .maybeSingle();
+
+      if (existing?.id) {
+        await supabase.from('website_briefs').update(updatePayload).eq('client_id', staticClientId);
+      } else {
+        await supabase.from('website_briefs').insert({
+          client_id: staticClientId,
+          business_name: client.business_name,
+          industry: '',
+          services_offered: '',
+          location: '',
+          tone: 'Professional',
+          primary_color: '#4F46E5',
+          generation_status: 'complete',
+          ...updatePayload,
+        });
+      }
+
+      const liveUrl = staticDomain.trim()
+        ? `https://${staticDomain.trim()}`
+        : `${window.location.origin}/site/${clientSlug}`;
+      setStaticSuccess(liveUrl);
+    } catch (err: any) {
+      setStaticError(err.message || 'Upload failed');
+    } finally {
+      setStaticUploading(false);
+    }
+  };
+
   // ─── Render ──────────────────────────────────────────────────────────────────
 
   return (
@@ -322,7 +441,7 @@ const AdminSiteImport: React.FC = () => {
       <div className="p-6 max-w-7xl mx-auto">
 
         {/* Page header */}
-        <div className="mb-8">
+        <div className="mb-6">
           <h1 className="text-3xl font-bold text-slate-900 flex items-center gap-3">
             <Download className="w-8 h-8 text-indigo-600" />
             Site Import
@@ -332,6 +451,201 @@ const AdminSiteImport: React.FC = () => {
           </p>
         </div>
 
+        {/* Tab navigation */}
+        <div className="flex gap-1 mb-6 bg-slate-100 rounded-xl p-1 w-fit">
+          <button
+            onClick={() => setMainTab('import')}
+            className={`flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-semibold transition-colors ${
+              mainTab === 'import'
+                ? 'bg-white text-indigo-700 shadow-sm'
+                : 'text-slate-600 hover:text-slate-900'
+            }`}
+          >
+            <Download className="w-4 h-4" />
+            AI Site Import
+          </button>
+          <button
+            onClick={() => setMainTab('static-upload')}
+            className={`flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-semibold transition-colors ${
+              mainTab === 'static-upload'
+                ? 'bg-white text-indigo-700 shadow-sm'
+                : 'text-slate-600 hover:text-slate-900'
+            }`}
+          >
+            <CloudUpload className="w-4 h-4" />
+            Upload Static Site
+          </button>
+        </div>
+
+        {/* ═══ STATIC UPLOAD TAB ════════════════════════════════════════════ */}
+        {mainTab === 'static-upload' && (
+          <div className="max-w-2xl space-y-6">
+            <div className="bg-indigo-50 border border-indigo-200 rounded-xl p-4 text-sm text-indigo-800 flex gap-3">
+              <Zap className="w-5 h-5 mt-0.5 shrink-0" />
+              <div>
+                <strong>Static Site Hosting</strong> — Upload a pre-built <code>/dist</code> ZIP and serve it pixel-perfect on a custom domain with SSL. Zero changes to the original site's look or functionality. Lead capture goes to <code>static_site_leads</code>.
+              </div>
+            </div>
+
+            {/* Client selector */}
+            <div className="bg-white rounded-2xl border border-slate-200 shadow-sm p-5 space-y-4">
+              <h2 className="text-sm font-semibold text-slate-700">1. Select Client</h2>
+              <select
+                className="w-full border border-slate-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                value={staticClientId}
+                onChange={e => { setStaticClientId(e.target.value); setStaticSuccess(null); setStaticError(null); }}
+                disabled={staticUploading || loadingClients}
+              >
+                <option value="">Select a client...</option>
+                {clients.map(c => (
+                  <option key={c.id} value={c.id}>{c.business_name}</option>
+                ))}
+              </select>
+
+              {/* Custom domain */}
+              <div>
+                <label className="block text-sm font-semibold text-slate-700 mb-1">
+                  Custom Domain <span className="text-slate-400 font-normal">(optional)</span>
+                </label>
+                <div className="flex items-center gap-2">
+                  <Globe className="w-4 h-4 text-slate-400" />
+                  <input
+                    type="text"
+                    className="flex-1 border border-slate-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                    placeholder="cassandrasmith.com"
+                    value={staticDomain}
+                    onChange={e => setStaticDomain(e.target.value)}
+                    disabled={staticUploading}
+                  />
+                </div>
+                <p className="text-xs text-slate-400 mt-1">Point domain DNS to Vercel after upload. Leave blank to use the CWP preview URL.</p>
+              </div>
+            </div>
+
+            {/* ZIP drop zone */}
+            <div className="bg-white rounded-2xl border border-slate-200 shadow-sm p-5 space-y-3">
+              <h2 className="text-sm font-semibold text-slate-700">2. Upload Built /dist ZIP</h2>
+              <div
+                className={`border-2 border-dashed rounded-xl p-8 text-center cursor-pointer transition-colors ${
+                  staticIsDragging
+                    ? 'border-indigo-400 bg-indigo-50'
+                    : staticZipFile
+                    ? 'border-emerald-400 bg-emerald-50'
+                    : 'border-slate-300 hover:border-indigo-300 hover:bg-slate-50'
+                }`}
+                onDragOver={e => { e.preventDefault(); setStaticIsDragging(true); }}
+                onDragLeave={() => setStaticIsDragging(false)}
+                onDrop={handleStaticZipDrop}
+                onClick={() => !staticUploading && staticZipRef.current?.click()}
+              >
+                {staticZipFile ? (
+                  <div className="flex flex-col items-center gap-2">
+                    <FileArchive className="w-8 h-8 text-emerald-500" />
+                    <p className="text-sm font-semibold text-emerald-700">{staticZipFile.name}</p>
+                    <p className="text-xs text-slate-400">{(staticZipFile.size / 1024 / 1024).toFixed(2)} MB</p>
+                    {!staticUploading && (
+                      <button
+                        className="text-xs text-slate-500 underline"
+                        onClick={e => { e.stopPropagation(); setStaticZipFile(null); setStaticSuccess(null); }}
+                      >
+                        Remove
+                      </button>
+                    )}
+                  </div>
+                ) : (
+                  <div className="flex flex-col items-center gap-2 text-slate-500">
+                    <Upload className="w-8 h-8" />
+                    <p className="text-sm font-semibold">Drag & drop your dist.zip here</p>
+                    <p className="text-xs">or click to browse</p>
+                  </div>
+                )}
+                <input
+                  ref={staticZipRef}
+                  type="file"
+                  accept=".zip,application/zip"
+                  className="hidden"
+                  onChange={e => {
+                    const f = e.target.files?.[0];
+                    if (f) { setStaticZipFile(f); setStaticError(null); setStaticSuccess(null); }
+                  }}
+                />
+              </div>
+            </div>
+
+            {/* Progress */}
+            {staticUploading && staticTotal > 0 && (
+              <div className="bg-white rounded-2xl border border-slate-200 shadow-sm p-5 space-y-3">
+                <div className="flex justify-between text-sm text-slate-700">
+                  <span className="font-semibold flex items-center gap-2">
+                    <Loader2 className="w-4 h-4 animate-spin" />
+                    Uploading files…
+                  </span>
+                  <span className="text-slate-500">{staticProgress} / {staticTotal}</span>
+                </div>
+                <div className="w-full bg-slate-100 rounded-full h-2.5">
+                  <div
+                    className="bg-indigo-600 h-2.5 rounded-full transition-all"
+                    style={{ width: `${Math.round((staticProgress / staticTotal) * 100)}%` }}
+                  />
+                </div>
+              </div>
+            )}
+
+            {/* Error */}
+            {staticError && (
+              <div className="p-4 bg-red-50 border border-red-200 rounded-xl text-sm text-red-700 flex gap-2">
+                <AlertTriangle className="w-4 h-4 mt-0.5 shrink-0" />
+                {staticError}
+              </div>
+            )}
+
+            {/* Success */}
+            {staticSuccess && (
+              <div className="p-4 bg-emerald-50 border border-emerald-200 rounded-xl space-y-2">
+                <p className="text-sm font-semibold text-emerald-800 flex items-center gap-2">
+                  <CheckCircle className="w-4 h-4" />
+                  Site uploaded &amp; activated!
+                </p>
+                <div className="flex items-center gap-2">
+                  <a
+                    href={staticSuccess}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="text-sm text-indigo-600 underline break-all"
+                  >
+                    {staticSuccess}
+                  </a>
+                  <button
+                    onClick={() => navigator.clipboard.writeText(staticSuccess)}
+                    className="p-1.5 rounded border border-slate-200 hover:bg-slate-50"
+                    title="Copy URL"
+                  >
+                    <Copy className="w-3.5 h-3.5 text-slate-500" />
+                  </button>
+                </div>
+                {staticDomain && (
+                  <p className="text-xs text-slate-500">Point <strong>{staticDomain}</strong> DNS to Vercel's IP to activate SSL on the custom domain.</p>
+                )}
+              </div>
+            )}
+
+            {/* Upload button */}
+            <button
+              disabled={!staticClientId || !staticZipFile || staticUploading}
+              onClick={uploadStaticSite}
+              className="w-full flex items-center justify-center gap-2 px-6 py-3 bg-indigo-600 hover:bg-indigo-700 disabled:opacity-50 text-white font-semibold rounded-xl transition-colors"
+            >
+              {staticUploading ? (
+                <><Loader2 className="w-4 h-4 animate-spin" /> Uploading…</>
+              ) : (
+                <><CloudUpload className="w-4 h-4" /> Upload &amp; Activate</>
+              )}
+            </button>
+          </div>
+        )}
+
+        {/* ═══ IMPORT TAB ══════════════════════════════════════════════════════ */}
+        {mainTab === 'import' && (
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
 
           {/* ── Left: Configuration ───────────────────────────────────────── */}
@@ -1121,6 +1435,7 @@ const AdminSiteImport: React.FC = () => {
             )}
           </div>
         </div>
+        )}
       </div>
     </AdminLayout>
   );

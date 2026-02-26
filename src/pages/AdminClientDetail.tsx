@@ -17,6 +17,7 @@ import { format } from 'date-fns';
 import { ensureArray } from '../utils/dataNormalization'; // Import normalization utility
 import { useAuth } from '../hooks/useAuth';
 import AdminClientLeadsPanel from '../components/AdminClientLeadsPanel';
+import StaticSiteLeadsPanel from '../components/StaticSiteLeadsPanel';
 import ExportSiteButton from '../components/ExportSiteButton';
 
 interface ProjectSummary {
@@ -1197,6 +1198,19 @@ const AdminClientDetail: React.FC = () => {
                 </div>
                 <div className="bg-white p-5">
                   <AdminClientLeadsPanel clientId={client.id} />
+                </div>
+              </div>
+            )}
+
+            {/* Static Site Leads */}
+            {client && (
+              <div className="overflow-hidden rounded-2xl border border-slate-200 shadow-sm">
+                <div className="bg-gradient-to-r from-indigo-700 to-indigo-600 px-5 py-3.5 flex items-center gap-2.5">
+                  <Globe className="w-4 h-4 text-indigo-200" />
+                  <h2 className="text-xs font-bold text-white tracking-widest uppercase">Static Site Leads</h2>
+                </div>
+                <div className="bg-white p-5">
+                  <StaticSiteLeadsPanel clientId={client.id} />
                 </div>
               </div>
             )}

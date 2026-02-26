@@ -91,6 +91,10 @@ export interface WebsiteBrief {
   premium_features: PremiumFeatureId[];
   /** ID of the AI provider last used to generate/edit this site */
   ai_provider: string | null;
+  /** 'cwp' = rendered by CWP JSON engine; 'static' = served from Supabase Storage */
+  site_type: 'cwp' | 'static';
+  /** Storage path prefix for static sites, e.g. 'gapbridgecs/' */
+  static_dist_path: string | null;
   created_at: string;
   updated_at: string;
 }
