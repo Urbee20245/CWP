@@ -99,6 +99,22 @@ interface ExtractedContent {
   layoutHints: string[];
 }
 
+// ─── Universal extraction types ───────────────────────────────────────────────
+
+type ProjectType = 'static_html' | 'react_tsx' | 'vue' | 'svelte' | 'next' | 'unknown';
+
+interface ExtractedImage {
+  src: string;
+  alt: string;
+  context: 'hero' | 'background' | 'gallery' | 'team' | 'logo' | 'general';
+}
+
+interface ExtractedLink {
+  text: string;
+  href: string;
+  context: 'nav' | 'cta' | 'contact' | 'general';
+}
+
 // ─── HTML / CSS extraction helpers ───────────────────────────────────────────
 
 function stripTags(html: string): string {
@@ -516,13 +532,15 @@ function mergeExtracted(pages: ExtractedContent[]): ExtractedContent {
 
 // ─── URL scraper ──────────────────────────────────────────────────────────────
 
-async function scrapeUrl(url: string): Promise<{ content: ExtractedContent; backendFeatures: string[] }> {
+async function scrapeUrl(url: string): Promise<{ content: ExtractedContent; backendFeatures: string[]; images: ExtractedImage[]; links: ExtractedLink[] }> {
   const normalizedUrl = url.startsWith('http') ? url : `https://${url}`;
   const baseUrl = new URL(normalizedUrl);
   const allHtml: string[] = [];
   const allCssTexts: string[] = [];
   const visited = new Set<string>();
   const backendFeatures = new Set<string>();
+  const scrapedImages: ExtractedImage[] = [];
+  const scrapedLinks: ExtractedLink[] = [];
 
   const fetchPage = async (pageUrl: string): Promise<string | null> => {
     try {
@@ -563,6 +581,21 @@ async function scrapeUrl(url: string): Promise<{ content: ExtractedContent; back
   visited.add(normalizedUrl);
 
   detectBackendFeatures(mainHtml).forEach(f => backendFeatures.add(f));
+
+  // Extract images and links from main HTML
+  for (const m of mainHtml.matchAll(/<img[^>]+src=["']([^"']+)["'][^>]*(?:alt=["']([^"']*)["'])?/gi)) {
+    try {
+      const src = m[1].startsWith('http') ? m[1] : new URL(m[1], baseUrl).toString();
+      scrapedImages.push({ src, alt: m[2] || '', context: inferImageContext(m[2] || '', m[0]) });
+    } catch { /* skip invalid URLs */ }
+  }
+  for (const m of mainHtml.matchAll(/<a[^>]+href=["']([^"'#?]+)["'][^>]*>([\s\S]*?)<\/a>/gi)) {
+    const text = stripTags(m[2]).trim();
+    const href = m[1];
+    if (text && text.length < 60) scrapedLinks.push({ text, href, context: href.startsWith('/') ? 'nav' : 'general' });
+  }
+  for (const m of mainHtml.matchAll(/["'](tel:[^"']+)["']/g)) scrapedLinks.push({ text: '', href: m[1], context: 'contact' });
+  for (const m of mainHtml.matchAll(/["'](mailto:[^"']+)["']/g)) scrapedLinks.push({ text: '', href: m[1], context: 'contact' });
 
   // Extract and fetch ALL linked CSS files (not just first 5)
   const cssLinkRegex = /<link[^>]+rel=["']stylesheet["'][^>]+href=["']([^"']+)["']|<link[^>]+href=["']([^"']+)["'][^>]+rel=["']stylesheet["']/gi;
@@ -621,12 +654,311 @@ async function scrapeUrl(url: string): Promise<{ content: ExtractedContent; back
   return {
     content: mergeExtracted(contents),
     backendFeatures: Array.from(backendFeatures),
+    images: scrapedImages,
+    links: scrapedLinks,
   };
 }
 
-// ─── ZIP extractor ────────────────────────────────────────────────────────────
+// ─── Universal extraction helpers ─────────────────────────────────────────────
 
-function extractZip(zipBytes: Uint8Array): { content: ExtractedContent; backendFeatures: string[] } {
+function detectProjectType(fileNames: string[]): ProjectType {
+  const all = fileNames.join('\n').toLowerCase();
+  if (all.includes('next.config')) return 'next';
+  if (fileNames.some(f => f.endsWith('.vue'))) return 'vue';
+  if (fileNames.some(f => f.endsWith('.svelte'))) return 'svelte';
+  if (fileNames.some(f => f.endsWith('.tsx') || f.endsWith('.jsx'))) return 'react_tsx';
+  if (fileNames.some(f => f.endsWith('.html'))) return 'static_html';
+  return 'unknown';
+}
+
+function inferImageContext(alt: string, tagOrPath: string): ExtractedImage['context'] {
+  const combined = (alt + ' ' + tagOrPath).toLowerCase();
+  if (combined.match(/logo/)) return 'logo';
+  if (combined.match(/hero|banner|cover|header|splash/)) return 'hero';
+  if (combined.match(/background|bg-/)) return 'background';
+  if (combined.match(/team|staff|person|avatar|portrait|headshot|founder|owner/)) return 'team';
+  if (combined.match(/gallery|portfolio|work|project/)) return 'gallery';
+  return 'general';
+}
+
+function resolveAssetUrl(path: string, owner: string, repo: string, branch: string): string {
+  if (path.startsWith('http')) return path;
+  const clean = path.replace(/^\.\//, '').replace(/^\//, '');
+  return `https://raw.githubusercontent.com/${owner}/${repo}/${branch}/${clean}`;
+}
+
+function extractColorsFromReact(source: string, css: string, unzipped: Record<string, Uint8Array>): ColorPalette {
+  const primary = new Set<string>();
+  const background = new Set<string>();
+  const text = new Set<string>();
+
+  // From CSS files
+  extractColors(css).forEach(c => primary.add(c));
+
+  // From tailwind.config — colors defined there are the brand colors
+  for (const [path, bytes] of Object.entries(unzipped)) {
+    if (path.toLowerCase().includes('tailwind.config')) {
+      const config = strFromU8(bytes);
+      for (const m of config.matchAll(/#([0-9a-f]{6}|[0-9a-f]{3})\b/gi)) {
+        const n = normalizeColor(m[0]);
+        if (n) primary.add(n);
+      }
+    }
+    if (path.toLowerCase().endsWith('index.html')) {
+      const html = strFromU8(bytes);
+      const configMatch = html.match(/tailwind\.config\s*=\s*\{([\s\S]+?)\}/);
+      if (configMatch) {
+        for (const m of configMatch[1].matchAll(/#([0-9a-f]{6}|[0-9a-f]{3})\b/gi)) {
+          const n = normalizeColor(m[0]);
+          if (n) primary.add(n);
+        }
+      }
+    }
+  }
+
+  // From source className strings — text-[#...] bg-[#...]
+  for (const m of source.matchAll(/(?:text|bg|border|ring|from|to|via)-\[#([0-9a-f]{6}|[0-9a-f]{3})\]/gi)) {
+    const n = normalizeColor('#' + m[1]);
+    if (n) {
+      if (m[0].startsWith('text')) text.add(n);
+      else if (m[0].startsWith('bg')) background.add(n);
+      else primary.add(n);
+    }
+  }
+
+  // Hex literals anywhere in source
+  for (const m of source.matchAll(/#([0-9a-f]{6})\b/gi)) {
+    const n = normalizeColor(m[0]);
+    if (n) primary.add(n);
+  }
+
+  const all = [...new Set([...primary, ...background, ...text])];
+  return {
+    primary: Array.from(primary).slice(0, 5),
+    background: Array.from(background).slice(0, 5),
+    text: Array.from(text).slice(0, 5),
+    all: all.slice(0, 15),
+  };
+}
+
+function extractFontsFromReact(source: string, css: string, indexHtml: string): string[] {
+  const fonts = new Set<string>();
+  for (const m of indexHtml.matchAll(/family=([A-Za-z+]+)/gi)) {
+    fonts.add(m[1].replace(/\+/g, ' ').split(':')[0]);
+  }
+  for (const m of (source + css).matchAll(/font-family\s*[=:]\s*['"`]?([A-Za-z][A-Za-z\s-]+?)['"`]?\s*[,;}/]/gi)) {
+    const f = m[1].trim();
+    if (!['serif', 'sans-serif', 'monospace', 'cursive', 'fantasy'].includes(f.toLowerCase())) fonts.add(f);
+  }
+  for (const m of source.matchAll(/sans\s*:\s*\[\s*['"]([^'"]+)['"]/g)) fonts.add(m[1]);
+  return Array.from(fonts).slice(0, 8);
+}
+
+function detectLayoutHintsFromReact(source: string, css: string): string[] {
+  const hints: string[] = [];
+  if (source.includes('grid') || css.includes('display: grid')) hints.push('uses-css-grid');
+  if (source.includes('flex') || css.includes('display: flex')) hints.push('uses-flexbox');
+  if (source.match(/md:grid-cols-3|lg:grid-cols-3/)) hints.push('three-column-layout');
+  if (source.match(/md:grid-cols-2|lg:grid-cols-2/)) hints.push('two-column-layout');
+  if (source.match(/AccordionItem|<details|isOpen/)) hints.push('has-accordion');
+  if (source.match(/useState.*step|setStep|FormStep/)) hints.push('has-multi-step-form');
+  if (source.match(/<nav|NavLink|navItems/)) hints.push('has-navigation');
+  if (source.match(/bg-slate-900|bg-gray-900|bg-black/)) hints.push('dark-hero');
+  if (source.match(/sticky|fixed.*top/)) hints.push('sticky-header');
+  return hints;
+}
+
+function extractFromReactProject(
+  unzipped: Record<string, Uint8Array>,
+  owner: string,
+  repo: string,
+  branch: string,
+): { content: ExtractedContent; images: ExtractedImage[]; links: ExtractedLink[]; colors: ColorPalette; rawSourceMap: Record<string, string> } {
+  // 1. Collect all component files
+  const componentFiles: Record<string, string> = {};
+  const cssFiles: Record<string, string> = {};
+
+  for (const [path, bytes] of Object.entries(unzipped)) {
+    if (path.includes('node_modules') || path.includes('.git')) continue;
+    const lower = path.toLowerCase();
+    if (lower.endsWith('.tsx') || lower.endsWith('.jsx') || lower.endsWith('.ts') || lower.endsWith('.js')) {
+      if (lower.match(/vite\.config|next\.config|tailwind\.config|postcss|jest|test\.|spec\.|\.d\.ts$/)) continue;
+      componentFiles[path] = strFromU8(bytes);
+    }
+    if (lower.endsWith('.css') || lower.endsWith('.scss') || lower.endsWith('.sass')) {
+      cssFiles[path] = strFromU8(bytes);
+    }
+  }
+
+  // 2. Get index.html for meta tags/title/colors
+  let indexHtml = '';
+  for (const [path, bytes] of Object.entries(unzipped)) {
+    if (path.toLowerCase().endsWith('index.html') && !path.includes('node_modules')) {
+      indexHtml = strFromU8(bytes);
+      break;
+    }
+  }
+
+  const allCss = Object.values(cssFiles).join('\n');
+  const allSource = Object.values(componentFiles).join('\n');
+
+  // 3. Extract text content from JSX
+  const jsxTexts: string[] = [];
+  for (const m of allSource.matchAll(/>([^<>{}\n\r]{3,300})</g)) {
+    const text = m[1].trim();
+    if (text && !text.startsWith('{') && !text.startsWith('//') && !text.startsWith('*') && text.length > 2) {
+      jsxTexts.push(text);
+    }
+  }
+  for (const m of allSource.matchAll(/["'`]([A-Z][^"'`\n]{9,300})["'`]/g)) {
+    const text = m[1].trim();
+    if (!text.includes('${') && !text.match(/^https?:\/\//)) jsxTexts.push(text);
+  }
+  for (const m of allSource.matchAll(/`([A-Z][^`\n]{9,300})`/g)) {
+    jsxTexts.push(m[1].trim());
+  }
+
+  // 4. Extract headings
+  const h1s: string[] = [];
+  const h2s: string[] = [];
+  const h3s: string[] = [];
+  for (const m of allSource.matchAll(/<h1[^>]*>\s*([^<{]{3,200})\s*<\/h1>/gi)) h1s.push(m[1].trim());
+  for (const m of allSource.matchAll(/<h2[^>]*>\s*([^<{]{3,200})\s*<\/h2>/gi)) h2s.push(m[1].trim());
+  for (const m of allSource.matchAll(/<h3[^>]*>\s*([^<{]{3,200})\s*<\/h3>/gi)) h3s.push(m[1].trim());
+  for (const m of allSource.matchAll(/<h1[^>]*>([\s\S]{3,300}?)<\/h1>/gi)) {
+    const text = m[1].replace(/<[^>]+>/g, '').replace(/[{}]/g, '').trim();
+    if (text.length > 2) h1s.push(text);
+  }
+
+  // 5. Extract images
+  const images: ExtractedImage[] = [];
+  for (const m of allSource.matchAll(/const\s+\w*(?:URL|Url|Photo|photo|Image|image|Img|img|Src|src|Banner|banner|Hero|hero|Logo|logo|Bg|bg)\w*\s*=\s*["'`]([^"'`\n]+)["'`]/gi)) {
+    if (m[1].startsWith('http') || m[1].startsWith('/')) {
+      const resolved = m[1].startsWith('http') ? m[1] : resolveAssetUrl(m[1], owner, repo, branch);
+      images.push({ src: resolved, alt: '', context: inferImageContext('', m[0]) });
+    }
+  }
+  for (const m of allSource.matchAll(/\bsrc\s*=\s*[{]?\s*["'`]([^"'`{}]+)["'`]\s*[}]?/gi)) {
+    const src = m[1].trim();
+    if (src.length > 4 && !src.includes('\n')) {
+      const resolved = src.startsWith('http') ? src : resolveAssetUrl(src, owner, repo, branch);
+      images.push({ src: resolved, alt: '', context: inferImageContext('', m[0]) });
+    }
+  }
+  for (const m of allCss.matchAll(/url\(["']?([^"')]+)["']?\)/gi)) {
+    const resolved = m[1].startsWith('http') ? m[1] : resolveAssetUrl(m[1], owner, repo, branch);
+    if (!resolved.startsWith('data:')) images.push({ src: resolved, alt: '', context: 'background' });
+  }
+  for (const m of allSource.matchAll(/url\(['"]?([^'")\n]+)['"]?\)/gi)) {
+    const resolved = m[1].startsWith('http') ? m[1] : resolveAssetUrl(m[1], owner, repo, branch);
+    if (!resolved.startsWith('data:')) images.push({ src: resolved, alt: '', context: 'background' });
+  }
+  for (const [path] of Object.entries(unzipped)) {
+    if (path.match(/\.(png|jpg|jpeg|gif|webp|svg)$/i) && !path.includes('node_modules')) {
+      const relativePath = path.split('/').slice(1).join('/');
+      const url = resolveAssetUrl('/' + relativePath, owner, repo, branch);
+      images.push({ src: url, alt: '', context: inferImageContext(path, path) });
+    }
+  }
+
+  // 6. Extract links
+  const links: ExtractedLink[] = [];
+  for (const m of allSource.matchAll(/navigate\(['"]([^'"]+)['"]\)/g)) {
+    links.push({ text: '', href: m[1], context: 'cta' });
+  }
+  for (const m of allSource.matchAll(/href\s*=\s*["'`]([^"'`\n]+)["'`]/gi)) {
+    links.push({ text: '', href: m[1], context: m[1].startsWith('/') ? 'nav' : 'general' });
+  }
+  for (const m of allSource.matchAll(/["'`](tel:[^"'`\n]+)["'`]/g)) links.push({ text: '', href: m[1], context: 'contact' });
+  for (const m of allSource.matchAll(/["'`](mailto:[^"'`\n]+)["'`]/g)) links.push({ text: '', href: m[1], context: 'contact' });
+
+  // 7. Extract colors
+  const colors = extractColorsFromReact(allSource, allCss, unzipped);
+
+  // 8. Extract phone/email
+  const phoneNumbers = extractPhone(allSource + indexHtml);
+  const emailAddresses = extractEmails(allSource + indexHtml);
+
+  // 9. Extract title
+  let title = '';
+  const titleMatch = indexHtml.match(/<title[^>]*>([\s\S]*?)<\/title>/i);
+  if (titleMatch) title = stripTags(titleMatch[1]).trim();
+  if (!title) title = h1s[0] || h2s[0] || 'Imported Site';
+
+  // 10. Extract meta description
+  const metaDescription = extractMeta(indexHtml, 'description') || extractMeta(indexHtml, 'og:description') || '';
+
+  // 11. Build nav links from route definitions
+  const navLinks: string[] = [];
+  for (const m of allSource.matchAll(/(?:path\s*[:=]\s*|to\s*=\s*)["'`]\/([a-z][a-z0-9-]*)["'`]/gi)) {
+    navLinks.push(m[1].charAt(0).toUpperCase() + m[1].slice(1));
+  }
+  for (const m of allSource.matchAll(/<(?:NavLink|Link)[^>]*>([^<]{2,30})<\/(?:NavLink|Link)>/g)) {
+    const text = m[1].trim();
+    if (text) navLinks.push(text);
+  }
+
+  const rawText = jsxTexts.join(' ').slice(0, 12000);
+  const cssRules = parseCSSRules(allCss);
+  const layoutHints = detectLayoutHintsFromReact(allSource, allCss);
+  const fonts = extractFontsFromReact(allSource, allCss, indexHtml);
+
+  const content: ExtractedContent = {
+    title,
+    metaDescription,
+    h1s: [...new Set(h1s)].slice(0, 8),
+    h2s: [...new Set(h2s)].slice(0, 15),
+    h3s: [...new Set(h3s)].slice(0, 20),
+    paragraphs: jsxTexts.filter(t => t.length > 40).slice(0, 30),
+    navLinks: [...new Set(navLinks)].slice(0, 15),
+    listItems: jsxTexts.filter(t => t.length < 100 && t.length > 5).slice(0, 25),
+    colors: colors.all.slice(0, 10),
+    fonts,
+    phoneNumbers,
+    emailAddresses,
+    addresses: [],
+    rawText,
+    cssRules,
+    colorPalette: colors,
+    fontDefinitions: [],
+    dominantSpacing: [],
+    inlineStyleSample: [],
+    layoutHints,
+  };
+
+  return { content, images, links, colors, rawSourceMap: componentFiles };
+}
+
+function extractFromVueSvelteProject(
+  unzipped: Record<string, Uint8Array>,
+  _owner: string,
+  _repo: string,
+  _branch: string,
+): ExtractedContent {
+  const allTemplateContent: string[] = [];
+  const allStyleContent: string[] = [];
+
+  for (const [path, bytes] of Object.entries(unzipped)) {
+    if (path.includes('node_modules')) continue;
+    const content = strFromU8(bytes);
+    if (path.endsWith('.vue') || path.endsWith('.svelte')) {
+      const templateMatch = content.match(/<template>([\s\S]*?)<\/template>/i);
+      if (templateMatch) allTemplateContent.push(templateMatch[1]);
+      const styleMatch = content.match(/<style[^>]*>([\s\S]*?)<\/style>/i);
+      if (styleMatch) allStyleContent.push(styleMatch[1]);
+    }
+  }
+
+  const combined = allTemplateContent.join('\n');
+  return parseHtml(combined, allStyleContent);
+}
+
+// ─── Universal ZIP extractor ──────────────────────────────────────────────────
+
+async function universalExtractZip(
+  zipBytes: Uint8Array,
+  githubMeta?: { owner: string; repo: string; branch: string },
+): Promise<{ content: ExtractedContent; images: ExtractedImage[]; links: ExtractedLink[]; backendFeatures: string[]; projectType: ProjectType }> {
   let unzipped: Record<string, Uint8Array>;
   try {
     unzipped = unzipSync(zipBytes);
@@ -634,42 +966,86 @@ function extractZip(zipBytes: Uint8Array): { content: ExtractedContent; backendF
     throw new Error(`Failed to extract ZIP: ${e.message}`);
   }
 
-  const htmlFiles = Object.entries(unzipped)
-    .filter(([name]) => name.endsWith('.html') || name.endsWith('.htm'))
-    .sort(([a], [b]) => {
-      const aDepth = a.split('/').length;
-      const bDepth = b.split('/').length;
-      if (aDepth !== bDepth) return aDepth - bDepth;
-      if (a.includes('index')) return -1;
-      if (b.includes('index')) return 1;
-      return 0;
-    })
-    .slice(0, 10);
+  const fileNames = Object.keys(unzipped);
+  const projectType = detectProjectType(fileNames);
+  const owner = githubMeta?.owner || 'unknown';
+  const repo = githubMeta?.repo || 'unknown';
+  const branch = githubMeta?.branch || 'main';
 
-  if (htmlFiles.length === 0) {
-    throw new Error('No HTML files found in ZIP.');
-  }
+  console.log(`[import-site] Detected project type: ${projectType}, files: ${fileNames.length}`);
 
   const backendFeatures = new Set<string>();
+  let content: ExtractedContent;
+  let images: ExtractedImage[] = [];
+  let links: ExtractedLink[] = [];
 
-  // Extract ALL CSS files (no artificial limit)
-  const cssFiles = Object.entries(unzipped).filter(([name]) => name.endsWith('.css'));
-  const allCssTexts = cssFiles.map(([, b]) => strFromU8(b));
+  if (projectType === 'react_tsx' || projectType === 'next') {
+    const result = extractFromReactProject(unzipped, owner, repo, branch);
+    content = result.content;
+    images = result.images;
+    links = result.links;
+    const allSource = Object.values(result.rawSourceMap).join('\n');
+    if (allSource.match(/fetch\(|axios\.|api\//i)) backendFeatures.add('api_calls');
+    if (allSource.match(/useState.*step|multi.*step|FormStep/i)) backendFeatures.add('multi_step_form');
+    if (allSource.match(/supabase|firebase|prisma/i)) backendFeatures.add('database');
+    if (allSource.match(/<form|onSubmit|handleSubmit/i)) backendFeatures.add('contact_form');
+  } else if (projectType === 'vue' || projectType === 'svelte') {
+    content = extractFromVueSvelteProject(unzipped, owner, repo, branch);
+  } else {
+    // static_html or unknown — existing parseHtml path
+    const htmlFiles = fileNames
+      .filter(n => n.endsWith('.html') || n.endsWith('.htm'))
+      .sort((a, b) => {
+        if (a.includes('index')) return -1;
+        if (b.includes('index')) return 1;
+        return a.split('/').length - b.split('/').length;
+      })
+      .slice(0, 10);
 
-  const allHtml: string[] = [];
-  for (const [, bytes] of htmlFiles) {
-    const html = strFromU8(bytes);
-    allHtml.push(html);
-    detectBackendFeatures(html).forEach(f => backendFeatures.add(f));
+    if (htmlFiles.length === 0) {
+      throw new Error('No HTML or component files found. Please provide a valid website repository.');
+    }
+
+    const cssFileNames = fileNames.filter(n => n.endsWith('.css'));
+    const allCssTexts = cssFileNames.map(f => strFromU8(unzipped[f]));
+    const allHtml = htmlFiles.map(f => strFromU8(unzipped[f]));
+
+    for (const html of allHtml) {
+      for (const m of html.matchAll(/<img[^>]+src=["']([^"']+)["'][^>]*(?:alt=["']([^"']*)["'])?/gi)) {
+        const src = m[1].startsWith('http') ? m[1] : resolveAssetUrl(m[1], owner, repo, branch);
+        images.push({ src, alt: m[2] || '', context: inferImageContext(m[2] || '', m[0]) });
+      }
+      for (const m of html.matchAll(/<a[^>]+href=["']([^"'#]+)["'][^>]*>([\s\S]*?)<\/a>/gi)) {
+        const text = stripTags(m[2]).trim();
+        if (text && text.length < 60) links.push({ text, href: m[1], context: 'general' });
+      }
+      detectBackendFeatures(html).forEach(f => backendFeatures.add(f));
+    }
+
+    const contents = allHtml.map(html => parseHtml(html, allCssTexts));
+    content = mergeExtracted(contents);
   }
 
-  const contents = allHtml.map(html => parseHtml(html, allCssTexts));
-  return { content: mergeExtracted(contents), backendFeatures: Array.from(backendFeatures) };
+  // Dedupe images (remove duplicate src URLs)
+  const seenSrc = new Set<string>();
+  images = images.filter(img => {
+    if (!img.src || seenSrc.has(img.src)) return false;
+    seenSrc.add(img.src);
+    return true;
+  });
+
+  return {
+    content,
+    images,
+    links,
+    backendFeatures: Array.from(backendFeatures),
+    projectType,
+  };
 }
 
 // ─── GitHub ZIP fetcher ───────────────────────────────────────────────────────
 
-async function fetchGithubZip(rawUrl: string): Promise<Uint8Array> {
+async function fetchGithubZip(rawUrl: string): Promise<{ bytes: Uint8Array; owner: string; repo: string; branch: string }> {
   const normalized = rawUrl.trim().replace(/\.git$/, '').replace(/\/$/, '');
   let urlObj: URL;
   try {
@@ -706,7 +1082,7 @@ async function fetchGithubZip(rawUrl: string): Promise<Uint8Array> {
         signal: AbortSignal.timeout(30000),
       });
       if (res.ok) {
-        return new Uint8Array(await res.arrayBuffer());
+        return { bytes: new Uint8Array(await res.arrayBuffer()), owner, repo, branch };
       }
     } catch {
       /* try next */
@@ -733,10 +1109,12 @@ SCHEMA:
     "phone": string,
     "address": string,
     "primary_color": string,        // exact hex from colorPalette.primary[0]
+    "secondary_color": string,      // accent color if detected (e.g. gold alongside blue)
     "font_heading": "Inter" | "Playfair Display" | "Montserrat" | "Raleway",
     "font_body": "Inter" | "Lato" | "Open Sans",
     "logo_url": "",
-    "hero_image_url": ""
+    "hero_image_url": "",
+    "founder_photo_url": ""
   },
   "pages": [
     {
@@ -758,10 +1136,10 @@ SCHEMA:
 
 SECTION TYPES AND VARIANTS:
 - hero: "centered_cta" | "split_image_left" | "bold_statement"
-- services: "three_column_cards" | "icon_list" | "accordion"
+- services: "three_column_cards" | "four_column_icons" | "icon_list" | "accordion"
 - about: "left_text_right_stats" | "centered_story" | "founder_focus"
 - social_proof: "star_testimonials" | "review_wall" | "stats_bar"
-- contact_cta: "simple_form" | "phone_prominent" | "split_contact"
+- contact_cta: "simple_form" | "multi_step_form" | "phone_prominent" | "split_contact" | "dark_band"
 - faq: "accordion_simple" | "two_column"
 - stats: "four_number_bar"
 - gallery: "masonry_grid" | "simple_grid"
@@ -769,14 +1147,14 @@ SECTION TYPES AND VARIANTS:
 - blog_preview: "card_grid"
 
 CONTENT REQUIREMENTS:
-- hero: { headline, subheadline, cta_primary_text, cta_primary_link, background_style: "gradient"|"dark"|"light" }
-- services: { heading, services: [{ name, description, icon }] }
-- about: { heading, body, stat_1_number, stat_1_label, stat_2_number, stat_2_label }
+- hero: { headline, subheadline, cta_primary_text, cta_primary_link, cta_secondary_text, cta_secondary_link, background_image_url, background_style: "gradient"|"dark"|"light" }
+- services: { heading, services: [{ name, description, icon, image_url }] }
+- about: { heading, body, image_url, stat_1_number, stat_1_label, stat_2_number, stat_2_label }
 - social_proof: { heading, reviews: [{ author, stars, text }] }
 - contact_cta: { heading, subtext, phone, email, hours }
 - faq: { heading, faqs: [{ question, answer }] }
 - stats: { stats: [{ number, label }] }
-- gallery: { heading, subtext }
+- gallery: { heading, subtext, images: [{ url, caption, alt }] }
 - pricing_cards: { heading, subtext, tiers: [{ name, price, period, description, features, cta_text, highlighted }] }
 - blog_preview: { heading, subtext }
 
@@ -792,13 +1170,38 @@ DESIGN PRESERVATION RULES (MANDATORY):
 6. SPACING: Preserve visual hierarchy — if source has large headings, choose variants with prominent headings.
 7. HERO BACKGROUND: If source uses a dark hero, set background_style to "dark". Light source → "light". Gradient → "gradient".
 
+CONTENT FIDELITY RULES (MANDATORY — NEVER VIOLATE):
+1. IMAGES: Only use URLs from the "REAL IMAGE URLS" section. If that section is empty, use "". Never invent or guess URLs.
+2. LINKS: Only use hrefs from "REAL LINKS" section. For internal pages use "/about", "/services" etc. Never use "#" as a link.
+3. COPY: Use the EXACT text extracted from the source. Do not rephrase, improve, or summarize.
+   * Headings must match the H1/H2 from the source exactly (including capitalization)
+   * Service names, feature names, testimonial text — verbatim
+   * Statistics and numbers must be exact (e.g. "10+ Years", "0% Floor", "$2M+")
+4. CONTACT INFO: Phone and email must be exactly as extracted. Never substitute placeholder values.
+5. SECTIONS: Map every distinct content block you see in the extracted text to a CWP section.
+   * Multi-step contact form → section_type: "contact_cta", variant: "multi_step_form"
+   * Accordion FAQs → section_type: "faq", variant: "accordion_simple"
+   * Feature grid (4 items) → section_type: "services", variant: "four_column_icons"
+   * Stats bar → section_type: "stats", variant: "four_number_bar"
+   * Dark CTA band → section_type: "contact_cta", variant: "dark_band"
+   * Two-column about with photo → section_type: "about", variant: "founder_focus"
+6. MULTI-PAGE: Create one page entry per detected route/page. Each page's sections must use content scoped to that page, not content from other pages.
+7. COLORS: The secondary_color field must be populated if a distinct accent color exists (e.g. gold/amber alongside a primary blue — both must be captured).
+8. BACKGROUND IMAGES: If a section uses a dark overlay on an image, set: background_image_url to the real image URL AND background_style to "dark".
+
 VALIDATION CHECKLIST (verify before returning JSON):
 ✓ primary_color matches colorPalette.primary[0] exactly
 ✓ All source nav sections are represented as pages
 ✓ No extra pages or sections added beyond source
 ✓ Font selections reflect source typography
 ✓ Phone/email populated from extracted data
-✓ Hero style (dark/light/gradient) matches source`;
+✓ Hero style (dark/light/gradient) matches source
+✓ No invented image URLs (check every image field)
+✓ No "#" placeholder links
+✓ secondary_color populated if source has an accent color
+✓ All pages from source navigation are represented
+✓ Phone formatted as tel:+1XXXXXXXXXX
+✓ Email formatted as mailto:email@domain.com`;
 
 // ─── Generate website JSON via chosen AI provider ─────────────────────────────
 
@@ -807,6 +1210,9 @@ async function generateWebsiteJson(
   tone: string,
   providerId: string,
   primaryColorHint?: string,
+  images: ExtractedImage[] = [],
+  links: ExtractedLink[] = [],
+  projectType: ProjectType = 'unknown',
 ): Promise<any> {
   const colorList = content.colorPalette.all.join(', ') || content.colors.join(', ') || 'not detected';
   const fontList = content.fontDefinitions.length > 0
@@ -820,8 +1226,51 @@ async function generateWebsiteJson(
     .map(r => `${r.selector} { ${Object.entries(r.properties).map(([k,v]) => `${k}:${v}`).join('; ')} }`)
     .join('\n');
 
-  const userPrompt = `Migrate this existing website into the CWP website_json format with EXACT design fidelity.
+  // Build image block
+  const byCtx = (ctx: string) => images.filter(i => i.context === ctx).map(i => i.src).filter(Boolean);
+  const heroImgs = byCtx('hero').concat(byCtx('background'));
+  const galleryImgs = byCtx('gallery');
+  const teamImgs = byCtx('team');
+  const logoImgs = byCtx('logo');
 
+  const imageBlock = images.length > 0 ? `
+═══ REAL IMAGE URLS — USE THESE EXACTLY IN YOUR JSON OUTPUT ═══
+Hero/background images:
+  ${heroImgs.slice(0, 3).join('\n  ') || 'none'}
+Gallery images:
+  ${galleryImgs.slice(0, 10).join('\n  ') || 'none'}
+Team/person photos:
+  ${teamImgs.slice(0, 5).join('\n  ') || 'none'}
+Logo: ${logoImgs[0] || 'none'}
+All other images:
+  ${images.filter(i => !['hero', 'background', 'gallery', 'team', 'logo'].includes(i.context)).map(i => i.src).slice(0, 10).join('\n  ') || 'none'}
+
+RULE: Use EXACT URLs above. Never invent placeholder URLs. If no image fits a field, use "".
+` : '';
+
+  // Build link block
+  const ctaLinks = links.filter(l => l.context === 'cta');
+  const navLinks2 = links.filter(l => l.context === 'nav');
+  const contactLinks = links.filter(l => l.context === 'contact');
+
+  const linkBlock = links.length > 0 ? `
+═══ REAL LINKS — USE EXACT HREFS IN CTA FIELDS ═══
+Navigation: ${navLinks2.map(l => `${l.text} → ${l.href}`).join(', ') || 'none'}
+CTA buttons: ${ctaLinks.map(l => `${l.text} → ${l.href}`).join(', ') || 'none'}
+Contact: ${contactLinks.map(l => l.href).join(', ') || 'none'}
+Phone: ${content.phoneNumbers.map(p => `tel:${p.replace(/\D/g, '')}`).join(', ') || 'none'}
+Email: ${content.emailAddresses.map(e => `mailto:${e}`).join(', ') || 'none'}
+
+RULE: Use real hrefs for all cta_primary_link and cta_secondary_link fields. Never use "#".
+` : '';
+
+  const projectTypeHint = `
+═══ SOURCE PROJECT TYPE: ${projectType.toUpperCase()} ═══
+${projectType === 'react_tsx' || projectType === 'next' ? 'This is a React/TypeScript SPA. Content was extracted from .tsx/.jsx component files.' : ''}${projectType === 'static_html' ? 'This is a static HTML site.' : ''}${projectType === 'vue' ? 'This is a Vue.js app.' : ''}${projectType === 'svelte' ? 'This is a Svelte app.' : ''}
+`;
+
+  const userPrompt = `Migrate this existing website into the CWP website_json format with EXACT design fidelity.
+${imageBlock}${linkBlock}${projectTypeHint}
 ═══ COLOR SYSTEM ═══
 colorPalette.primary (use for primary_color): ${content.colorPalette.primary.join(', ') || 'not detected'}
 colorPalette.background: ${content.colorPalette.background.join(', ') || 'not detected'}
@@ -881,6 +1330,83 @@ Generate the complete website_json now. Use real content from the source. Primar
     .trim();
 
   return JSON.parse(cleaned);
+}
+
+// ─── Post-AI image validation and fallback ────────────────────────────────────
+
+function validateAndHydrateImages(
+  websiteJson: any,
+  images: ExtractedImage[],
+): any {
+  const heroImgs = images.filter(i => ['hero', 'background'].includes(i.context)).map(i => i.src);
+  const galleryImgs = images.filter(i => i.context === 'gallery').map(i => i.src);
+  const teamImgs = images.filter(i => i.context === 'team').map(i => i.src);
+  const logoImgs = images.filter(i => i.context === 'logo').map(i => i.src);
+  const allImgs = images.map(i => i.src);
+
+  const isPlaceholder = (url: string): boolean =>
+    !url || url === '#' || url === '' ||
+    url.includes('placeholder') || url.includes('example.com') ||
+    url.includes('via.placeholder') || url.includes('picsum') ||
+    url.includes('unsplash.com/photo-15') ||
+    url.startsWith('/images/') || url.startsWith('./images/');
+
+  // Fix global fields
+  if (isPlaceholder(websiteJson.global?.logo_url)) {
+    websiteJson.global.logo_url = logoImgs[0] || '';
+  }
+  if (isPlaceholder(websiteJson.global?.hero_image_url)) {
+    websiteJson.global.hero_image_url = heroImgs[0] || allImgs[0] || '';
+  }
+  if (isPlaceholder(websiteJson.global?.founder_photo_url)) {
+    websiteJson.global.founder_photo_url = teamImgs[0] || '';
+  }
+
+  // Walk pages and sections
+  for (const page of websiteJson.pages || []) {
+    for (const section of page.sections || []) {
+      const c = section.content;
+      if (!c) continue;
+
+      // Hero background
+      if (section.section_type === 'hero' && isPlaceholder(c.background_image_url)) {
+        c.background_image_url = heroImgs[0] || '';
+      }
+
+      // About/founder photo
+      if (section.section_type === 'about' && isPlaceholder(c.image_url)) {
+        c.image_url = teamImgs[0] || allImgs.find(u => u.includes('photo') || u.includes('person')) || '';
+      }
+
+      // Gallery — hydrate with real gallery images if empty
+      if (section.section_type === 'gallery') {
+        if (!Array.isArray(c.images) || c.images.length === 0) {
+          c.images = galleryImgs
+            .concat(allImgs.filter(u => !heroImgs.includes(u) && !teamImgs.includes(u)))
+            .slice(0, 12)
+            .map(url => ({ url, caption: '', alt: '' }));
+        }
+      }
+
+      // Services — cycle through real images for placeholder image_urls
+      if (Array.isArray(c.services)) {
+        c.services.forEach((svc: any, i: number) => {
+          if (svc.image_url && isPlaceholder(svc.image_url)) {
+            svc.image_url = allImgs[i] || '';
+          }
+        });
+      }
+      if (Array.isArray(c.team)) {
+        c.team.forEach((member: any, i: number) => {
+          if (member.photo_url && isPlaceholder(member.photo_url)) {
+            member.photo_url = teamImgs[i] || allImgs[i] || '';
+          }
+        });
+      }
+    }
+  }
+
+  return websiteJson;
 }
 
 // ─── Main handler ─────────────────────────────────────────────────────────────
@@ -952,16 +1478,25 @@ serve(async (req) => {
     // ── 1. Extract content ────────────────────────────────────────────────────
     let extractedContent: ExtractedContent;
     let backendFeatures: string[] = [];
+    let extractedImages: ExtractedImage[] = [];
+    let extractedLinks: ExtractedLink[] = [];
+    let detectedProjectType: ProjectType = 'unknown';
 
     if (source_type === 'url') {
       const result = await scrapeUrl(url);
       extractedContent = result.content;
       backendFeatures = result.backendFeatures;
+      extractedImages = result.images;
+      extractedLinks = result.links;
+      detectedProjectType = 'static_html';
     } else if (source_type === 'github') {
-      const zipBytes = await fetchGithubZip(github_url);
-      const result = extractZip(zipBytes);
+      const { bytes: zipBytes, owner, repo, branch } = await fetchGithubZip(github_url);
+      const result = await universalExtractZip(zipBytes, { owner, repo, branch });
       extractedContent = result.content;
       backendFeatures = result.backendFeatures;
+      extractedImages = result.images;
+      extractedLinks = result.links;
+      detectedProjectType = result.projectType;
     } else {
       let zipBytes: Uint8Array;
       try {
@@ -971,13 +1506,17 @@ serve(async (req) => {
       } catch (e: any) {
         throw new Error(`Invalid base64 ZIP data: ${e.message}`);
       }
-      const result = extractZip(zipBytes);
+      const result = await universalExtractZip(zipBytes);
       extractedContent = result.content;
       backendFeatures = result.backendFeatures;
+      extractedImages = result.images;
+      extractedLinks = result.links;
+      detectedProjectType = result.projectType;
     }
 
     console.log(
-      `[import-site] Extracted title="${extractedContent.title}" ` +
+      `[import-site] ProjectType=${detectedProjectType} Images=${extractedImages.length} Links=${extractedLinks.length} ` +
+      `title="${extractedContent.title}" ` +
       `colors=${extractedContent.colorPalette.primary[0] || extractedContent.colors[0]} ` +
       `fonts=${extractedContent.fonts.join(',')} ` +
       `cssRules=${extractedContent.cssRules.length} ` +
@@ -1036,7 +1575,15 @@ First, provision all required Supabase infrastructure using the available tools.
         );
       } else {
         // Standard non-agentic generation
-        websiteJson = await generateWebsiteJson(extractedContent, tone, resolvedProviderId, primary_color);
+        websiteJson = await generateWebsiteJson(
+          extractedContent,
+          tone,
+          resolvedProviderId,
+          primary_color,
+          extractedImages,
+          extractedLinks,
+          detectedProjectType,
+        );
       }
     } catch (e: any) {
       console.error(`[import-site] ${providerConfig.name} generation error:`, e.message);
@@ -1047,7 +1594,10 @@ First, provision all required Supabase infrastructure using the available tools.
       return errorResponse(`AI (${providerConfig.name}) error: ${e.message}`, 500);
     }
 
-    // ── 3. Validate and normalise ─────────────────────────────────────────────
+    // ── 3. Validate and hydrate images ────────────────────────────────────────
+    websiteJson = validateAndHydrateImages(websiteJson, extractedImages);
+
+    // ── 4. Validate and normalise ─────────────────────────────────────────────
     if (!websiteJson.global || !Array.isArray(websiteJson.pages) || websiteJson.pages.length === 0) {
       await supabaseAdmin
         .from('website_briefs')
@@ -1080,7 +1630,7 @@ First, provision all required Supabase infrastructure using the available tools.
       }
     }
 
-    // ── 4. Determine slug ─────────────────────────────────────────────────────
+    // ── 5. Determine slug ─────────────────────────────────────────────────────
     const { data: existingBrief } = await supabaseAdmin
       .from('website_briefs')
       .select('client_slug')
@@ -1093,7 +1643,7 @@ First, provision all required Supabase infrastructure using the available tools.
       slugify(websiteJson.global.business_name || 'site');
     const clientSlug = await makeUniqueSlug(supabaseAdmin, baseSlug, client_id);
 
-    // ── 5. Save to website_briefs ─────────────────────────────────────────────
+    // ── 6. Save to website_briefs ─────────────────────────────────────────────
     const businessName = websiteJson.global.business_name || extractedContent.title || 'Imported Site';
     const navText = extractedContent.navLinks.join(', ');
 
@@ -1137,6 +1687,9 @@ First, provision all required Supabase infrastructure using the available tools.
       ai_provider: resolvedProviderId,
       ai_model: providerConfig.model,
       autonomous_provisioning: useAutonomous,
+      project_type: detectedProjectType,
+      images_found: extractedImages.length,
+      links_found: extractedLinks.length,
     });
   } catch (error: any) {
     console.error('[import-site] Unhandled error:', error.message);
