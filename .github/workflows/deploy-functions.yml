@@ -9,6 +9,7 @@ on:
       - 'supabase/functions/generate-website/**'
       - 'supabase/functions/regenerate-section/**'
       - 'supabase/functions/_shared/**'
+      - 'supabase/functions/import-site/**'
 
 jobs:
   deploy:
@@ -44,3 +45,4 @@ jobs:
           deploy_if_changed "website-chat" "--no-verify-jwt"
           deploy_if_changed "generate-website" ""
           deploy_if_changed "regenerate-section" ""
+          deploy_if_changed "import-site" "--no-verify-jwt"
