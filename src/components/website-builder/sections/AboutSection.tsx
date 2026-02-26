@@ -79,12 +79,22 @@ const AboutCenteredStory: React.FC<SectionComponentProps> = ({ content, global: 
 const AboutFounderFocus: React.FC<SectionComponentProps> = ({ content, global: g }) => (
   <section className="py-20 px-4 bg-slate-900 text-white">
     <div className="max-w-6xl mx-auto grid grid-cols-1 lg:grid-cols-3 gap-10 items-center">
-      <div
-        className="h-64 lg:h-80 rounded-2xl flex items-center justify-center text-5xl font-black"
-        style={{ backgroundColor: g.primary_color }}
-      >
-        {g.business_name.charAt(0)}
-      </div>
+      {(content.image_url || g.founder_photo_url) ? (
+        <div className="h-64 lg:h-80 rounded-2xl overflow-hidden">
+          <img
+            src={content.image_url || g.founder_photo_url}
+            alt={content.heading || g.business_name}
+            className="w-full h-full object-cover rounded-2xl shadow-xl"
+          />
+        </div>
+      ) : (
+        <div
+          className="h-64 lg:h-80 rounded-2xl flex items-center justify-center text-5xl font-black"
+          style={{ backgroundColor: g.primary_color }}
+        >
+          {g.business_name.charAt(0)}
+        </div>
+      )}
       <div className="lg:col-span-2">
         <h2
           className="text-3xl sm:text-4xl font-bold mb-6"

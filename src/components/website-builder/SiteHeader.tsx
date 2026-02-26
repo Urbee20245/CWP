@@ -8,9 +8,10 @@ interface SiteHeaderProps {
   siteSlug: string;
   currentPageId: string;
   customDomain?: boolean;
+  isPreview?: boolean;
 }
 
-const SiteHeader: React.FC<SiteHeaderProps> = ({ global: g, pages, siteSlug, currentPageId, customDomain }) => {
+const SiteHeader: React.FC<SiteHeaderProps> = ({ global: g, pages, siteSlug, currentPageId, customDomain, isPreview }) => {
   const [mobileOpen, setMobileOpen] = useState(false);
   const [scrolled, setScrolled] = useState(false);
 
@@ -24,9 +25,10 @@ const SiteHeader: React.FC<SiteHeaderProps> = ({ global: g, pages, siteSlug, cur
   useEffect(() => { setMobileOpen(false); }, [currentPageId]);
 
   const getHref = (page: WebsitePage) => {
-    if (customDomain) return page.slug === '' ? '/' : `/${page.slug}`;
-    if (page.slug === '') return `/site/${siteSlug}`;
-    return `/site/${siteSlug}/${page.slug}`;
+    const preview = isPreview ? '?preview=1' : '';
+    if (customDomain) return page.slug === '' ? `/${preview}` : `/${page.slug}${preview}`;
+    if (page.slug === '') return `/site/${siteSlug}${preview}`;
+    return `/site/${siteSlug}/${page.slug}${preview}`;
   };
 
   // Pages that appear in nav (all of them)
