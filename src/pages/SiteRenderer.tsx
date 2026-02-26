@@ -93,6 +93,7 @@ const SiteRenderer: React.FC = () => {
       premiumFeatures={siteData!.premiumFeatures}
       clientId={siteData!.clientId}
       calBookingLink={siteData!.calBookingLink ?? undefined}
+      isPreview={isPreview}
     />
   );
 };

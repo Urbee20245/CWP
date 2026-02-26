@@ -28,6 +28,7 @@ interface SiteRendererProps {
   clientId?: string;
   /** Full Cal.com booking URL, e.g. "https://cal.com/jane/30min" */
   calBookingLink?: string;
+  isPreview?: boolean;
 }
 
 type SectionComponent = React.FC<{
@@ -60,6 +61,7 @@ const SiteRenderer: React.FC<SiteRendererProps> = ({
   premiumFeatures = [],
   clientId,
   calBookingLink,
+  isPreview,
 }) => {
   const { global: g, pages } = websiteJson;
 
@@ -98,6 +100,7 @@ const SiteRenderer: React.FC<SiteRendererProps> = ({
         siteSlug={siteSlug}
         currentPageId={activePage?.id ?? 'home'}
         customDomain={customDomain}
+        isPreview={isPreview}
       />
 
       {/* ── Standard page sections from website_json ── */}

@@ -29,6 +29,15 @@ const ServicesCards: React.FC<SectionComponentProps> = ({ content, global: g }) 
             <p className="text-slate-600 text-sm" style={{ fontFamily: g.font_body }}>
               {svc.description}
             </p>
+            {(svc.cta_text || svc.cta_link) && (
+              <a
+                href={svc.cta_link || '#contact'}
+                className="inline-flex items-center gap-1 text-sm font-semibold mt-4 transition-opacity hover:opacity-75"
+                style={{ color: g.primary_color }}
+              >
+                {svc.cta_text || 'Learn More'} →
+              </a>
+            )}
           </div>
         ))}
       </div>
@@ -56,6 +65,15 @@ const ServicesIconList: React.FC<SectionComponentProps> = ({ content, global: g 
               <p className="text-slate-600 text-sm mt-0.5" style={{ fontFamily: g.font_body }}>
                 {svc.description}
               </p>
+              {(svc.cta_text || svc.cta_link) && (
+                <a
+                  href={svc.cta_link || '#contact'}
+                  className="inline-flex items-center gap-1 text-sm font-semibold mt-2 transition-opacity hover:opacity-75"
+                  style={{ color: g.primary_color }}
+                >
+                  {svc.cta_text || 'Learn More'} →
+                </a>
+              )}
             </div>
           </div>
         ))}
