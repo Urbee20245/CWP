@@ -2,6 +2,7 @@ import React, { useEffect } from 'react';
 import { useParams, useSearchParams } from 'react-router-dom';
 import { Loader2, Globe, Clock } from 'lucide-react';
 import SiteRendererComponent from '../components/website-builder/SiteRenderer';
+import RawHtmlRenderer from '../components/website-builder/RawHtmlRenderer';
 import { useSiteData } from '../hooks/useSiteData';
 
 // ─── Coming Soon ──────────────────────────────────────────────────────────────
@@ -85,6 +86,20 @@ const SiteRenderer: React.FC = () => {
   if (status === 'coming_soon') return <ComingSoon />;
   if (status === 'not_found') return <SiteNotFound />;
 
+  // ── Raw HTML clone mode ──────────────────────────────────────────────────
+  if (siteData?.siteType === 'raw_html' && siteData.rawHtml) {
+    return (
+      <RawHtmlRenderer
+        rawHtml={siteData.rawHtml}
+        premiumFeatures={siteData.premiumFeatures}
+        clientId={siteData.clientId}
+        calBookingLink={siteData.calBookingLink ?? undefined}
+        isPreview={isPreview}
+      />
+    );
+  }
+
+  // ── Standard CWP JSON renderer ───────────────────────────────────────────
   return (
     <SiteRendererComponent
       websiteJson={siteData!.websiteJson}
