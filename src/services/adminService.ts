@@ -352,6 +352,19 @@ export const AdminService = {
     source_type: 'url',
   }),
 
+  /**
+   * Pixel-perfect clone: fetches raw HTML, inlines all CSS, stores as-is.
+   * No AI involved — the original site renders exactly in an iframe.
+   * Returns { success, client_slug, business_name, site_type: 'raw_html', html_size_kb }.
+   */
+  cloneSiteExact: async (payload: {
+    client_id: string;
+    url: string;
+    slug?: string;
+    custom_domain?: string;
+    premium_features?: string[];
+  }) => invokeEdgeFunction('clone-site-exact', payload),
+
   // ── Claude Admin Assistant ──────────────────────────────────────────────────
 
   /**
