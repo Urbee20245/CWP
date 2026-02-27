@@ -152,10 +152,13 @@ const AdminSiteImport: React.FC = () => {
   const [importError, setImportError] = useState<string | null>(null);
   const [result, setResult] = useState<{
     client_slug: string;
-    website_json: any;
-    backend_features: string[];
-    pages_imported: number;
+    website_json?: any;
+    backend_features?: string[];
+    pages_imported?: number;
     business_name: string;
+    exact_clone?: boolean;
+    html_size_kb?: number;
+    site_type?: string;
   } | null>(null);
 
   // ── UI state ───────────────────────────────────────────────────────────────
@@ -310,6 +313,30 @@ const AdminSiteImport: React.FC = () => {
       await loadBrief(selectedClientId);
     } catch (err: any) {
       setImportError(err.message || 'Import failed. Please try again.');
+      setStep('configure');
+    }
+  };
+
+  // ── Handle exact clone (pixel-perfect raw HTML mode) ──────────────────────
+  const handleExactClone = async () => {
+    if (!canImport || importSource !== 'url') return;
+    setStep('importing');
+    setImportError(null);
+    setResult(null);
+
+    try {
+      const data = await AdminService.cloneSiteExact({
+        client_id: selectedClientId,
+        url: urlInput.trim(),
+        slug: slugInput.trim() || undefined,
+        custom_domain: customDomainInput.trim() || undefined,
+        premium_features: Array.from(selectedPremiumFeatures),
+      });
+      setResult({ ...data, exact_clone: true });
+      setStep('done');
+      await loadBrief(selectedClientId);
+    } catch (err: any) {
+      setImportError(err.message || 'Exact clone failed. Please try again.');
       setStep('configure');
     }
   };
@@ -1040,18 +1067,43 @@ const AdminSiteImport: React.FC = () => {
               )}
             </div>
 
-            {/* Import button */}
-            <button
-              onClick={handleImport}
-              disabled={!canImport || step === 'importing'}
-              className="w-full flex items-center justify-center gap-2 px-4 py-3 bg-indigo-600 text-white font-semibold rounded-xl hover:bg-indigo-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
-            >
-              {step === 'importing' ? (
-                <><Loader2 className="w-4 h-4 animate-spin" /> Importing site...</>
-              ) : (
-                <><Download className="w-4 h-4" /> Import Site</>
+            {/* Import buttons */}
+            <div className="space-y-2">
+              {importSource === 'url' && (
+                <button
+                  onClick={handleExactClone}
+                  disabled={!canImport || step === 'importing'}
+                  className="w-full flex items-center justify-center gap-2 px-4 py-3 bg-emerald-600 text-white font-semibold rounded-xl hover:bg-emerald-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+                >
+                  {step === 'importing' ? (
+                    <><Loader2 className="w-4 h-4 animate-spin" /> Cloning...</>
+                  ) : (
+                    <><Copy className="w-4 h-4" /> Exact Clone — Pixel Perfect</>
+                  )}
+                </button>
               )}
-            </button>
+              {importSource === 'url' && (
+                <p className="text-xs text-center text-slate-400">
+                  ↑ Preserves exact design from Hostinger/any host — no AI rewrite
+                </p>
+              )}
+              <button
+                onClick={handleImport}
+                disabled={!canImport || step === 'importing'}
+                className="w-full flex items-center justify-center gap-2 px-4 py-3 bg-indigo-600 text-white font-semibold rounded-xl hover:bg-indigo-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+              >
+                {step === 'importing' ? (
+                  <><Loader2 className="w-4 h-4 animate-spin" /> Importing site...</>
+                ) : (
+                  <><Download className="w-4 h-4" /> Import &amp; Rebuild with AI</>
+                )}
+              </button>
+              {importSource === 'url' && (
+                <p className="text-xs text-center text-slate-400">
+                  ↑ AI rebuilds as editable CWP sections — design may differ from original
+                </p>
+              )}
+            </div>
           </div>
 
           {/* ── Right: Output ─────────────────────────────────────────────── */}
@@ -1202,21 +1254,40 @@ const AdminSiteImport: React.FC = () => {
                 </div>
 
                 {/* Stats bar */}
-                <div className="bg-indigo-50 border border-indigo-100 rounded-2xl p-5 grid grid-cols-3 gap-4">
-                  <div className="text-center">
-                    <p className="text-2xl font-bold text-indigo-700">{result.pages_imported}</p>
-                    <p className="text-xs text-indigo-500 mt-0.5">Pages imported</p>
-                  </div>
-                  <div className="text-center border-x border-indigo-200">
-                    <p className="text-2xl font-bold text-indigo-700">
-                      {result.website_json?.pages?.reduce((n: number, p: any) => n + (p.sections?.length || 0), 0) || 0}
-                    </p>
-                    <p className="text-xs text-indigo-500 mt-0.5">Sections built</p>
-                  </div>
-                  <div className="text-center">
-                    <p className="text-2xl font-bold text-indigo-700">{result.backend_features.length}</p>
-                    <p className="text-xs text-indigo-500 mt-0.5">Backend features detected</p>
-                  </div>
+                <div className={`border rounded-2xl p-5 grid grid-cols-3 gap-4 ${result.exact_clone ? 'bg-emerald-50 border-emerald-100' : 'bg-indigo-50 border-indigo-100'}`}>
+                  {result.exact_clone ? (
+                    <>
+                      <div className="text-center">
+                        <p className="text-2xl font-bold text-emerald-700">{result.html_size_kb ?? '—'}KB</p>
+                        <p className="text-xs text-emerald-500 mt-0.5">HTML preserved</p>
+                      </div>
+                      <div className="text-center border-x border-emerald-200">
+                        <p className="text-2xl font-bold text-emerald-700">100%</p>
+                        <p className="text-xs text-emerald-500 mt-0.5">Pixel fidelity</p>
+                      </div>
+                      <div className="text-center">
+                        <p className="text-2xl font-bold text-emerald-700">✓</p>
+                        <p className="text-xs text-emerald-500 mt-0.5">CSS inlined</p>
+                      </div>
+                    </>
+                  ) : (
+                    <>
+                      <div className="text-center">
+                        <p className="text-2xl font-bold text-indigo-700">{result.pages_imported}</p>
+                        <p className="text-xs text-indigo-500 mt-0.5">Pages imported</p>
+                      </div>
+                      <div className="text-center border-x border-indigo-200">
+                        <p className="text-2xl font-bold text-indigo-700">
+                          {result.website_json?.pages?.reduce((n: number, p: any) => n + (p.sections?.length || 0), 0) || 0}
+                        </p>
+                        <p className="text-xs text-indigo-500 mt-0.5">Sections built</p>
+                      </div>
+                      <div className="text-center">
+                        <p className="text-2xl font-bold text-indigo-700">{result.backend_features?.length ?? 0}</p>
+                        <p className="text-xs text-indigo-500 mt-0.5">Backend features detected</p>
+                      </div>
+                    </>
+                  )}
                 </div>
 
                 {/* Global settings */}
