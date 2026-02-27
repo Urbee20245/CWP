@@ -4,6 +4,7 @@ import ProblemSolution from '@/components/ProblemSolution';
 import JetOptimizer from '@/components/JetOptimizer';
 import JetViz from '@/components/JetViz';
 import Services from '@/components/Services';
+import ProSitesFeature from '@/components/ProSitesFeature';
 import TrustAuthority from '@/components/TrustAuthority';
 import Stats from '@/components/Stats';
 import Process from '@/components/ProcessPage';
@@ -25,6 +26,7 @@ const Home: React.FC = () => {
     <JetOptimizer />
     <JetViz />
     <Services />
+    <ProSitesFeature />
     <TrustAuthority />
     <Stats />
     <Process />

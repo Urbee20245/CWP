@@ -65,6 +65,14 @@ const Header: React.FC = () => {
             JetSuite
           </Link>
 
+          <Link
+            to="/pro-sites"
+            className="px-5 py-2.5 text-sm font-medium text-white bg-indigo-600 hover:bg-indigo-700 rounded-full transition-all flex items-center gap-1.5 shadow-md shadow-indigo-900/20"
+          >
+            <Sparkles className="w-3.5 h-3.5" />
+            Pro Sites
+          </Link>
+
           {/* Tools Dropdown Container */}
           <div 
             className="relative"
@@ -198,6 +206,14 @@ const Header: React.FC = () => {
                     >
                       <Sparkles className="w-4 h-4 text-indigo-600" />
                       JetSuite
+                    </Link>
+                    <Link
+                      to="/pro-sites"
+                      onClick={() => setIsMobileMenuOpen(false)}
+                      className="w-full text-left px-4 py-3 rounded-xl bg-indigo-600 hover:bg-indigo-700 text-white font-semibold flex items-center gap-2"
+                    >
+                      <Sparkles className="w-4 h-4" />
+                      Pro Sites
                     </Link>
                     <Link
                       to="/process"

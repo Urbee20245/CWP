@@ -20,6 +20,7 @@ const ServicesPage = React.lazy(() => import('./components/ServicesPage'));
 const ProcessPage = React.lazy(() => import('./components/ProcessPage'));
 const ContactPage = React.lazy(() => import('./components/ContactPage'));
 const JetSuitePage = React.lazy(() => import('./components/JetSuitePage'));
+const ProSitesPage = React.lazy(() => import('./src/pages/ProSitesPage'));
 const JetVizPage = React.lazy(() => import('./components/JetVizPage'));
 const JetLocalOptimizerPage = React.lazy(() => import('./components/JetLocalOptimizerPage'));
 const PrivacyPolicy = React.lazy(() => import('./src/pages/PrivacyPolicy'));
@@ -120,6 +121,7 @@ const AppContent: React.FC = () => {
           <Route path="/process" element={<ProcessPage />} />
           <Route path="/contact" element={<ContactPage />} />
           <Route path="/jetsuite" element={<JetSuitePage />} />
+          <Route path="/pro-sites" element={<ProSitesPage />} />
           <Route path="/jetviz" element={<JetVizPage />} />
           <Route path="/jet-local-optimizer" element={<JetLocalOptimizerPage />} />
           <Route path="/privacy-policy" element={<PrivacyPolicy />} />
