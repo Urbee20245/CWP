@@ -155,6 +155,7 @@ const PLANS = [
   {
     name: 'Starter',
     price: '$97',
+    tier: 'starter',
     features: [
       'AI-Built Professional Website',
       'Up to 5 Pages',
@@ -170,6 +171,7 @@ const PLANS = [
   {
     name: 'Growth',
     price: '$147',
+    tier: 'growth',
     features: [
       'Everything in Starter, plus:',
       'Cal.com Booking Integration',
@@ -183,6 +185,7 @@ const PLANS = [
   {
     name: 'Pro',
     price: '$197',
+    tier: 'pro',
     features: [
       'Everything in Growth, plus:',
       'AI Phone Receptionist (Inbound)',
@@ -196,6 +199,7 @@ const PLANS = [
   {
     name: 'Elite',
     price: '$247',
+    tier: 'elite',
     features: [
       'Everything in Pro, plus:',
       'AI Phone (Inbound + Outbound)',
@@ -320,7 +324,7 @@ const ProSitesPage: React.FC = () => {
           {/* CTAs */}
           <div className="flex flex-col sm:flex-row gap-4 justify-center mb-16">
             <Link
-              to="/contact"
+              to="/pro-sites/checkout"
               className="bg-indigo-600 hover:bg-indigo-500 text-white font-bold px-8 py-4 rounded-full text-base transition-all shadow-lg shadow-indigo-900/40 active:scale-95 flex items-center justify-center gap-2"
             >
               Get Started — $497 Setup
@@ -421,7 +425,7 @@ const ProSitesPage: React.FC = () => {
                 {/* CTA */}
                 <div className="md:w-56 shrink-0">
                   <Link
-                    to="/contact"
+                    to="/pro-sites/checkout?tier=starter"
                     className={`block w-full text-center text-white font-bold px-6 py-4 rounded-2xl text-sm transition-all shadow-md active:scale-95 ${colors.btn}`}
                   >
                     Get This Website
@@ -555,7 +559,7 @@ const ProSitesPage: React.FC = () => {
                 </ul>
 
                 <Link
-                  to="/contact"
+                  to={`/pro-sites/checkout?tier=${plan.tier}`}
                   className={`block w-full text-center font-bold py-3 rounded-2xl text-sm transition-all active:scale-95 ${
                     plan.popular
                       ? 'bg-indigo-600 hover:bg-indigo-700 text-white shadow-md shadow-indigo-200'
@@ -627,7 +631,7 @@ const ProSitesPage: React.FC = () => {
           </p>
           <div className="flex flex-col sm:flex-row gap-4 justify-center">
             <Link
-              to="/contact"
+              to="/pro-sites/checkout"
               className="bg-indigo-600 hover:bg-indigo-500 text-white font-bold px-8 py-4 rounded-full text-base transition-all shadow-lg shadow-indigo-900/40 active:scale-95 flex items-center justify-center gap-2"
             >
               Get Started — $497 Setup

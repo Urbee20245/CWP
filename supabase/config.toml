@@ -170,6 +170,9 @@ verify_jwt = false
 [functions.serve-static-site]
 verify_jwt = false
 
+[functions.create-pro-sites-checkout]
+verify_jwt = false
+
 # ── Public-facing (no auth required) ─────────────────────────────────────────
 
 [functions.append-to-google-sheet]

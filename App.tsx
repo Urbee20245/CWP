@@ -27,6 +27,8 @@ const PrivacyPolicy = React.lazy(() => import('./src/pages/PrivacyPolicy'));
 const TermsAndConditions = React.lazy(() => import('./src/pages/TermsAndConditions'));
 const LoginPage = React.lazy(() => import('./src/pages/Login'));
 const GemOnboarding = React.lazy(() => import('./src/pages/GemOnboarding'));
+const ProSitesCheckout = React.lazy(() => import('./src/pages/ProSitesCheckout'));
+const ProSitesSuccess = React.lazy(() => import('./src/pages/ProSitesSuccess'));
 
 // Admin pages
 const AdminDashboard = React.lazy(() => import('./src/pages/AdminDashboard'));
@@ -122,6 +124,8 @@ const AppContent: React.FC = () => {
           <Route path="/contact" element={<ContactPage />} />
           <Route path="/jetsuite" element={<JetSuitePage />} />
           <Route path="/pro-sites" element={<ProSitesPage />} />
+          <Route path="/pro-sites/checkout" element={<ProSitesCheckout />} />
+          <Route path="/pro-sites/success" element={<ProSitesSuccess />} />
           <Route path="/jetviz" element={<JetVizPage />} />
           <Route path="/jet-local-optimizer" element={<JetLocalOptimizerPage />} />
           <Route path="/privacy-policy" element={<PrivacyPolicy />} />

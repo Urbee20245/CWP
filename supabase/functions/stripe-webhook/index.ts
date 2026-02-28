@@ -267,7 +267,98 @@ serve(async (req) => {
       case 'checkout.session.completed': {
         const session = data as Stripe.Checkout.Session;
         const metadata = session.metadata;
-        
+
+        // ── Pro Sites checkout ─────────────────────────────────────────────────
+        if (metadata?.payment_type === 'pro_sites' && metadata.pro_sites_checkout_id) {
+          const checkoutId = metadata.pro_sites_checkout_id;
+          const customerId = session.customer as string;
+          const subscriptionId = session.subscription as string;
+
+          console.log(`[stripe-webhook] Pro Sites checkout completed: ${checkoutId}`);
+
+          // 1. Update pro_sites_checkouts to 'paid'
+          const { error: updateError } = await supabaseAdmin
+            .from('pro_sites_checkouts')
+            .update({
+              status: 'paid',
+              stripe_customer_id: customerId,
+              stripe_subscription_id: subscriptionId,
+            })
+            .eq('id', checkoutId);
+
+          if (updateError) {
+            console.error('[stripe-webhook] Failed to update pro_sites_checkout:', updateError);
+          }
+
+          // 2. Get the checkout record for notification
+          const { data: proCheckout } = await supabaseAdmin
+            .from('pro_sites_checkouts')
+            .select('*')
+            .eq('id', checkoutId)
+            .single();
+
+          // 3. Send admin notification email
+          if (proCheckout) {
+            const adminEmails = await supabaseAdmin
+              .from('admin_notification_emails')
+              .select('email')
+              .eq('is_active', true);
+
+            const addonList = (proCheckout.selected_addons as string[]).join(', ') || 'None';
+            const totalMonthly = ((proCheckout.total_monthly_cents) / 100).toFixed(2);
+
+            for (const adminEmail of (adminEmails.data || [])) {
+              await supabaseAdmin.functions.invoke('send-email', {
+                body: {
+                  to: adminEmail.email,
+                  subject: `🎉 New CWP Pro Sites Order — ${proCheckout.business_name}`,
+                  html: `
+                    <h2>New Pro Sites Order Received</h2>
+                    <p><strong>Business:</strong> ${proCheckout.business_name}</p>
+                    <p><strong>Industry:</strong> ${proCheckout.industry}</p>
+                    <p><strong>Contact:</strong> ${proCheckout.first_name} ${proCheckout.last_name}</p>
+                    <p><strong>Email:</strong> ${proCheckout.email}</p>
+                    <p><strong>Phone:</strong> ${proCheckout.phone || 'Not provided'}</p>
+                    <hr/>
+                    <p><strong>Plan:</strong> ${proCheckout.tier.toUpperCase()}</p>
+                    <p><strong>Add-ons:</strong> ${addonList}</p>
+                    <p><strong>Monthly Total:</strong> $${totalMonthly}/mo</p>
+                    <p><strong>Setup Fee Paid:</strong> $497</p>
+                    <hr/>
+                    <p><strong>Business Description:</strong> ${proCheckout.business_description || 'None provided'}</p>
+                    <p><em>Go to Admin > Pro Sites Orders to manage this order.</em></p>
+                  `,
+                },
+              });
+            }
+
+            // 4. Send client confirmation email
+            await supabaseAdmin.functions.invoke('send-email', {
+              body: {
+                to: proCheckout.email,
+                subject: `Your CWP Pro Sites Order is Confirmed — We're Building Your Website! 🚀`,
+                html: `
+                  <h2>Thank you, ${proCheckout.first_name}!</h2>
+                  <p>We've received your order for <strong>${proCheckout.business_name}</strong> and your payment is confirmed.</p>
+                  <h3>What happens next:</h3>
+                  <ol>
+                    <li>Our team will review your order and begin building your ${proCheckout.industry} website</li>
+                    <li>We'll reach out within 24 hours if we have any questions</li>
+                    <li>Once your site is ready, we'll send you a link to review it</li>
+                    <li>After your approval, your site goes live!</li>
+                  </ol>
+                  <p><strong>Your Plan:</strong> ${proCheckout.tier.charAt(0).toUpperCase() + proCheckout.tier.slice(1)} — $${totalMonthly}/mo</p>
+                  <p>Questions? Reply to this email or call us at <strong>(470) 264-6256</strong>.</p>
+                  <p>— The CWP Team</p>
+                `,
+              },
+            });
+          }
+
+          break; // Exit the switch case
+        }
+        // ── End Pro Sites checkout ─────────────────────────────────────────────
+
         if (metadata?.payment_type === 'deposit' && metadata.supabase_project_id && metadata.supabase_client_id) {
             const projectId = metadata.supabase_project_id;
             const clientId = metadata.supabase_client_id;
