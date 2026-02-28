@@ -1,12 +1,12 @@
 import React, { useState, useEffect } from 'react';
-import { Link, useSearchParams } from 'react-router-dom';
-import { CheckCircle2, Lock, ArrowRight, ArrowLeft, Phone } from 'lucide-react';
+import { useSearchParams } from 'react-router-dom';
+import { CheckCircle2, Lock, ArrowRight, ArrowLeft, Phone, Loader2 } from 'lucide-react';
 import { supabase } from '../integrations/supabase/client';
 
 // ─── Pricing Constants ─────────────────────────────────────────────────────────
 
 export const TIER_PRICES = {
-  starter: { monthly_cents: 9700, label: 'Starter', display: '$97/mo' },
+  starter: { monthly_cents: 9700,  label: 'Starter', display: '$97/mo'  },
   growth:  { monthly_cents: 14700, label: 'Growth',  display: '$147/mo' },
   pro:     { monthly_cents: 19700, label: 'Pro',     display: '$197/mo' },
   elite:   { monthly_cents: 24700, label: 'Elite',   display: '$247/mo' },
@@ -14,112 +14,86 @@ export const TIER_PRICES = {
 
 export const SETUP_FEE_CENTS = 49700; // $497
 
-export const PROSITES_ADDONS = [
-  {
-    key: 'ai_phone_inbound',
-    name: 'AI Phone Receptionist — Inbound',
-    description: '24/7 AI answers calls, qualifies leads, books appointments. Includes 135 FREE minutes/month.',
-    monthly_cents: 5000,
-    display: '+$50/mo',
-    badge: '135 min FREE',
-    included_in: ['pro', 'elite'],
+// ─── Free Tier Perks ("Human Touch") ──────────────────────────────────────────
+
+const TIER_FREE_PERKS = {
+  starter: {
+    perk: 'Personal Site Reveal Call',
+    detail:
+      '30-minute 1-on-1 walkthrough of your completed site with a real team member before launch. We make sure you love it.',
   },
-  {
-    key: 'ai_phone_outbound',
-    name: 'AI Phone Receptionist — Outbound',
-    description: 'AI follows up with leads automatically via outbound calls.',
-    monthly_cents: 3000,
-    display: '+$30/mo',
-    badge: null,
-    included_in: ['elite'],
+  growth: {
+    perk: 'Competitor Snapshot Report',
+    detail:
+      "We manually research and deliver a written report on 3 of your top local competitors — what they're doing online and where you can win.",
   },
-  {
-    key: 'ai_chatbot',
-    name: 'AI Chatbot',
-    description: 'Trained on your business — handles FAQs and captures leads automatically.',
-    monthly_cents: 4000,
-    display: '+$40/mo',
-    badge: 'Popular',
-    included_in: ['pro', 'elite'],
+  pro: {
+    perk: 'Monthly Performance Check-In',
+    detail:
+      "Each month we personally review your site's traffic, lead form submissions, and AI activity — then email you a plain-English summary with action tips.",
   },
-  {
-    key: 'cal_booking',
-    name: 'Cal.com Booking Calendar',
-    description: 'Let clients schedule appointments directly on your website.',
-    monthly_cents: 2000,
-    display: '+$20/mo',
-    badge: null,
-    included_in: ['growth', 'pro', 'elite'],
+  elite: {
+    perk: 'Quarterly Strategy Call',
+    detail:
+      'Every 3 months, a 45-minute call with your dedicated account manager to review performance, refresh content, and plan your next moves.',
   },
-  {
-    key: 'chat_widget',
-    name: 'Live Chat Widget',
-    description: 'Real-time messaging so website visitors can reach you instantly.',
-    monthly_cents: 1500,
-    display: '+$15/mo',
-    badge: null,
-    included_in: ['growth', 'pro', 'elite'],
-  },
-  {
-    key: 'blog_2x',
-    name: 'Blog Automation (2 posts/month)',
-    description: 'AI-generated, SEO-optimized blog posts published automatically.',
-    monthly_cents: 3000,
-    display: '+$30/mo',
-    badge: null,
-    included_in: ['growth', 'pro', 'elite'],
-  },
-  {
-    key: 'blog_4x',
-    name: 'Blog Automation (4 posts/month)',
-    description: 'Doubles your content output — 4 posts per month on autopilot.',
-    monthly_cents: 5000,
-    display: '+$50/mo',
-    badge: null,
-    included_in: ['pro', 'elite'],
-  },
-  {
-    key: 'blog_weekly',
-    name: 'Weekly Blog Posts (auto-published)',
-    description: 'Maximum content velocity — a new post every single week.',
-    monthly_cents: 8000,
-    display: '+$80/mo',
-    badge: null,
-    included_in: ['elite'],
-  },
-  {
-    key: 'legal_pages',
-    name: 'Legal Pages Bundle',
-    description: 'AI-generated Privacy Policy, Terms & Conditions, and Refund Policy.',
-    monthly_cents: 1500,
-    display: '+$15/mo',
-    badge: null,
-    included_in: ['growth', 'pro', 'elite'],
-  },
-  {
-    key: 'google_calendar',
-    name: 'Google Calendar Sync',
-    description: 'Sync appointments with your existing Google Calendar.',
-    monthly_cents: 1000,
-    display: '+$10/mo',
-    badge: null,
-    included_in: [],
-  },
-  {
-    key: 'client_backoffice',
-    name: 'Client Back Office Portal',
-    description: 'Private admin portal on your domain to manage your site content.',
-    monthly_cents: 2500,
-    display: '+$25/mo',
-    badge: null,
-    included_in: [],
-  },
-] as const;
+} as const;
+
+// ─── Tier Feature Lists ────────────────────────────────────────────────────────
+
+const TIER_FEATURES: Record<string, string[]> = {
+  starter: [
+    'Up to 5 pages (Home, About, Services, FAQ, Contact)',
+    'Smart contact form + lead notifications',
+    'Google Maps embed + business hours',
+    'Mobile-optimized design',
+  ],
+  growth: [
+    'Everything in Starter (up to 6 pages)',
+    'Cal.com booking calendar (appointment scheduling)',
+    'Live chat widget',
+    'Automated blog (2 SEO posts/month)',
+    'Legal pages (Privacy Policy + Terms)',
+  ],
+  pro: [
+    'Everything in Growth (up to 8 pages)',
+    'AI Website Chat Assistant (trained on your business)',
+    '24/7 AI Phone Receptionist (120 FREE min/mo)',
+    'Automated blog (4 SEO posts/month)',
+  ],
+  elite: [
+    'Everything in Pro (up to 10 pages)',
+    'AI Phone — Inbound + Outbound calling',
+    'Weekly blog posts (52 posts/year)',
+    'Priority support',
+  ],
+};
+
+// ─── Types ─────────────────────────────────────────────────────────────────────
 
 type TierKey = keyof typeof TIER_PRICES;
-type AddonKey = typeof PROSITES_ADDONS[number]['key'];
 
-const BLOG_ADDON_KEYS: AddonKey[] = ['blog_2x', 'blog_4x', 'blog_weekly'];
+interface AddonCatalogItem {
+  id: string;
+  key: string;
+  name: string;
+  description: string;
+  monthly_price_cents: number | null;
+  setup_fee_cents: number | null;
+  billing_type: 'one_time' | 'subscription' | 'setup_plus_subscription';
+}
+
+interface FormData {
+  firstName: string;
+  lastName: string;
+  businessName: string;
+  email: string;
+  phone: string;
+  industry: string;
+  businessDescription: string;
+}
+
+// ─── Industries ────────────────────────────────────────────────────────────────
 
 const INDUSTRIES = [
   'Insurance Agent',
@@ -136,24 +110,42 @@ const INDUSTRIES = [
   'Other Professional Service',
 ];
 
-// ─── Helper ───────────────────────────────────────────────────────────────────
+// ─── Helpers ───────────────────────────────────────────────────────────────────
 
 function centsToDisplay(cents: number): string {
   return `$${(cents / 100).toFixed(0)}`;
 }
 
-function isAddonIncluded(addonKey: AddonKey, tier: TierKey): boolean {
-  const addon = PROSITES_ADDONS.find(a => a.key === addonKey);
-  return addon ? (addon.included_in as readonly string[]).includes(tier) : false;
+function isBlogAddon(addon: AddonCatalogItem): boolean {
+  return (
+    addon.key.toLowerCase().includes('blog') ||
+    addon.name.toLowerCase().includes('blog')
+  );
 }
 
-// ─── Progress Bar ─────────────────────────────────────────────────────────────
+function isAiPhoneAddon(addon: AddonCatalogItem): boolean {
+  return addon.key === 'ai_phone_receptionist_with_booking';
+}
+
+/** Monthly recurring contribution of an addon (one_time addons = 0). */
+function addonMonthlyContribution(addon: AddonCatalogItem): number {
+  if (addon.billing_type === 'one_time') return 0;
+  return addon.monthly_price_cents ?? 0;
+}
+
+function addonPriceLabel(addon: AddonCatalogItem): string {
+  if (addon.billing_type === 'one_time') return 'One-time fee';
+  if (addon.monthly_price_cents) return `+${centsToDisplay(addon.monthly_price_cents)}/mo`;
+  return '';
+}
+
+// ─── Progress Bar ──────────────────────────────────────────────────────────────
 
 const ProgressBar: React.FC<{ step: number }> = ({ step }) => {
   const steps = ['Your Business', 'Your Plan', 'Review & Pay'];
   return (
     <div className="mb-10">
-      <div className="flex items-center justify-center gap-0">
+      <div className="flex items-center justify-center">
         {steps.map((label, idx) => {
           const stepNum = idx + 1;
           const isActive = step === stepNum;
@@ -195,7 +187,7 @@ const ProgressBar: React.FC<{ step: number }> = ({ step }) => {
   );
 };
 
-// ─── Tier Card ────────────────────────────────────────────────────────────────
+// ─── Tier Card ─────────────────────────────────────────────────────────────────
 
 const TierCard: React.FC<{
   tier: TierKey;
@@ -203,12 +195,15 @@ const TierCard: React.FC<{
   onClick: () => void;
 }> = ({ tier, selected, onClick }) => {
   const info = TIER_PRICES[tier];
+  const features = TIER_FEATURES[tier] ?? [];
+  const perk = TIER_FREE_PERKS[tier];
   const isPopular = tier === 'pro';
+
   return (
     <button
       type="button"
       onClick={onClick}
-      className={`relative flex-1 cursor-pointer transition-all rounded-xl border-2 p-4 text-left focus:outline-none ${
+      className={`relative w-full cursor-pointer transition-all rounded-xl border-2 p-4 text-left focus:outline-none ${
         selected
           ? 'border-indigo-500 ring-2 ring-indigo-200 bg-indigo-50'
           : 'border-slate-200 hover:border-indigo-300 bg-white'
@@ -219,114 +214,152 @@ const TierCard: React.FC<{
           Most Popular
         </span>
       )}
-      <div className={`text-sm font-bold mb-1 ${selected ? 'text-indigo-700' : 'text-slate-700'}`}>
+
+      <div className={`text-sm font-bold mb-0.5 ${selected ? 'text-indigo-700' : 'text-slate-700'}`}>
         {info.label}
       </div>
-      <div className={`text-lg font-black ${selected ? 'text-indigo-600' : 'text-slate-900'}`}>
+      <div className={`text-xl font-black mb-3 ${selected ? 'text-indigo-600' : 'text-slate-900'}`}>
         {info.display}
+      </div>
+
+      <ul className="space-y-1.5 mb-3">
+        {features.map((f) => (
+          <li key={f} className="flex items-start gap-1.5 text-xs text-slate-600">
+            <CheckCircle2
+              className={`w-3.5 h-3.5 shrink-0 mt-0.5 ${selected ? 'text-indigo-500' : 'text-slate-400'}`}
+            />
+            {f}
+          </li>
+        ))}
+      </ul>
+
+      {/* Free Human Touch perk */}
+      <div className="bg-amber-50 border border-amber-200 rounded-lg p-3 text-xs">
+        <p className="font-bold text-amber-800 mb-0.5">⭐ Free — Included: {perk.perk}</p>
+        <p className="text-amber-700 leading-relaxed">{perk.detail}</p>
       </div>
     </button>
   );
 };
 
-// ─── Add-On Card ─────────────────────────────────────────────────────────────
+// ─── Add-On Card ───────────────────────────────────────────────────────────────
 
 const AddonCard: React.FC<{
-  addonKey: AddonKey;
-  selectedTier: TierKey;
+  addon: AddonCatalogItem;
   selected: boolean;
-  isBlogSelected: boolean;
+  blogStyle: boolean;
+  wantsTollFree: boolean;
   onToggle: () => void;
-}> = ({ addonKey, selectedTier, selected, isBlogSelected, onToggle }) => {
-  const addon = PROSITES_ADDONS.find(a => a.key === addonKey)!;
-  const included = isAddonIncluded(addonKey, selectedTier);
-  const isBlog = BLOG_ADDON_KEYS.includes(addonKey);
+  onTollFreeChange: (val: boolean) => void;
+}> = ({ addon, selected, blogStyle, wantsTollFree, onToggle, onTollFreeChange }) => {
+  const isPhone = isAiPhoneAddon(addon);
+  const priceLabel = addonPriceLabel(addon);
+  const hasSetupFee =
+    addon.setup_fee_cents && addon.setup_fee_cents > 0 && addon.billing_type !== 'one_time';
 
-  if (included) {
-    return (
-      <div className="rounded-xl border border-slate-200 p-4 bg-slate-50 opacity-70">
+  return (
+    <div>
+      {/* Main clickable card */}
+      <button
+        type="button"
+        onClick={onToggle}
+        className={`w-full text-left cursor-pointer transition-all rounded-xl border p-4 focus:outline-none ${
+          selected
+            ? 'border-indigo-400 bg-indigo-50'
+            : 'border-slate-200 hover:border-indigo-300 bg-white'
+        } ${isPhone && 'rounded-b-none border-b-0'}`}
+      >
         <div className="flex items-start justify-between gap-2">
           <div className="flex-1">
             <div className="flex items-center gap-2 flex-wrap">
-              <span className="text-sm font-semibold text-slate-600">{addon.name}</span>
-              <span className="inline-flex items-center gap-1 bg-emerald-100 text-emerald-700 text-xs font-bold px-2 py-0.5 rounded-full">
-                <CheckCircle2 className="w-3 h-3" /> Included in your plan
+              <span
+                className={`text-sm font-semibold ${selected ? 'text-indigo-700' : 'text-slate-700'}`}
+              >
+                {addon.name}
               </span>
+              {isPhone && (
+                <span className="bg-emerald-100 text-emerald-700 text-xs font-bold px-2 py-0.5 rounded-full">
+                  Includes 120 FREE min/mo (2 hours)
+                </span>
+              )}
+              {blogStyle && (
+                <span className="bg-slate-100 text-slate-500 text-xs px-2 py-0.5 rounded-full">
+                  Choose one
+                </span>
+              )}
             </div>
-            <p className="text-xs text-slate-400 mt-1 leading-relaxed">{addon.description}</p>
+            <p className="text-xs text-slate-500 mt-1 leading-relaxed">{addon.description}</p>
+            {isPhone && (
+              <p className="text-xs text-blue-700 mt-1 leading-relaxed">
+                We will provision a dedicated phone number for you — either a toll-free (1-800) or
+                local number depending on your preference. No Twilio account needed.
+              </p>
+            )}
           </div>
-        </div>
-      </div>
-    );
-  }
 
-  return (
-    <button
-      type="button"
-      onClick={onToggle}
-      className={`w-full text-left cursor-pointer transition-all rounded-xl border p-4 focus:outline-none ${
-        selected
-          ? 'border-indigo-400 bg-indigo-50'
-          : 'border-slate-200 hover:border-indigo-300 bg-white'
-      }`}
-    >
-      <div className="flex items-start justify-between gap-2">
-        <div className="flex-1">
-          <div className="flex items-center gap-2 flex-wrap">
-            <span className={`text-sm font-semibold ${selected ? 'text-indigo-700' : 'text-slate-700'}`}>
-              {addon.name}
+          <div className="flex flex-col items-end gap-1 shrink-0">
+            <span className={`text-sm font-bold ${selected ? 'text-indigo-600' : 'text-slate-500'}`}>
+              {priceLabel}
             </span>
-            {addon.badge && (
-              <span className="bg-amber-100 text-amber-700 text-xs font-bold px-2 py-0.5 rounded-full">
-                {addon.badge}
+            {hasSetupFee && (
+              <span className="text-xs text-slate-400 text-right">
+                +{centsToDisplay(addon.setup_fee_cents!)} setup
               </span>
             )}
-            {isBlog && (
-              <span className="bg-slate-100 text-slate-500 text-xs px-2 py-0.5 rounded-full">
-                Choose one
-              </span>
-            )}
-          </div>
-          <p className="text-xs text-slate-500 mt-1 leading-relaxed">{addon.description}</p>
-        </div>
-        <div className="flex flex-col items-end gap-1.5 shrink-0">
-          <span className={`text-sm font-bold ${selected ? 'text-indigo-600' : 'text-slate-500'}`}>
-            {addon.display}
-          </span>
-          <div
-            className={`w-5 h-5 rounded flex items-center justify-center border-2 transition-all ${
-              isBlog
-                ? selected
-                  ? 'rounded-full bg-indigo-600 border-indigo-600'
-                  : 'rounded-full border-slate-300'
-                : selected
-                ? 'bg-indigo-600 border-indigo-600'
-                : 'border-slate-300'
-            }`}
-          >
-            {selected && <CheckCircle2 className="w-3.5 h-3.5 text-white" />}
+            <div
+              className={`w-5 h-5 flex items-center justify-center border-2 transition-all ${
+                blogStyle
+                  ? `rounded-full ${selected ? 'bg-indigo-600 border-indigo-600' : 'border-slate-300'}`
+                  : `rounded ${selected ? 'bg-indigo-600 border-indigo-600' : 'border-slate-300'}`
+              }`}
+            >
+              {selected && <CheckCircle2 className="w-3.5 h-3.5 text-white" />}
+            </div>
           </div>
         </div>
-      </div>
-    </button>
+      </button>
+
+      {/* AI Phone provisioning box — always visible for this addon */}
+      {isPhone && (
+        <div
+          className={`rounded-b-xl border border-t-0 px-4 pb-4 pt-3 transition-all ${
+            selected ? 'border-indigo-400 bg-indigo-50' : 'border-slate-200 bg-white'
+          }`}
+        >
+          <div className="bg-blue-50 border border-blue-200 rounded-lg p-3 text-xs text-blue-800">
+            <span className="font-semibold">📞 Don't have a business phone number?</span>
+            <span> No problem — we'll set one up for you. Choose between a </span>
+            <span className="font-semibold">toll-free (1-800)</span>
+            <span> or </span>
+            <span className="font-semibold">local area code number</span>
+            <span>. No Twilio account or technical setup required on your end.</span>
+          </div>
+          {selected && (
+            <label className="flex items-start gap-2 mt-2 cursor-pointer text-xs text-slate-600">
+              <input
+                type="checkbox"
+                className="mt-0.5"
+                checked={wantsTollFree}
+                onChange={(e) => onTollFreeChange(e.target.checked)}
+              />
+              <span>I'd prefer a toll-free (1-800) number</span>
+            </label>
+          )}
+        </div>
+      )}
+    </div>
   );
 };
 
 // ─── Main Component ────────────────────────────────────────────────────────────
 
-interface FormData {
-  firstName: string;
-  lastName: string;
-  businessName: string;
-  email: string;
-  phone: string;
-  industry: string;
-  businessDescription: string;
-}
-
 const ProSitesCheckout: React.FC = () => {
   const [searchParams] = useSearchParams();
+
+  // Step
   const [step, setStep] = useState<1 | 2 | 3>(1);
+
+  // Business info form
   const [formData, setFormData] = useState<FormData>({
     firstName: '',
     lastName: '',
@@ -336,13 +369,23 @@ const ProSitesCheckout: React.FC = () => {
     industry: '',
     businessDescription: '',
   });
-  const [selectedTier, setSelectedTier] = useState<TierKey>('starter');
-  const [selectedAddons, setSelectedAddons] = useState<AddonKey[]>([]);
-  const [isSubmitting, setIsSubmitting] = useState(false);
-  const [error, setError] = useState<string | null>(null);
   const [formErrors, setFormErrors] = useState<Partial<FormData>>({});
 
-  // Pre-select tier from URL param
+  // Plan selection
+  const [selectedTier, setSelectedTier] = useState<TierKey>('starter');
+  const [selectedAddons, setSelectedAddons] = useState<string[]>([]);
+  const [wantsTollFree, setWantsTollFree] = useState(false);
+
+  // Dynamic addons from API
+  const [addons, setAddons] = useState<AddonCatalogItem[]>([]);
+  const [addonsLoading, setAddonsLoading] = useState(true);
+  const [addonsError, setAddonsError] = useState<string | null>(null);
+
+  // Submit state
+  const [isSubmitting, setIsSubmitting] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  // Pre-select tier from ?tier= URL param
   useEffect(() => {
     const tierParam = searchParams.get('tier');
     if (tierParam && tierParam in TIER_PRICES) {
@@ -350,48 +393,65 @@ const ProSitesCheckout: React.FC = () => {
     }
   }, [searchParams]);
 
-  // ── Pricing Calculations ────────────────────────────────────────────────────
+  // Fetch addons from edge function on mount
+  useEffect(() => {
+    const fetchAddons = async () => {
+      try {
+        setAddonsLoading(true);
+        setAddonsError(null);
+        const { data, error: fnError } = await supabase.functions.invoke('get-pro-sites-addons');
+        if (fnError) throw new Error(fnError.message);
+        setAddons(data?.addons ?? []);
+      } catch {
+        setAddonsError(
+          'We had trouble loading add-on options. Please refresh the page or contact us at (470) 264-6256.'
+        );
+      } finally {
+        setAddonsLoading(false);
+      }
+    };
+    fetchAddons();
+  }, []);
 
-  const addonsMonthlyCents = selectedAddons.reduce((sum, key) => {
-    if (isAddonIncluded(key, selectedTier)) return sum;
-    const addon = PROSITES_ADDONS.find(a => a.key === key);
-    return sum + (addon?.monthly_cents ?? 0);
-  }, 0);
+  // ── Pricing Calculations ─────────────────────────────────────────────────────
 
   const baseMonthlyCents = TIER_PRICES[selectedTier].monthly_cents;
+
+  const addonsMonthlyCents = selectedAddons.reduce((sum, key) => {
+    const addon = addons.find((a) => a.key === key);
+    return addon ? sum + addonMonthlyContribution(addon) : sum;
+  }, 0);
+
   const totalMonthlyCents = baseMonthlyCents + addonsMonthlyCents;
 
-  // ── Addon Toggle ────────────────────────────────────────────────────────────
+  const hasAddonSetupFees = selectedAddons.some((key) => {
+    const addon = addons.find((a) => a.key === key);
+    return addon && addon.setup_fee_cents && addon.billing_type !== 'one_time';
+  });
 
-  const toggleAddon = (key: AddonKey) => {
-    if (isAddonIncluded(key, selectedTier)) return;
+  // ── Addon Toggle ─────────────────────────────────────────────────────────────
 
-    setSelectedAddons(prev => {
-      const isBlog = BLOG_ADDON_KEYS.includes(key);
-      if (isBlog) {
-        // Radio-style: deselect other blog addons
-        const withoutBlogs = prev.filter(k => !BLOG_ADDON_KEYS.includes(k));
-        if (prev.includes(key)) {
-          // Deselect if already selected
-          return withoutBlogs;
-        }
-        return [...withoutBlogs, key];
+  const toggleAddon = (key: string) => {
+    const addon = addons.find((a) => a.key === key);
+    if (!addon) return;
+
+    setSelectedAddons((prev) => {
+      if (isBlogAddon(addon)) {
+        const blogKeys = addons.filter(isBlogAddon).map((a) => a.key);
+        const withoutBlogs = prev.filter((k) => !blogKeys.includes(k));
+        // Toggle off if already selected, else replace blogs with this one
+        return prev.includes(key) ? withoutBlogs : [...withoutBlogs, key];
       }
-      // Checkbox style
-      return prev.includes(key) ? prev.filter(k => k !== key) : [...prev, key];
+      return prev.includes(key) ? prev.filter((k) => k !== key) : [...prev, key];
     });
+
+    // Clear toll-free preference when deselecting AI phone
+    if (isAiPhoneAddon(addon) && selectedAddons.includes(key)) {
+      setWantsTollFree(false);
+    }
   };
 
-  // When tier changes, remove addons that are now included (they don't need to stay selected)
-  const handleTierChange = (tier: TierKey) => {
-    setSelectedTier(tier);
-    // Filter out addons that are now included in the new tier (no need to keep selected)
-    setSelectedAddons(prev =>
-      prev.filter(key => !isAddonIncluded(key, tier))
-    );
-  };
-
-  // ── Form Validation ─────────────────────────────────────────────────────────
+  // ── Form Validation ──────────────────────────────────────────────────────────
 
   const validateStep1 = (): boolean => {
     const errors: Partial<FormData> = {};
@@ -405,7 +465,7 @@ const ProSitesCheckout: React.FC = () => {
     return Object.keys(errors).length === 0;
   };
 
-  // ── Submit ──────────────────────────────────────────────────────────────────
+  // ── Submit ───────────────────────────────────────────────────────────────────
 
   const handleSubmit = async () => {
     setIsSubmitting(true);
@@ -415,21 +475,25 @@ const ProSitesCheckout: React.FC = () => {
       const success_url = `${window.location.origin}/pro-sites/success`;
       const cancel_url = `${window.location.origin}/pro-sites/checkout`;
 
-      const { data, error: fnError } = await supabase.functions.invoke('create-pro-sites-checkout', {
-        body: {
-          first_name: formData.firstName,
-          last_name: formData.lastName,
-          business_name: formData.businessName,
-          email: formData.email,
-          phone: formData.phone || undefined,
-          industry: formData.industry,
-          business_description: formData.businessDescription || undefined,
-          tier: selectedTier,
-          selected_addons: selectedAddons,
-          success_url,
-          cancel_url,
-        },
-      });
+      const { data, error: fnError } = await supabase.functions.invoke(
+        'create-pro-sites-checkout',
+        {
+          body: {
+            first_name: formData.firstName,
+            last_name: formData.lastName,
+            business_name: formData.businessName,
+            email: formData.email,
+            phone: formData.phone || undefined,
+            industry: formData.industry,
+            business_description: formData.businessDescription || undefined,
+            tier: selectedTier,
+            selected_addons: selectedAddons,
+            prefers_toll_free_number: wantsTollFree,
+            success_url,
+            cancel_url,
+          },
+        }
+      );
 
       if (fnError) throw new Error(fnError.message || 'Failed to create checkout session.');
       if (!data?.checkout_url) throw new Error('No checkout URL returned.');
@@ -442,17 +506,30 @@ const ProSitesCheckout: React.FC = () => {
   };
 
   const updateField = (field: keyof FormData, value: string) => {
-    setFormData(prev => ({ ...prev, [field]: value }));
-    if (formErrors[field]) setFormErrors(prev => ({ ...prev, [field]: undefined }));
+    setFormData((prev) => ({ ...prev, [field]: value }));
+    if (formErrors[field]) setFormErrors((prev) => ({ ...prev, [field]: undefined }));
   };
 
-  // ── Render ──────────────────────────────────────────────────────────────────
+  // ── Derived State ────────────────────────────────────────────────────────────
+
+  const aiPhoneSelected = selectedAddons.some((k) => {
+    const a = addons.find((ad) => ad.key === k);
+    return a && isAiPhoneAddon(a);
+  });
+
+  const selectedAddonObjects = selectedAddons
+    .map((k) => addons.find((a) => a.key === k))
+    .filter(Boolean) as AddonCatalogItem[];
+
+  const tierPerk = TIER_FREE_PERKS[selectedTier];
+
+  // ── Render ───────────────────────────────────────────────────────────────────
 
   return (
     <div className="bg-slate-50 min-h-screen py-12 px-4">
       <div className="max-w-3xl mx-auto">
 
-        {/* Header */}
+        {/* Page header */}
         <div className="text-center mb-8">
           <h1 className="text-2xl md:text-3xl font-extrabold text-slate-900">
             Get Your CWP Pro Site
@@ -464,7 +541,7 @@ const ProSitesCheckout: React.FC = () => {
 
         <ProgressBar step={step} />
 
-        {/* ── Step 1: Your Business ─────────────────────────────────────────── */}
+        {/* ── Step 1: Your Business ──────────────────────────────────────────── */}
         {step === 1 && (
           <div className="bg-white rounded-2xl shadow-sm border border-slate-200 p-6 md:p-8">
             <h2 className="text-xl font-bold text-slate-900 mb-6">Tell Us About Your Business</h2>
@@ -479,7 +556,7 @@ const ProSitesCheckout: React.FC = () => {
                   <input
                     type="text"
                     value={formData.firstName}
-                    onChange={e => updateField('firstName', e.target.value)}
+                    onChange={(e) => updateField('firstName', e.target.value)}
                     placeholder="Jane"
                     className={`w-full border rounded-xl px-4 py-3 text-sm text-slate-800 focus:outline-none focus:ring-2 focus:ring-indigo-400 transition-all ${
                       formErrors.firstName ? 'border-red-400' : 'border-slate-200'
@@ -496,7 +573,7 @@ const ProSitesCheckout: React.FC = () => {
                   <input
                     type="text"
                     value={formData.lastName}
-                    onChange={e => updateField('lastName', e.target.value)}
+                    onChange={(e) => updateField('lastName', e.target.value)}
                     placeholder="Smith"
                     className={`w-full border rounded-xl px-4 py-3 text-sm text-slate-800 focus:outline-none focus:ring-2 focus:ring-indigo-400 transition-all ${
                       formErrors.lastName ? 'border-red-400' : 'border-slate-200'
@@ -516,7 +593,7 @@ const ProSitesCheckout: React.FC = () => {
                 <input
                   type="text"
                   value={formData.businessName}
-                  onChange={e => updateField('businessName', e.target.value)}
+                  onChange={(e) => updateField('businessName', e.target.value)}
                   placeholder="Smith Insurance Agency"
                   className={`w-full border rounded-xl px-4 py-3 text-sm text-slate-800 focus:outline-none focus:ring-2 focus:ring-indigo-400 transition-all ${
                     formErrors.businessName ? 'border-red-400' : 'border-slate-200'
@@ -535,7 +612,7 @@ const ProSitesCheckout: React.FC = () => {
                 <input
                   type="email"
                   value={formData.email}
-                  onChange={e => updateField('email', e.target.value)}
+                  onChange={(e) => updateField('email', e.target.value)}
                   placeholder="jane@smithinsurance.com"
                   className={`w-full border rounded-xl px-4 py-3 text-sm text-slate-800 focus:outline-none focus:ring-2 focus:ring-indigo-400 transition-all ${
                     formErrors.email ? 'border-red-400' : 'border-slate-200'
@@ -549,12 +626,13 @@ const ProSitesCheckout: React.FC = () => {
               {/* Phone */}
               <div>
                 <label className="block text-sm font-semibold text-slate-700 mb-1.5">
-                  Phone Number <span className="text-slate-400 font-normal">(optional)</span>
+                  Phone Number{' '}
+                  <span className="text-slate-400 font-normal">(optional)</span>
                 </label>
                 <input
                   type="tel"
                   value={formData.phone}
-                  onChange={e => updateField('phone', e.target.value)}
+                  onChange={(e) => updateField('phone', e.target.value)}
                   placeholder="(470) 555-1234"
                   className="w-full border border-slate-200 rounded-xl px-4 py-3 text-sm text-slate-800 focus:outline-none focus:ring-2 focus:ring-indigo-400 transition-all"
                 />
@@ -567,14 +645,16 @@ const ProSitesCheckout: React.FC = () => {
                 </label>
                 <select
                   value={formData.industry}
-                  onChange={e => updateField('industry', e.target.value)}
+                  onChange={(e) => updateField('industry', e.target.value)}
                   className={`w-full border rounded-xl px-4 py-3 text-sm text-slate-800 focus:outline-none focus:ring-2 focus:ring-indigo-400 transition-all bg-white ${
                     formErrors.industry ? 'border-red-400' : 'border-slate-200'
                   }`}
                 >
                   <option value="">— Select your industry —</option>
-                  {INDUSTRIES.map(ind => (
-                    <option key={ind} value={ind}>{ind}</option>
+                  {INDUSTRIES.map((ind) => (
+                    <option key={ind} value={ind}>
+                      {ind}
+                    </option>
                   ))}
                 </select>
                 {formErrors.industry && (
@@ -590,7 +670,7 @@ const ProSitesCheckout: React.FC = () => {
                 </label>
                 <textarea
                   value={formData.businessDescription}
-                  onChange={e => updateField('businessDescription', e.target.value)}
+                  onChange={(e) => updateField('businessDescription', e.target.value)}
                   placeholder="What services do you offer? Who are your customers?"
                   rows={3}
                   className="w-full border border-slate-200 rounded-xl px-4 py-3 text-sm text-slate-800 focus:outline-none focus:ring-2 focus:ring-indigo-400 transition-all resize-none"
@@ -613,21 +693,63 @@ const ProSitesCheckout: React.FC = () => {
           </div>
         )}
 
-        {/* ── Step 2: Plan & Add-Ons ────────────────────────────────────────── */}
+        {/* ── Step 2: Plan & Add-Ons ─────────────────────────────────────────── */}
         {step === 2 && (
           <div className="space-y-6">
-            {/* Tier Selection */}
+
+            {/* Header & context */}
             <div className="bg-white rounded-2xl shadow-sm border border-slate-200 p-6 md:p-8">
               <h2 className="text-xl font-bold text-slate-900 mb-2">Choose Your Plan</h2>
-              <p className="text-slate-500 text-sm mb-6">Select the tier that fits your business.</p>
+              <p className="text-slate-600 text-sm mb-5 leading-relaxed">
+                Every CWP Pro Sites plan includes a professionally built website, custom-written
+                content, and full configuration — tailored specifically to your industry and
+                business. <strong>This is not a template. We build it for you.</strong>
+              </p>
 
-              <div className="flex gap-3 flex-wrap sm:flex-nowrap">
-                {(Object.keys(TIER_PRICES) as TierKey[]).map(tier => (
+              {/* What's always included */}
+              <div className="border border-indigo-200 bg-indigo-50 rounded-xl p-4 mb-4">
+                <p className="text-xs font-bold text-indigo-800 uppercase tracking-wide mb-2">
+                  ✅ Included in Every Plan
+                </p>
+                <ul className="space-y-1.5">
+                  {[
+                    'Custom AI-built website (pages tailored to your industry)',
+                    'Mobile-optimized, fast-loading design',
+                    'Smart contact form + lead capture',
+                    'SSL certificate + Hosting + Uptime monitoring',
+                    'Monthly maintenance & security updates',
+                    'You own your content — export or leave anytime',
+                  ].map((item) => (
+                    <li key={item} className="flex items-start gap-1.5 text-xs text-indigo-700">
+                      <CheckCircle2 className="w-3.5 h-3.5 shrink-0 mt-0.5 text-indigo-500" />
+                      {item}
+                    </li>
+                  ))}
+                </ul>
+              </div>
+
+              {/* Disclaimer */}
+              <div className="bg-rose-50 border border-rose-200 rounded-lg p-4">
+                <p className="text-xs font-bold text-rose-800 mb-1">⚠️ Please Note</p>
+                <p className="text-xs text-rose-800 leading-relaxed">
+                  CWP Pro Sites is a <strong>website subscription service</strong> — not a CRM,
+                  custom development project, or our full-service agency offering. If you need a
+                  custom business operating system, client portal, or advanced automation platform,
+                  visit our main services page.
+                </p>
+              </div>
+            </div>
+
+            {/* Tier Cards */}
+            <div className="bg-white rounded-2xl shadow-sm border border-slate-200 p-6 md:p-8">
+              <h3 className="text-base font-bold text-slate-800 mb-4">Select Your Monthly Plan</h3>
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                {(Object.keys(TIER_PRICES) as TierKey[]).map((tier) => (
                   <TierCard
                     key={tier}
                     tier={tier}
                     selected={selectedTier === tier}
-                    onClick={() => handleTierChange(tier)}
+                    onClick={() => setSelectedTier(tier)}
                   />
                 ))}
               </div>
@@ -635,43 +757,74 @@ const ProSitesCheckout: React.FC = () => {
 
             {/* Add-Ons */}
             <div className="bg-white rounded-2xl shadow-sm border border-slate-200 p-6 md:p-8">
-              <h2 className="text-xl font-bold text-slate-900 mb-2">Customize With Add-Ons</h2>
-              <p className="text-slate-500 text-sm mb-6">
-                Add-ons included in your plan are highlighted. Select any extras you'd like.
+              <h3 className="text-base font-bold text-slate-800 mb-1">Customize With Add-Ons</h3>
+              <p className="text-slate-500 text-sm mb-5">
+                Optional features you can add to any plan. Select as many as you'd like.
               </p>
 
-              <div className="space-y-3">
-                {PROSITES_ADDONS.map(addon => (
-                  <AddonCard
-                    key={addon.key}
-                    addonKey={addon.key}
-                    selectedTier={selectedTier}
-                    selected={selectedAddons.includes(addon.key)}
-                    isBlogSelected={BLOG_ADDON_KEYS.some(k => selectedAddons.includes(k))}
-                    onToggle={() => toggleAddon(addon.key)}
-                  />
-                ))}
-              </div>
+              {/* Loading state */}
+              {addonsLoading && (
+                <div className="flex items-center justify-center py-10 gap-3 text-slate-400">
+                  <Loader2 className="w-5 h-5 animate-spin" />
+                  <span className="text-sm">Loading add-on options...</span>
+                </div>
+              )}
+
+              {/* Error state */}
+              {addonsError && (
+                <div className="bg-red-50 border border-red-200 rounded-xl p-4 text-sm text-red-700">
+                  {addonsError}
+                </div>
+              )}
+
+              {/* Addon list */}
+              {!addonsLoading && !addonsError && addons.length > 0 && (
+                <div className="space-y-3">
+                  {addons.map((addon) => (
+                    <AddonCard
+                      key={addon.key}
+                      addon={addon}
+                      selected={selectedAddons.includes(addon.key)}
+                      blogStyle={isBlogAddon(addon)}
+                      wantsTollFree={wantsTollFree}
+                      onToggle={() => toggleAddon(addon.key)}
+                      onTollFreeChange={setWantsTollFree}
+                    />
+                  ))}
+                </div>
+              )}
 
               {/* Running Total */}
               <div className="mt-6 pt-5 border-t border-slate-100">
                 <div className="bg-slate-50 rounded-xl p-4 space-y-2">
                   <div className="flex justify-between text-sm text-slate-600">
-                    <span>Base Plan ({TIER_PRICES[selectedTier].label})</span>
+                    <span>{TIER_PRICES[selectedTier].label} Plan</span>
                     <span className="font-semibold">{centsToDisplay(baseMonthlyCents)}/mo</span>
                   </div>
                   {addonsMonthlyCents > 0 && (
                     <div className="flex justify-between text-sm text-slate-600">
                       <span>Add-ons</span>
-                      <span className="font-semibold">+{centsToDisplay(addonsMonthlyCents)}/mo</span>
+                      <span className="font-semibold">
+                        +{centsToDisplay(addonsMonthlyCents)}/mo
+                      </span>
                     </div>
                   )}
                   <div className="flex justify-between text-sm text-slate-500">
-                    <span>One-time setup fee</span>
+                    <span>One-time setup fee (website build)</span>
                     <span>+{centsToDisplay(SETUP_FEE_CENTS)}</span>
                   </div>
+                  {hasAddonSetupFees && (
+                    <p className="text-xs text-slate-400 text-right">
+                      Additional setup fees may apply for selected add-ons
+                    </p>
+                  )}
                   <div className="flex justify-between font-bold text-slate-900 text-base pt-2 border-t border-slate-200">
-                    <span>Monthly Total</span>
+                    <div>
+                      <span>Monthly Subscription Total</span>
+                      <p className="text-xs font-normal text-slate-400 mt-0.5">
+                        Billed on a recurring basis
+                      </p>
+                    </div>
                     <span className="text-indigo-600">{centsToDisplay(totalMonthlyCents)}/mo</span>
                   </div>
                 </div>
@@ -699,20 +852,29 @@ const ProSitesCheckout: React.FC = () => {
           </div>
         )}
 
-        {/* ── Step 3: Review & Pay ──────────────────────────────────────────── */}
+        {/* ── Step 3: Review & Pay ───────────────────────────────────────────── */}
         {step === 3 && (
           <div className="space-y-6">
             <div className="bg-white rounded-2xl shadow-sm border border-slate-200 p-6 md:p-8">
               <h2 className="text-xl font-bold text-slate-900 mb-6">Review Your Order</h2>
 
-              {/* Business Summary */}
-              <div className="bg-slate-50 rounded-xl p-4 mb-6">
+              {/* Business summary */}
+              <div className="bg-slate-50 rounded-xl p-4 mb-5">
                 <p className="font-bold text-slate-900">{formData.businessName}</p>
                 <p className="text-slate-500 text-sm">{formData.industry}</p>
               </div>
 
-              {/* Line Items */}
+              {/* Free perk callout */}
+              <div className="bg-amber-50 border border-amber-200 rounded-xl p-4 mb-5">
+                <p className="text-sm font-bold text-amber-800">
+                  ⭐ Your Free Included Perk: {tierPerk.perk}
+                </p>
+                <p className="text-xs text-amber-700 mt-1 leading-relaxed">{tierPerk.detail}</p>
+              </div>
+
+              {/* Line items */}
               <div className="space-y-3">
+                {/* Setup fee */}
                 <div className="flex justify-between items-start text-sm">
                   <div>
                     <p className="font-semibold text-slate-800">One-time Setup Fee</p>
@@ -725,6 +887,7 @@ const ProSitesCheckout: React.FC = () => {
                   </span>
                 </div>
 
+                {/* Base plan */}
                 <div className="flex justify-between items-center text-sm">
                   <p className="font-semibold text-slate-800">
                     Monthly Plan — {TIER_PRICES[selectedTier].label}
@@ -734,40 +897,58 @@ const ProSitesCheckout: React.FC = () => {
                   </span>
                 </div>
 
-                {selectedAddons.filter(k => !isAddonIncluded(k, selectedTier)).map(key => {
-                  const addon = PROSITES_ADDONS.find(a => a.key === key)!;
-                  return (
-                    <div key={key} className="flex justify-between items-center text-sm pl-3 border-l-2 border-indigo-200">
-                      <p className="text-slate-600">{addon.name}</p>
-                      <span className="text-slate-700 font-semibold">{addon.display}</span>
+                {/* Selected addons */}
+                {selectedAddonObjects.map((addon) => (
+                  <div
+                    key={addon.key}
+                    className="pl-3 border-l-2 border-indigo-200 space-y-0.5"
+                  >
+                    <div className="flex justify-between items-start text-sm">
+                      <p className="text-slate-600">
+                        {isAiPhoneAddon(addon)
+                          ? '24/7 AI Phone Receptionist (120 FREE min/mo — 2 hrs)'
+                          : addon.name}
+                      </p>
+                      <span className="text-slate-700 font-semibold whitespace-nowrap ml-4">
+                        {addonPriceLabel(addon)}
+                      </span>
                     </div>
-                  );
-                })}
+                    {addon.setup_fee_cents && addon.billing_type !== 'one_time' && (
+                      <p className="text-xs text-slate-400">
+                        +{centsToDisplay(addon.setup_fee_cents)} one-time setup (billed separately
+                        after launch)
+                      </p>
+                    )}
+                  </div>
+                ))}
 
-                <div className="border-t border-slate-200 pt-3 flex justify-between items-center">
+                {/* Toll-free preference */}
+                {aiPhoneSelected && wantsTollFree && (
+                  <div className="pl-3 border-l-2 border-blue-200 text-xs text-blue-700">
+                    📞 Phone number preference: Toll-free (1-800)
+                  </div>
+                )}
+
+                {/* Monthly total */}
+                <div className="border-t border-slate-200 pt-3 flex justify-between items-start">
                   <div>
-                    <p className="font-bold text-slate-900">Monthly Total</p>
+                    <p className="font-bold text-slate-900">Monthly Subscription Total</p>
                     <p className="text-slate-400 text-xs mt-0.5">
-                      Your first month + setup fee is charged today. Cancel anytime.
+                      Billed on a recurring basis. Your first month + setup fee is charged today.
+                      Cancel anytime.
                     </p>
                   </div>
-                  <span className="text-xl font-black text-indigo-600">
+                  <span className="text-xl font-black text-indigo-600 whitespace-nowrap ml-4">
                     {centsToDisplay(totalMonthlyCents)}/mo
                   </span>
                 </div>
               </div>
 
-              {/* AI Phone callout */}
-              {(selectedAddons.includes('ai_phone_inbound') ||
-                isAddonIncluded('ai_phone_inbound', selectedTier)) && (
-                <div className="mt-5 bg-amber-50 border border-amber-200 rounded-xl p-4 flex gap-3">
-                  <span className="text-xl">🎙️</span>
-                  <p className="text-sm text-amber-800 leading-relaxed">
-                    <strong>AI Phone includes 135 FREE minutes every month.</strong> We handle all
-                    setup and configuration.
-                  </p>
-                </div>
-              )}
+              {/* Subscription disclaimer */}
+              <div className="mt-5 bg-slate-50 border border-slate-200 rounded-lg p-3 text-xs text-slate-500 leading-relaxed">
+                This is a website subscription service. Setup fee covers your website build. Monthly
+                fee covers hosting, maintenance &amp; active features.
+              </div>
 
               {/* Error */}
               {error && (
@@ -785,7 +966,7 @@ const ProSitesCheckout: React.FC = () => {
               >
                 {isSubmitting ? (
                   <>
-                    <span className="animate-spin w-5 h-5 border-2 border-white border-t-transparent rounded-full" />
+                    <Loader2 className="w-5 h-5 animate-spin" />
                     Creating your checkout...
                   </>
                 ) : (
@@ -811,7 +992,7 @@ const ProSitesCheckout: React.FC = () => {
               <ArrowLeft className="w-4 h-4" /> Edit My Order
             </button>
 
-            {/* Questions */}
+            {/* Contact */}
             <div className="text-center">
               <a
                 href="tel:4702646256"

@@ -76,6 +76,7 @@ serve(async (req) => {
       business_description,
       tier,
       selected_addons,
+      prefers_toll_free_number,
       success_url,
       cancel_url,
     } = body;
@@ -202,6 +203,7 @@ serve(async (req) => {
         selected_addons: JSON.stringify(billedAddons),
         business_name,
         industry,
+        prefers_toll_free: prefers_toll_free_number ? 'yes' : 'no',
       },
       subscription_data: {
         metadata: {
