@@ -429,10 +429,14 @@ const ProSitesCheckout: React.FC = () => {
 
   const totalMonthlyCents = baseMonthlyCents + addonsMonthlyCents;
 
-  const hasAddonSetupFees = selectedAddons.some((key) => {
+  const addonSetupFeeCents = selectedAddons.reduce((sum, key) => {
     const addon = addons.find((a) => a.key === key);
-    return addon && addon.setup_fee_cents && addon.billing_type !== 'one_time';
-  });
+    if (!addon || addon.billing_type === 'one_time' || !addon.setup_fee_cents) return sum;
+    return sum + addon.setup_fee_cents;
+  }, 0);
+
+  const dueTodayCents = SETUP_FEE_CENTS + addonSetupFeeCents + totalMonthlyCents;
+  const hasAddonSetupFees = addonSetupFeeCents > 0;
 
   // ── Addon Toggle ─────────────────────────────────────────────────────────────
 
@@ -877,82 +881,70 @@ const ProSitesCheckout: React.FC = () => {
                 <p className="text-xs text-amber-700 mt-1 leading-relaxed">{tierPerk.detail}</p>
               </div>
 
-              {/* Line items */}
-              <div className="space-y-3">
-                {/* Setup fee */}
-                <div className="flex justify-between items-start text-sm">
-                  <div>
-                    <p className="font-semibold text-slate-800">One-time Setup Fee</p>
-                    <p className="text-slate-400 text-xs mt-0.5">
-                      Covers AI website build, all integrations, testing &amp; launch
-                    </p>
-                  </div>
-                  <span className="font-bold text-slate-900 whitespace-nowrap ml-4">
-                    {centsToDisplay(SETUP_FEE_CENTS)}
-                  </span>
-                </div>
-
-                {/* Base plan */}
-                <div className="flex justify-between items-center text-sm">
-                  <p className="font-semibold text-slate-800">
-                    Monthly Plan — {TIER_PRICES[selectedTier].label}
-                  </p>
-                  <span className="font-bold text-slate-900">
-                    {centsToDisplay(baseMonthlyCents)}/mo
-                  </span>
-                </div>
-
-                {/* Selected addons */}
-                {selectedAddonObjects.map((addon) => (
-                  <div
-                    key={addon.key}
-                    className="pl-3 border-l-2 border-indigo-200 space-y-0.5"
-                  >
-                    <div className="flex justify-between items-start text-sm">
-                      <p className="text-slate-600">
-                        {isAiPhoneAddon(addon)
-                          ? '24/7 AI Phone Receptionist (120 FREE min/mo — 2 hrs)'
-                          : addon.name}
-                      </p>
-                      <span className="text-slate-700 font-semibold whitespace-nowrap ml-4">
-                        {addonPriceLabel(addon)}
-                      </span>
+              {/* ── DUE TODAY ─────────────────────────────────────────── */}
+              <div className="rounded-xl border-2 border-emerald-400 bg-emerald-50 p-5 mb-4">
+                <p className="text-xs font-bold uppercase tracking-widest text-emerald-700 mb-3">Charged Today</p>
+                <div className="space-y-2 text-sm">
+                  {/* Website setup fee */}
+                  <div className="flex justify-between items-start">
+                    <div>
+                      <p className="font-semibold text-slate-800">Website Build &amp; Setup Fee</p>
+                      <p className="text-slate-500 text-xs mt-0.5">AI-built site, integrations, testing &amp; launch</p>
                     </div>
-                    {addon.setup_fee_cents && addon.billing_type !== 'one_time' && (
-                      <p className="text-xs text-slate-400">
-                        +{centsToDisplay(addon.setup_fee_cents)} one-time setup (billed separately
-                        after launch)
-                      </p>
-                    )}
+                    <span className="font-bold text-slate-900 whitespace-nowrap ml-4">{centsToDisplay(SETUP_FEE_CENTS)}</span>
                   </div>
-                ))}
-
-                {/* Toll-free preference */}
-                {aiPhoneSelected && wantsTollFree && (
-                  <div className="pl-3 border-l-2 border-blue-200 text-xs text-blue-700">
-                    📞 Phone number preference: Toll-free (1-800)
+                  {/* Addon setup fees */}
+                  {selectedAddonObjects.filter(a => a.setup_fee_cents && a.billing_type !== 'one_time').map((addon) => (
+                    <div key={addon.key + '_setup'} className="flex justify-between items-center">
+                      <p className="text-slate-600">{addon.name} — Setup</p>
+                      <span className="font-semibold text-slate-800 whitespace-nowrap ml-4">+{centsToDisplay(addon.setup_fee_cents!)}</span>
+                    </div>
+                  ))}
+                  {/* First month */}
+                  <div className="flex justify-between items-start">
+                    <div>
+                      <p className="font-semibold text-slate-800">First Month ({TIER_PRICES[selectedTier].label} Plan{addonsMonthlyCents > 0 ? ' + Add-ons' : ''})</p>
+                      <p className="text-slate-500 text-xs mt-0.5">Hosting, maintenance &amp; active features</p>
+                    </div>
+                    <span className="font-bold text-slate-900 whitespace-nowrap ml-4">{centsToDisplay(totalMonthlyCents)}</span>
                   </div>
-                )}
-
-                {/* Monthly total */}
-                <div className="border-t border-slate-200 pt-3 flex justify-between items-start">
-                  <div>
-                    <p className="font-bold text-slate-900">Monthly Subscription Total</p>
-                    <p className="text-slate-400 text-xs mt-0.5">
-                      Billed on a recurring basis. Your first month + setup fee is charged today.
-                      Cancel anytime.
-                    </p>
-                  </div>
-                  <span className="text-xl font-black text-indigo-600 whitespace-nowrap ml-4">
-                    {centsToDisplay(totalMonthlyCents)}/mo
-                  </span>
+                </div>
+                <div className="border-t border-emerald-300 mt-3 pt-3 flex justify-between items-center">
+                  <p className="font-black text-slate-900 text-base">Total Due Today</p>
+                  <span className="text-2xl font-black text-emerald-700">{centsToDisplay(dueTodayCents)}</span>
                 </div>
               </div>
 
+              {/* ── RECURRING MONTHLY ─────────────────────────────────────── */}
+              <div className="rounded-xl border border-indigo-200 bg-indigo-50 p-5 mb-4">
+                <p className="text-xs font-bold uppercase tracking-widest text-indigo-600 mb-3">Then Monthly — Starting 30 Days After Signup</p>
+                <div className="space-y-2 text-sm">
+                  <div className="flex justify-between items-center">
+                    <p className="font-semibold text-slate-700">{TIER_PRICES[selectedTier].label} Plan</p>
+                    <span className="text-slate-800 font-semibold">{centsToDisplay(baseMonthlyCents)}/mo</span>
+                  </div>
+                  {selectedAddonObjects.filter(a => addonMonthlyContribution(a) > 0).map((addon) => (
+                    <div key={addon.key + '_mo'} className="flex justify-between items-center">
+                      <p className="text-slate-600">
+                        {isAiPhoneAddon(addon) ? '24/7 AI Phone (120 FREE min/mo — 2 hrs)' : addon.name}
+                      </p>
+                      <span className="text-slate-700 font-semibold whitespace-nowrap ml-4">+{centsToDisplay(addonMonthlyContribution(addon))}/mo</span>
+                    </div>
+                  ))}
+                  {aiPhoneSelected && wantsTollFree && (
+                    <p className="text-xs text-blue-700 pl-2">📞 Phone number preference: Toll-free (1-800)</p>
+                  )}
+                </div>
+                <div className="border-t border-indigo-200 mt-3 pt-3 flex justify-between items-center">
+                  <p className="font-black text-slate-900 text-base">Monthly Total</p>
+                  <span className="text-2xl font-black text-indigo-600">{centsToDisplay(totalMonthlyCents)}<span className="text-sm font-semibold">/mo</span></span>
+                </div>
+                <p className="text-xs text-indigo-500 mt-2 text-center">Cancel anytime. No long-term contract.</p>
+              </div>
+
               {/* Subscription disclaimer */}
-              <div className="mt-5 bg-slate-50 border border-slate-200 rounded-lg p-3 text-xs text-slate-500 leading-relaxed">
-                This is a website subscription service. Setup fee covers your website build. Monthly
-                fee covers hosting, maintenance &amp; active features.
+              <div className="bg-slate-50 border border-slate-200 rounded-lg p-3 text-xs text-slate-500 leading-relaxed">
+                Website subscription service. Setup fee covers your site build. Monthly fee covers hosting, maintenance &amp; active features. Add-on setup fees are one-time charges for initial configuration.
               </div>
 
               {/* Error */}
