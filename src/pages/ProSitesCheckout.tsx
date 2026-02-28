@@ -399,10 +399,15 @@ const ProSitesCheckout: React.FC = () => {
       try {
         setAddonsLoading(true);
         setAddonsError(null);
-        const { data, error: fnError } = await supabase.functions.invoke('get-pro-sites-addons');
-        if (fnError) throw new Error(fnError.message);
-        setAddons(data?.addons ?? []);
-      } catch {
+        const res = await fetch(
+          'https://nvgumhlewbqynrhlkqhx.supabase.co/functions/v1/get-pro-sites-addons',
+          { method: 'GET', headers: { 'Content-Type': 'application/json' } }
+        );
+        if (!res.ok) throw new Error(`HTTP ${res.status}`);
+        const json = await res.json();
+        setAddons(json?.addons ?? []);
+      } catch (err: any) {
+        console.error('[ProSitesCheckout] Failed to load addons:', err);
         setAddonsError(
           'We had trouble loading add-on options. Please refresh the page or contact us at (470) 264-6256.'
         );
