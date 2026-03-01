@@ -8,15 +8,14 @@ import { Profile } from '../types/auth';
 interface ClientData {
   id: string;
   business_name: string;
+  contact_name?: string | null;
   phone: string;
-  address: string; // Added address
+  address: string;
   status: string;
   notes: string;
   owner_profile_id: string;
   billing_email: string | null;
-  contact_name?: string | null;
-  contact_name?: string | null;
-  profiles: Profile | null; // Allowing null here to match Supabase join behavior
+  profiles: Profile | null;
 }
 
 interface EditClientDialogProps {
@@ -40,10 +39,10 @@ const EditClientDialog: React.FC<EditClientDialogProps> = ({ isOpen, onClose, on
     } as Profile;
     
     return {
-        fullName: data.contact_name || profile.full_name,
+        fullName: data.contact_name || profile.full_name || '',
         businessName: data.business_name,
         phone: data.phone,
-        address: data.address, // Include address
+        address: data.address,
         billingEmail: data.billing_email || profile.email,
         clientStatus: data.status,
         profileRole: profile.role,
@@ -53,7 +52,6 @@ const EditClientDialog: React.FC<EditClientDialogProps> = ({ isOpen, onClose, on
   const [formData, setFormData] = useState(getSafeProfileData(initialClientData));
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [profileLoaded, setProfileLoaded] = useState(false);
 
   // Sync state when initial data changes (e.g., when dialog opens with new client data)
   useEffect(() => {
@@ -62,30 +60,6 @@ const EditClientDialog: React.FC<EditClientDialogProps> = ({ isOpen, onClose, on
         setError(null);
     }
   }, [isOpen, initialClientData]);
-
-  useEffect(() => {
-    if (!isOpen || !initialClientData.owner_profile_id) return;
-
-    const fetchProfile = async () => {
-      const { data, error } = await supabase.functions.invoke('admin-update-profile', {
-        body: {
-          action: 'get_profile',
-          profile_id: initialClientData.owner_profile_id
-        },
-      });
-
-      if (!error && data?.profile) {
-        setFormData(prev => ({
-          ...prev,
-          fullName: data.profile.full_name || '',
-          profileRole: data.profile.role || 'client',
-        }));
-        setProfileLoaded(true);
-      }
-    };
-
-    fetchProfile();
-  }, [isOpen, initialClientData.owner_profile_id]);
 
   if (!isOpen) return null;
 
@@ -99,37 +73,23 @@ const EditClientDialog: React.FC<EditClientDialogProps> = ({ isOpen, onClose, on
     setIsLoading(true);
     setError(null);
 
-    const { fullName, businessName, phone, address, billingEmail, clientStatus, profileRole } = formData;
-    const { id: clientId, owner_profile_id: profileId } = initialClientData;
+    const { fullName, businessName, phone, address, billingEmail, clientStatus } = formData;
+    const { id: clientId } = initialClientData;
 
     try {
-      // 1. Update Client Record
       const { error: clientError } = await supabase
         .from('clients')
         .update({
           business_name: businessName,
+          contact_name: fullName,
           phone: phone,
-          address: address, // Save address
+          address: address,
           billing_email: billingEmail,
           status: clientStatus,
         })
         .eq('id', clientId);
 
       if (clientError) throw clientError;
-
-      // 2. Update Profile via admin edge function (bypasses RLS)
-      const { data: profileData, error: profileError } = await supabase.functions.invoke('admin-update-profile', {
-        body: {
-          action: 'update_profile',
-          profile_id: profileId,
-          full_name: fullName,
-          role: profileRole,
-        },
-      });
-
-      if (profileError || profileData?.error) {
-        throw new Error(profileError?.message || profileData?.error || 'Failed to update profile');
-      }
 
       alert(`Client ${businessName} updated successfully!`);
       onClientUpdated();
@@ -178,10 +138,9 @@ const EditClientDialog: React.FC<EditClientDialogProps> = ({ isOpen, onClose, on
                   name="fullName"
                   value={formData.fullName}
                   onChange={handleChange}
-                  placeholder={profileLoaded ? '' : 'Loading...'}
                   className="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm"
                   required
-                  disabled={isLoading || !profileLoaded}
+                  disabled={isLoading}
                 />
               </div>
               <div>

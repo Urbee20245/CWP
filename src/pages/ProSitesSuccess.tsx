@@ -32,7 +32,7 @@ const ProSitesSuccess: React.FC = () => {
             {[
               "You'll receive a confirmation email shortly.",
               'Our team will review your order and begin building your site.',
-              "We'll reach out within 24 hours if we have any questions.",
+              "We'll reach out within 7 days if we have any questions.",
               "Once your site is ready, we'll send you a link to review it.",
               'After your approval, your site goes live!',
             ].map((item, idx) => (

@@ -99,6 +99,7 @@ type ClientServiceStatus = 'active' | 'paused' | 'onboarding' | 'completed' | 'a
 interface Client {
   id: string;
   business_name: string;
+  contact_name: string | null;
   phone: string;
   address: string;
   status: string; // Client status (active/inactive)
@@ -122,7 +123,12 @@ interface Client {
     connection_status: 'connected' | 'disconnected';
     calendar_id: string;
     updated_at: string;
+    access_token?: string | null;
+    needs_reauth?: boolean | null;
   }[] | null;
+  client_cal_calendar: any | null;
+  client_integrations: any | null;
+  client_voice_integrations: any | null;
   proposals: ClientProposal[];
 }
 
@@ -136,13 +142,44 @@ interface BillingProduct {
   bundled_with_product_id: string | null; // New field
 }
 
+const ConnectionCard = ({ icon, name, description, status, detail }: {
+  icon: string;
+  name: string;
+  description: string;
+  status: 'connected' | 'not_configured' | 'error';
+  detail: string;
+}) => {
+  const statusConfig = {
+    connected: { bg: 'bg-emerald-50', border: 'border-emerald-200', dot: 'bg-emerald-500', label: 'Connected', text: 'text-emerald-700' },
+    not_configured: { bg: 'bg-slate-50', border: 'border-slate-200', dot: 'bg-slate-400', label: 'Not Configured', text: 'text-slate-500' },
+    error: { bg: 'bg-red-50', border: 'border-red-200', dot: 'bg-red-500', label: 'Needs Attention', text: 'text-red-700' },
+  }[status];
+
+  return (
+    <div className={`flex items-center justify-between p-4 rounded-xl border ${statusConfig.bg} ${statusConfig.border}`}>
+      <div className="flex items-center gap-3">
+        <span className="text-2xl">{icon}</span>
+        <div>
+          <p className="font-semibold text-slate-800 text-sm">{name}</p>
+          <p className="text-slate-500 text-xs">{description}</p>
+          <p className="text-slate-400 text-xs mt-0.5 font-mono">{detail}</p>
+        </div>
+      </div>
+      <div className={`flex items-center gap-1.5 px-3 py-1 rounded-full ${statusConfig.bg} border ${statusConfig.border}`}>
+        <div className={`w-2 h-2 rounded-full ${statusConfig.dot}`} />
+        <span className={`text-xs font-semibold ${statusConfig.text}`}>{statusConfig.label}</span>
+      </div>
+    </div>
+  );
+};
+
 const AdminClientDetail: React.FC = () => {
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
   const { user, profile: adminProfile } = useAuth();
   const [client, setClient] = useState<Client | null>(null);
   const [isLoading, setIsLoading] = useState(true);
-  const [activeTab, setActiveTab] = useState<'projects' | 'billing' | 'reminders' | 'addons' | 'sms' | 'website'>('billing'); // Default to billing
+  const [activeTab, setActiveTab] = useState<'projects' | 'billing' | 'reminders' | 'addons' | 'sms' | 'website' | 'connections'>('billing'); // Default to billing
   const [fetchError, setFetchError] = useState<string | null>(null); // New state for fetch errors
 
   // Dialog State
@@ -217,9 +254,12 @@ const AdminClientDetail: React.FC = () => {
     const { data: clientData, error: clientError } = await supabase
       .from('clients')
       .select(`
-          id, business_name, phone, address, status, notes, owner_profile_id, stripe_customer_id, billing_email, service_status, cancellation_reason, cancellation_effective_date,
+          id, business_name, contact_name, phone, address, status, notes, owner_profile_id, stripe_customer_id, billing_email, service_status, cancellation_reason, cancellation_effective_date,
           profiles (id, full_name, email, role),
-          client_google_calendar (*)
+          client_google_calendar (*),
+          client_cal_calendar (*),
+          client_integrations (*),
+          client_voice_integrations (*)
       `)
       .eq('id', id)
       .single();
@@ -275,6 +315,9 @@ const AdminClientDetail: React.FC = () => {
         reminders: ensureArray(remindersData) as ClientReminder[],
         proposals: ensureArray(proposalsData) as ClientProposal[],
         client_google_calendar: ensureArray(clientData.client_google_calendar),
+        client_cal_calendar: (clientData as any).client_cal_calendar ?? null,
+        client_integrations: (clientData as any).client_integrations ?? null,
+        client_voice_integrations: (clientData as any).client_voice_integrations ?? null,
     };
     
     setClient(mergedClient);
@@ -964,8 +1007,10 @@ const AdminClientDetail: React.FC = () => {
               </div>
               <div className="flex flex-col sm:flex-row sm:items-center gap-1 sm:gap-3 mt-0.5">
                 <p className="text-sm text-slate-500">
-                  <span className="font-medium text-slate-700">{client.profiles?.full_name || 'N/A'}</span>
-                  {client.profiles?.email ? <span className="text-slate-400"> · {client.profiles.email}</span> : ''}
+                  <span className="font-medium text-slate-700">{client.contact_name || client.profiles?.full_name || 'N/A'}</span>
+                  {(client.profiles?.email || client.billing_email) && (
+                    <span className="text-slate-400"> · {client.profiles?.email || client.billing_email}</span>
+                  )}
                 </p>
                 {client.phone && <p className="text-sm text-slate-400">{client.phone}</p>}
               </div>
@@ -1019,6 +1064,7 @@ const AdminClientDetail: React.FC = () => {
             { id: 'addons', label: 'Add-on Requests' },
             { id: 'sms', label: 'SMS Inbox' },
             { id: 'website', label: '🔑 Domain Creds' },
+            { id: 'connections', label: '🔌 Connections' },
           ].map(tab => (
             <button
               key={tab.id}
@@ -1423,6 +1469,64 @@ const AdminClientDetail: React.FC = () => {
                     <p className="text-slate-400 text-sm mt-1">The client hasn't filled in their domain registrar info yet.</p>
                   </div>
                 )}
+              </div>
+            )}
+
+            {activeTab === 'connections' && (
+              <div className="space-y-4 p-4">
+                <h3 className="text-lg font-bold text-slate-800 mb-4">Client Integrations</h3>
+
+                <ConnectionCard
+                  icon="📱"
+                  name="Twilio SMS"
+                  description="Business SMS number and messaging"
+                  status={client.client_integrations?.twilio_number ? 'connected' : 'not_configured'}
+                  detail={client.client_integrations?.twilio_number || 'No number configured'}
+                />
+
+                <ConnectionCard
+                  icon="📅"
+                  name="Cal.com Booking"
+                  description="Online appointment booking calendar"
+                  status={client.client_cal_calendar?.access_token ? 'connected' : 'not_configured'}
+                  detail={client.client_cal_calendar?.booking_link || 'Not connected'}
+                />
+
+                <ConnectionCard
+                  icon="💳"
+                  name="Stripe"
+                  description="Payment processing"
+                  status={client.stripe_customer_id ? 'connected' : 'not_configured'}
+                  detail={client.stripe_customer_id || 'No Stripe customer'}
+                />
+
+                <ConnectionCard
+                  icon="📆"
+                  name="Google Calendar"
+                  description="Automated appointment syncing"
+                  status={
+                    client.client_google_calendar?.[0]?.access_token && !client.client_google_calendar?.[0]?.needs_reauth
+                      ? 'connected'
+                      : client.client_google_calendar?.[0]?.needs_reauth
+                      ? 'error'
+                      : 'not_configured'
+                  }
+                  detail={
+                    client.client_google_calendar?.[0]?.needs_reauth
+                      ? 'Needs re-authorization'
+                      : client.client_google_calendar?.[0]?.access_token
+                      ? 'Connected'
+                      : 'Not connected'
+                  }
+                />
+
+                <ConnectionCard
+                  icon="🎙️"
+                  name="AI Voice (Retell)"
+                  description="AI phone receptionist"
+                  status={client.client_voice_integrations?.retell_agent_id ? 'connected' : 'not_configured'}
+                  detail={client.client_voice_integrations?.platform_phone_number || 'No voice number configured'}
+                />
               </div>
             )}
 
