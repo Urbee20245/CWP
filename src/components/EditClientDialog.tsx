@@ -14,6 +14,7 @@ interface ClientData {
   notes: string;
   owner_profile_id: string;
   billing_email: string | null;
+  contact_name?: string | null;
   profiles: Profile | null; // Allowing null here to match Supabase join behavior
 }
 
@@ -38,7 +39,7 @@ const EditClientDialog: React.FC<EditClientDialogProps> = ({ isOpen, onClose, on
     } as Profile;
     
     return {
-        fullName: profile.full_name,
+        fullName: data.contact_name || profile.full_name,
         businessName: data.business_name,
         phone: data.phone,
         address: data.address, // Include address
