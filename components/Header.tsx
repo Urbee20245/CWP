@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { Menu, X, Gauge, Phone, Sparkles, LogIn } from 'lucide-react';
+import { Menu, X, Gauge, Sparkles, LogIn } from 'lucide-react';
 import { NavigationLink } from '../types';
 import { Link } from 'react-router-dom';
 
@@ -78,15 +78,15 @@ const Header: React.FC = () => {
           </Link>
         </nav>
 
-        {/* Right Side Actions (Run Website Audit CTA) */}
-        <div className="hidden md:flex items-center gap-4 pl-4 border-l border-slate-200 ml-2">
-             <a 
-                href="tel:4702646256" 
-                className="text-sm font-bold text-slate-700 hover:text-indigo-600 transition-colors flex items-center gap-2"
+        {/* Right Side Actions */}
+        <div className="hidden md:flex items-center gap-3 pl-4 border-l border-slate-200 ml-2">
+             <Link
+                to="/login"
+                className="px-4 py-2.5 text-sm font-semibold text-slate-600 hover:text-slate-900 hover:bg-white/50 rounded-full transition-all flex items-center gap-1.5"
              >
-                <Phone className="w-4 h-4" />
-                <span className="hidden lg:inline">(470) 264-6256</span>
-             </a>
+                <LogIn className="w-3.5 h-3.5" />
+                Client Login
+             </Link>
              <Link
                 to="/jetsuite"
                 className="bg-indigo-600 text-white px-4 py-2.5 rounded-full text-sm font-bold hover:bg-indigo-700 transition-all shadow-lg shadow-indigo-900/20 active:scale-95 flex items-center gap-2"
