@@ -27,6 +27,7 @@ interface Addon {
     is_jet_suite_only: boolean;
     addon_type: 'standard' | 'plan_specific';
     eligible_plans: string[];
+    included_in_plans: string[];
 }
 
 const AdminAddonCatalog: React.FC = () => {
@@ -50,6 +51,7 @@ const AdminAddonCatalog: React.FC = () => {
         isJetSuiteOnly: false,
         addonType: 'standard' as 'standard' | 'plan_specific',
         eligiblePlans: [] as string[],
+        includedInPlans: [] as string[],
     });
 
     const fetchAddons = useCallback(async () => {
@@ -78,6 +80,7 @@ const AdminAddonCatalog: React.FC = () => {
             ...addon,
             addon_type: addon.addon_type ?? 'standard',
             eligible_plans: addon.eligible_plans ?? [],
+            included_in_plans: addon.included_in_plans ?? [],
         });
         setSaveError(null);
     };
@@ -135,6 +138,18 @@ const AdminAddonCatalog: React.FC = () => {
         });
     };
 
+    const handleNewIncludedPlanToggle = (planKey: string) => {
+        setNewAddonData(prev => {
+            const has = prev.includedInPlans.includes(planKey);
+            return {
+                ...prev,
+                includedInPlans: has
+                    ? prev.includedInPlans.filter(p => p !== planKey)
+                    : [...prev.includedInPlans, planKey],
+            };
+        });
+    };
+
     const handleEditEligiblePlanToggle = (planKey: string) => {
         setEditAddon(prev => {
             if (!prev) return null;
@@ -144,6 +159,19 @@ const AdminAddonCatalog: React.FC = () => {
                 eligible_plans: has
                     ? prev.eligible_plans.filter(p => p !== planKey)
                     : [...prev.eligible_plans, planKey],
+            };
+        });
+    };
+
+    const handleEditIncludedPlanToggle = (planKey: string) => {
+        setEditAddon(prev => {
+            if (!prev) return null;
+            const has = prev.included_in_plans.includes(planKey);
+            return {
+                ...prev,
+                included_in_plans: has
+                    ? prev.included_in_plans.filter(p => p !== planKey)
+                    : [...prev.included_in_plans, planKey],
             };
         });
     };
@@ -157,7 +185,7 @@ const AdminAddonCatalog: React.FC = () => {
         setFormError(null);
         setIsCreating(true);
 
-        const { name, key, description, price, setupFee, monthlyPrice, billingType, sortOrder, isJetSuiteOnly, addonType, eligiblePlans } = newAddonData;
+        const { name, key, description, price, setupFee, monthlyPrice, billingType, sortOrder, isJetSuiteOnly, addonType, eligiblePlans, includedInPlans } = newAddonData;
         
         let priceCents = null;
         let setupFeeCents = null;
@@ -206,6 +234,7 @@ const AdminAddonCatalog: React.FC = () => {
             is_jet_suite_only: isJetSuiteOnly,
             addon_type: addonType,
             eligible_plans: addonType === 'plan_specific' ? eligiblePlans : [],
+            included_in_plans: includedInPlans,
         };
 
         try {
@@ -216,7 +245,7 @@ const AdminAddonCatalog: React.FC = () => {
             if (error) throw error;
 
             alert(`Add-on '${name}' created successfully!`);
-            setNewAddonData({ name: '', key: '', description: '', price: 0, setupFee: 0, monthlyPrice: 0, billingType: 'subscription', sortOrder: 0, isJetSuiteOnly: false, addonType: 'standard', eligiblePlans: [] });
+            setNewAddonData({ name: '', key: '', description: '', price: 0, setupFee: 0, monthlyPrice: 0, billingType: 'subscription', sortOrder: 0, isJetSuiteOnly: false, addonType: 'standard', eligiblePlans: [], includedInPlans: [] });
             fetchAddons();
         } catch (e: any) {
             setFormError(e.message || 'Failed to create add-on. Check if the Key is unique.');
@@ -273,6 +302,7 @@ const AdminAddonCatalog: React.FC = () => {
             monthly_price_cents: monthlyPriceCents,
             addon_type: editAddon.addon_type,
             eligible_plans: editAddon.addon_type === 'plan_specific' ? editAddon.eligible_plans : [],
+            included_in_plans: editAddon.included_in_plans,
         };
 
         try {
@@ -581,7 +611,27 @@ const AdminAddonCatalog: React.FC = () => {
                                     </div>
                                 </div>
                             )}
-                            
+
+                            {/* Included In Plans */}
+                            <div className="pt-2 border-t border-slate-100">
+                                <label className="block text-sm font-bold text-slate-700 mb-1">Included In Plans</label>
+                                <p className="text-xs text-slate-400 mb-2">Plans that include this add-on for free (bundled, no extra charge).</p>
+                                <div className="grid grid-cols-2 gap-2">
+                                    {PLAN_OPTIONS.map(plan => (
+                                        <label key={plan.key} className="flex items-center gap-2 text-sm text-slate-700 cursor-pointer bg-emerald-50 rounded-lg px-3 py-2 border border-emerald-100 hover:border-emerald-300 transition-colors">
+                                            <input
+                                                type="checkbox"
+                                                checked={newAddonData.includedInPlans.includes(plan.key)}
+                                                onChange={() => handleNewIncludedPlanToggle(plan.key)}
+                                                className="w-4 h-4 text-emerald-600 border-slate-300 rounded focus:ring-emerald-500"
+                                                disabled={isCreating}
+                                            />
+                                            {plan.label}
+                                        </label>
+                                    ))}
+                                </div>
+                            </div>
+
                             <button
                                 type="submit"
                                 disabled={isCreating || !newAddonData.name || !newAddonData.key || (newAddonData.billingType === 'one_time' && newAddonData.price <= 0) || (newAddonData.billingType === 'subscription' && newAddonData.monthlyPrice <= 0) || (newAddonData.billingType === 'setup_plus_subscription' && (newAddonData.setupFee <= 0 || newAddonData.monthlyPrice <= 0))}
@@ -629,9 +679,19 @@ const AdminAddonCatalog: React.FC = () => {
                                             </div>
                                             <p className="text-xs text-slate-500 truncate mb-1">{addon.description}</p>
                                             {addon.addon_type === 'plan_specific' && addon.eligible_plans?.length > 0 && (
-                                                <div className="flex gap-1 flex-wrap">
+                                                <div className="flex gap-1 flex-wrap mb-1">
                                                     {addon.eligible_plans.map(p => (
                                                         <span key={p} className="px-2 py-0.5 rounded-full text-xs font-medium bg-indigo-50 text-indigo-700 border border-indigo-100 capitalize">
+                                                            {p}
+                                                        </span>
+                                                    ))}
+                                                </div>
+                                            )}
+                                            {addon.included_in_plans?.length > 0 && (
+                                                <div className="flex gap-1 flex-wrap items-center">
+                                                    <span className="text-xs text-emerald-600 font-semibold">Bundled:</span>
+                                                    {addon.included_in_plans.map(p => (
+                                                        <span key={p} className="px-2 py-0.5 rounded-full text-xs font-medium bg-emerald-50 text-emerald-700 border border-emerald-100 capitalize">
                                                             {p}
                                                         </span>
                                                     ))}
@@ -844,6 +904,26 @@ const AdminAddonCatalog: React.FC = () => {
                                     </div>
                                 </div>
                             )}
+
+                            {/* Included In Plans */}
+                            <div className="pt-2 border-t border-slate-100">
+                                <label className="block text-sm font-bold text-slate-700 mb-1">Included In Plans</label>
+                                <p className="text-xs text-slate-400 mb-2">Plans that include this add-on for free (bundled, no extra charge).</p>
+                                <div className="grid grid-cols-2 gap-2">
+                                    {PLAN_OPTIONS.map(plan => (
+                                        <label key={plan.key} className="flex items-center gap-2 text-sm text-slate-700 cursor-pointer bg-emerald-50 rounded-lg px-3 py-2 border border-emerald-100 hover:border-emerald-300 transition-colors">
+                                            <input
+                                                type="checkbox"
+                                                checked={editAddon.included_in_plans.includes(plan.key)}
+                                                onChange={() => handleEditIncludedPlanToggle(plan.key)}
+                                                className="w-4 h-4 text-emerald-600 border-slate-300 rounded focus:ring-emerald-500"
+                                                disabled={isSaving}
+                                            />
+                                            {plan.label}
+                                        </label>
+                                    ))}
+                                </div>
+                            </div>
 
                             <button
                                 type="submit"
