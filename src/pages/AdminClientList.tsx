@@ -26,25 +26,24 @@ const AdminClientList: React.FC = () => {
   const fetchData = useCallback(async () => {
     setIsLoading(true);
     try {
-      const { data, error } = await supabase.functions.invoke('admin-update-profile', {
-        body: { action: 'list_client_profiles' },
-      });
+      const { data: clientsData, error: clientsError } = await supabase
+        .from('clients')
+        .select('id, business_name, contact_name, billing_email, status, owner_profile_id, projects(count)');
 
-      if (error) {
-        console.error('Error fetching clients:', error);
+      if (clientsError) {
+        console.error('Error fetching clients:', clientsError);
         setClients([]);
         return;
       }
 
-      const formattedClients: ClientSummary[] = (data.clients || []).map((client: any) => {
-        const profile = client.profiles;
+      const formattedClients: ClientSummary[] = (clientsData || []).map((client: any) => {
         return {
           id: client.id,
           business_name: client.business_name,
           status: client.status,
           owner_profile_id: client.owner_profile_id,
-          owner_name: profile?.full_name || profile?.email || client.billing_email || 'No user linked',
-          owner_email: profile?.email || client.billing_email || '',
+          owner_name: client.contact_name || client.billing_email || 'No user linked',
+          owner_email: client.billing_email || '',
           project_count: client.projects?.[0]?.count || 0,
         };
       });
