@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { Menu, X, Gauge, Phone, ArrowRight, Sparkles, LogIn } from 'lucide-react';
+import { Menu, X, Gauge, Phone, Sparkles, LogIn } from 'lucide-react';
 import { NavigationLink } from '../types';
 import { Link } from 'react-router-dom';
 
@@ -56,14 +56,6 @@ const Header: React.FC = () => {
           </Link>
 
           <Link
-            to="/jetsuite"
-            className="px-5 py-2.5 text-sm font-medium text-slate-600 hover:text-slate-900 hover:bg-white/50 rounded-full transition-all flex items-center gap-1.5"
-          >
-            <Sparkles className="w-3.5 h-3.5" />
-            JetSuite
-          </Link>
-
-          <Link
             to="/pro-sites"
             className="px-5 py-2.5 text-sm font-medium text-white bg-indigo-600 hover:bg-indigo-700 rounded-full transition-all flex items-center gap-1.5 shadow-md shadow-indigo-900/20"
           >
@@ -96,7 +88,7 @@ const Header: React.FC = () => {
                 <span className="hidden lg:inline">(470) 264-6256</span>
              </a>
              <Link
-                to="/jet-local-optimizer" 
+                to="/jetsuite"
                 className="bg-indigo-600 text-white px-4 py-2.5 rounded-full text-sm font-bold hover:bg-indigo-700 transition-all shadow-lg shadow-indigo-900/20 active:scale-95 flex items-center gap-2"
              >
                 <Gauge className="w-4 h-4" />
@@ -125,14 +117,6 @@ const Header: React.FC = () => {
                       className="w-full text-left px-4 py-3 rounded-xl hover:bg-slate-50 text-slate-700 font-semibold"
                     >
                       Services
-                    </Link>
-                    <Link
-                      to="/jetsuite"
-                      onClick={() => setIsMobileMenuOpen(false)}
-                      className="w-full text-left px-4 py-3 rounded-xl hover:bg-slate-50 text-slate-700 font-semibold flex items-center gap-2"
-                    >
-                      <Sparkles className="w-4 h-4 text-indigo-600" />
-                      JetSuite
                     </Link>
                     <Link
                       to="/pro-sites"
@@ -170,7 +154,7 @@ const Header: React.FC = () => {
                 
                 <div className="p-2">
                     <Link
-                      to="/jet-local-optimizer"
+                      to="/jetsuite"
                       onClick={() => setIsMobileMenuOpen(false)}
                       className="w-full bg-indigo-600 text-white px-4 py-4 rounded-2xl font-bold shadow-lg flex justify-center items-center gap-2"
                     >
