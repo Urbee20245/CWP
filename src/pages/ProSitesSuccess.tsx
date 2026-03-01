@@ -1,6 +1,6 @@
 import React from 'react';
 import { Link, useSearchParams } from 'react-router-dom';
-import { CheckCircle2, Phone } from 'lucide-react';
+import { CheckCircle2, Phone, Rocket } from 'lucide-react';
 
 const ProSitesSuccess: React.FC = () => {
   const [searchParams] = useSearchParams();
@@ -46,6 +46,24 @@ const ProSitesSuccess: React.FC = () => {
           </ol>
         </div>
 
+        {/* GEM CTA */}
+        <div className="bg-indigo-600 rounded-2xl p-6 md:p-8 text-left mb-8 text-white">
+          <div className="flex items-start gap-4">
+            <div className="flex-shrink-0 bg-white/20 rounded-xl p-3">
+              <Rocket className="w-7 h-7 text-white" />
+            </div>
+            <div>
+              <h2 className="text-lg font-bold mb-1">Complete Your Setup Now</h2>
+              <p className="text-indigo-100 text-sm mb-4 leading-relaxed">
+                We're sending your personalized setup link to your email shortly. Use it to configure your phone number, business profile, and more — all in one guided flow.
+              </p>
+              <p className="text-indigo-200 text-xs">
+                Check your inbox for an email with your setup link. It may take a few minutes to arrive.
+              </p>
+            </div>
+          </div>
+        </div>
+
         {/* Contact */}
         <div className="mb-8">
           <a
@@ -60,7 +78,7 @@ const ProSitesSuccess: React.FC = () => {
         {/* Home Link */}
         <Link
           to="/"
-          className="inline-flex items-center gap-2 bg-indigo-600 hover:bg-indigo-700 text-white font-bold px-8 py-3 rounded-xl transition-all active:scale-95 shadow-md shadow-indigo-200"
+          className="inline-flex items-center gap-2 border border-slate-300 hover:border-indigo-400 text-slate-700 hover:text-indigo-700 font-semibold px-8 py-3 rounded-xl transition-all"
         >
           Back to Home
         </Link>
