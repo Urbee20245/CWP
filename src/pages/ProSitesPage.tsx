@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { Link } from 'react-router-dom';
 import {
   CheckCircle2,
@@ -25,7 +25,9 @@ import {
   UtensilsCrossed,
   DollarSign,
   Home,
+  Loader2,
 } from 'lucide-react';
+import { supabase } from '../integrations/supabase/client';
 
 // ─── Industry Data ─────────────────────────────────────────────────────────────
 const INDUSTRY_DATA: Record<
@@ -150,6 +152,16 @@ const INDUSTRY_ICONS = [
   { label: 'Fitness', icon: Dumbbell },
 ];
 
+// ─── Setup Fee — What's Included ──────────────────────────────────────────────
+const SETUP_INCLUDES = [
+  'Custom AI-built website for your industry',
+  'Professional design tailored to your brand',
+  'All pages built & configured',
+  'Mobile optimized & SEO ready',
+  'Domain connection + SSL + Hosting setup',
+  '24-hour delivery guarantee',
+];
+
 // ─── Pricing Plans ─────────────────────────────────────────────────────────────
 const PLANS = [
   {
@@ -161,9 +173,12 @@ const PLANS = [
       'Up to 5 Pages',
       'Mobile Optimized',
       'Smart Contact Form',
-      'SSL Certificate Included',
-      'Hosting Included',
+      'SSL & Hosting Included',
       'Monthly Maintenance',
+    ],
+    included: [
+      'AI Chat Agent — Included',
+      'Cal.com Booking Calendar — Included',
     ],
     popular: false,
     color: 'slate',
@@ -174,11 +189,12 @@ const PLANS = [
     tier: 'growth',
     features: [
       'Everything in Starter, plus:',
-      'Cal.com Booking Integration',
+      'AI Phone Receptionist — Inbound',
       'Live Chat Widget',
       'Automated Blog (2 posts/month)',
       'Privacy Policy + Terms Pages',
     ],
+    included: [],
     popular: false,
     color: 'indigo',
   },
@@ -188,11 +204,12 @@ const PLANS = [
     tier: 'pro',
     features: [
       'Everything in Growth, plus:',
-      'AI Phone Receptionist (Inbound)',
-      'AI Chatbot on Website',
+      'AI Chatbot on Website (advanced)',
+      'AI Phone — Inbound + Outbound',
       'Automated Blog (4 posts/month)',
       'Google Calendar Integration',
     ],
+    included: [],
     popular: true,
     color: 'indigo',
   },
@@ -202,92 +219,147 @@ const PLANS = [
     tier: 'elite',
     features: [
       'Everything in Pro, plus:',
-      'AI Phone (Inbound + Outbound)',
       'Weekly Blog Posts (auto-published)',
       'Priority Support',
       'Quarterly Site Refresh',
     ],
+    included: [],
     popular: false,
     color: 'slate',
   },
 ];
 
-// ─── Add-Ons Data ──────────────────────────────────────────────────────────────
-const ADDONS = [
+// ─── Fallback Add-Ons (shown if Supabase fetch fails) ─────────────────────────
+const FALLBACK_ADDONS = [
   {
     icon: Phone,
     name: 'AI Phone Receptionist — Inbound',
-    description: 'Answers calls 24/7, qualifies leads, books appointments',
-    note: 'Included in Pro & Elite',
+    description: 'Answers calls 24/7, qualifies leads, and books appointments — so you never miss a potential customer.',
+    note: 'Included in Growth, Pro & Elite',
   },
   {
     icon: Zap,
     name: 'AI Phone Receptionist — Outbound',
-    description: 'Follows up with leads automatically',
-    note: 'Included in Elite',
+    description: 'Automatically follows up with leads and prospects via AI-powered outbound calls.',
+    note: 'Included in Pro & Elite',
   },
   {
     icon: FileText,
     name: 'Automated Blog Posts',
-    description: 'Fresh content published on autopilot',
-    note: '2 posts in Growth, 4 in Pro, weekly in Elite',
+    description: 'Fresh, SEO-optimized blog content published on autopilot to keep your site ranking.',
+    note: '2/mo in Growth, 4/mo in Pro, weekly in Elite',
   },
   {
     icon: Calendar,
     name: 'Cal.com Booking Calendar',
-    description: 'Let clients schedule directly on your site',
-    note: 'Included from Growth up',
+    description: 'Let clients schedule appointments directly on your site — no back-and-forth emails.',
+    note: 'Included in Starter & up',
   },
   {
     icon: Bot,
-    name: 'AI Chatbot',
-    description: 'Trained on your business, handles FAQs and captures leads',
-    note: 'Included in Pro & Elite',
+    name: 'AI Chat Agent',
+    description: 'Trained on your business to handle FAQs, capture leads, and guide visitors 24/7.',
+    note: 'Included in Starter & up',
   },
   {
     icon: MessageSquare,
     name: 'Live Chat Widget',
-    description: 'Real-time messaging from your website visitors',
+    description: 'Real-time messaging from your website visitors, routed directly to you or your team.',
     note: 'Included from Growth up',
   },
   {
     icon: Sparkles,
     name: 'AI Business Assistant',
-    description: 'Helps you draft emails, answer business questions',
-    note: 'Available on all plans',
+    description: 'Your AI-powered writing and strategy assistant — draft emails, answer business questions, and more.',
+    note: 'Available as add-on',
   },
   {
     icon: Shield,
     name: 'Legal Pages Bundle',
-    description: 'Privacy Policy, Terms & Conditions, Refund Policy',
+    description: 'Privacy Policy, Terms & Conditions, and Refund Policy — auto-generated for your business.',
     note: 'Included from Growth up',
   },
   {
     icon: Calendar,
     name: 'Google Calendar Sync',
-    description: 'Sync appointments with your existing Google Calendar',
+    description: 'Keep Cal.com appointments in sync with your existing Google Calendar automatically.',
     note: 'Available as add-on',
   },
   {
     icon: Globe,
     name: 'Client Back Office',
-    description: 'Private portal on your domain to manage content',
+    description: 'A private branded portal on your domain where clients can manage content and requests.',
     note: 'Available as add-on',
   },
 ];
 
+// ─── Addon icon mapper (for dynamically fetched add-ons) ──────────────────────
+function getAddonIcon(name: string) {
+  const lower = name.toLowerCase();
+  if (lower.includes('phone') || lower.includes('call')) return Phone;
+  if (lower.includes('blog') || lower.includes('post')) return FileText;
+  if (lower.includes('booking') || lower.includes('calendar') || lower.includes('cal.com') || lower.includes('google calendar')) return Calendar;
+  if (lower.includes('chat') && lower.includes('ai')) return Bot;
+  if (lower.includes('chat') || lower.includes('live')) return MessageSquare;
+  if (lower.includes('legal') || lower.includes('privacy') || lower.includes('terms')) return Shield;
+  if (lower.includes('back office') || lower.includes('portal')) return Globe;
+  if (lower.includes('outbound') || lower.includes('zap')) return Zap;
+  if (lower.includes('assistant') || lower.includes('ai')) return Sparkles;
+  return Star;
+}
+
 // ─── Main Component ────────────────────────────────────────────────────────────
 const ProSitesPage: React.FC = () => {
   const [selectedIndustry, setSelectedIndustry] = useState<string>('');
+  const [catalogAddons, setCatalogAddons] = useState<{ name: string; description: string; note: string; icon: React.ElementType }[]>([]);
+  const [addonsLoading, setAddonsLoading] = useState(true);
 
   const industryData = selectedIndustry ? INDUSTRY_DATA[selectedIndustry] : null;
   const colors = industryData ? COLOR_MAP[industryData.color] || COLOR_MAP.indigo : COLOR_MAP.indigo;
+
+  // Fetch active, public add-ons from the catalog
+  useEffect(() => {
+    supabase
+      .from('addon_catalog')
+      .select('name, description, billing_type, monthly_price_cents, setup_fee_cents, price_cents')
+      .eq('is_active', true)
+      .eq('is_jet_suite_only', false)
+      .order('sort_order', { ascending: true })
+      .then(({ data, error }) => {
+        if (!error && data && data.length > 0) {
+          setCatalogAddons(
+            data.map((a: any) => {
+              let note = 'Available as add-on';
+              if (a.billing_type === 'subscription' && a.monthly_price_cents) {
+                note = `$${(a.monthly_price_cents / 100).toFixed(0)}/mo`;
+              } else if (a.billing_type === 'one_time' && a.price_cents) {
+                note = `$${(a.price_cents / 100).toFixed(0)} one-time`;
+              } else if (a.billing_type === 'setup_plus_subscription' && a.setup_fee_cents && a.monthly_price_cents) {
+                note = `$${(a.setup_fee_cents / 100).toFixed(0)} setup + $${(a.monthly_price_cents / 100).toFixed(0)}/mo`;
+              }
+              return {
+                name: a.name,
+                description: a.description || '',
+                note,
+                icon: getAddonIcon(a.name),
+              };
+            })
+          );
+        } else {
+          // Fall back to hardcoded list if catalog is empty or has an error
+          setCatalogAddons(FALLBACK_ADDONS);
+        }
+        setAddonsLoading(false);
+      });
+  }, []);
 
   const scrollToPricing = (e: React.MouseEvent) => {
     e.preventDefault();
     const el = document.getElementById('pricing');
     if (el) el.scrollIntoView({ behavior: 'smooth' });
   };
+
+  const displayAddons = catalogAddons.length > 0 ? catalogAddons : FALLBACK_ADDONS;
 
   return (
     <div className="bg-white">
@@ -504,15 +576,61 @@ const ProSitesPage: React.FC = () => {
       {/* ─── D. Pricing Tiers Section ────────────────────────────────────────── */}
       <section id="pricing" className="py-24 bg-slate-50">
         <div className="max-w-6xl mx-auto px-6">
-          <div className="text-center mb-14">
+
+          {/* Section heading */}
+          <div className="text-center mb-10">
             <h2 className="text-3xl md:text-4xl font-extrabold text-slate-900 mb-4">
-              Simple, Transparent Monthly Pricing
+              Choose Your Plan
             </h2>
             <p className="text-slate-500 text-lg max-w-2xl mx-auto">
-              All plans include your professionally built website. Add features as your business grows.
+              Every plan starts with a one-time $497 setup. Then choose the monthly plan that fits — each one comes with featured add-ons pre-configured. Or customize your build with any add-on below.
             </p>
           </div>
 
+          {/* $497 Setup — What's Included Banner */}
+          <div className="bg-gradient-to-br from-indigo-900 to-slate-900 rounded-3xl p-8 mb-10 border border-indigo-700/40 shadow-xl">
+            <div className="flex flex-col md:flex-row md:items-center gap-6">
+              <div className="flex-1">
+                <div className="flex items-center gap-3 mb-3">
+                  <div className="bg-indigo-500/20 border border-indigo-400/30 rounded-xl p-2">
+                    <Zap className="w-5 h-5 text-indigo-300" />
+                  </div>
+                  <div>
+                    <p className="text-indigo-300 text-xs font-bold uppercase tracking-widest">One-Time Setup Fee</p>
+                    <p className="text-white text-3xl font-black leading-none">$497</p>
+                  </div>
+                </div>
+                <p className="text-slate-300 text-sm mb-5 leading-relaxed">
+                  Your setup fee covers everything needed to build and launch your professional website. Here's exactly what's included:
+                </p>
+                <ul className="grid sm:grid-cols-2 gap-2">
+                  {SETUP_INCLUDES.map((item) => (
+                    <li key={item} className="flex items-center gap-2 text-slate-200 text-sm">
+                      <CheckCircle2 className="w-4 h-4 text-indigo-400 shrink-0" />
+                      {item}
+                    </li>
+                  ))}
+                </ul>
+              </div>
+              <div className="md:w-64 shrink-0 bg-white/10 rounded-2xl p-5 border border-white/10 backdrop-blur-sm">
+                <p className="text-white font-bold text-sm mb-3">After setup, choose your plan:</p>
+                <ul className="space-y-2 mb-4">
+                  <li className="flex justify-between text-sm text-slate-300"><span>Starter</span><span className="font-bold text-white">$97/mo</span></li>
+                  <li className="flex justify-between text-sm text-slate-300"><span>Growth</span><span className="font-bold text-white">$147/mo</span></li>
+                  <li className="flex justify-between text-sm text-slate-300"><span>Pro</span><span className="font-bold text-indigo-300">$197/mo ⭐</span></li>
+                  <li className="flex justify-between text-sm text-slate-300"><span>Elite</span><span className="font-bold text-white">$247/mo</span></li>
+                </ul>
+                <Link
+                  to="/pro-sites/checkout"
+                  className="block w-full text-center bg-indigo-600 hover:bg-indigo-500 text-white font-bold py-3 rounded-xl text-sm transition-all active:scale-95"
+                >
+                  Get Started — $497
+                </Link>
+              </div>
+            </div>
+          </div>
+
+          {/* Plan cards */}
           <div className="grid sm:grid-cols-2 lg:grid-cols-4 gap-6 mb-8">
             {PLANS.map((plan) => (
               <div
@@ -541,7 +659,7 @@ const ProSitesPage: React.FC = () => {
                   <p className="text-xs text-slate-400 mt-1">After $497 one-time setup</p>
                 </div>
 
-                <ul className="space-y-2.5 flex-1 mb-7">
+                <ul className="space-y-2.5 flex-1 mb-4">
                   {plan.features.map((feature) => (
                     <li key={feature} className="flex items-start gap-2 text-sm text-slate-600">
                       {feature.endsWith(':') ? (
@@ -558,6 +676,21 @@ const ProSitesPage: React.FC = () => {
                   ))}
                 </ul>
 
+                {/* Included featured add-ons */}
+                {plan.included.length > 0 && (
+                  <div className="border-t border-indigo-100 pt-3 mb-4">
+                    <p className="text-xs font-bold text-indigo-600 uppercase tracking-wide mb-2">Featured Add-Ons Included</p>
+                    <ul className="space-y-1.5">
+                      {plan.included.map((item) => (
+                        <li key={item} className="flex items-center gap-2 text-xs text-indigo-700 font-medium">
+                          <Sparkles className="w-3 h-3 text-indigo-500 shrink-0" />
+                          {item}
+                        </li>
+                      ))}
+                    </ul>
+                  </div>
+                )}
+
                 <Link
                   to={`/pro-sites/checkout?tier=${plan.tier}`}
                   className={`block w-full text-center font-bold py-3 rounded-2xl text-sm transition-all active:scale-95 ${
@@ -572,12 +705,12 @@ const ProSitesPage: React.FC = () => {
             ))}
           </div>
 
-          {/* Add-ons note */}
+          {/* Customize note */}
           <div className="bg-amber-50 border-2 border-amber-200 rounded-2xl p-5 text-center max-w-3xl mx-auto">
             <p className="text-amber-800 font-medium text-sm leading-relaxed">
-              💡 <strong>Every plan supports add-ons.</strong> Need something specific? Any feature can be added to any tier.{' '}
+              💡 <strong>Want to customize your build?</strong> Any add-on below can be added to any plan.{' '}
               <Link to="/contact" className="underline underline-offset-2 font-bold hover:text-amber-900">
-                Contact us to build your custom combination.
+                Contact us to build your perfect combination.
               </Link>
             </p>
           </div>
@@ -596,23 +729,29 @@ const ProSitesPage: React.FC = () => {
             </p>
           </div>
 
-          <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-5">
-            {ADDONS.map(({ icon: Icon, name, description, note }) => (
-              <div
-                key={name}
-                className="bg-slate-50 border border-slate-100 rounded-2xl p-6 hover:border-indigo-200 hover:bg-indigo-50/30 transition-all group"
-              >
-                <div className="bg-indigo-100 text-indigo-600 rounded-xl p-2.5 w-fit mb-4 group-hover:bg-indigo-600 group-hover:text-white transition-colors">
-                  <Icon className="w-5 h-5" />
+          {addonsLoading ? (
+            <div className="flex justify-center items-center py-16">
+              <Loader2 className="w-8 h-8 animate-spin text-indigo-400" />
+            </div>
+          ) : (
+            <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-5">
+              {displayAddons.map(({ icon: Icon, name, description, note }) => (
+                <div
+                  key={name}
+                  className="bg-slate-50 border border-slate-100 rounded-2xl p-6 hover:border-indigo-200 hover:bg-indigo-50/30 transition-all group"
+                >
+                  <div className="bg-indigo-100 text-indigo-600 rounded-xl p-2.5 w-fit mb-4 group-hover:bg-indigo-600 group-hover:text-white transition-colors">
+                    <Icon className="w-5 h-5" />
+                  </div>
+                  <h3 className="font-bold text-slate-900 mb-1 text-sm">{name}</h3>
+                  <p className="text-slate-500 text-sm mb-3 leading-relaxed">{description}</p>
+                  <span className="inline-block bg-indigo-100 text-indigo-700 text-xs font-semibold rounded-full px-3 py-1">
+                    {note}
+                  </span>
                 </div>
-                <h3 className="font-bold text-slate-900 mb-1 text-sm">{name}</h3>
-                <p className="text-slate-500 text-sm mb-3 leading-relaxed">{description}</p>
-                <span className="inline-block bg-indigo-100 text-indigo-700 text-xs font-semibold rounded-full px-3 py-1">
-                  {note}
-                </span>
-              </div>
-            ))}
-          </div>
+              ))}
+            </div>
+          )}
         </div>
       </section>
 

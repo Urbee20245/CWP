@@ -6,6 +6,13 @@ import { supabase } from '../integrations/supabase/client';
 import { Loader2, Zap, DollarSign, Plus, Edit, Trash2, CheckCircle2, AlertTriangle, Clock, ExternalLink, Save, X } from 'lucide-react';
 import AiContentGenerator from '../components/AiContentGenerator';
 
+const PLAN_OPTIONS = [
+    { key: 'starter', label: 'Starter ($97/mo)' },
+    { key: 'growth',  label: 'Growth ($147/mo)' },
+    { key: 'pro',     label: 'Pro ($197/mo)' },
+    { key: 'elite',   label: 'Elite ($247/mo)' },
+];
+
 interface Addon {
     id: string;
     key: string;
@@ -18,6 +25,8 @@ interface Addon {
     is_active: boolean;
     sort_order: number;
     is_jet_suite_only: boolean;
+    addon_type: 'standard' | 'plan_specific';
+    eligible_plans: string[];
 }
 
 const AdminAddonCatalog: React.FC = () => {
@@ -39,6 +48,8 @@ const AdminAddonCatalog: React.FC = () => {
         billingType: 'subscription' as 'one_time' | 'subscription' | 'setup_plus_subscription',
         sortOrder: 0,
         isJetSuiteOnly: false,
+        addonType: 'standard' as 'standard' | 'plan_specific',
+        eligiblePlans: [] as string[],
     });
 
     const fetchAddons = useCallback(async () => {
@@ -63,7 +74,11 @@ const AdminAddonCatalog: React.FC = () => {
     }, [fetchAddons]);
 
     const handleEditClick = (addon: Addon) => {
-        setEditAddon(addon);
+        setEditAddon({
+            ...addon,
+            addon_type: addon.addon_type ?? 'standard',
+            eligible_plans: addon.eligible_plans ?? [],
+        });
         setSaveError(null);
     };
     
@@ -88,19 +103,48 @@ const AdminAddonCatalog: React.FC = () => {
     const handleNewFormChange = (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement>) => {
         const { name, value, type } = e.target;
         const checked = (e.target as HTMLInputElement).checked;
-        
+
         setNewAddonData(prev => {
             let newState = {
                 ...prev,
                 [name]: type === 'checkbox' ? checked : (name === 'price' || name === 'setupFee' || name === 'monthlyPrice' || name === 'sortOrder' ? parseFloat(value || '0') : value),
             };
-            
+
             if (name === 'name') {
                 const generatedKey = value.toLowerCase().replace(/\s+/g, '_').replace(/[^a-z0-9_]/g, '');
                 newState.key = generatedKey;
             }
-            
+            // When switching to standard, clear eligible plans
+            if (name === 'addonType' && value === 'standard') {
+                newState.eligiblePlans = [];
+            }
+
             return newState;
+        });
+    };
+
+    const handleNewEligiblePlanToggle = (planKey: string) => {
+        setNewAddonData(prev => {
+            const has = prev.eligiblePlans.includes(planKey);
+            return {
+                ...prev,
+                eligiblePlans: has
+                    ? prev.eligiblePlans.filter(p => p !== planKey)
+                    : [...prev.eligiblePlans, planKey],
+            };
+        });
+    };
+
+    const handleEditEligiblePlanToggle = (planKey: string) => {
+        setEditAddon(prev => {
+            if (!prev) return null;
+            const has = prev.eligible_plans.includes(planKey);
+            return {
+                ...prev,
+                eligible_plans: has
+                    ? prev.eligible_plans.filter(p => p !== planKey)
+                    : [...prev.eligible_plans, planKey],
+            };
         });
     };
     
@@ -113,7 +157,7 @@ const AdminAddonCatalog: React.FC = () => {
         setFormError(null);
         setIsCreating(true);
 
-        const { name, key, description, price, setupFee, monthlyPrice, billingType, sortOrder, isJetSuiteOnly } = newAddonData;
+        const { name, key, description, price, setupFee, monthlyPrice, billingType, sortOrder, isJetSuiteOnly, addonType, eligiblePlans } = newAddonData;
         
         let priceCents = null;
         let setupFeeCents = null;
@@ -160,6 +204,8 @@ const AdminAddonCatalog: React.FC = () => {
             is_active: true,
             sort_order: sortOrder,
             is_jet_suite_only: isJetSuiteOnly,
+            addon_type: addonType,
+            eligible_plans: addonType === 'plan_specific' ? eligiblePlans : [],
         };
 
         try {
@@ -170,7 +216,7 @@ const AdminAddonCatalog: React.FC = () => {
             if (error) throw error;
 
             alert(`Add-on '${name}' created successfully!`);
-            setNewAddonData({ name: '', key: '', description: '', price: 0, setupFee: 0, monthlyPrice: 0, billingType: 'subscription', sortOrder: 0, isJetSuiteOnly: false });
+            setNewAddonData({ name: '', key: '', description: '', price: 0, setupFee: 0, monthlyPrice: 0, billingType: 'subscription', sortOrder: 0, isJetSuiteOnly: false, addonType: 'standard', eligiblePlans: [] });
             fetchAddons();
         } catch (e: any) {
             setFormError(e.message || 'Failed to create add-on. Check if the Key is unique.');
@@ -225,6 +271,8 @@ const AdminAddonCatalog: React.FC = () => {
             price_cents: priceCents,
             setup_fee_cents: setupFeeCents,
             monthly_price_cents: monthlyPriceCents,
+            addon_type: editAddon.addon_type,
+            eligible_plans: editAddon.addon_type === 'plan_specific' ? editAddon.eligible_plans : [],
         };
 
         try {
@@ -476,6 +524,63 @@ const AdminAddonCatalog: React.FC = () => {
                                     Internal Only (JetSuite)
                                 </label>
                             </div>
+
+                            {/* Add-on Type */}
+                            <div className="pt-2 border-t border-slate-100">
+                                <label className="block text-sm font-bold text-slate-700 mb-2">Add-on Type</label>
+                                <div className="flex gap-4">
+                                    <label className="flex items-center gap-2 text-sm text-slate-700 cursor-pointer">
+                                        <input
+                                            type="radio"
+                                            name="addonType"
+                                            value="standard"
+                                            checked={newAddonData.addonType === 'standard'}
+                                            onChange={handleNewFormChange}
+                                            className="w-4 h-4 text-indigo-600 border-slate-300 focus:ring-indigo-500"
+                                            disabled={isCreating}
+                                        />
+                                        Standard Add-on
+                                    </label>
+                                    <label className="flex items-center gap-2 text-sm text-slate-700 cursor-pointer">
+                                        <input
+                                            type="radio"
+                                            name="addonType"
+                                            value="plan_specific"
+                                            checked={newAddonData.addonType === 'plan_specific'}
+                                            onChange={handleNewFormChange}
+                                            className="w-4 h-4 text-indigo-600 border-slate-300 focus:ring-indigo-500"
+                                            disabled={isCreating}
+                                        />
+                                        Plan-Specific
+                                    </label>
+                                </div>
+                                <p className="text-xs text-slate-400 mt-1">
+                                    {newAddonData.addonType === 'standard'
+                                        ? 'Available as an add-on on all plans.'
+                                        : 'Restrict this add-on to specific monthly plans.'}
+                                </p>
+                            </div>
+
+                            {/* Eligible Plans (shown only when plan_specific) */}
+                            {newAddonData.addonType === 'plan_specific' && (
+                                <div>
+                                    <label className="block text-sm font-bold text-slate-700 mb-2">Eligible Plans</label>
+                                    <div className="grid grid-cols-2 gap-2">
+                                        {PLAN_OPTIONS.map(plan => (
+                                            <label key={plan.key} className="flex items-center gap-2 text-sm text-slate-700 cursor-pointer bg-slate-50 rounded-lg px-3 py-2 border border-slate-200 hover:border-indigo-300 transition-colors">
+                                                <input
+                                                    type="checkbox"
+                                                    checked={newAddonData.eligiblePlans.includes(plan.key)}
+                                                    onChange={() => handleNewEligiblePlanToggle(plan.key)}
+                                                    className="w-4 h-4 text-indigo-600 border-slate-300 rounded focus:ring-indigo-500"
+                                                    disabled={isCreating}
+                                                />
+                                                {plan.label}
+                                            </label>
+                                        ))}
+                                    </div>
+                                </div>
+                            )}
                             
                             <button
                                 type="submit"
@@ -502,7 +607,7 @@ const AdminAddonCatalog: React.FC = () => {
                                 {addons.map(addon => (
                                     <div key={addon.id} className="p-4 bg-slate-50 rounded-lg border border-slate-100 flex justify-between items-center hover:bg-slate-100 transition-colors">
                                         <div className="flex-1 min-w-0">
-                                            <div className="flex items-center gap-2 mb-1">
+                                            <div className="flex items-center gap-2 mb-1 flex-wrap">
                                                 <span className="font-bold text-slate-900 truncate">{addon.name}</span>
                                                 <span className={`px-2 py-0.5 rounded-full text-xs font-semibold ${getStatusColor(addon.is_active)}`}>
                                                     {addon.is_active ? 'Active' : 'Inactive'}
@@ -512,8 +617,26 @@ const AdminAddonCatalog: React.FC = () => {
                                                         Internal
                                                     </span>
                                                 )}
+                                                {addon.addon_type === 'plan_specific' ? (
+                                                    <span className="px-2 py-0.5 rounded-full text-xs font-semibold bg-blue-100 text-blue-800">
+                                                        Plan-Specific
+                                                    </span>
+                                                ) : (
+                                                    <span className="px-2 py-0.5 rounded-full text-xs font-semibold bg-slate-100 text-slate-600">
+                                                        Standard
+                                                    </span>
+                                                )}
                                             </div>
-                                            <p className="text-xs text-slate-500 truncate">{addon.description}</p>
+                                            <p className="text-xs text-slate-500 truncate mb-1">{addon.description}</p>
+                                            {addon.addon_type === 'plan_specific' && addon.eligible_plans?.length > 0 && (
+                                                <div className="flex gap-1 flex-wrap">
+                                                    {addon.eligible_plans.map(p => (
+                                                        <span key={p} className="px-2 py-0.5 rounded-full text-xs font-medium bg-indigo-50 text-indigo-700 border border-indigo-100 capitalize">
+                                                            {p}
+                                                        </span>
+                                                    ))}
+                                                </div>
+                                            )}
                                         </div>
                                         <div className="flex items-center gap-4 flex-shrink-0 ml-4">
                                             <div className="text-right">
@@ -664,6 +787,63 @@ const AdminAddonCatalog: React.FC = () => {
                                     Internal Only (JetSuite)
                                 </label>
                             </div>
+
+                            {/* Add-on Type */}
+                            <div className="pt-2 border-t border-slate-100">
+                                <label className="block text-sm font-bold text-slate-700 mb-2">Add-on Type</label>
+                                <div className="flex gap-4">
+                                    <label className="flex items-center gap-2 text-sm text-slate-700 cursor-pointer">
+                                        <input
+                                            type="radio"
+                                            name="edit_addonType"
+                                            value="standard"
+                                            checked={editAddon.addon_type === 'standard'}
+                                            onChange={() => setEditAddon(prev => prev ? { ...prev, addon_type: 'standard', eligible_plans: [] } : null)}
+                                            className="w-4 h-4 text-indigo-600 border-slate-300 focus:ring-indigo-500"
+                                            disabled={isSaving}
+                                        />
+                                        Standard Add-on
+                                    </label>
+                                    <label className="flex items-center gap-2 text-sm text-slate-700 cursor-pointer">
+                                        <input
+                                            type="radio"
+                                            name="edit_addonType"
+                                            value="plan_specific"
+                                            checked={editAddon.addon_type === 'plan_specific'}
+                                            onChange={() => setEditAddon(prev => prev ? { ...prev, addon_type: 'plan_specific' } : null)}
+                                            className="w-4 h-4 text-indigo-600 border-slate-300 focus:ring-indigo-500"
+                                            disabled={isSaving}
+                                        />
+                                        Plan-Specific
+                                    </label>
+                                </div>
+                                <p className="text-xs text-slate-400 mt-1">
+                                    {editAddon.addon_type === 'standard'
+                                        ? 'Available as an add-on on all plans.'
+                                        : 'Restrict this add-on to specific monthly plans.'}
+                                </p>
+                            </div>
+
+                            {/* Eligible Plans */}
+                            {editAddon.addon_type === 'plan_specific' && (
+                                <div>
+                                    <label className="block text-sm font-bold text-slate-700 mb-2">Eligible Plans</label>
+                                    <div className="grid grid-cols-2 gap-2">
+                                        {PLAN_OPTIONS.map(plan => (
+                                            <label key={plan.key} className="flex items-center gap-2 text-sm text-slate-700 cursor-pointer bg-slate-50 rounded-lg px-3 py-2 border border-slate-200 hover:border-indigo-300 transition-colors">
+                                                <input
+                                                    type="checkbox"
+                                                    checked={editAddon.eligible_plans.includes(plan.key)}
+                                                    onChange={() => handleEditEligiblePlanToggle(plan.key)}
+                                                    className="w-4 h-4 text-indigo-600 border-slate-300 rounded focus:ring-indigo-500"
+                                                    disabled={isSaving}
+                                                />
+                                                {plan.label}
+                                            </label>
+                                        ))}
+                                    </div>
+                                </div>
+                            )}
 
                             <button
                                 type="submit"
