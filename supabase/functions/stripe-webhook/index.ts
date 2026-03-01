@@ -374,6 +374,26 @@ serve(async (req) => {
             },
           });
 
+          // 5. Send SMS alert to admin
+          try {
+            const adminPhone = Deno.env.get('ADMIN_PHONE_NUMBER');
+            if (adminPhone) {
+              const tier = proCheckout.tier?.charAt(0).toUpperCase() + proCheckout.tier?.slice(1);
+              const smsBody = `💰 New Pro Sites Payment!\n${proCheckout.first_name} ${proCheckout.last_name}\n${proCheckout.business_name}\n${proCheckout.email}\nPlan: ${tier}\nOnboarding email sent ✅`;
+              await supabaseAdmin.functions.invoke('send-sms', {
+                body: JSON.stringify({
+                  to: adminPhone,
+                  body: smsBody,
+                }),
+              });
+              console.log(`[stripe-webhook] Admin SMS sent to ${adminPhone}`);
+            } else {
+              console.warn('[stripe-webhook] ADMIN_PHONE_NUMBER env var not set — skipping SMS');
+            }
+          } catch (smsErr: any) {
+            console.error('[stripe-webhook] Failed to send admin SMS:', smsErr.message);
+          }
+
           break; // Exit the switch case
         }
         // ── End Pro Sites checkout ─────────────────────────────────────────────

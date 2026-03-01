@@ -130,9 +130,14 @@ const INDUSTRIES = [
   'General Contractor / Home Services',
   'Restaurant & Food Service',
   'Fitness & Wellness',
-  'Auto Dealership / Services',
   'Salon & Beauty',
   'Other Professional Service',
+];
+
+// These industries need a custom CRM — not eligible for Pro Sites
+const RESTRICTED_INDUSTRIES = [
+  'Auto Dealership',
+  'E-Commerce / Online Store',
 ];
 
 // ─── Helpers ───────────────────────────────────────────────────────────────────
@@ -159,7 +164,12 @@ function addonMonthlyContribution(addon: AddonCatalogItem): number {
 }
 
 function addonPriceLabel(addon: AddonCatalogItem): string {
-  if (addon.billing_type === 'one_time') return 'One-time fee';
+  if (addon.billing_type === 'one_time') {
+    if (addon.setup_fee_cents && addon.setup_fee_cents > 0) {
+      return `${centsToDisplay(addon.setup_fee_cents)} one-time`;
+    }
+    return 'One-time';
+  }
   if (addon.monthly_price_cents) return `+${centsToDisplay(addon.monthly_price_cents)}/mo`;
   return '';
 }
@@ -466,6 +476,7 @@ const ProSitesCheckout: React.FC = () => {
     businessDescription: '',
   });
   const [formErrors, setFormErrors] = useState<Partial<FormData>>({});
+  const [restrictedIndustry, setRestrictedIndustry] = useState<string | null>(null);
 
   // Plan selection
   const [selectedTier, setSelectedTier] = useState<TierKey>('starter');
@@ -527,7 +538,7 @@ const ProSitesCheckout: React.FC = () => {
 
   const addonSetupFeeCents = selectedAddons.reduce((sum, key) => {
     const addon = addons.find((a) => a.key === key);
-    if (!addon || addon.billing_type === 'one_time' || !addon.setup_fee_cents) return sum;
+    if (!addon || !addon.setup_fee_cents) return sum;
     return sum + addon.setup_fee_cents;
   }, 0);
 
@@ -565,7 +576,8 @@ const ProSitesCheckout: React.FC = () => {
     if (!formData.businessName.trim()) errors.businessName = 'Required';
     if (!formData.email.trim()) errors.email = 'Required';
     else if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(formData.email)) errors.email = 'Invalid email';
-    if (!formData.industry) errors.industry = 'Required';
+    if (restrictedIndustry) errors.industry = 'Pro Sites is not available for this industry. Please select a different industry or contact us for a custom solution.';
+    else if (!formData.industry) errors.industry = 'Required';
     setFormErrors(errors);
     return Object.keys(errors).length === 0;
   };
@@ -749,21 +761,66 @@ const ProSitesCheckout: React.FC = () => {
                   Industry <span className="text-red-500">*</span>
                 </label>
                 <select
-                  value={formData.industry}
-                  onChange={(e) => updateField('industry', e.target.value)}
+                  value={restrictedIndustry ? '' : formData.industry}
+                  onChange={(e) => {
+                    const val = e.target.value;
+                    if (RESTRICTED_INDUSTRIES.includes(val)) {
+                      setRestrictedIndustry(val);
+                      updateField('industry', '');
+                    } else {
+                      setRestrictedIndustry(null);
+                      updateField('industry', val);
+                    }
+                  }}
                   className={`w-full border rounded-xl px-4 py-3 text-sm text-slate-800 focus:outline-none focus:ring-2 focus:ring-indigo-400 transition-all bg-white ${
                     formErrors.industry ? 'border-red-400' : 'border-slate-200'
                   }`}
                 >
                   <option value="">— Select your industry —</option>
                   {INDUSTRIES.map((ind) => (
-                    <option key={ind} value={ind}>
-                      {ind}
-                    </option>
+                    <option key={ind} value={ind}>{ind}</option>
+                  ))}
+                  <option disabled>── Requires Custom Solution ──</option>
+                  {RESTRICTED_INDUSTRIES.map((ind) => (
+                    <option key={ind} value={ind}>{ind}</option>
                   ))}
                 </select>
                 {formErrors.industry && (
                   <p className="text-red-500 text-xs mt-1">{formErrors.industry}</p>
+                )}
+                {restrictedIndustry && (
+                  <div className="mt-4 bg-amber-50 border-2 border-amber-300 rounded-2xl p-5">
+                    <div className="flex items-start gap-3">
+                      <span className="text-3xl">🏗️</span>
+                      <div>
+                        <h3 className="font-extrabold text-amber-900 text-base mb-1">
+                          {restrictedIndustry === 'Auto Dealership'
+                            ? 'Dealerships Require a Custom CRM Platform'
+                            : 'E-Commerce Businesses Require a Custom Solution'}
+                        </h3>
+                        <p className="text-amber-800 text-sm leading-relaxed mb-4">
+                          {restrictedIndustry === 'Auto Dealership'
+                            ? 'Auto dealerships need inventory management, VIN integration, trade-in tools, and specialized lead pipelines that go well beyond what Pro Sites offers. We build custom dealership CRM platforms designed specifically for your workflow.'
+                            : 'E-Commerce stores require product catalogs, shopping cart systems, inventory management, and order tracking. We build custom e-commerce solutions built for scale and fully integrated with your operations.'}
+                        </p>
+                        <div className="flex flex-wrap gap-3">
+                          <a
+                            href="/contact"
+                            className="inline-flex items-center gap-2 bg-amber-600 hover:bg-amber-700 text-white font-bold text-sm px-5 py-2.5 rounded-xl transition-all shadow-sm"
+                          >
+                            Talk to Us About a Custom Solution →
+                          </a>
+                          <button
+                            type="button"
+                            onClick={() => setRestrictedIndustry(null)}
+                            className="text-amber-700 text-sm font-medium underline underline-offset-2"
+                          >
+                            Choose a different industry
+                          </button>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
                 )}
               </div>
 
@@ -1120,10 +1177,12 @@ const ProSitesCheckout: React.FC = () => {
                     </div>
                     <span className="font-bold text-slate-900 whitespace-nowrap ml-4">{centsToDisplay(SETUP_FEE_CENTS)}</span>
                   </div>
-                  {/* Addon setup fees */}
-                  {selectedAddonObjects.filter(a => a.setup_fee_cents && a.billing_type !== 'one_time').map((addon) => (
+                  {/* Addon setup fees (setup_plus_subscription) and one-time addon fees */}
+                  {selectedAddonObjects.filter(a => a.setup_fee_cents && a.setup_fee_cents > 0).map((addon) => (
                     <div key={addon.key + '_setup'} className="flex justify-between items-center">
-                      <p className="text-slate-600">{addon.name} — Setup</p>
+                      <p className="text-slate-600">
+                        {addon.name}{addon.billing_type === 'one_time' ? ' (one-time)' : ' — Setup'}
+                      </p>
                       <span className="font-semibold text-slate-800 whitespace-nowrap ml-4">+{centsToDisplay(addon.setup_fee_cents!)}</span>
                     </div>
                   ))}
