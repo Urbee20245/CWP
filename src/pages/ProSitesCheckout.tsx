@@ -50,24 +50,55 @@ const TIER_FEATURES: Record<string, string[]> = {
   ],
   growth: [
     'Everything in Starter (up to 6 pages)',
-    'Cal.com booking calendar (appointment scheduling)',
-    'Live chat widget',
     'Automated blog (2 SEO posts/month)',
     'Legal pages (Privacy Policy + Terms)',
   ],
   pro: [
     'Everything in Growth (up to 8 pages)',
-    'AI Website Chat Assistant (trained on your business)',
-    '24/7 AI Phone Receptionist (120 FREE min/mo)',
     'Automated blog (4 SEO posts/month)',
+    'Google Calendar Integration',
   ],
   elite: [
     'Everything in Pro (up to 10 pages)',
-    'AI Phone — Inbound + Outbound calling',
     'Weekly blog posts (52 posts/year)',
     'Priority support',
+    'Quarterly site refresh',
   ],
 };
+
+// ─── Plan-Included Add-Ons (shown as "Featured Add-Ons Included") ─────────────
+
+const TIER_INCLUDED_ADDONS: Record<string, string[]> = {
+  starter: [
+    'AI Chat Agent — pre-configured for your business',
+    'Cal.com Booking Calendar',
+  ],
+  growth: [
+    'AI Phone Receptionist — Inbound (24/7)',
+    'Live Chat Widget',
+  ],
+  pro: [
+    'Advanced AI Website Chat Assistant',
+    'AI Phone — Inbound + Outbound',
+  ],
+  elite: [
+    'AI Phone — Inbound + Outbound (priority)',
+    'Dedicated Account Manager',
+  ],
+};
+
+// ─── $497 Setup — What's Included ────────────────────────────────────────────
+
+const SETUP_ITEMS = [
+  'Custom AI-built website for your industry',
+  'Professional design tailored to your brand',
+  'All pages built & configured',
+  'Mobile optimized & SEO ready',
+  'Domain connection + SSL + Hosting setup',
+  '24-hour delivery guarantee',
+  'Monthly maintenance & security updates',
+  'You own your content — export anytime',
+];
 
 // ─── Types ─────────────────────────────────────────────────────────────────────
 
@@ -196,6 +227,7 @@ const TierCard: React.FC<{
 }> = ({ tier, selected, onClick }) => {
   const info = TIER_PRICES[tier];
   const features = TIER_FEATURES[tier] ?? [];
+  const includedAddons = TIER_INCLUDED_ADDONS[tier] ?? [];
   const perk = TIER_FREE_PERKS[tier];
   const isPopular = tier === 'pro';
 
@@ -203,40 +235,70 @@ const TierCard: React.FC<{
     <button
       type="button"
       onClick={onClick}
-      className={`relative w-full cursor-pointer transition-all rounded-xl border-2 p-4 text-left focus:outline-none ${
+      className={`relative w-full cursor-pointer transition-all rounded-2xl border-2 p-5 text-left focus:outline-none flex flex-col ${
         selected
-          ? 'border-indigo-500 ring-2 ring-indigo-200 bg-indigo-50'
-          : 'border-slate-200 hover:border-indigo-300 bg-white'
+          ? 'border-indigo-500 ring-4 ring-indigo-100 bg-indigo-50 shadow-md shadow-indigo-100'
+          : 'border-slate-200 hover:border-indigo-300 bg-white hover:shadow-sm'
       }`}
     >
       {isPopular && (
-        <span className="absolute -top-3 left-1/2 -translate-x-1/2 bg-indigo-600 text-white text-xs font-bold px-3 py-0.5 rounded-full whitespace-nowrap">
-          Most Popular
+        <span className="absolute -top-3 left-1/2 -translate-x-1/2 bg-indigo-600 text-white text-xs font-bold px-3 py-1 rounded-full whitespace-nowrap shadow-md shadow-indigo-200">
+          ⭐ Most Popular
         </span>
       )}
 
-      <div className={`text-sm font-bold mb-0.5 ${selected ? 'text-indigo-700' : 'text-slate-700'}`}>
-        {info.label}
-      </div>
-      <div className={`text-xl font-black mb-3 ${selected ? 'text-indigo-600' : 'text-slate-900'}`}>
-        {info.display}
+      {/* Header */}
+      <div className="flex items-start justify-between mb-3">
+        <div>
+          <p className={`text-xs font-bold uppercase tracking-wider mb-0.5 ${selected ? 'text-indigo-500' : 'text-slate-400'}`}>
+            {info.label}
+          </p>
+          <div className="flex items-end gap-1">
+            <span className={`text-3xl font-black ${selected ? 'text-indigo-600' : 'text-slate-900'}`}>
+              {info.display.replace('/mo', '')}
+            </span>
+            <span className="text-slate-400 text-sm mb-1">/mo</span>
+          </div>
+        </div>
+        {/* Selected checkmark */}
+        <div className={`w-6 h-6 rounded-full border-2 flex items-center justify-center shrink-0 transition-all ${
+          selected ? 'bg-indigo-600 border-indigo-600' : 'border-slate-300'
+        }`}>
+          {selected && <CheckCircle2 className="w-4 h-4 text-white" />}
+        </div>
       </div>
 
-      <ul className="space-y-1.5 mb-3">
+      {/* Core website features */}
+      <ul className="space-y-1.5 mb-3 flex-1">
         {features.map((f) => (
           <li key={f} className="flex items-start gap-1.5 text-xs text-slate-600">
-            <CheckCircle2
-              className={`w-3.5 h-3.5 shrink-0 mt-0.5 ${selected ? 'text-indigo-500' : 'text-slate-400'}`}
-            />
+            <CheckCircle2 className={`w-3.5 h-3.5 shrink-0 mt-0.5 ${selected ? 'text-indigo-400' : 'text-slate-300'}`} />
             {f}
           </li>
         ))}
       </ul>
 
+      {/* Included add-ons — highlighted section */}
+      {includedAddons.length > 0 && (
+        <div className={`rounded-xl p-3 mb-3 border ${selected ? 'bg-indigo-100/60 border-indigo-200' : 'bg-slate-50 border-slate-100'}`}>
+          <p className={`text-xs font-bold uppercase tracking-wide mb-1.5 ${selected ? 'text-indigo-600' : 'text-slate-500'}`}>
+            Included Add-Ons
+          </p>
+          <ul className="space-y-1">
+            {includedAddons.map((addon) => (
+              <li key={addon} className={`flex items-center gap-1.5 text-xs font-medium ${selected ? 'text-indigo-700' : 'text-slate-600'}`}>
+                <span className={`w-1.5 h-1.5 rounded-full shrink-0 ${selected ? 'bg-indigo-500' : 'bg-slate-400'}`} />
+                {addon}
+              </li>
+            ))}
+          </ul>
+        </div>
+      )}
+
       {/* Free Human Touch perk */}
-      <div className="bg-amber-50 border border-amber-200 rounded-lg p-3 text-xs">
-        <p className="font-bold text-amber-800 mb-0.5">⭐ Free — Included: {perk.perk}</p>
-        <p className="text-amber-700 leading-relaxed">{perk.detail}</p>
+      <div className="bg-amber-50 border border-amber-200 rounded-xl p-2.5 text-xs">
+        <p className="font-bold text-amber-800">⭐ {perk.perk}</p>
+        <p className="text-amber-700 leading-relaxed mt-0.5">{perk.detail}</p>
       </div>
     </button>
   );
@@ -704,97 +766,69 @@ const ProSitesCheckout: React.FC = () => {
 
         {/* ── Step 2: Plan & Add-Ons ─────────────────────────────────────────── */}
         {step === 2 && (
-          <div className="space-y-6">
+          <div className="space-y-5">
 
-            {/* Header & context */}
-            <div className="bg-white rounded-2xl shadow-sm border border-slate-200 p-6 md:p-8">
-              <h2 className="text-xl font-bold text-slate-900 mb-2">Choose Your Plan</h2>
-              <p className="text-slate-600 text-sm mb-5 leading-relaxed">
-                Every CWP Pro Sites plan includes a professionally built website, custom-written
-                content, and full configuration — tailored specifically to your industry and
-                business. <strong>This is not a template. We build it for you.</strong>
-              </p>
+            {/* ── Sub-Step 1: $497 Website Build ─────────────────────────────── */}
+            <div className="relative bg-gradient-to-br from-slate-900 via-indigo-950 to-slate-900 rounded-2xl p-6 md:p-8 overflow-hidden shadow-xl">
+              {/* Subtle grid decoration */}
+              <div className="absolute inset-0 opacity-10 pointer-events-none" style={{
+                backgroundImage: 'linear-gradient(rgba(99,102,241,0.4) 1px, transparent 1px), linear-gradient(90deg, rgba(99,102,241,0.4) 1px, transparent 1px)',
+                backgroundSize: '40px 40px',
+              }} />
 
-              {/* What's always included */}
-              <div className="border border-indigo-200 bg-indigo-50 rounded-xl p-4 mb-4">
-                <p className="text-xs font-bold text-indigo-800 uppercase tracking-wide mb-2">
-                  ✅ Included in Every Plan
-                </p>
-                <ul className="space-y-1.5">
-                  {[
-                    'Custom AI-built website (pages tailored to your industry)',
-                    'Mobile-optimized, fast-loading design',
-                    'Smart contact form + lead capture',
-                    'SSL certificate + Hosting + Uptime monitoring',
-                    'Monthly maintenance & security updates',
-                    'You own your content — export or leave anytime',
-                  ].map((item) => (
-                    <li key={item} className="flex items-start gap-1.5 text-xs text-indigo-700">
-                      <CheckCircle2 className="w-3.5 h-3.5 shrink-0 mt-0.5 text-indigo-500" />
-                      {item}
-                    </li>
-                  ))}
-                </ul>
+              {/* Step badge + heading */}
+              <div className="relative flex items-center gap-3 mb-5">
+                <div className="bg-white/20 backdrop-blur-sm border border-white/20 text-white text-sm font-black w-8 h-8 rounded-full flex items-center justify-center shrink-0">
+                  1
+                </div>
+                <div className="flex-1">
+                  <p className="text-indigo-300 text-xs font-bold uppercase tracking-widest">One-Time Setup Fee</p>
+                  <p className="text-white text-lg font-extrabold leading-tight">Your Website Build</p>
+                </div>
+                <div className="bg-white/10 backdrop-blur-sm border border-white/20 rounded-2xl px-5 py-3 text-center shrink-0">
+                  <p className="text-4xl font-black text-white leading-none">$497</p>
+                  <p className="text-indigo-300 text-xs font-semibold mt-0.5">one-time</p>
+                </div>
               </div>
 
-              {/* Core Services Disclaimer */}
-              <div className="bg-rose-50 border border-rose-200 rounded-xl p-5">
-                <p className="text-xs font-bold text-rose-800 mb-1">⚠️ Please Note</p>
-                <p className="text-xs text-rose-800 leading-relaxed mb-4">
-                  CWP Pro Sites is a <strong>website subscription service</strong> — not a full custom build.
-                  Looking for something more powerful? Our core services below may be a better fit:
-                </p>
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                  {/* Card 1 — Business Automation Growth System */}
-                  <a
-                    href="/contact"
-                    className="group bg-white border border-rose-200 hover:border-indigo-400 rounded-xl p-4 transition-all hover:shadow-md block"
-                  >
-                    <div className="flex items-start justify-between mb-2">
-                      <span className="text-xl">🚀</span>
-                      <span className="text-xs font-bold text-emerald-700 bg-emerald-50 border border-emerald-200 rounded-full px-2 py-0.5">
-                        $4,997
-                      </span>
-                    </div>
-                    <p className="text-sm font-bold text-slate-900 group-hover:text-indigo-700 transition-colors leading-tight">
-                      Business Automation Growth System
-                    </p>
-                    <p className="text-xs text-slate-500 mt-1 leading-snug">
-                      Website + AI phone receptionist + automated lead follow-up + booking system. A complete revenue engine — not just a site.
-                    </p>
-                    <p className="text-xs font-semibold text-indigo-600 mt-3 group-hover:underline">
-                      Talk to Us →
-                    </p>
-                  </a>
-                  {/* Card 2 — Custom Business Operating System */}
-                  <a
-                    href="/contact"
-                    className="group bg-white border border-rose-200 hover:border-indigo-400 rounded-xl p-4 transition-all hover:shadow-md block"
-                  >
-                    <div className="flex items-start justify-between mb-2">
-                      <span className="text-xl">⚙️</span>
-                      <span className="text-xs font-bold text-emerald-700 bg-emerald-50 border border-emerald-200 rounded-full px-2 py-0.5">
-                        Starting at $8,500
-                      </span>
-                    </div>
-                    <p className="text-sm font-bold text-slate-900 group-hover:text-indigo-700 transition-colors leading-tight">
-                      Custom Business Operating System
-                      <span className="block text-xs font-normal text-slate-400 mt-0.5">(Custom CRM Development)</span>
-                    </p>
-                    <p className="text-xs text-slate-500 mt-1 leading-snug">
-                      Fully custom CRM, pipelines, automation, dashboards, and staff access — built around exactly how your business runs.
-                    </p>
-                    <p className="text-xs font-semibold text-indigo-600 mt-3 group-hover:underline">
-                      Talk to Us →
-                    </p>
-                  </a>
-                </div>
+              {/* Description */}
+              <p className="relative text-slate-300 text-sm mb-5 leading-relaxed">
+                Your $497 setup fee covers everything needed to build and launch your professional website — tailored specifically to your industry.{' '}
+                <strong className="text-white">This is not a template. We build it for you.</strong>
+              </p>
+
+              {/* What's included grid */}
+              <ul className="relative grid sm:grid-cols-2 gap-2 mb-5">
+                {SETUP_ITEMS.map((item) => (
+                  <li key={item} className="flex items-center gap-2 text-slate-200 text-xs">
+                    <CheckCircle2 className="w-3.5 h-3.5 text-indigo-400 shrink-0" />
+                    {item}
+                  </li>
+                ))}
+              </ul>
+
+              {/* Delivery badge */}
+              <div className="relative inline-flex items-center gap-2 bg-amber-500/20 border border-amber-400/30 rounded-full px-4 py-1.5">
+                <span className="text-amber-300 text-xs font-bold">⚡ Ready in 24 hours — guaranteed</span>
               </div>
             </div>
 
-            {/* Tier Cards */}
+            {/* ── Sub-Step 2: Monthly Plan ────────────────────────────────────── */}
             <div className="bg-white rounded-2xl shadow-sm border border-slate-200 p-6 md:p-8">
-              <h3 className="text-base font-bold text-slate-800 mb-4">Select Your Monthly Plan</h3>
+              {/* Step heading */}
+              <div className="flex items-center gap-3 mb-2">
+                <div className="bg-indigo-600 text-white text-sm font-black w-8 h-8 rounded-full flex items-center justify-center shrink-0">
+                  2
+                </div>
+                <div>
+                  <p className="text-indigo-500 text-xs font-bold uppercase tracking-widest">Monthly Subscription</p>
+                  <p className="text-slate-900 text-lg font-extrabold leading-tight">Choose Your Monthly Plan</p>
+                </div>
+              </div>
+              <p className="text-slate-500 text-sm mb-5 leading-relaxed ml-11">
+                Each plan includes hosting, maintenance, and a set of featured add-ons pre-configured for you. Pick the level of automation that fits your business.
+              </p>
+
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                 {(Object.keys(TIER_PRICES) as TierKey[]).map((tier) => (
                   <TierCard
@@ -805,13 +839,31 @@ const ProSitesCheckout: React.FC = () => {
                   />
                 ))}
               </div>
+
+              {/* Selected plan summary pill */}
+              <div className="mt-5 bg-indigo-50 border border-indigo-200 rounded-xl p-3 flex items-center justify-between">
+                <div>
+                  <p className="text-xs text-indigo-500 font-bold uppercase tracking-wide">Selected Plan</p>
+                  <p className="text-indigo-800 font-bold text-sm">{TIER_PRICES[selectedTier].label} — {TIER_PRICES[selectedTier].display}</p>
+                </div>
+                <p className="text-xs text-indigo-400">Includes {TIER_INCLUDED_ADDONS[selectedTier]?.length ?? 0} add-on{(TIER_INCLUDED_ADDONS[selectedTier]?.length ?? 0) !== 1 ? 's' : ''}</p>
+              </div>
             </div>
 
-            {/* Add-Ons */}
+            {/* ── Sub-Step 3: Optional Add-Ons ───────────────────────────────── */}
             <div className="bg-white rounded-2xl shadow-sm border border-slate-200 p-6 md:p-8">
-              <h3 className="text-base font-bold text-slate-800 mb-1">Customize With Add-Ons</h3>
-              <p className="text-slate-500 text-sm mb-5">
-                Optional features you can add to any plan. Select as many as you'd like.
+              {/* Step heading */}
+              <div className="flex items-center gap-3 mb-2">
+                <div className="bg-slate-100 text-slate-500 text-sm font-black w-8 h-8 rounded-full flex items-center justify-center shrink-0">
+                  3
+                </div>
+                <div>
+                  <p className="text-slate-400 text-xs font-bold uppercase tracking-widest">Optional</p>
+                  <p className="text-slate-900 text-lg font-extrabold leading-tight">Customize With Add-Ons</p>
+                </div>
+              </div>
+              <p className="text-slate-500 text-sm mb-5 leading-relaxed ml-11">
+                Want even more power? Add any of these features to your plan. You can skip this and add them later too.
               </p>
 
               {/* Loading state */}
@@ -846,41 +898,77 @@ const ProSitesCheckout: React.FC = () => {
                 </div>
               )}
 
-              {/* Running Total */}
-              <div className="mt-6 pt-5 border-t border-slate-100">
-                <div className="bg-slate-50 rounded-xl p-4 space-y-2">
+              {!addonsLoading && !addonsError && addons.length === 0 && (
+                <p className="text-center text-slate-400 text-sm py-6">No additional add-ons available right now.</p>
+              )}
+            </div>
+
+            {/* ── Order Summary ───────────────────────────────────────────────── */}
+            <div className="bg-white rounded-2xl shadow-sm border border-slate-200 p-6 md:p-8">
+              <h3 className="text-base font-bold text-slate-800 mb-4">Order Summary</h3>
+
+              <div className="space-y-2 text-sm mb-4">
+                {/* Setup fee row */}
+                <div className="flex justify-between items-center py-2 border-b border-slate-100">
+                  <div>
+                    <p className="font-semibold text-slate-800">Website Build & Setup</p>
+                    <p className="text-xs text-slate-400">One-time fee</p>
+                  </div>
+                  <span className="font-bold text-slate-900">{centsToDisplay(SETUP_FEE_CENTS)}</span>
+                </div>
+
+                {/* Monthly plan row */}
+                <div className="flex justify-between items-center py-2 border-b border-slate-100">
+                  <div>
+                    <p className="font-semibold text-slate-800">{TIER_PRICES[selectedTier].label} Plan</p>
+                    <p className="text-xs text-slate-400">Monthly — includes {TIER_INCLUDED_ADDONS[selectedTier]?.join(', ')}</p>
+                  </div>
+                  <span className="font-bold text-slate-900">{centsToDisplay(baseMonthlyCents)}/mo</span>
+                </div>
+
+                {/* Selected add-ons */}
+                {selectedAddons.map((key) => {
+                  const addon = addons.find((a) => a.key === key);
+                  if (!addon) return null;
+                  return (
+                    <div key={key} className="flex justify-between items-center py-2 border-b border-slate-100">
+                      <div>
+                        <p className="font-medium text-slate-700">{addon.name}</p>
+                        <p className="text-xs text-slate-400">Add-on</p>
+                      </div>
+                      <span className="font-semibold text-slate-800">{addonPriceLabel(addon)}</span>
+                    </div>
+                  );
+                })}
+              </div>
+
+              {/* Totals */}
+              <div className="bg-slate-50 rounded-xl p-4 space-y-2">
+                <div className="flex justify-between text-sm text-slate-600">
+                  <span>Setup fee (one-time)</span>
+                  <span className="font-semibold">{centsToDisplay(SETUP_FEE_CENTS)}</span>
+                </div>
+                {hasAddonSetupFees && (
                   <div className="flex justify-between text-sm text-slate-600">
-                    <span>{TIER_PRICES[selectedTier].label} Plan</span>
-                    <span className="font-semibold">{centsToDisplay(baseMonthlyCents)}/mo</span>
+                    <span>Add-on setup fees</span>
+                    <span className="font-semibold">+{centsToDisplay(addonSetupFeeCents)}</span>
                   </div>
-                  {addonsMonthlyCents > 0 && (
-                    <div className="flex justify-between text-sm text-slate-600">
-                      <span>Add-ons</span>
-                      <span className="font-semibold">
-                        +{centsToDisplay(addonsMonthlyCents)}/mo
-                      </span>
-                    </div>
-                  )}
-                  <div className="flex justify-between text-sm text-slate-500">
-                    <span>One-time setup fee (website build)</span>
-                    <span>+{centsToDisplay(SETUP_FEE_CENTS)}</span>
-                  </div>
-                  {hasAddonSetupFees && (
-                    <p className="text-xs text-slate-400 text-right">
-                      Additional setup fees may apply for selected add-ons
-                    </p>
-                  )}
-                  <div className="flex justify-between font-bold text-slate-900 text-base pt-2 border-t border-slate-200">
-                    <div>
-                      <span>Monthly Subscription Total</span>
-                      <p className="text-xs font-normal text-slate-400 mt-0.5">
-                        Billed on a recurring basis
-                      </p>
-                    </div>
-                    <span className="text-indigo-600">{centsToDisplay(totalMonthlyCents)}/mo</span>
-                  </div>
+                )}
+                <div className="flex justify-between text-sm text-slate-600">
+                  <span>First month</span>
+                  <span className="font-semibold">{centsToDisplay(totalMonthlyCents)}</span>
+                </div>
+                <div className="flex justify-between font-black text-base text-slate-900 pt-2 border-t border-slate-200">
+                  <span>Due Today</span>
+                  <span className="text-indigo-600">{centsToDisplay(dueTodayCents)}</span>
+                </div>
+                <div className="flex justify-between text-sm text-slate-500 pt-1">
+                  <span>Then every month</span>
+                  <span className="font-semibold text-slate-700">{centsToDisplay(totalMonthlyCents)}/mo</span>
                 </div>
               </div>
+
+              <p className="text-xs text-slate-400 text-center mt-3">No long-term contract. Cancel anytime.</p>
             </div>
 
             {/* Navigation */}
@@ -895,12 +983,18 @@ const ProSitesCheckout: React.FC = () => {
               <button
                 type="button"
                 onClick={() => setStep(3)}
-                className="flex-1 bg-indigo-600 hover:bg-indigo-700 text-white font-bold py-3 rounded-xl text-base transition-all active:scale-95 flex items-center justify-center gap-2 shadow-md shadow-indigo-200"
+                className="flex-1 bg-indigo-600 hover:bg-indigo-700 text-white font-bold py-4 rounded-xl text-base transition-all active:scale-95 flex items-center justify-center gap-2 shadow-md shadow-indigo-200"
               >
-                Review My Order
+                Review & Complete My Order
                 <ArrowRight className="w-5 h-5" />
               </button>
             </div>
+
+            {/* Small print disclaimer */}
+            <p className="text-center text-xs text-slate-400 leading-relaxed px-4">
+              CWP Pro Sites is a website subscription service. The $497 setup fee covers your full website build. The monthly fee covers hosting, maintenance & active features. Need something more custom?{' '}
+              <a href="/contact" className="text-indigo-500 underline underline-offset-2 hover:text-indigo-700">Talk to us</a>.
+            </p>
           </div>
         )}
 
