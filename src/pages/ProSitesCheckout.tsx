@@ -66,57 +66,18 @@ const TIER_FEATURES: Record<string, string[]> = {
   ],
 };
 
-// ─── Plan-Included Add-Ons (shown as "Featured Add-Ons Included") ─────────────
-
-// What's NEW in each tier (not cumulative — use getCumulativeIncludedAddons() for full list)
-const TIER_INCLUDED_ADDONS: Record<string, string[]> = {
-  starter: [
-    'AI Chat Agent — pre-configured for your business',
-    'Cal.com Booking Calendar Integration',
-  ],
-  growth: [
-    'AI Phone Receptionist — Inbound (24/7)',
-    'Live Chat Widget',
-  ],
-  pro: [
-    'Advanced AI Website Chat Assistant',
-    'AI Phone — Inbound + Outbound',
-  ],
-  elite: [
-    'Dedicated Account Manager',
-    'Priority AI Phone Support',
-  ],
-};
+// ─── Plan Add-On Helpers (DB-driven via included_in_plans) ───────────────────
 
 const TIER_ORDER: TierKey[] = ['starter', 'growth', 'pro', 'elite'];
 
-/** Returns every included add-on for a tier, including all add-ons from lower tiers. */
-function getCumulativeIncludedAddons(tier: TierKey): string[] {
-  const idx = TIER_ORDER.indexOf(tier);
-  return TIER_ORDER.slice(0, idx + 1).flatMap((t) => TIER_INCLUDED_ADDONS[t] ?? []);
+/** Returns all catalog add-ons included (free) with the given tier. */
+function getIncludedAddons(tier: TierKey, allAddons: AddonCatalogItem[]): AddonCatalogItem[] {
+  return allAddons.filter((a) => a.included_in_plans.includes(tier));
 }
 
-/**
- * Keyword patterns to detect if a catalog add-on is already covered by a plan.
- * Each inner array is a set of words that ALL must appear in the add-on name.
- */
-const COVERED_ADDON_PATTERNS: { tiers: TierKey[]; words: string[] }[] = [
-  { tiers: ['starter', 'growth', 'pro', 'elite'], words: ['chat', 'agent'] },
-  { tiers: ['starter', 'growth', 'pro', 'elite'], words: ['cal.com'] },
-  { tiers: ['starter', 'growth', 'pro', 'elite'], words: ['booking', 'calendar'] },
-  { tiers: ['growth', 'pro', 'elite'],            words: ['phone', 'receptionist'] },
-  { tiers: ['growth', 'pro', 'elite'],            words: ['live chat'] },
-  { tiers: ['growth', 'pro', 'elite'],            words: ['live', 'chat', 'widget'] },
-  { tiers: ['pro', 'elite'],                      words: ['chat assistant'] },
-  { tiers: ['pro', 'elite'],                      words: ['outbound'] },
-  { tiers: ['elite'],                             words: ['account manager'] },
-];
-
-function isAddonCoveredByPlan(addonName: string, tier: TierKey): boolean {
-  const name = addonName.toLowerCase();
-  return COVERED_ADDON_PATTERNS.some(
-    ({ tiers, words }) => tiers.includes(tier) && words.every((w) => name.includes(w))
-  );
+/** Returns true if this catalog add-on is included (free) in the given tier. */
+function isAddonIncludedInPlan(addon: AddonCatalogItem, tier: TierKey): boolean {
+  return addon.included_in_plans.includes(tier);
 }
 
 // ─── $497 Setup — What's Included ────────────────────────────────────────────
@@ -142,6 +103,9 @@ interface AddonCatalogItem {
   monthly_price_cents: number | null;
   setup_fee_cents: number | null;
   billing_type: 'one_time' | 'subscription' | 'setup_plus_subscription';
+  addon_type: 'standard' | 'plan_specific';
+  eligible_plans: string[];
+  included_in_plans: string[];
 }
 
 interface FormData {
@@ -253,11 +217,11 @@ const ProgressBar: React.FC<{ step: number }> = ({ step }) => {
 const TierCard: React.FC<{
   tier: TierKey;
   selected: boolean;
+  allAddons: AddonCatalogItem[];
   onClick: () => void;
-}> = ({ tier, selected, onClick }) => {
+}> = ({ tier, selected, allAddons, onClick }) => {
   const info = TIER_PRICES[tier];
   const features = TIER_FEATURES[tier] ?? [];
-  const includedAddons = TIER_INCLUDED_ADDONS[tier] ?? [];
   const perk = TIER_FREE_PERKS[tier];
   const isPopular = tier === 'pro';
 
@@ -308,39 +272,38 @@ const TierCard: React.FC<{
         ))}
       </ul>
 
-      {/* Cumulative included add-ons — shows all from this tier + lower tiers */}
+      {/* Included add-ons — sourced from DB included_in_plans field */}
       {(() => {
         const tierIdx = TIER_ORDER.indexOf(tier);
-        const allAddons = getCumulativeIncludedAddons(tier);
-        if (allAddons.length === 0) return null;
+        const prevTier = tierIdx > 0 ? TIER_ORDER[tierIdx - 1] : null;
+        const tierIncluded = getIncludedAddons(tier, allAddons);
+        if (tierIncluded.length === 0) return null;
         return (
           <div className={`rounded-xl p-3 mb-3 border ${selected ? 'bg-indigo-100/60 border-indigo-200' : 'bg-slate-50 border-slate-100'}`}>
             <p className={`text-xs font-bold uppercase tracking-wide mb-2 ${selected ? 'text-indigo-600' : 'text-slate-500'}`}>
-              Included Add-Ons <span className="ml-1 font-black">({allAddons.length})</span>
+              Included Add-Ons <span className="ml-1 font-black">({tierIncluded.length})</span>
             </p>
             <ul className="space-y-1.5">
-              {TIER_ORDER.slice(0, tierIdx + 1).map((t) =>
-                (TIER_INCLUDED_ADDONS[t] ?? []).map((addon) => {
-                  const isNew = t === tier;
-                  return (
-                    <li key={addon} className="flex items-start gap-1.5">
-                      {isNew ? (
-                        <span className="text-indigo-500 text-xs mt-px shrink-0">✦</span>
-                      ) : (
-                        <span className={`w-1.5 h-1.5 rounded-full mt-1 shrink-0 ${selected ? 'bg-indigo-300' : 'bg-slate-300'}`} />
+              {tierIncluded.map((addon) => {
+                const isNew = !prevTier || !addon.included_in_plans.includes(prevTier);
+                return (
+                  <li key={addon.id} className="flex items-start gap-1.5">
+                    {isNew ? (
+                      <span className="text-indigo-500 text-xs mt-px shrink-0">✦</span>
+                    ) : (
+                      <span className={`w-1.5 h-1.5 rounded-full mt-1 shrink-0 ${selected ? 'bg-indigo-300' : 'bg-slate-300'}`} />
+                    )}
+                    <span className={`text-xs ${isNew ? `font-semibold ${selected ? 'text-indigo-700' : 'text-slate-700'}` : `${selected ? 'text-indigo-500' : 'text-slate-400'}`}`}>
+                      {addon.name}
+                      {isNew && tier !== 'starter' && (
+                        <span className={`ml-1.5 text-xs font-bold px-1.5 py-0.5 rounded-full ${selected ? 'bg-indigo-200 text-indigo-700' : 'bg-slate-100 text-slate-500'}`}>
+                          New
+                        </span>
                       )}
-                      <span className={`text-xs ${isNew ? `font-semibold ${selected ? 'text-indigo-700' : 'text-slate-700'}` : `${selected ? 'text-indigo-500' : 'text-slate-400'}`}`}>
-                        {addon}
-                        {isNew && tier !== 'starter' && (
-                          <span className={`ml-1.5 text-xs font-bold px-1.5 py-0.5 rounded-full ${selected ? 'bg-indigo-200 text-indigo-700' : 'bg-slate-100 text-slate-500'}`}>
-                            New
-                          </span>
-                        )}
-                      </span>
-                    </li>
-                  );
-                })
-              )}
+                    </span>
+                  </li>
+                );
+              })}
             </ul>
           </div>
         );
@@ -916,6 +879,7 @@ const ProSitesCheckout: React.FC = () => {
                     key={tier}
                     tier={tier}
                     selected={selectedTier === tier}
+                    allAddons={addons}
                     onClick={() => setSelectedTier(tier)}
                   />
                 ))}
@@ -927,33 +891,35 @@ const ProSitesCheckout: React.FC = () => {
                   <p className="text-xs text-indigo-500 font-bold uppercase tracking-wide">Selected Plan</p>
                   <p className="text-indigo-800 font-bold text-sm">{TIER_PRICES[selectedTier].label} — {TIER_PRICES[selectedTier].display}</p>
                 </div>
-                {/* Hoverable "Includes X add-ons" — shows cumulative count + full tooltip */}
-                {getCumulativeIncludedAddons(selectedTier).length > 0 && (
+                {/* Hoverable "Includes X add-ons" — DB-driven count + full tooltip */}
+                {getIncludedAddons(selectedTier, addons).length > 0 && (
                   <div className="relative group/addons">
                     <button
                       type="button"
                       className="flex items-center gap-1 text-xs text-indigo-500 font-semibold underline decoration-dotted underline-offset-2 cursor-help"
                     >
-                      Includes {getCumulativeIncludedAddons(selectedTier).length} add-on{getCumulativeIncludedAddons(selectedTier).length !== 1 ? 's' : ''}
+                      Includes {getIncludedAddons(selectedTier, addons).length} add-on{getIncludedAddons(selectedTier, addons).length !== 1 ? 's' : ''}
                       <Info className="w-3 h-3" />
                     </button>
                     {/* Tooltip */}
                     <div className="absolute right-0 bottom-full mb-3 w-80 bg-slate-900 rounded-2xl p-4 shadow-2xl opacity-0 group-hover/addons:opacity-100 transition-all pointer-events-none z-30 border border-white/10">
                       <p className="text-white text-xs font-bold uppercase tracking-wide mb-3">All add-ons included with {TIER_PRICES[selectedTier].label}</p>
                       <ul className="space-y-2">
-                        {TIER_ORDER.slice(0, TIER_ORDER.indexOf(selectedTier) + 1).map((t) =>
-                          (TIER_INCLUDED_ADDONS[t] ?? []).map((addon) => (
-                            <li key={addon} className="flex items-start gap-2">
-                              <CheckCircle2 className={`w-4 h-4 shrink-0 mt-0.5 ${t === selectedTier ? 'text-indigo-400' : 'text-slate-500'}`} />
-                              <span className={`text-sm leading-snug ${t === selectedTier ? 'text-slate-200' : 'text-slate-400'}`}>
-                                {addon}
-                                {t !== selectedTier && (
-                                  <span className="ml-1.5 text-xs text-slate-500 capitalize">({TIER_PRICES[t].label})</span>
+                        {getIncludedAddons(selectedTier, addons).map((addon) => {
+                          const introTier = TIER_ORDER.find((t) => addon.included_in_plans.includes(t)) ?? selectedTier;
+                          const isCurrentTier = introTier === selectedTier;
+                          return (
+                            <li key={addon.id} className="flex items-start gap-2">
+                              <CheckCircle2 className={`w-4 h-4 shrink-0 mt-0.5 ${isCurrentTier ? 'text-indigo-400' : 'text-slate-500'}`} />
+                              <span className={`text-sm leading-snug ${isCurrentTier ? 'text-slate-200' : 'text-slate-400'}`}>
+                                {addon.name}
+                                {!isCurrentTier && (
+                                  <span className="ml-1.5 text-xs text-slate-500 capitalize">({TIER_PRICES[introTier].label})</span>
                                 )}
                               </span>
                             </li>
-                          ))
-                        )}
+                          );
+                        })}
                       </ul>
                       <p className="text-indigo-400 text-xs mt-3">All pre-configured for your business.</p>
                       {/* Arrow */}
@@ -999,7 +965,7 @@ const ProSitesCheckout: React.FC = () => {
               {!addonsLoading && !addonsError && addons.length > 0 && (
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                   {addons.map((addon) => {
-                    const covered = isAddonCoveredByPlan(addon.name, selectedTier);
+                    const covered = isAddonIncludedInPlan(addon, selectedTier);
                     return (
                       <AddonCard
                         key={addon.key}
@@ -1041,9 +1007,9 @@ const ProSitesCheckout: React.FC = () => {
                   <div className="flex-1 pr-4">
                     <p className="font-semibold text-slate-800">{TIER_PRICES[selectedTier].label} Maintenance Plan</p>
                     <p className="text-xs text-slate-400 leading-relaxed">Hosting, maintenance &amp; security updates</p>
-                    {getCumulativeIncludedAddons(selectedTier).length > 0 && (
+                    {getIncludedAddons(selectedTier, addons).length > 0 && (
                       <p className="text-xs text-indigo-500 mt-0.5">
-                        + {getCumulativeIncludedAddons(selectedTier).join(' · ')}
+                        + {getIncludedAddons(selectedTier, addons).map((a) => a.name).join(' · ')}
                       </p>
                     )}
                   </div>
