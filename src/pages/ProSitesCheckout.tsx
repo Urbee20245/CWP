@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { useSearchParams } from 'react-router-dom';
-import { CheckCircle2, Lock, ArrowRight, ArrowLeft, Phone, Loader2 } from 'lucide-react';
+import { CheckCircle2, Lock, ArrowRight, ArrowLeft, Phone, Loader2, Info } from 'lucide-react';
 import { supabase } from '../integrations/supabase/client';
 
 // ─── Pricing Constants ─────────────────────────────────────────────────────────
@@ -44,19 +44,19 @@ const TIER_FREE_PERKS = {
 const TIER_FEATURES: Record<string, string[]> = {
   starter: [
     'Up to 5 pages (Home, About, Services, FAQ, Contact)',
-    'Smart contact form + lead notifications',
+    'Smart contact form',
     'Google Maps embed + business hours',
     'Mobile-optimized design',
   ],
   growth: [
     'Everything in Starter (up to 6 pages)',
+    'Professional email setup (yourname@yourdomain.com)',
     'Automated blog (2 SEO posts/month)',
     'Legal pages (Privacy Policy + Terms)',
   ],
   pro: [
     'Everything in Growth (up to 8 pages)',
     'Automated blog (4 SEO posts/month)',
-    'Google Calendar Integration',
   ],
   elite: [
     'Everything in Pro (up to 10 pages)',
@@ -95,8 +95,6 @@ const SETUP_ITEMS = [
   'All pages built & configured',
   'Mobile optimized & SEO ready',
   'Domain connection + SSL + Hosting setup',
-  '24-hour delivery guarantee',
-  'Monthly maintenance & security updates',
   'You own your content — export anytime',
 ];
 
@@ -809,24 +807,34 @@ const ProSitesCheckout: React.FC = () => {
 
               {/* Delivery badge */}
               <div className="relative inline-flex items-center gap-2 bg-amber-500/20 border border-amber-400/30 rounded-full px-4 py-1.5">
-                <span className="text-amber-300 text-xs font-bold">⚡ Ready in 24 hours — guaranteed</span>
+                <span className="text-amber-300 text-xs font-bold">⚡ Ready in 7 days — guaranteed</span>
               </div>
             </div>
 
-            {/* ── Sub-Step 2: Monthly Plan ────────────────────────────────────── */}
+            {/* ── Sub-Step 2: Maintenance Plan ─────────────────────────────────── */}
             <div className="bg-white rounded-2xl shadow-sm border border-slate-200 p-6 md:p-8">
               {/* Step heading */}
               <div className="flex items-center gap-3 mb-2">
                 <div className="bg-indigo-600 text-white text-sm font-black w-8 h-8 rounded-full flex items-center justify-center shrink-0">
                   2
                 </div>
-                <div>
-                  <p className="text-indigo-500 text-xs font-bold uppercase tracking-widest">Monthly Subscription</p>
-                  <p className="text-slate-900 text-lg font-extrabold leading-tight">Choose Your Monthly Plan</p>
+                <div className="flex-1">
+                  <div className="flex items-center gap-2 flex-wrap">
+                    <span className="text-red-500 text-xs font-bold uppercase tracking-widest">Required</span>
+                    {/* Info icon with hover tooltip */}
+                    <div className="relative group/info">
+                      <Info className="w-3.5 h-3.5 text-slate-400 cursor-help" />
+                      <div className="absolute left-0 bottom-full mb-2 w-72 bg-slate-900 text-white rounded-xl p-3.5 text-xs leading-relaxed opacity-0 group-hover/info:opacity-100 transition-opacity pointer-events-none z-20 shadow-2xl">
+                        <p className="font-bold text-white mb-1.5">Why is this required?</p>
+                        <p className="text-slate-300">In order to host your website, a monthly maintenance plan must be selected. This covers hosting, uptime monitoring, security updates, and all the features included with your plan.</p>
+                      </div>
+                    </div>
+                  </div>
+                  <p className="text-slate-900 text-lg font-extrabold leading-tight">Choose Your Maintenance Plan</p>
                 </div>
               </div>
               <p className="text-slate-500 text-sm mb-5 leading-relaxed ml-11">
-                Each plan includes hosting, maintenance, and a set of featured add-ons pre-configured for you. Pick the level of automation that fits your business.
+                Each plan covers hosting, maintenance &amp; security updates, plus a set of featured add-ons pre-configured for you. Pick the level that fits your business.
               </p>
 
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
@@ -840,13 +848,39 @@ const ProSitesCheckout: React.FC = () => {
                 ))}
               </div>
 
-              {/* Selected plan summary pill */}
+              {/* Selected plan summary pill with hoverable add-ons tooltip */}
               <div className="mt-5 bg-indigo-50 border border-indigo-200 rounded-xl p-3 flex items-center justify-between">
                 <div>
                   <p className="text-xs text-indigo-500 font-bold uppercase tracking-wide">Selected Plan</p>
                   <p className="text-indigo-800 font-bold text-sm">{TIER_PRICES[selectedTier].label} — {TIER_PRICES[selectedTier].display}</p>
                 </div>
-                <p className="text-xs text-indigo-400">Includes {TIER_INCLUDED_ADDONS[selectedTier]?.length ?? 0} add-on{(TIER_INCLUDED_ADDONS[selectedTier]?.length ?? 0) !== 1 ? 's' : ''}</p>
+                {/* Hoverable "Includes X add-ons" */}
+                {(TIER_INCLUDED_ADDONS[selectedTier]?.length ?? 0) > 0 && (
+                  <div className="relative group/addons">
+                    <button
+                      type="button"
+                      className="flex items-center gap-1 text-xs text-indigo-500 font-semibold underline decoration-dotted underline-offset-2 cursor-help"
+                    >
+                      Includes {TIER_INCLUDED_ADDONS[selectedTier]?.length} add-on{(TIER_INCLUDED_ADDONS[selectedTier]?.length ?? 0) !== 1 ? 's' : ''}
+                      <Info className="w-3 h-3" />
+                    </button>
+                    {/* Tooltip */}
+                    <div className="absolute right-0 bottom-full mb-3 w-72 bg-slate-900 rounded-2xl p-4 shadow-2xl opacity-0 group-hover/addons:opacity-100 transition-all pointer-events-none z-30 border border-white/10">
+                      <p className="text-white text-xs font-bold uppercase tracking-wide mb-3">Included with {TIER_PRICES[selectedTier].label}</p>
+                      <ul className="space-y-2">
+                        {TIER_INCLUDED_ADDONS[selectedTier]?.map((addon) => (
+                          <li key={addon} className="flex items-start gap-2">
+                            <CheckCircle2 className="w-4 h-4 text-indigo-400 shrink-0 mt-0.5" />
+                            <span className="text-slate-200 text-sm leading-snug">{addon}</span>
+                          </li>
+                        ))}
+                      </ul>
+                      <p className="text-indigo-400 text-xs mt-3">All pre-configured for your business.</p>
+                      {/* Arrow */}
+                      <div className="absolute -bottom-1.5 right-6 w-3 h-3 bg-slate-900 rotate-45 border-r border-b border-white/10" />
+                    </div>
+                  </div>
+                )}
               </div>
             </div>
 
@@ -918,12 +952,17 @@ const ProSitesCheckout: React.FC = () => {
                 </div>
 
                 {/* Monthly plan row */}
-                <div className="flex justify-between items-center py-2 border-b border-slate-100">
-                  <div>
-                    <p className="font-semibold text-slate-800">{TIER_PRICES[selectedTier].label} Plan</p>
-                    <p className="text-xs text-slate-400">Monthly — includes {TIER_INCLUDED_ADDONS[selectedTier]?.join(', ')}</p>
+                <div className="flex justify-between items-start py-2 border-b border-slate-100">
+                  <div className="flex-1 pr-4">
+                    <p className="font-semibold text-slate-800">{TIER_PRICES[selectedTier].label} Maintenance Plan</p>
+                    <p className="text-xs text-slate-400 leading-relaxed">Hosting, maintenance &amp; security updates</p>
+                    {(TIER_INCLUDED_ADDONS[selectedTier]?.length ?? 0) > 0 && (
+                      <p className="text-xs text-indigo-500 mt-0.5">
+                        + {TIER_INCLUDED_ADDONS[selectedTier]?.join(' · ')}
+                      </p>
+                    )}
                   </div>
-                  <span className="font-bold text-slate-900">{centsToDisplay(baseMonthlyCents)}/mo</span>
+                  <span className="font-bold text-slate-900 shrink-0">{centsToDisplay(baseMonthlyCents)}/mo</span>
                 </div>
 
                 {/* Selected add-ons */}
