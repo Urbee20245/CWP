@@ -15,6 +15,7 @@ interface ClientData {
   owner_profile_id: string;
   billing_email: string | null;
   contact_name?: string | null;
+  contact_name?: string | null;
   profiles: Profile | null; // Allowing null here to match Supabase join behavior
 }
 
