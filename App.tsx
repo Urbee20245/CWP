@@ -29,6 +29,7 @@ const LoginPage = React.lazy(() => import('./src/pages/Login'));
 const GemOnboarding = React.lazy(() => import('./src/pages/GemOnboarding'));
 const ProSitesCheckout = React.lazy(() => import('./src/pages/ProSitesCheckout'));
 const ProSitesSuccess = React.lazy(() => import('./src/pages/ProSitesSuccess'));
+const ProSitesGem = React.lazy(() => import('./src/pages/ProSitesGem'));
 
 // Admin pages
 const AdminDashboard = React.lazy(() => import('./src/pages/AdminDashboard'));
@@ -107,7 +108,7 @@ function isCustomDomain(): boolean {
 const AppContent: React.FC = () => {
   const location = useLocation();
   const { isLoading, user } = useAuth();
-  const isBackOfficeRoute = location.pathname.startsWith('/admin') || location.pathname.startsWith('/client') || location.pathname.startsWith('/back-office') || location.pathname === '/login' || location.pathname.startsWith('/site/') || location.pathname === '/onboarding';
+  const isBackOfficeRoute = location.pathname.startsWith('/admin') || location.pathname.startsWith('/client') || location.pathname.startsWith('/back-office') || location.pathname === '/login' || location.pathname.startsWith('/site/') || location.pathname === '/onboarding' || location.pathname === '/pro-sites/onboard';
   const showGlobalComponents = !isBackOfficeRoute;
 
   if (isLoading && !user) return <GlobalLoading />;
@@ -126,6 +127,7 @@ const AppContent: React.FC = () => {
           <Route path="/pro-sites" element={<ProSitesPage />} />
           <Route path="/pro-sites/checkout" element={<ProSitesCheckout />} />
           <Route path="/pro-sites/success" element={<ProSitesSuccess />} />
+          <Route path="/pro-sites/onboard" element={<ProSitesGem />} />
           <Route path="/jetviz" element={<JetVizPage />} />
           <Route path="/jet-local-optimizer" element={<JetLocalOptimizerPage />} />
           <Route path="/privacy-policy" element={<PrivacyPolicy />} />

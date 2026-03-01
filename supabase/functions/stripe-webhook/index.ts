@@ -276,84 +276,103 @@ serve(async (req) => {
 
           console.log(`[stripe-webhook] Pro Sites checkout completed: ${checkoutId}`);
 
-          // 1. Update pro_sites_checkouts to 'paid'
-          const { error: updateError } = await supabaseAdmin
+          // 1. Update checkout to 'paid' and return the updated record in one query
+          const { data: proCheckout, error: updateError } = await supabaseAdmin
             .from('pro_sites_checkouts')
             .update({
               status: 'paid',
               stripe_customer_id: customerId,
               stripe_subscription_id: subscriptionId,
             })
-            .eq('id', checkoutId);
-
-          if (updateError) {
-            console.error('[stripe-webhook] Failed to update pro_sites_checkout:', updateError);
-          }
-
-          // 2. Get the checkout record for notification
-          const { data: proCheckout } = await supabaseAdmin
-            .from('pro_sites_checkouts')
-            .select('*')
             .eq('id', checkoutId)
+            .select('*')
             .single();
 
-          // 3. Send admin notification email
-          if (proCheckout) {
-            const adminEmails = await supabaseAdmin
-              .from('admin_notification_emails')
-              .select('email')
-              .eq('is_active', true);
+          if (updateError || !proCheckout) {
+            console.error('[stripe-webhook] Failed to update pro_sites_checkout:', updateError);
+            break;
+          }
 
-            const addonList = (proCheckout.selected_addons as string[]).join(', ') || 'None';
-            const totalMonthly = ((proCheckout.total_monthly_cents) / 100).toFixed(2);
+          // 2. Create client record if not already linked
+          if (!proCheckout.client_id) {
+            const { data: newClient } = await supabaseAdmin
+              .from('clients')
+              .insert({
+                name: proCheckout.business_name,
+                email: proCheckout.email,
+                phone: proCheckout.phone || null,
+                industry: proCheckout.industry || null,
+                plan: proCheckout.tier,
+                status: 'active',
+              })
+              .select('id')
+              .single();
 
-            for (const adminEmail of (adminEmails.data || [])) {
-              await supabaseAdmin.functions.invoke('send-email', {
-                body: {
-                  to: adminEmail.email,
-                  subject: `🎉 New CWP Pro Sites Order — ${proCheckout.business_name}`,
-                  html: `
-                    <h2>New Pro Sites Order Received</h2>
-                    <p><strong>Business:</strong> ${proCheckout.business_name}</p>
-                    <p><strong>Industry:</strong> ${proCheckout.industry}</p>
-                    <p><strong>Contact:</strong> ${proCheckout.first_name} ${proCheckout.last_name}</p>
-                    <p><strong>Email:</strong> ${proCheckout.email}</p>
-                    <p><strong>Phone:</strong> ${proCheckout.phone || 'Not provided'}</p>
-                    <hr/>
-                    <p><strong>Plan:</strong> ${proCheckout.tier.toUpperCase()}</p>
-                    <p><strong>Add-ons:</strong> ${addonList}</p>
-                    <p><strong>Monthly Total:</strong> $${totalMonthly}/mo</p>
-                    <p><strong>Setup Fee Paid:</strong> $497</p>
-                    <hr/>
-                    <p><strong>Business Description:</strong> ${proCheckout.business_description || 'None provided'}</p>
-                    <p><em>Go to Admin > Pro Sites Orders to manage this order.</em></p>
-                  `,
-                },
-              });
+            if (newClient?.id) {
+              await supabaseAdmin
+                .from('pro_sites_checkouts')
+                .update({ client_id: newClient.id })
+                .eq('id', checkoutId);
             }
+          }
 
-            // 4. Send client confirmation email
+          // 3. Send onboarding email with GEM link (guard against duplicates)
+          if (!proCheckout.onboarding_email_sent_at) {
+            const gemUrl = `https://customwebsitesplus.com/pro-sites/onboard?token=${proCheckout.onboarding_token}`;
+            const tierLabel = proCheckout.tier.charAt(0).toUpperCase() + proCheckout.tier.slice(1);
+
             await supabaseAdmin.functions.invoke('send-email', {
               body: {
                 to: proCheckout.email,
-                subject: `Your CWP Pro Sites Order is Confirmed — We're Building Your Website! 🚀`,
+                subject: `Your CWP Pro Sites setup link is ready — complete your account now`,
                 html: `
-                  <h2>Thank you, ${proCheckout.first_name}!</h2>
-                  <p>We've received your order for <strong>${proCheckout.business_name}</strong> and your payment is confirmed.</p>
-                  <h3>What happens next:</h3>
-                  <ol>
-                    <li>Our team will review your order and begin building your ${proCheckout.industry} website</li>
-                    <li>We'll reach out within 24 hours if we have any questions</li>
-                    <li>Once your site is ready, we'll send you a link to review it</li>
-                    <li>After your approval, your site goes live!</li>
-                  </ol>
-                  <p><strong>Your Plan:</strong> ${proCheckout.tier.charAt(0).toUpperCase() + proCheckout.tier.slice(1)} — $${totalMonthly}/mo</p>
-                  <p>Questions? Reply to this email or call us at <strong>(470) 264-6256</strong>.</p>
+                  <h2>Welcome, ${proCheckout.first_name}! Your order is confirmed. 🎉</h2>
+                  <p>We've received your payment for the <strong>${tierLabel} Plan</strong> and we're excited to get started on <strong>${proCheckout.business_name}</strong>.</p>
+                  <p>To get the most out of your plan, please complete your setup using the link below:</p>
+                  <p style="text-align:center;margin:32px 0;">
+                    <a href="${gemUrl}" style="background:#2563EB;color:#fff;padding:14px 32px;border-radius:10px;text-decoration:none;font-weight:bold;font-size:16px;">
+                      Complete Your Setup →
+                    </a>
+                  </p>
+                  <p style="font-size:13px;color:#64748b;">This link is unique to your account. You can return to it at any time to pick up where you left off.</p>
+                  <p>Questions? Call us at <strong>(470) 264-6256</strong> or reply to this email.</p>
                   <p>— The CWP Team</p>
                 `,
               },
             });
+
+            await supabaseAdmin
+              .from('pro_sites_checkouts')
+              .update({ onboarding_email_sent_at: new Date().toISOString() })
+              .eq('id', checkoutId);
           }
+
+          // 4. Notify admins via send-admin-notification
+          const addonList = (proCheckout.selected_addons as string[] || []).join(', ') || 'None';
+          const totalMonthly = proCheckout.total_monthly_cents
+            ? ((proCheckout.total_monthly_cents) / 100).toFixed(2)
+            : '—';
+
+          await supabaseAdmin.functions.invoke('send-admin-notification', {
+            body: {
+              subject: `New Pro Sites Order — ${proCheckout.business_name}`,
+              html: `
+                <h2>New Pro Sites Order Received</h2>
+                <p><strong>Business:</strong> ${proCheckout.business_name}</p>
+                <p><strong>Industry:</strong> ${proCheckout.industry}</p>
+                <p><strong>Contact:</strong> ${proCheckout.first_name} ${proCheckout.last_name}</p>
+                <p><strong>Email:</strong> ${proCheckout.email}</p>
+                <p><strong>Phone:</strong> ${proCheckout.phone || 'Not provided'}</p>
+                <hr/>
+                <p><strong>Plan:</strong> ${proCheckout.tier.toUpperCase()}</p>
+                <p><strong>Add-ons:</strong> ${addonList}</p>
+                <p><strong>Monthly Total:</strong> $${totalMonthly}/mo</p>
+                <p><strong>Setup Fee Paid:</strong> $497</p>
+                <hr/>
+                <p><em>Go to Admin &gt; Pro Sites Orders to manage this order.</em></p>
+              `,
+            },
+          });
 
           break; // Exit the switch case
         }
