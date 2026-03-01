@@ -29,7 +29,7 @@ const AdminClientList: React.FC = () => {
     try {
       const { data: clientsData, error: clientsError } = await supabase
         .from('clients')
-        .select('id, business_name, status, owner_profile_id, projects(count)');
+        .select('id, business_name, billing_email, status, owner_profile_id, projects(count), profiles(full_name, email)');
 
       if (clientsError) {
         console.error('Error fetching clients:', clientsError);
@@ -37,28 +37,15 @@ const AdminClientList: React.FC = () => {
         return;
       }
 
-      const profileIds = (clientsData || [])
-        .map((c: any) => c.owner_profile_id)
-        .filter(Boolean);
-
-      const { data: profilesData } = await supabase
-        .from('profiles')
-        .select('id, full_name, email')
-        .in('id', profileIds);
-
-      const profileMap = Object.fromEntries(
-        (profilesData || []).map((p: any) => [p.id, p])
-      );
-
       const formattedClients: ClientSummary[] = (clientsData || []).map((client: any) => {
-        const profile = profileMap[client.owner_profile_id];
+        const profile = client.profiles;
         return {
           id: client.id,
           business_name: client.business_name,
           status: client.status,
           owner_profile_id: client.owner_profile_id,
-          owner_name: profile?.full_name || profile?.email || 'No user linked',
-          owner_email: profile?.email || '',
+          owner_name: profile?.full_name || profile?.email || client.billing_email || 'No user linked',
+          owner_email: profile?.email || client.billing_email || '',
           project_count: client.projects?.[0]?.count || 0,
         };
       });
