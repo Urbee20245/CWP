@@ -258,12 +258,12 @@ const AddonCard: React.FC<{
     addon.setup_fee_cents && addon.setup_fee_cents > 0 && addon.billing_type !== 'one_time';
 
   return (
-    <div>
+    <div className="h-full flex flex-col">
       {/* Main clickable card */}
       <button
         type="button"
         onClick={onToggle}
-        className={`w-full text-left cursor-pointer transition-all rounded-xl border p-4 focus:outline-none ${
+        className={`w-full flex-1 text-left cursor-pointer transition-all rounded-xl border p-4 focus:outline-none ${
           selected
             ? 'border-indigo-400 bg-indigo-50'
             : 'border-slate-200 hover:border-indigo-300 bg-white'
@@ -728,15 +728,61 @@ const ProSitesCheckout: React.FC = () => {
                 </ul>
               </div>
 
-              {/* Disclaimer */}
-              <div className="bg-rose-50 border border-rose-200 rounded-lg p-4">
+              {/* Core Services Disclaimer */}
+              <div className="bg-rose-50 border border-rose-200 rounded-xl p-5">
                 <p className="text-xs font-bold text-rose-800 mb-1">⚠️ Please Note</p>
-                <p className="text-xs text-rose-800 leading-relaxed">
+                <p className="text-xs text-rose-800 leading-relaxed mb-4">
                   CWP Pro Sites is a <strong>website subscription service</strong> — not a CRM,
-                  custom development project, or our full-service agency offering. If you need a
-                  custom business operating system, client portal, or advanced automation platform,
-                  visit our main services page.
+                  custom development project, or full-service agency build. Looking for something
+                  more powerful? Our core services below may be a better fit:
                 </p>
+                <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                  <a
+                    href="/services"
+                    className="group bg-white border border-rose-200 hover:border-indigo-400 rounded-xl p-4 transition-all hover:shadow-md block"
+                  >
+                    <div className="text-xl mb-2">🌐</div>
+                    <p className="text-sm font-bold text-slate-900 group-hover:text-indigo-700 transition-colors">
+                      Custom Website Build
+                    </p>
+                    <p className="text-xs text-slate-500 mt-1 leading-snug">
+                      Fully custom design &amp; development tailored to your brand. No templates. You own it.
+                    </p>
+                    <p className="text-xs font-semibold text-indigo-600 mt-2 group-hover:underline">
+                      View Services →
+                    </p>
+                  </a>
+                  <a
+                    href="/contact"
+                    className="group bg-white border border-rose-200 hover:border-indigo-400 rounded-xl p-4 transition-all hover:shadow-md block"
+                  >
+                    <div className="text-xl mb-2">⚙️</div>
+                    <p className="text-sm font-bold text-slate-900 group-hover:text-indigo-700 transition-colors">
+                      Custom Business OS
+                    </p>
+                    <p className="text-xs text-slate-500 mt-1 leading-snug">
+                      CRM, client portals, automation, dashboards — built specifically for how your business runs.
+                    </p>
+                    <p className="text-xs font-semibold text-indigo-600 mt-2 group-hover:underline">
+                      Talk to Us →
+                    </p>
+                  </a>
+                  <a
+                    href="/jetsuite"
+                    className="group bg-white border border-rose-200 hover:border-indigo-400 rounded-xl p-4 transition-all hover:shadow-md block"
+                  >
+                    <div className="text-xl mb-2">✨</div>
+                    <p className="text-sm font-bold text-slate-900 group-hover:text-indigo-700 transition-colors">
+                      JetSuite Platform
+                    </p>
+                    <p className="text-xs text-slate-500 mt-1 leading-snug">
+                      AI tools, lead management, scheduling, and business automation — all in one place.
+                    </p>
+                    <p className="text-xs font-semibold text-indigo-600 mt-2 group-hover:underline">
+                      Explore JetSuite →
+                    </p>
+                  </a>
+                </div>
               </div>
             </div>
 
@@ -779,7 +825,7 @@ const ProSitesCheckout: React.FC = () => {
 
               {/* Addon list */}
               {!addonsLoading && !addonsError && addons.length > 0 && (
-                <div className="space-y-3">
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                   {addons.map((addon) => (
                     <AddonCard
                       key={addon.key}
