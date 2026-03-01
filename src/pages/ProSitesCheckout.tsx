@@ -732,54 +732,51 @@ const ProSitesCheckout: React.FC = () => {
               <div className="bg-rose-50 border border-rose-200 rounded-xl p-5">
                 <p className="text-xs font-bold text-rose-800 mb-1">⚠️ Please Note</p>
                 <p className="text-xs text-rose-800 leading-relaxed mb-4">
-                  CWP Pro Sites is a <strong>website subscription service</strong> — not a CRM,
-                  custom development project, or full-service agency build. Looking for something
-                  more powerful? Our core services below may be a better fit:
+                  CWP Pro Sites is a <strong>website subscription service</strong> — not a full custom build.
+                  Looking for something more powerful? Our core services below may be a better fit:
                 </p>
-                <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
-                  <a
-                    href="/services"
-                    className="group bg-white border border-rose-200 hover:border-indigo-400 rounded-xl p-4 transition-all hover:shadow-md block"
-                  >
-                    <div className="text-xl mb-2">🌐</div>
-                    <p className="text-sm font-bold text-slate-900 group-hover:text-indigo-700 transition-colors">
-                      Custom Website Build
-                    </p>
-                    <p className="text-xs text-slate-500 mt-1 leading-snug">
-                      Fully custom design &amp; development tailored to your brand. No templates. You own it.
-                    </p>
-                    <p className="text-xs font-semibold text-indigo-600 mt-2 group-hover:underline">
-                      View Services →
-                    </p>
-                  </a>
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                  {/* Card 1 — Business Automation Growth System */}
                   <a
                     href="/contact"
                     className="group bg-white border border-rose-200 hover:border-indigo-400 rounded-xl p-4 transition-all hover:shadow-md block"
                   >
-                    <div className="text-xl mb-2">⚙️</div>
-                    <p className="text-sm font-bold text-slate-900 group-hover:text-indigo-700 transition-colors">
-                      Custom Business OS
+                    <div className="flex items-start justify-between mb-2">
+                      <span className="text-xl">🚀</span>
+                      <span className="text-xs font-bold text-emerald-700 bg-emerald-50 border border-emerald-200 rounded-full px-2 py-0.5">
+                        $4,997
+                      </span>
+                    </div>
+                    <p className="text-sm font-bold text-slate-900 group-hover:text-indigo-700 transition-colors leading-tight">
+                      Business Automation Growth System
                     </p>
                     <p className="text-xs text-slate-500 mt-1 leading-snug">
-                      CRM, client portals, automation, dashboards — built specifically for how your business runs.
+                      Website + AI phone receptionist + automated lead follow-up + booking system. A complete revenue engine — not just a site.
                     </p>
-                    <p className="text-xs font-semibold text-indigo-600 mt-2 group-hover:underline">
+                    <p className="text-xs font-semibold text-indigo-600 mt-3 group-hover:underline">
                       Talk to Us →
                     </p>
                   </a>
+                  {/* Card 2 — Custom Business Operating System */}
                   <a
-                    href="/jetsuite"
+                    href="/contact"
                     className="group bg-white border border-rose-200 hover:border-indigo-400 rounded-xl p-4 transition-all hover:shadow-md block"
                   >
-                    <div className="text-xl mb-2">✨</div>
-                    <p className="text-sm font-bold text-slate-900 group-hover:text-indigo-700 transition-colors">
-                      JetSuite Platform
+                    <div className="flex items-start justify-between mb-2">
+                      <span className="text-xl">⚙️</span>
+                      <span className="text-xs font-bold text-emerald-700 bg-emerald-50 border border-emerald-200 rounded-full px-2 py-0.5">
+                        Starting at $8,500
+                      </span>
+                    </div>
+                    <p className="text-sm font-bold text-slate-900 group-hover:text-indigo-700 transition-colors leading-tight">
+                      Custom Business Operating System
+                      <span className="block text-xs font-normal text-slate-400 mt-0.5">(Custom CRM Development)</span>
                     </p>
                     <p className="text-xs text-slate-500 mt-1 leading-snug">
-                      AI tools, lead management, scheduling, and business automation — all in one place.
+                      Fully custom CRM, pipelines, automation, dashboards, and staff access — built around exactly how your business runs.
                     </p>
-                    <p className="text-xs font-semibold text-indigo-600 mt-2 group-hover:underline">
-                      Explore JetSuite →
+                    <p className="text-xs font-semibold text-indigo-600 mt-3 group-hover:underline">
+                      Talk to Us →
                     </p>
                   </a>
                 </div>

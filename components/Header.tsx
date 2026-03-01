@@ -1,12 +1,11 @@
 import React, { useState, useEffect } from 'react';
-import { Menu, X, ChevronDown, Gauge, Eye, Phone, ArrowRight, Sparkles, LogIn } from 'lucide-react';
+import { Menu, X, Gauge, Phone, ArrowRight, Sparkles, LogIn } from 'lucide-react';
 import { NavigationLink } from '../types';
 import { Link } from 'react-router-dom';
 
 const Header: React.FC = () => {
   const [isScrolled, setIsScrolled] = useState(false);
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
-  const [isToolsOpen, setIsToolsOpen] = useState(false);
 
   // Handle scroll effect for background
   useEffect(() => {
@@ -20,7 +19,6 @@ const Header: React.FC = () => {
   // Smooth scroll handler
   const scrollToSection = (id: string) => {
     setIsMobileMenuOpen(false);
-    setIsToolsOpen(false);
     const element = document.getElementById(id);
     if (element) {
       element.scrollIntoView({ behavior: 'smooth' });
@@ -72,77 +70,6 @@ const Header: React.FC = () => {
             <Sparkles className="w-3.5 h-3.5" />
             Pro Sites
           </Link>
-
-          {/* Tools Dropdown Container */}
-          <div 
-            className="relative"
-            onMouseEnter={() => setIsToolsOpen(true)}
-            onMouseLeave={() => setIsToolsOpen(false)}
-          >
-            <button 
-                className={`
-                    px-5 py-2.5 text-sm font-medium rounded-full transition-all flex items-center gap-1.5
-                    ${isToolsOpen ? 'text-slate-900 bg-white/50' : 'text-slate-600 hover:text-slate-900 hover:bg-white/50'}
-                `}
-            >
-                Tools 
-                <ChevronDown className={`w-3.5 h-3.5 transition-transform duration-200 ${isToolsOpen ? 'rotate-180' : ''}`} />
-            </button>
-            
-            {/* Dropdown Menu */}
-            <div 
-                className={`
-                    absolute top-full left-1/2 -translate-x-1/2 pt-4 w-80 
-                    transition-all duration-200 origin-top
-                    ${isToolsOpen ? 'opacity-100 translate-y-0 visible' : 'opacity-0 translate-y-2 invisible'}
-                `}
-            >
-                <div className="bg-white rounded-2xl shadow-xl border border-slate-100 p-2 overflow-hidden ring-1 ring-black/5">
-                    <div className="px-3 py-2 text-[10px] font-bold text-slate-400 uppercase tracking-widest border-b border-slate-50 mb-1">
-                        Free Utilities
-                    </div>
-                    <Link 
-                        to="/jet-local-optimizer"
-                        onClick={() => setIsToolsOpen(false)}
-                        className="w-full flex items-start gap-3 p-3 rounded-xl hover:bg-slate-50 transition-colors text-left group/item"
-                    >
-                        <div className="mt-1 bg-indigo-50 p-2 rounded-lg text-indigo-600 group-hover/item:bg-indigo-100 transition-colors">
-                            <Gauge className="w-5 h-5" />
-                        </div>
-                        <div>
-                            <div className="text-sm font-bold text-slate-900 group-hover/item:text-indigo-700 transition-colors">Jet Optimizer</div>
-                            <div className="text-xs text-slate-500 leading-tight mt-0.5">Technical website audit & health check.</div>
-                        </div>
-                    </Link>
-                    <Link 
-                        to="/jetviz"
-                        onClick={() => setIsToolsOpen(false)}
-                        className="w-full flex items-start gap-3 p-3 rounded-xl hover:bg-slate-50 transition-colors text-left group/item"
-                    >
-                        <div className="mt-1 bg-purple-50 p-2 rounded-lg text-purple-600 group-hover/item:bg-purple-100 transition-colors">
-                            <Eye className="w-5 h-5" />
-                        </div>
-                        <div>
-                            <div className="text-sm font-bold text-slate-900 group-hover/item:text-purple-700 transition-colors">JetViz</div>
-                            <div className="text-xs text-slate-500 leading-tight mt-0.5">Visual design comparison.</div>
-                        </div>
-                    </Link>
-                    <Link 
-                        to="/jetsuite"
-                        onClick={() => setIsToolsOpen(false)}
-                        className="w-full flex items-start gap-3 p-3 rounded-xl hover:bg-slate-50 transition-colors text-left group/item"
-                    >
-                        <div className="mt-1 bg-emerald-50 p-2 rounded-lg text-emerald-600 group-hover/item:bg-emerald-100 transition-colors">
-                            <Sparkles className="w-5 h-5" />
-                        </div>
-                        <div>
-                            <div className="text-sm font-bold text-slate-900 group-hover/item:text-emerald-700 transition-colors">JetSuite</div>
-                            <div className="text-xs text-slate-500 leading-tight mt-0.5">The complete agency operating system.</div>
-                        </div>
-                    </Link>
-                </div>
-            </div>
-          </div>
 
           <Link
             to="/process"
@@ -241,35 +168,6 @@ const Header: React.FC = () => {
                     </Link>
                 </div>
                 
-                {/* Mobile Tools Block */}
-                <div className="mx-2 bg-slate-50 rounded-2xl p-4 mb-2 border border-slate-100">
-                   <div className="text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-3 pl-1">Free Tools</div>
-                   <div className="space-y-2">
-                       <Link 
-                           to="/jet-local-optimizer"
-                           onClick={() => setIsMobileMenuOpen(false)}
-                           className="w-full text-left p-3 rounded-xl bg-white border border-slate-100 flex items-center gap-3 active:scale-[0.98] transition-transform"
-                       >
-                          <div className="bg-indigo-50 p-2 rounded-lg text-indigo-600"><Gauge className="w-5 h-5" /></div>
-                          <div>
-                              <div className="text-sm font-bold text-slate-900">Jet Local Optimizer</div>
-                              <div className="text-xs text-slate-500">Technical Website Audit</div>
-                          </div>
-                       </Link>
-                       <Link 
-                           to="/jetviz"
-                           onClick={() => setIsMobileMenuOpen(false)}
-                           className="w-full text-left p-3 rounded-xl bg-white border border-slate-100 flex items-center gap-3 active:scale-[0.98] transition-transform"
-                       >
-                          <div className="bg-purple-50 p-2 rounded-lg text-purple-600"><Eye className="w-5 h-5" /></div>
-                          <div>
-                              <div className="text-sm font-bold text-slate-900">JetViz</div>
-                              <div className="text-xs text-slate-500">Visual Website Check</div>
-                          </div>
-                       </Link>
-                   </div>
-                </div>
-
                 <div className="p-2">
                     <Link
                       to="/jet-local-optimizer"
