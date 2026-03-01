@@ -25,19 +25,18 @@ const AdminClientList: React.FC = () => {
 
   const fetchData = useCallback(async () => {
     setIsLoading(true);
-
     try {
-      const { data: clientsData, error: clientsError } = await supabase
-        .from('clients')
-        .select('id, business_name, billing_email, status, owner_profile_id, projects(count), profiles(full_name, email)');
+      const { data, error } = await supabase.functions.invoke('admin-update-profile', {
+        body: { action: 'list_client_profiles' },
+      });
 
-      if (clientsError) {
-        console.error('Error fetching clients:', clientsError);
+      if (error) {
+        console.error('Error fetching clients:', error);
         setClients([]);
         return;
       }
 
-      const formattedClients: ClientSummary[] = (clientsData || []).map((client: any) => {
+      const formattedClients: ClientSummary[] = (data.clients || []).map((client: any) => {
         const profile = client.profiles;
         return {
           id: client.id,

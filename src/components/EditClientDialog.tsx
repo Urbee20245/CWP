@@ -51,6 +51,7 @@ const EditClientDialog: React.FC<EditClientDialogProps> = ({ isOpen, onClose, on
   const [formData, setFormData] = useState(getSafeProfileData(initialClientData));
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [profileLoaded, setProfileLoaded] = useState(false);
 
   // Sync state when initial data changes (e.g., when dialog opens with new client data)
   useEffect(() => {
@@ -59,6 +60,30 @@ const EditClientDialog: React.FC<EditClientDialogProps> = ({ isOpen, onClose, on
         setError(null);
     }
   }, [isOpen, initialClientData]);
+
+  useEffect(() => {
+    if (!isOpen || !initialClientData.owner_profile_id) return;
+
+    const fetchProfile = async () => {
+      const { data, error } = await supabase.functions.invoke('admin-update-profile', {
+        body: {
+          action: 'get_profile',
+          profile_id: initialClientData.owner_profile_id
+        },
+      });
+
+      if (!error && data?.profile) {
+        setFormData(prev => ({
+          ...prev,
+          fullName: data.profile.full_name || '',
+          profileRole: data.profile.role || 'client',
+        }));
+        setProfileLoaded(true);
+      }
+    };
+
+    fetchProfile();
+  }, [isOpen, initialClientData.owner_profile_id]);
 
   if (!isOpen) return null;
 
@@ -90,14 +115,19 @@ const EditClientDialog: React.FC<EditClientDialogProps> = ({ isOpen, onClose, on
 
       if (clientError) throw clientError;
 
-      // 2. Update Profile Record directly using admin RLS policy
-      // (The "Admins can update any profile" RLS policy allows this; no edge function needed)
-      const { error: profileError } = await supabase
-        .from('profiles')
-        .update({ full_name: fullName, role: profileRole })
-        .eq('id', profileId);
+      // 2. Update Profile via admin edge function (bypasses RLS)
+      const { data: profileData, error: profileError } = await supabase.functions.invoke('admin-update-profile', {
+        body: {
+          action: 'update_profile',
+          profile_id: profileId,
+          full_name: fullName,
+          role: profileRole,
+        },
+      });
 
-      if (profileError) throw profileError;
+      if (profileError || profileData?.error) {
+        throw new Error(profileError?.message || profileData?.error || 'Failed to update profile');
+      }
 
       alert(`Client ${businessName} updated successfully!`);
       onClientUpdated();
@@ -146,9 +176,10 @@ const EditClientDialog: React.FC<EditClientDialogProps> = ({ isOpen, onClose, on
                   name="fullName"
                   value={formData.fullName}
                   onChange={handleChange}
+                  placeholder={profileLoaded ? '' : 'Loading...'}
                   className="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm"
                   required
-                  disabled={isLoading}
+                  disabled={isLoading || !profileLoaded}
                 />
               </div>
               <div>
