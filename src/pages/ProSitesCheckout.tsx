@@ -68,10 +68,11 @@ const TIER_FEATURES: Record<string, string[]> = {
 
 // ─── Plan-Included Add-Ons (shown as "Featured Add-Ons Included") ─────────────
 
+// What's NEW in each tier (not cumulative — use getCumulativeIncludedAddons() for full list)
 const TIER_INCLUDED_ADDONS: Record<string, string[]> = {
   starter: [
     'AI Chat Agent — pre-configured for your business',
-    'Cal.com Booking Calendar',
+    'Cal.com Booking Calendar Integration',
   ],
   growth: [
     'AI Phone Receptionist — Inbound (24/7)',
@@ -82,10 +83,41 @@ const TIER_INCLUDED_ADDONS: Record<string, string[]> = {
     'AI Phone — Inbound + Outbound',
   ],
   elite: [
-    'AI Phone — Inbound + Outbound (priority)',
     'Dedicated Account Manager',
+    'Priority AI Phone Support',
   ],
 };
+
+const TIER_ORDER: TierKey[] = ['starter', 'growth', 'pro', 'elite'];
+
+/** Returns every included add-on for a tier, including all add-ons from lower tiers. */
+function getCumulativeIncludedAddons(tier: TierKey): string[] {
+  const idx = TIER_ORDER.indexOf(tier);
+  return TIER_ORDER.slice(0, idx + 1).flatMap((t) => TIER_INCLUDED_ADDONS[t] ?? []);
+}
+
+/**
+ * Keyword patterns to detect if a catalog add-on is already covered by a plan.
+ * Each inner array is a set of words that ALL must appear in the add-on name.
+ */
+const COVERED_ADDON_PATTERNS: { tiers: TierKey[]; words: string[] }[] = [
+  { tiers: ['starter', 'growth', 'pro', 'elite'], words: ['chat', 'agent'] },
+  { tiers: ['starter', 'growth', 'pro', 'elite'], words: ['cal.com'] },
+  { tiers: ['starter', 'growth', 'pro', 'elite'], words: ['booking', 'calendar'] },
+  { tiers: ['growth', 'pro', 'elite'],            words: ['phone', 'receptionist'] },
+  { tiers: ['growth', 'pro', 'elite'],            words: ['live chat'] },
+  { tiers: ['growth', 'pro', 'elite'],            words: ['live', 'chat', 'widget'] },
+  { tiers: ['pro', 'elite'],                      words: ['chat assistant'] },
+  { tiers: ['pro', 'elite'],                      words: ['outbound'] },
+  { tiers: ['elite'],                             words: ['account manager'] },
+];
+
+function isAddonCoveredByPlan(addonName: string, tier: TierKey): boolean {
+  const name = addonName.toLowerCase();
+  return COVERED_ADDON_PATTERNS.some(
+    ({ tiers, words }) => tiers.includes(tier) && words.every((w) => name.includes(w))
+  );
+}
 
 // ─── $497 Setup — What's Included ────────────────────────────────────────────
 
@@ -276,22 +308,43 @@ const TierCard: React.FC<{
         ))}
       </ul>
 
-      {/* Included add-ons — highlighted section */}
-      {includedAddons.length > 0 && (
-        <div className={`rounded-xl p-3 mb-3 border ${selected ? 'bg-indigo-100/60 border-indigo-200' : 'bg-slate-50 border-slate-100'}`}>
-          <p className={`text-xs font-bold uppercase tracking-wide mb-1.5 ${selected ? 'text-indigo-600' : 'text-slate-500'}`}>
-            Included Add-Ons
-          </p>
-          <ul className="space-y-1">
-            {includedAddons.map((addon) => (
-              <li key={addon} className={`flex items-center gap-1.5 text-xs font-medium ${selected ? 'text-indigo-700' : 'text-slate-600'}`}>
-                <span className={`w-1.5 h-1.5 rounded-full shrink-0 ${selected ? 'bg-indigo-500' : 'bg-slate-400'}`} />
-                {addon}
-              </li>
-            ))}
-          </ul>
-        </div>
-      )}
+      {/* Cumulative included add-ons — shows all from this tier + lower tiers */}
+      {(() => {
+        const tierIdx = TIER_ORDER.indexOf(tier);
+        const allAddons = getCumulativeIncludedAddons(tier);
+        if (allAddons.length === 0) return null;
+        return (
+          <div className={`rounded-xl p-3 mb-3 border ${selected ? 'bg-indigo-100/60 border-indigo-200' : 'bg-slate-50 border-slate-100'}`}>
+            <p className={`text-xs font-bold uppercase tracking-wide mb-2 ${selected ? 'text-indigo-600' : 'text-slate-500'}`}>
+              Included Add-Ons <span className="ml-1 font-black">({allAddons.length})</span>
+            </p>
+            <ul className="space-y-1.5">
+              {TIER_ORDER.slice(0, tierIdx + 1).map((t) =>
+                (TIER_INCLUDED_ADDONS[t] ?? []).map((addon) => {
+                  const isNew = t === tier;
+                  return (
+                    <li key={addon} className="flex items-start gap-1.5">
+                      {isNew ? (
+                        <span className="text-indigo-500 text-xs mt-px shrink-0">✦</span>
+                      ) : (
+                        <span className={`w-1.5 h-1.5 rounded-full mt-1 shrink-0 ${selected ? 'bg-indigo-300' : 'bg-slate-300'}`} />
+                      )}
+                      <span className={`text-xs ${isNew ? `font-semibold ${selected ? 'text-indigo-700' : 'text-slate-700'}` : `${selected ? 'text-indigo-500' : 'text-slate-400'}`}`}>
+                        {addon}
+                        {isNew && tier !== 'starter' && (
+                          <span className={`ml-1.5 text-xs font-bold px-1.5 py-0.5 rounded-full ${selected ? 'bg-indigo-200 text-indigo-700' : 'bg-slate-100 text-slate-500'}`}>
+                            New
+                          </span>
+                        )}
+                      </span>
+                    </li>
+                  );
+                })
+              )}
+            </ul>
+          </div>
+        );
+      })()}
 
       {/* Free Human Touch perk */}
       <div className="bg-amber-50 border border-amber-200 rounded-xl p-2.5 text-xs">
@@ -309,13 +362,33 @@ const AddonCard: React.FC<{
   selected: boolean;
   blogStyle: boolean;
   wantsTollFree: boolean;
+  coveredByPlan: boolean;
+  planLabel: string;
   onToggle: () => void;
   onTollFreeChange: (val: boolean) => void;
-}> = ({ addon, selected, blogStyle, wantsTollFree, onToggle, onTollFreeChange }) => {
+}> = ({ addon, selected, blogStyle, wantsTollFree, coveredByPlan, planLabel, onToggle, onTollFreeChange }) => {
   const isPhone = isAiPhoneAddon(addon);
   const priceLabel = addonPriceLabel(addon);
   const hasSetupFee =
     addon.setup_fee_cents && addon.setup_fee_cents > 0 && addon.billing_type !== 'one_time';
+
+  // If this add-on is already covered by the selected plan, render a "Included" card
+  if (coveredByPlan) {
+    return (
+      <div className="h-full flex flex-col rounded-xl border-2 border-emerald-200 bg-emerald-50 p-4">
+        <div className="flex items-start justify-between gap-2 mb-2">
+          <span className="text-sm font-semibold text-emerald-800">{addon.name}</span>
+          <span className="shrink-0 bg-emerald-100 border border-emerald-300 text-emerald-700 text-xs font-bold px-2.5 py-1 rounded-full whitespace-nowrap">
+            ✅ In your plan
+          </span>
+        </div>
+        <p className="text-xs text-emerald-700 leading-relaxed mb-2">{addon.description}</p>
+        <p className="text-xs text-emerald-600 font-semibold mt-auto">
+          Included with your {planLabel} plan — no extra charge.
+        </p>
+      </div>
+    );
+  }
 
   return (
     <div className="h-full flex flex-col">
@@ -604,7 +677,7 @@ const ProSitesCheckout: React.FC = () => {
             Get Your CWP Pro Site
           </h1>
           <p className="text-slate-500 mt-2 text-sm">
-            Professional AI-built website — ready in 24 hours
+            Professional AI-built website — ready in 7 days
           </p>
         </div>
 
@@ -854,26 +927,33 @@ const ProSitesCheckout: React.FC = () => {
                   <p className="text-xs text-indigo-500 font-bold uppercase tracking-wide">Selected Plan</p>
                   <p className="text-indigo-800 font-bold text-sm">{TIER_PRICES[selectedTier].label} — {TIER_PRICES[selectedTier].display}</p>
                 </div>
-                {/* Hoverable "Includes X add-ons" */}
-                {(TIER_INCLUDED_ADDONS[selectedTier]?.length ?? 0) > 0 && (
+                {/* Hoverable "Includes X add-ons" — shows cumulative count + full tooltip */}
+                {getCumulativeIncludedAddons(selectedTier).length > 0 && (
                   <div className="relative group/addons">
                     <button
                       type="button"
                       className="flex items-center gap-1 text-xs text-indigo-500 font-semibold underline decoration-dotted underline-offset-2 cursor-help"
                     >
-                      Includes {TIER_INCLUDED_ADDONS[selectedTier]?.length} add-on{(TIER_INCLUDED_ADDONS[selectedTier]?.length ?? 0) !== 1 ? 's' : ''}
+                      Includes {getCumulativeIncludedAddons(selectedTier).length} add-on{getCumulativeIncludedAddons(selectedTier).length !== 1 ? 's' : ''}
                       <Info className="w-3 h-3" />
                     </button>
                     {/* Tooltip */}
-                    <div className="absolute right-0 bottom-full mb-3 w-72 bg-slate-900 rounded-2xl p-4 shadow-2xl opacity-0 group-hover/addons:opacity-100 transition-all pointer-events-none z-30 border border-white/10">
-                      <p className="text-white text-xs font-bold uppercase tracking-wide mb-3">Included with {TIER_PRICES[selectedTier].label}</p>
+                    <div className="absolute right-0 bottom-full mb-3 w-80 bg-slate-900 rounded-2xl p-4 shadow-2xl opacity-0 group-hover/addons:opacity-100 transition-all pointer-events-none z-30 border border-white/10">
+                      <p className="text-white text-xs font-bold uppercase tracking-wide mb-3">All add-ons included with {TIER_PRICES[selectedTier].label}</p>
                       <ul className="space-y-2">
-                        {TIER_INCLUDED_ADDONS[selectedTier]?.map((addon) => (
-                          <li key={addon} className="flex items-start gap-2">
-                            <CheckCircle2 className="w-4 h-4 text-indigo-400 shrink-0 mt-0.5" />
-                            <span className="text-slate-200 text-sm leading-snug">{addon}</span>
-                          </li>
-                        ))}
+                        {TIER_ORDER.slice(0, TIER_ORDER.indexOf(selectedTier) + 1).map((t) =>
+                          (TIER_INCLUDED_ADDONS[t] ?? []).map((addon) => (
+                            <li key={addon} className="flex items-start gap-2">
+                              <CheckCircle2 className={`w-4 h-4 shrink-0 mt-0.5 ${t === selectedTier ? 'text-indigo-400' : 'text-slate-500'}`} />
+                              <span className={`text-sm leading-snug ${t === selectedTier ? 'text-slate-200' : 'text-slate-400'}`}>
+                                {addon}
+                                {t !== selectedTier && (
+                                  <span className="ml-1.5 text-xs text-slate-500 capitalize">({TIER_PRICES[t].label})</span>
+                                )}
+                              </span>
+                            </li>
+                          ))
+                        )}
                       </ul>
                       <p className="text-indigo-400 text-xs mt-3">All pre-configured for your business.</p>
                       {/* Arrow */}
@@ -918,17 +998,22 @@ const ProSitesCheckout: React.FC = () => {
               {/* Addon list */}
               {!addonsLoading && !addonsError && addons.length > 0 && (
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                  {addons.map((addon) => (
-                    <AddonCard
-                      key={addon.key}
-                      addon={addon}
-                      selected={selectedAddons.includes(addon.key)}
-                      blogStyle={isBlogAddon(addon)}
-                      wantsTollFree={wantsTollFree}
-                      onToggle={() => toggleAddon(addon.key)}
-                      onTollFreeChange={setWantsTollFree}
-                    />
-                  ))}
+                  {addons.map((addon) => {
+                    const covered = isAddonCoveredByPlan(addon.name, selectedTier);
+                    return (
+                      <AddonCard
+                        key={addon.key}
+                        addon={addon}
+                        selected={selectedAddons.includes(addon.key)}
+                        blogStyle={isBlogAddon(addon)}
+                        wantsTollFree={wantsTollFree}
+                        coveredByPlan={covered}
+                        planLabel={TIER_PRICES[selectedTier].label}
+                        onToggle={() => toggleAddon(addon.key)}
+                        onTollFreeChange={setWantsTollFree}
+                      />
+                    );
+                  })}
                 </div>
               )}
 
@@ -956,9 +1041,9 @@ const ProSitesCheckout: React.FC = () => {
                   <div className="flex-1 pr-4">
                     <p className="font-semibold text-slate-800">{TIER_PRICES[selectedTier].label} Maintenance Plan</p>
                     <p className="text-xs text-slate-400 leading-relaxed">Hosting, maintenance &amp; security updates</p>
-                    {(TIER_INCLUDED_ADDONS[selectedTier]?.length ?? 0) > 0 && (
+                    {getCumulativeIncludedAddons(selectedTier).length > 0 && (
                       <p className="text-xs text-indigo-500 mt-0.5">
-                        + {TIER_INCLUDED_ADDONS[selectedTier]?.join(' · ')}
+                        + {getCumulativeIncludedAddons(selectedTier).join(' · ')}
                       </p>
                     )}
                   </div>
@@ -1096,7 +1181,7 @@ const ProSitesCheckout: React.FC = () => {
                 <p className="text-xs font-bold uppercase tracking-widest text-indigo-600 mb-3">Then Monthly — Starting 30 Days After Signup</p>
                 <div className="space-y-2 text-sm">
                   <div className="flex justify-between items-center">
-                    <p className="font-semibold text-slate-700">{TIER_PRICES[selectedTier].label} Plan</p>
+                    <p className="font-semibold text-slate-700">{TIER_PRICES[selectedTier].label} Maintenance Plan</p>
                     <span className="text-slate-800 font-semibold">{centsToDisplay(baseMonthlyCents)}/mo</span>
                   </div>
                   {selectedAddonObjects.filter(a => addonMonthlyContribution(a) > 0).map((addon) => (
