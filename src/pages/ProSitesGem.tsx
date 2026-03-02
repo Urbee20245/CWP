@@ -8,22 +8,25 @@ import { supabase } from '../integrations/supabase/client';
 // ─── Constants ─────────────────────────────────────────────────────────────────
 
 const SUPABASE_URL = 'https://nvgumhlewbqynrhlkqhx.supabase.co';
-const TOTAL_DISPLAY_STEPS = 10;
+const TOTAL_DISPLAY_STEPS = 12;
 
 const STEP_DISPLAY_NUM: Partial<Record<GemStep, number>> = {
   auth_check: 1, login: 1, signup: 1,
   welcome: 2,
-  phone: 3, phone_carrier: 4, phone_porting: 4, phone_provision: 4,
-  cal_check: 5, cal_api_key: 6,
-  a2p_intro: 7, a2p_form: 8,
-  brand: 9,
-  addon_suggest: 10, complete: 10,
+  domain: 3, domain_access: 3,
+  phone: 4, phone_carrier: 5, phone_porting: 5, phone_provision: 5,
+  cal_check: 6, cal_api_key: 7,
+  a2p_intro: 8, a2p_form: 9,
+  brand: 10,
+  addon_suggest: 11, complete: 12,
 };
 
 const STEP_MESSAGES: Partial<Record<GemStep, string>> = {
   auth_check: "Welcome! 👋 I'm going to walk you through getting your site set up. First — do you already have a CWP client account?",
   login: "Great! Log in with your email and password below.",
   signup: "Let's create your account. Your email is already confirmed from your purchase. Just choose a password!",
+  domain: "🌐 Does your business have a domain name? (e.g. yourbusiness.com)",
+  domain_access: "Great! Please enter your domain name below, and then we'll ask for access to your DNS settings so we can connect everything automatically.",
   phone: "Now let's set up your business phone. Does your business have a dedicated phone number?",
   phone_carrier: "Which provider is your number currently with?",
   phone_porting: "Got it! We can port most numbers. Here's what you should know first:",
@@ -50,7 +53,8 @@ const BUSINESS_TYPES = ['LLC', 'S-Corp', 'C-Corp', 'Sole Proprietor', 'Non-Profi
 
 type GemStep =
   | 'loading' | 'invalid_token' | 'auth_check' | 'login' | 'signup'
-  | 'welcome' | 'phone' | 'phone_carrier' | 'phone_porting' | 'phone_provision'
+  | 'welcome' | 'domain' | 'domain_access'
+  | 'phone' | 'phone_carrier' | 'phone_porting' | 'phone_provision'
   | 'cal_check' | 'cal_api_key' | 'a2p_intro' | 'a2p_form'
   | 'brand' | 'addon_suggest' | 'complete';
 
@@ -183,6 +187,11 @@ const ProSitesGem: React.FC = () => {
   // ── Cal.com ─────────────────────────────────────────────────────────────────
   const [calApiKey, setCalApiKey] = useState('');
   const [calNeedCreate, setCalNeedCreate] = useState(false);
+
+  // ── Domain ────────────────────────────────────────────────────────────────────
+  const [domainName, setDomainName] = useState('');
+  const [domainAccessMethod, setDomainAccessMethod] = useState('');
+  const [domainNotes, setDomainNotes] = useState('');
 
   // ── A2P form ────────────────────────────────────────────────────────────────
   const [a2pForm, setA2pForm] = useState({
@@ -514,6 +523,56 @@ const ProSitesGem: React.FC = () => {
     addUserMessage("I'll set this up later");
     await saveProgress({ current_step: 'a2p_intro', cal_setup_status: 'skipped' });
     await goToStep('a2p_intro');
+  };
+
+  // ── DOMAIN: handlers ────────────────────────────────────────────────────────
+  const handleHasDomain = async () => {
+    addUserMessage('Yes, I have a domain');
+    await goToStep('domain_access');
+  };
+
+  const handleNeedsDomain = async () => {
+    addUserMessage("No, I need to purchase one");
+    setStepHistory(prev => [...prev, step]);
+    setStep('phone');
+    await saveProgress({ current_step: 'phone' });
+    await supabase
+      .from('pro_sites_checkouts')
+      .update({ domain_status: 'purchasing' })
+      .eq('id', checkout!.id);
+    await addAssistantMessage(
+      "No problem! 🛒 We recommend Namecheap — it's easy to use and very affordable.\n\n" +
+      "👉 Visit namecheap.com to search for and purchase your domain, then come back and complete your setup.\n\n" +
+      "Once you have it, our team will help you connect it. Let's continue with the rest of your setup for now!"
+    );
+    await addAssistantMessage(STEP_MESSAGES.phone!);
+  };
+
+  const handleDomainAccessSubmit = async () => {
+    if (!domainName.trim()) return;
+    addUserMessage(`Domain: ${domainName}`);
+    setStepHistory(prev => [...prev, step]);
+    setStep('phone');
+    await supabase
+      .from('pro_sites_checkouts')
+      .update({
+        domain_name: domainName.trim(),
+        domain_status: 'has_domain',
+      })
+      .eq('id', checkout!.id);
+    await saveProgress({
+      current_step: 'phone',
+      a2p_data: {
+        ...progress?.a2p_data,
+        domain_name: domainName.trim(),
+        domain_access_method: domainAccessMethod,
+        domain_notes: domainNotes,
+      },
+    });
+    await addAssistantMessage(
+      `Perfect! We've noted your domain: ${domainName.trim()} ✅\n\nOur team will reach out with instructions to connect it once your site is ready.`
+    );
+    await addAssistantMessage(STEP_MESSAGES.phone!);
   };
 
   // ── A2P ─────────────────────────────────────────────────────────────────────
@@ -928,10 +987,105 @@ const ProSitesGem: React.FC = () => {
               )}
 
               <button
-                onClick={() => { addUserMessage("Let's get started!"); goToStep('phone'); }}
+                onClick={() => { addUserMessage("Let's get started!"); goToStep('domain'); }}
                 className="w-full py-3.5 bg-indigo-600 hover:bg-indigo-700 text-white font-bold rounded-xl text-sm transition-colors active:scale-95"
               >
                 Continue Setup →
+              </button>
+            </div>
+          )}
+
+          {/* ── domain ── */}
+          {step === 'domain' && (
+            <div className="space-y-3">
+              <div className="grid grid-cols-1 gap-3">
+                <button
+                  onClick={handleHasDomain}
+                  className="py-4 bg-white border-2 border-slate-200 rounded-2xl text-sm font-semibold text-slate-700 hover:border-indigo-400 hover:bg-indigo-50 hover:text-indigo-700 transition-all active:scale-95"
+                >
+                  ✅ Yes, I have a domain name
+                </button>
+                <button
+                  onClick={handleNeedsDomain}
+                  className="py-4 bg-white border-2 border-slate-200 rounded-2xl text-sm font-semibold text-slate-700 hover:border-indigo-400 hover:bg-indigo-50 hover:text-indigo-700 transition-all active:scale-95"
+                >
+                  🛒 No, I need to purchase one
+                </button>
+              </div>
+            </div>
+          )}
+
+          {/* ── domain_access ── */}
+          {step === 'domain_access' && (
+            <div className="bg-white border border-slate-200 rounded-2xl p-5 space-y-4">
+
+              {/* Domain name input */}
+              <div>
+                <label className="block text-xs font-semibold text-slate-600 mb-1">
+                  Your Domain Name *
+                </label>
+                <input
+                  type="text"
+                  value={domainName}
+                  onChange={e => setDomainName(e.target.value.toLowerCase().replace(/\s/g, ''))}
+                  placeholder="yourbusiness.com"
+                  className="w-full px-3 py-2.5 rounded-xl border border-slate-300 focus:border-indigo-500 focus:ring-2 focus:ring-indigo-100 text-sm outline-none font-mono transition-all"
+                />
+                <p className="text-xs text-slate-400 mt-1">Just the domain — no https:// needed</p>
+              </div>
+
+              {/* Domain registrar / access method */}
+              <div>
+                <label className="block text-xs font-semibold text-slate-600 mb-1">
+                  Where is your domain registered?
+                </label>
+                <select
+                  value={domainAccessMethod}
+                  onChange={e => setDomainAccessMethod(e.target.value)}
+                  className="w-full px-3 py-2.5 rounded-xl border border-slate-300 focus:border-indigo-500 focus:ring-2 focus:ring-indigo-100 text-sm outline-none bg-white transition-all"
+                >
+                  <option value="">Select registrar...</option>
+                  <option value="namecheap">Namecheap</option>
+                  <option value="godaddy">GoDaddy</option>
+                  <option value="google_domains">Google Domains / Squarespace</option>
+                  <option value="cloudflare">Cloudflare</option>
+                  <option value="network_solutions">Network Solutions</option>
+                  <option value="other">Other</option>
+                  <option value="not_sure">Not sure</option>
+                </select>
+              </div>
+
+              {/* DNS access info card */}
+              <div className="bg-blue-50 border border-blue-200 rounded-xl p-4 text-sm text-blue-800">
+                <p className="font-bold mb-2">🔐 We'll need DNS access to connect your site</p>
+                <p className="text-xs leading-relaxed text-blue-700">
+                  Once your site is ready, our team will reach out with specific instructions
+                  to update your nameservers or DNS records. We'll walk you through every step —
+                  most registrars take just 2 minutes to update.
+                </p>
+              </div>
+
+              {/* Optional notes */}
+              <div>
+                <label className="block text-xs font-semibold text-slate-600 mb-1">
+                  Anything else about your domain? (optional)
+                </label>
+                <textarea
+                  value={domainNotes}
+                  onChange={e => setDomainNotes(e.target.value)}
+                  placeholder="e.g. domain is expiring soon, I have existing email on it, it's pointing to another site..."
+                  rows={2}
+                  className="w-full px-3 py-2.5 rounded-xl border border-slate-300 focus:border-indigo-500 focus:ring-2 focus:ring-indigo-100 text-sm outline-none resize-none transition-all"
+                />
+              </div>
+
+              <button
+                onClick={handleDomainAccessSubmit}
+                disabled={!domainName.trim() || isSaving}
+                className="w-full py-3.5 bg-indigo-600 hover:bg-indigo-700 text-white font-bold rounded-xl text-sm transition-colors disabled:opacity-50 flex items-center justify-center gap-2 active:scale-95"
+              >
+                {isSaving && <Loader2 className="w-4 h-4 animate-spin" />}
+                Save & Continue →
               </button>
             </div>
           )}
