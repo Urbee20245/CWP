@@ -21,6 +21,8 @@ import {
   UtensilsCrossed,
   DollarSign,
   Home,
+  Star,
+  AlertTriangle,
 } from 'lucide-react';
 
 // ─── Industry Data ─────────────────────────────────────────────────────────────
@@ -224,7 +226,16 @@ const PLANS = [
 ];
 
 // ─── All Available Add-Ons (with pricing) ─────────────────────────────────────
-const ADDONS = {
+type Addon = {
+  name: string;
+  description: string;
+  price: string;
+  billing: string;
+  icon: string;
+  perk?: string;
+};
+
+const ADDONS: { oneTime: Addon[]; monthly: Addon[] } = {
   oneTime: [
     {
       name: 'Form Leads Collector',
@@ -257,11 +268,20 @@ const ADDONS = {
   ],
   monthly: [
     {
-      name: '24/7 AI Phone Receptionist',
-      description: 'AI-powered receptionist that answers calls 24/7, responds to customer questions, and books appointments automatically.',
+      name: 'AI Inbound Voice Receptionist',
+      description: 'Answers every inbound call 24/7 — qualifies leads, responds to customer questions, and books appointments automatically. Never miss a call again.',
       price: '$1,500 setup + $50/mo',
       billing: 'setup + monthly',
       icon: '📞',
+      perk: '🎙️ 120 minutes FREE every month',
+    },
+    {
+      name: 'AI Outbound Voice Agent',
+      description: 'Proactively follows up with leads and prospects via AI-powered outbound calls — re-engage cold leads, confirm appointments, and drive more conversions on autopilot.',
+      price: '$1,500 setup + $50/mo',
+      billing: 'setup + monthly',
+      icon: '📣',
+      perk: '🎙️ 120 minutes FREE every month',
     },
     {
       name: 'AI Website Chat Assistant',
@@ -307,6 +327,11 @@ const ADDONS = {
     },
   ],
 };
+
+// ─── Industries that need e-commerce / are not a Pro Sites fit ────────────────
+const ECOMMERCE_INDUSTRIES = new Set([
+  'Auto Dealership / Services',
+]);
 
 // ─── Main Component ────────────────────────────────────────────────────────────
 const ProSitesPage: React.FC = () => {
@@ -419,7 +444,15 @@ const ProSitesPage: React.FC = () => {
               <div className="flex flex-col md:flex-row md:items-start gap-6">
                 <div className="flex-1">
                   <h3 className={`text-2xl font-extrabold mb-2 ${colors.text}`}>{selectedIndustry}</h3>
-                  <p className="text-slate-600 mb-6 leading-relaxed">{industryData.tagline}</p>
+                  <p className="text-slate-600 mb-4 leading-relaxed">{industryData.tagline}</p>
+                  {ECOMMERCE_INDUSTRIES.has(selectedIndustry) && (
+                    <div className="flex items-start gap-2 bg-amber-50 border border-amber-200 rounded-xl px-4 py-3 mb-4">
+                      <AlertTriangle className="w-4 h-4 text-amber-500 shrink-0 mt-0.5" />
+                      <p className="text-amber-800 text-sm">
+                        <strong>Heads up:</strong> This industry often requires e-commerce or inventory management features. Pro Sites handles lead generation and service-based websites — not e-stores. We can still help, just through a different path.
+                      </p>
+                    </div>
+                  )}
 
                   <div className="grid md:grid-cols-2 gap-6">
                     {/* Pages */}
@@ -454,15 +487,32 @@ const ProSitesPage: React.FC = () => {
                   </div>
                 </div>
 
-                {/* CTA */}
+                {/* CTA — or e-commerce notice */}
                 <div className="md:w-56 shrink-0">
-                  <Link
-                    to="/pro-sites/checkout?tier=starter"
-                    className={`block w-full text-center text-white font-bold px-6 py-4 rounded-2xl text-sm transition-all shadow-md active:scale-95 ${colors.btn}`}
-                  >
-                    Get This Website
-                    <span className="block text-xs font-normal mt-0.5 opacity-80">$497 Setup</span>
-                  </Link>
+                  {ECOMMERCE_INDUSTRIES.has(selectedIndustry) ? (
+                    <div className="bg-amber-50 border-2 border-amber-300 rounded-2xl p-4 text-center">
+                      <AlertTriangle className="w-6 h-6 text-amber-500 mx-auto mb-2" />
+                      <p className="text-amber-900 font-bold text-sm mb-1">Not a Pro Sites Fit</p>
+                      <p className="text-amber-700 text-xs mb-3 leading-relaxed">
+                        This type of business typically needs an e-store or inventory system — that's not what Pro Sites is built for.
+                      </p>
+                      <Link
+                        to="/onboarding"
+                        className="block w-full text-center bg-amber-500 hover:bg-amber-600 text-white font-bold px-4 py-3 rounded-xl text-xs transition-all active:scale-95"
+                      >
+                        Explore Your Options
+                        <span className="block font-normal mt-0.5 opacity-90">Start with our Onboarding Gem →</span>
+                      </Link>
+                    </div>
+                  ) : (
+                    <Link
+                      to="/pro-sites/checkout?tier=starter"
+                      className={`block w-full text-center text-white font-bold px-6 py-4 rounded-2xl text-sm transition-all shadow-md active:scale-95 ${colors.btn}`}
+                    >
+                      Get This Website
+                      <span className="block text-xs font-normal mt-0.5 opacity-80">$497 Setup</span>
+                    </Link>
+                  )}
                 </div>
               </div>
             </div>
@@ -722,8 +772,18 @@ const ProSitesPage: React.FC = () => {
               <span className="px-3 py-1 bg-indigo-50 text-indigo-600 text-xs font-bold uppercase tracking-widest rounded-full">Setup + Monthly</span>
               <div className="flex-1 h-px bg-slate-100" />
             </div>
+
+            {/* Voice AI free-minutes callout */}
+            <div className="flex items-center gap-3 bg-gradient-to-r from-emerald-50 to-teal-50 border border-emerald-200 rounded-2xl px-5 py-4 mb-6">
+              <span className="text-2xl shrink-0">🎙️</span>
+              <div>
+                <p className="font-bold text-emerald-900 text-sm">120 Minutes FREE Every Month — Included with Any AI Voice Add-On</p>
+                <p className="text-emerald-700 text-xs mt-0.5">Both the Inbound Receptionist and Outbound Agent include 120 voice minutes per month at no extra charge. Additional minutes available as needed.</p>
+              </div>
+            </div>
+
             <div className="grid sm:grid-cols-2 gap-5">
-              {ADDONS.monthly.map(({ icon, name, description, price }) => (
+              {ADDONS.monthly.map(({ icon, name, description, price, perk }) => (
                 <div
                   key={name}
                   className="bg-slate-50 border border-slate-100 rounded-2xl p-6 hover:border-indigo-200 hover:bg-indigo-50/30 transition-all"
@@ -733,9 +793,16 @@ const ProSitesPage: React.FC = () => {
                     <div className="flex-1 min-w-0">
                       <h3 className="font-bold text-slate-900 mb-1 text-sm">{name}</h3>
                       <p className="text-slate-500 text-sm mb-3 leading-relaxed">{description}</p>
-                      <span className="inline-block bg-indigo-100 text-indigo-700 text-xs font-bold rounded-full px-3 py-1">
-                        {price}
-                      </span>
+                      <div className="flex flex-wrap gap-2">
+                        <span className="inline-block bg-indigo-100 text-indigo-700 text-xs font-bold rounded-full px-3 py-1">
+                          {price}
+                        </span>
+                        {perk && (
+                          <span className="inline-block bg-emerald-100 text-emerald-700 text-xs font-bold rounded-full px-3 py-1">
+                            {perk}
+                          </span>
+                        )}
+                      </div>
                     </div>
                   </div>
                 </div>
