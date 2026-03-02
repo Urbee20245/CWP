@@ -226,7 +226,16 @@ const PLANS = [
 ];
 
 // ─── All Available Add-Ons (with pricing) ─────────────────────────────────────
-const ADDONS = {
+type Addon = {
+  name: string;
+  description: string;
+  price: string;
+  billing: string;
+  icon: string;
+  perk?: string;
+};
+
+const ADDONS: { oneTime: Addon[]; monthly: Addon[] } = {
   oneTime: [
     {
       name: 'Form Leads Collector',
@@ -259,11 +268,20 @@ const ADDONS = {
   ],
   monthly: [
     {
-      name: '24/7 AI Phone Receptionist',
-      description: 'AI-powered receptionist that answers calls 24/7, responds to customer questions, and books appointments automatically.',
+      name: 'AI Inbound Voice Receptionist',
+      description: 'Answers every inbound call 24/7 — qualifies leads, responds to customer questions, and books appointments automatically. Never miss a call again.',
       price: '$1,500 setup + $50/mo',
       billing: 'setup + monthly',
       icon: '📞',
+      perk: '🎙️ 120 minutes FREE every month',
+    },
+    {
+      name: 'AI Outbound Voice Agent',
+      description: 'Proactively follows up with leads and prospects via AI-powered outbound calls — re-engage cold leads, confirm appointments, and drive more conversions on autopilot.',
+      price: '$1,500 setup + $50/mo',
+      billing: 'setup + monthly',
+      icon: '📣',
+      perk: '🎙️ 120 minutes FREE every month',
     },
     {
       name: 'AI Website Chat Assistant',
@@ -754,8 +772,18 @@ const ProSitesPage: React.FC = () => {
               <span className="px-3 py-1 bg-indigo-50 text-indigo-600 text-xs font-bold uppercase tracking-widest rounded-full">Setup + Monthly</span>
               <div className="flex-1 h-px bg-slate-100" />
             </div>
+
+            {/* Voice AI free-minutes callout */}
+            <div className="flex items-center gap-3 bg-gradient-to-r from-emerald-50 to-teal-50 border border-emerald-200 rounded-2xl px-5 py-4 mb-6">
+              <span className="text-2xl shrink-0">🎙️</span>
+              <div>
+                <p className="font-bold text-emerald-900 text-sm">120 Minutes FREE Every Month — Included with Any AI Voice Add-On</p>
+                <p className="text-emerald-700 text-xs mt-0.5">Both the Inbound Receptionist and Outbound Agent include 120 voice minutes per month at no extra charge. Additional minutes available as needed.</p>
+              </div>
+            </div>
+
             <div className="grid sm:grid-cols-2 gap-5">
-              {ADDONS.monthly.map(({ icon, name, description, price }) => (
+              {ADDONS.monthly.map(({ icon, name, description, price, perk }) => (
                 <div
                   key={name}
                   className="bg-slate-50 border border-slate-100 rounded-2xl p-6 hover:border-indigo-200 hover:bg-indigo-50/30 transition-all"
@@ -765,9 +793,16 @@ const ProSitesPage: React.FC = () => {
                     <div className="flex-1 min-w-0">
                       <h3 className="font-bold text-slate-900 mb-1 text-sm">{name}</h3>
                       <p className="text-slate-500 text-sm mb-3 leading-relaxed">{description}</p>
-                      <span className="inline-block bg-indigo-100 text-indigo-700 text-xs font-bold rounded-full px-3 py-1">
-                        {price}
-                      </span>
+                      <div className="flex flex-wrap gap-2">
+                        <span className="inline-block bg-indigo-100 text-indigo-700 text-xs font-bold rounded-full px-3 py-1">
+                          {price}
+                        </span>
+                        {perk && (
+                          <span className="inline-block bg-emerald-100 text-emerald-700 text-xs font-bold rounded-full px-3 py-1">
+                            {perk}
+                          </span>
+                        )}
+                      </div>
                     </div>
                   </div>
                 </div>
