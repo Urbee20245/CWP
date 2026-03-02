@@ -21,6 +21,8 @@ import {
   UtensilsCrossed,
   DollarSign,
   Home,
+  Star,
+  AlertTriangle,
 } from 'lucide-react';
 
 // ─── Industry Data ─────────────────────────────────────────────────────────────
@@ -308,6 +310,11 @@ const ADDONS = {
   ],
 };
 
+// ─── Industries that need e-commerce / are not a Pro Sites fit ────────────────
+const ECOMMERCE_INDUSTRIES = new Set([
+  'Auto Dealership / Services',
+]);
+
 // ─── Main Component ────────────────────────────────────────────────────────────
 const ProSitesPage: React.FC = () => {
   const [selectedIndustry, setSelectedIndustry] = useState<string>('');
@@ -419,7 +426,15 @@ const ProSitesPage: React.FC = () => {
               <div className="flex flex-col md:flex-row md:items-start gap-6">
                 <div className="flex-1">
                   <h3 className={`text-2xl font-extrabold mb-2 ${colors.text}`}>{selectedIndustry}</h3>
-                  <p className="text-slate-600 mb-6 leading-relaxed">{industryData.tagline}</p>
+                  <p className="text-slate-600 mb-4 leading-relaxed">{industryData.tagline}</p>
+                  {ECOMMERCE_INDUSTRIES.has(selectedIndustry) && (
+                    <div className="flex items-start gap-2 bg-amber-50 border border-amber-200 rounded-xl px-4 py-3 mb-4">
+                      <AlertTriangle className="w-4 h-4 text-amber-500 shrink-0 mt-0.5" />
+                      <p className="text-amber-800 text-sm">
+                        <strong>Heads up:</strong> This industry often requires e-commerce or inventory management features. Pro Sites handles lead generation and service-based websites — not e-stores. We can still help, just through a different path.
+                      </p>
+                    </div>
+                  )}
 
                   <div className="grid md:grid-cols-2 gap-6">
                     {/* Pages */}
@@ -454,15 +469,32 @@ const ProSitesPage: React.FC = () => {
                   </div>
                 </div>
 
-                {/* CTA */}
+                {/* CTA — or e-commerce notice */}
                 <div className="md:w-56 shrink-0">
-                  <Link
-                    to="/pro-sites/checkout?tier=starter"
-                    className={`block w-full text-center text-white font-bold px-6 py-4 rounded-2xl text-sm transition-all shadow-md active:scale-95 ${colors.btn}`}
-                  >
-                    Get This Website
-                    <span className="block text-xs font-normal mt-0.5 opacity-80">$497 Setup</span>
-                  </Link>
+                  {ECOMMERCE_INDUSTRIES.has(selectedIndustry) ? (
+                    <div className="bg-amber-50 border-2 border-amber-300 rounded-2xl p-4 text-center">
+                      <AlertTriangle className="w-6 h-6 text-amber-500 mx-auto mb-2" />
+                      <p className="text-amber-900 font-bold text-sm mb-1">Not a Pro Sites Fit</p>
+                      <p className="text-amber-700 text-xs mb-3 leading-relaxed">
+                        This type of business typically needs an e-store or inventory system — that's not what Pro Sites is built for.
+                      </p>
+                      <Link
+                        to="/onboarding"
+                        className="block w-full text-center bg-amber-500 hover:bg-amber-600 text-white font-bold px-4 py-3 rounded-xl text-xs transition-all active:scale-95"
+                      >
+                        Explore Your Options
+                        <span className="block font-normal mt-0.5 opacity-90">Start with our Onboarding Gem →</span>
+                      </Link>
+                    </div>
+                  ) : (
+                    <Link
+                      to="/pro-sites/checkout?tier=starter"
+                      className={`block w-full text-center text-white font-bold px-6 py-4 rounded-2xl text-sm transition-all shadow-md active:scale-95 ${colors.btn}`}
+                    >
+                      Get This Website
+                      <span className="block text-xs font-normal mt-0.5 opacity-80">$497 Setup</span>
+                    </Link>
+                  )}
                 </div>
               </div>
             </div>
