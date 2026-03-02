@@ -80,7 +80,7 @@ const ClientLayout: React.FC<ClientLayoutProps> = ({ children }) => {
       title: 'Account',
       items: [
         { name: 'My Profile', href: '/client/profile', icon: User, description: 'Profile settings' },
-        { name: 'Settings', href: '/client/settings', icon: Settings, description: 'Integrations & config' },
+        { name: 'Connections', href: '/client/settings', icon: Settings, description: 'Integrations & config' },
         { name: 'Help & Guides', href: '/client/help', icon: HelpCircle, description: 'Support resources' },
       ],
     },
