@@ -319,6 +319,7 @@ export const AdminService = {
     tone?: string;
     primary_color?: string;
     premium_features?: string[];
+    import_mode?: 'ai_rebuild' | 'pixel_perfect';
   }) => invokeEdgeFunction('import-site', payload),
 
   /**

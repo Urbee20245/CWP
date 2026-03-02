@@ -319,19 +319,41 @@ const AdminSiteImport: React.FC = () => {
 
   // ── Handle exact clone (pixel-perfect raw HTML mode) ──────────────────────
   const handleExactClone = async () => {
-    if (!canImport || importSource !== 'url') return;
+    if (!canImport) return;
     setStep('importing');
     setImportError(null);
     setResult(null);
 
     try {
-      const data = await AdminService.cloneSiteExact({
-        client_id: selectedClientId,
-        url: urlInput.trim(),
-        slug: slugInput.trim() || undefined,
-        custom_domain: customDomainInput.trim() || undefined,
-        premium_features: Array.from(selectedPremiumFeatures),
-      });
+      let data: any;
+
+      if (importSource === 'url') {
+        // URL: use existing clone-site-exact edge function
+        data = await AdminService.cloneSiteExact({
+          client_id: selectedClientId,
+          url: urlInput.trim(),
+          slug: slugInput.trim() || undefined,
+          custom_domain: customDomainInput.trim() || undefined,
+          premium_features: Array.from(selectedPremiumFeatures),
+        });
+      } else {
+        // ZIP / GitHub: use import-site with pixel_perfect mode
+        const payload: Record<string, any> = {
+          client_id: selectedClientId,
+          source_type: importSource,
+          import_mode: 'pixel_perfect',
+          slug: slugInput.trim() || undefined,
+          custom_domain: customDomainInput.trim() || undefined,
+          premium_features: Array.from(selectedPremiumFeatures),
+        };
+        if (importSource === 'github') {
+          payload.github_url = githubUrlInput.trim();
+        } else {
+          payload.zip_base64 = await fileToBase64(zipFile!);
+        }
+        data = await AdminService.importSite(payload as any);
+      }
+
       setResult({ ...data, exact_clone: true });
       setStep('done');
       await loadBrief(selectedClientId);
@@ -1069,24 +1091,22 @@ const AdminSiteImport: React.FC = () => {
 
             {/* Import buttons */}
             <div className="space-y-2">
-              {importSource === 'url' && (
-                <button
-                  onClick={handleExactClone}
-                  disabled={!canImport || step === 'importing'}
-                  className="w-full flex items-center justify-center gap-2 px-4 py-3 bg-emerald-600 text-white font-semibold rounded-xl hover:bg-emerald-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
-                >
-                  {step === 'importing' ? (
-                    <><Loader2 className="w-4 h-4 animate-spin" /> Cloning...</>
-                  ) : (
-                    <><Copy className="w-4 h-4" /> Exact Clone — Pixel Perfect</>
-                  )}
-                </button>
-              )}
-              {importSource === 'url' && (
-                <p className="text-xs text-center text-slate-400">
-                  ↑ Preserves exact design from Hostinger/any host — no AI rewrite
-                </p>
-              )}
+              <button
+                onClick={handleExactClone}
+                disabled={!canImport || step === 'importing'}
+                className="w-full flex items-center justify-center gap-2 px-4 py-3 bg-emerald-600 text-white font-semibold rounded-xl hover:bg-emerald-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+              >
+                {step === 'importing' ? (
+                  <><Loader2 className="w-4 h-4 animate-spin" /> Cloning...</>
+                ) : (
+                  <><Copy className="w-4 h-4" /> Exact Clone — Pixel Perfect</>
+                )}
+              </button>
+              <p className="text-xs text-center text-slate-400">
+                {importSource === 'url'
+                  ? '↑ Preserves exact design from Hostinger/any host — no AI rewrite'
+                  : '↑ Preserves full source (React/Vue/static), uploads assets to CDN — no AI rewrite'}
+              </p>
               <button
                 onClick={handleImport}
                 disabled={!canImport || step === 'importing'}
@@ -1266,8 +1286,8 @@ const AdminSiteImport: React.FC = () => {
                         <p className="text-xs text-emerald-500 mt-0.5">Pixel fidelity</p>
                       </div>
                       <div className="text-center">
-                        <p className="text-2xl font-bold text-emerald-700">✓</p>
-                        <p className="text-xs text-emerald-500 mt-0.5">CSS inlined</p>
+                        <p className="text-2xl font-bold text-emerald-700">{result.assets_uploaded ?? '✓'}</p>
+                        <p className="text-xs text-emerald-500 mt-0.5">{result.assets_uploaded != null ? 'Assets on CDN' : 'CSS inlined'}</p>
                       </div>
                     </>
                   ) : (
@@ -1289,6 +1309,27 @@ const AdminSiteImport: React.FC = () => {
                     </>
                   )}
                 </div>
+
+                {/* Framework detection card (pixel-perfect ZIP/GitHub only) */}
+                {result.exact_clone && result.framework && (
+                  <div className="bg-blue-50 border border-blue-200 rounded-2xl p-5">
+                    <h3 className="font-semibold text-blue-900 mb-3 text-sm uppercase tracking-wide">Framework Detected</h3>
+                    <div className="grid grid-cols-3 gap-4 text-sm text-blue-700">
+                      <span>
+                        <span className="font-medium text-blue-900">Type:</span>{' '}
+                        <span className="capitalize">{result.framework}</span>
+                      </span>
+                      <span>
+                        <span className="font-medium text-blue-900">Assets on CDN:</span>{' '}
+                        {result.assets_uploaded ?? 0}
+                      </span>
+                      <span>
+                        <span className="font-medium text-blue-900">Source Files:</span>{' '}
+                        {result.source_files ?? 0}
+                      </span>
+                    </div>
+                  </div>
+                )}
 
                 {/* Global settings */}
                 <div className="bg-white rounded-2xl border border-slate-200 shadow-sm p-5">

@@ -1094,6 +1094,270 @@ async function fetchGithubZip(rawUrl: string): Promise<{ bytes: Uint8Array; owne
   );
 }
 
+// ─── Pixel-Perfect Import: Framework Detection ───────────────────────────────
+
+interface FrameworkDetection {
+  type: 'react' | 'vue' | 'angular' | 'static' | 'unknown';
+  buildTool?: 'vite' | 'webpack' | 'parcel' | 'next' | 'gatsby';
+  dependencies: Record<string, string>;
+}
+
+function detectFrameworkFromZip(unzipped: Record<string, Uint8Array>): FrameworkDetection {
+  let packageJson: any = {};
+
+  if (unzipped['package.json']) {
+    try {
+      packageJson = JSON.parse(strFromU8(unzipped['package.json']));
+    } catch (e) {
+      console.warn('[pixel-perfect] Failed to parse package.json:', e);
+    }
+  }
+
+  const deps = { ...packageJson.dependencies, ...packageJson.devDependencies } as Record<string, string>;
+
+  if (deps['react'] || deps['react-dom']) {
+    return {
+      type: 'react',
+      buildTool: deps['vite'] ? 'vite' : deps['webpack'] ? 'webpack' : deps['next'] ? 'next' : undefined,
+      dependencies: packageJson.dependencies || {},
+    };
+  }
+  if (deps['vue']) {
+    return { type: 'vue', dependencies: packageJson.dependencies || {} };
+  }
+  if (deps['@angular/core']) {
+    return { type: 'angular', dependencies: packageJson.dependencies || {} };
+  }
+  if (unzipped['index.html']) {
+    return { type: 'static', dependencies: {} };
+  }
+  return { type: 'unknown', dependencies: {} };
+}
+
+// ─── Pixel-Perfect Import: Source File Extraction ────────────────────────────
+
+interface SourceExtraction {
+  sourceFiles: Record<string, string>;
+  binaryAssets: Record<string, Uint8Array>;
+}
+
+function extractSourceFilesFromZip(unzipped: Record<string, Uint8Array>): SourceExtraction {
+  const sourceFiles: Record<string, string> = {};
+  const binaryAssets: Record<string, Uint8Array> = {};
+
+  // Strip leading root folder from zip paths (e.g. "Cassansra-Smith-main/")
+  const paths = Object.keys(unzipped);
+  const prefix = paths.length > 0 ? (paths[0].split('/')[0] + '/') : '';
+  const hasCommonPrefix = paths.every(p => p.startsWith(prefix));
+
+  for (const [rawPath, buffer] of Object.entries(unzipped)) {
+    const path = hasCommonPrefix ? rawPath.slice(prefix.length) : rawPath;
+    if (!path) continue;
+    if (path.includes('node_modules') || path.startsWith('.')) continue;
+
+    if (/\.(tsx?|jsx?|html?|css|scss|sass|less|json|md|txt|svg)$/i.test(path)) {
+      try { sourceFiles[path] = strFromU8(buffer); } catch { /* skip non-text */ }
+    } else if (/\.(png|jpe?g|gif|webp|ico|woff2?|ttf|eot|mp4|webm|pdf)$/i.test(path)) {
+      binaryAssets[path] = buffer;
+    }
+  }
+
+  return { sourceFiles, binaryAssets };
+}
+
+// ─── Pixel-Perfect Import: Asset Upload ──────────────────────────────────────
+
+async function uploadClientAssets(
+  supabaseAdmin: any,
+  clientId: string,
+  binaryAssets: Record<string, Uint8Array>,
+): Promise<Record<string, string>> {
+  const assetMapping: Record<string, string> = {};
+  const mimeTypes: Record<string, string> = {
+    png: 'image/png', jpg: 'image/jpeg', jpeg: 'image/jpeg',
+    gif: 'image/gif', webp: 'image/webp', ico: 'image/x-icon',
+    woff: 'font/woff', woff2: 'font/woff2', ttf: 'font/ttf',
+    eot: 'application/vnd.ms-fontobject', pdf: 'application/pdf',
+    mp4: 'video/mp4', webm: 'video/webm',
+  };
+
+  for (const [originalPath, buffer] of Object.entries(binaryAssets)) {
+    try {
+      const storagePath = `${clientId}/${originalPath}`;
+      const ext = originalPath.split('.').pop()?.toLowerCase() || '';
+      const contentType = mimeTypes[ext] || 'application/octet-stream';
+
+      const { error } = await supabaseAdmin.storage
+        .from('client-assets')
+        .upload(storagePath, buffer, { contentType, upsert: true });
+
+      if (error) {
+        console.warn(`[pixel-perfect] Upload failed ${originalPath}:`, error.message);
+        continue;
+      }
+
+      const { data: urlData } = supabaseAdmin.storage
+        .from('client-assets')
+        .getPublicUrl(storagePath);
+
+      assetMapping[originalPath] = urlData.publicUrl;
+    } catch (e: any) {
+      console.warn(`[pixel-perfect] Error uploading ${originalPath}:`, e.message);
+    }
+  }
+
+  return assetMapping;
+}
+
+// ─── Pixel-Perfect Import: Download External Assets ──────────────────────────
+
+async function downloadExternalAssets(
+  supabaseAdmin: any,
+  clientId: string,
+  htmlContent: string,
+): Promise<Record<string, string>> {
+  const mapping: Record<string, string> = {};
+  const urlRegex = /https?:\/\/[^\s"'<>]+\.(png|jpe?g|gif|svg|webp|woff2?|ttf|mp4|webm)/gi;
+  const matches = htmlContent.match(urlRegex) || [];
+  const uniqueUrls = [...new Set(matches)];
+
+  for (const url of uniqueUrls) {
+    try {
+      const res = await fetch(url, {
+        headers: { 'User-Agent': 'Mozilla/5.0 CWP-AssetMirror/1.0' },
+        signal: AbortSignal.timeout(10000),
+      });
+      if (!res.ok) continue;
+
+      const buffer = new Uint8Array(await res.arrayBuffer());
+      const fileName = url.split('/').pop()?.split('?')[0] || `asset-${Date.now()}`;
+      const storagePath = `${clientId}/external/${fileName}`;
+
+      const { error } = await supabaseAdmin.storage
+        .from('client-assets')
+        .upload(storagePath, buffer, {
+          contentType: res.headers.get('content-type') || 'application/octet-stream',
+          upsert: true,
+        });
+
+      if (!error) {
+        const { data: urlData } = supabaseAdmin.storage
+          .from('client-assets')
+          .getPublicUrl(storagePath);
+        mapping[url] = urlData.publicUrl;
+      }
+    } catch (e: any) {
+      console.warn(`[pixel-perfect] Failed to download external asset ${url}:`, e.message);
+    }
+  }
+
+  return mapping;
+}
+
+// ─── Pixel-Perfect Import: Config Extraction ─────────────────────────────────
+
+function extractTailwindConfig(html: string): any {
+  const match = html.match(/tailwind\.config\s*=\s*(\{[\s\S]*?\})\s*(?:<\/script>|;?\s*$)/m);
+  if (!match) return null;
+  try {
+    // Safe parse via Function constructor
+    return (new Function(`return ${match[1]}`))();
+  } catch {
+    return null;
+  }
+}
+
+function extractImportMap(html: string): any {
+  const match = html.match(/<script\s+type=["']importmap["'][^>]*>([\s\S]*?)<\/script>/i);
+  if (!match) return null;
+  try { return JSON.parse(match[1]); } catch { return null; }
+}
+
+function extractGoogleFontLinks(html: string): string[] {
+  const regex = /<link[^>]*href=["']https:\/\/fonts\.googleapis\.com[^"']*["'][^>]*>/gi;
+  return html.match(regex) || [];
+}
+
+function extractAllMetaTags(html: string): string[] {
+  return html.match(/<meta[^>]*>/gi) || [];
+}
+
+function extractJsonLd(html: string): any[] {
+  const regex = /<script[^>]+type=["']application\/ld\+json["'][^>]*>([\s\S]*?)<\/script>/gi;
+  const results: any[] = [];
+  let m: RegExpExecArray | null;
+  while ((m = regex.exec(html)) !== null) {
+    try { results.push(JSON.parse(m[1])); } catch { /* skip */ }
+  }
+  return results;
+}
+
+// ─── Pixel-Perfect Import: Asset Path Rewriting ──────────────────────────────
+
+function rewriteAllAssetPaths(
+  content: string,
+  assetMapping: Record<string, string>,
+): string {
+  let updated = content;
+  for (const [oldPath, newUrl] of Object.entries(assetMapping)) {
+    const escaped = oldPath.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+    // Match as attribute value or bare string
+    updated = updated
+      .replace(new RegExp(`(src|href|url)=["']${escaped}["']`, 'gi'),
+        (_m, attr) => `${attr}="${newUrl}"`)
+      .replace(new RegExp(`url\\(["']?${escaped}["']?\\)`, 'gi'),
+        `url("${newUrl}")`)
+      .replace(new RegExp(`["']${escaped}["']`, 'g'),
+        `"${newUrl}"`);
+  }
+  return updated;
+}
+
+// ─── Pixel-Perfect Import: Build Raw HTML Bundle ─────────────────────────────
+
+function buildPixelPerfectBundle(
+  sourceFiles: Record<string, string>,
+  assetMapping: Record<string, string>,
+  buildConfig: {
+    tailwind_config?: any;
+    import_maps?: any;
+    google_fonts?: string[];
+  },
+): string {
+  // Find index.html in root or public/
+  let html = sourceFiles['index.html'] || sourceFiles['public/index.html'] || '';
+  if (!html) throw new Error('No index.html found in ZIP source files');
+
+  // Rewrite all asset paths to Supabase URLs
+  html = rewriteAllAssetPaths(html, assetMapping);
+
+  // Ensure viewport meta tag
+  if (!html.includes('viewport')) {
+    html = html.replace(/<head>/i,
+      '<head>\n  <meta name="viewport" content="width=device-width, initial-scale=1.0">');
+  }
+
+  // Inject Tailwind CDN + custom config if needed and not already bundled
+  if (buildConfig.tailwind_config && !html.includes('cdn.tailwindcss.com')) {
+    const twScript = `\n  <script src="https://cdn.tailwindcss.com"></script>\n  <script>\n    tailwind.config = ${JSON.stringify(buildConfig.tailwind_config, null, 2)};\n  </script>`;
+    html = html.replace(/<\/head>/i, `${twScript}\n</head>`);
+  } else if (buildConfig.tailwind_config && html.includes('cdn.tailwindcss.com')) {
+    // Replace existing tailwind config in-place
+    html = html.replace(
+      /tailwind\.config\s*=\s*\{[\s\S]*?\}\s*;?\s*(?=<\/script>)/,
+      `tailwind.config = ${JSON.stringify(buildConfig.tailwind_config, null, 2)};\n  `,
+    );
+  }
+
+  // Inject import map if present and not already there
+  if (buildConfig.import_maps && !html.includes('type="importmap"') && !html.includes("type='importmap'")) {
+    const importMapScript = `\n  <script type="importmap">\n${JSON.stringify(buildConfig.import_maps, null, 4)}\n  </script>`;
+    html = html.replace(/<\/head>/i, `${importMapScript}\n</head>`);
+  }
+
+  return html;
+}
+
 // ─── System prompt: design-preserving migration ───────────────────────────────
 
 const DESIGN_PRESERVATION_SYSTEM = `You are migrating an existing website into the CWP platform's structured JSON format with EXACT design fidelity.
@@ -1439,6 +1703,7 @@ serve(async (req) => {
     tone = 'Professional',
     primary_color,
     ai_provider = DEFAULT_PROVIDER_ID,
+    import_mode = 'ai_rebuild',  // 'pixel_perfect' | 'ai_rebuild'
   } = body;
 
   if (!client_id) return errorResponse('client_id is required.', 400);
@@ -1475,6 +1740,115 @@ serve(async (req) => {
     );
 
   try {
+    // ══════════════════════════════════════════════════════════════════════════
+    // PIXEL-PERFECT MODE: Preserve full source, upload assets, build raw bundle
+    // ══════════════════════════════════════════════════════════════════════════
+    if (import_mode === 'pixel_perfect') {
+      // Decode ZIP bytes (ZIP-only for pixel-perfect)
+      let zipBytes: Uint8Array;
+      if (source_type === 'zip' && zip_base64) {
+        const binary = atob(zip_base64);
+        zipBytes = new Uint8Array(binary.length);
+        for (let i = 0; i < binary.length; i++) zipBytes[i] = binary.charCodeAt(i);
+      } else if (source_type === 'github' && github_url) {
+        const { bytes } = await fetchGithubZip(github_url);
+        zipBytes = bytes;
+      } else {
+        return errorResponse('Pixel-perfect mode requires a ZIP file or GitHub URL.', 400);
+      }
+
+      const unzipped = unzipSync(zipBytes);
+
+      console.log('[pixel-perfect] Detecting framework...');
+      const frameworkInfo = detectFrameworkFromZip(unzipped);
+      console.log(`[pixel-perfect] Framework: ${frameworkInfo.type}`);
+
+      console.log('[pixel-perfect] Extracting source files...');
+      const { sourceFiles, binaryAssets } = extractSourceFilesFromZip(unzipped);
+      console.log(`[pixel-perfect] sourceFiles=${Object.keys(sourceFiles).length} binaryAssets=${Object.keys(binaryAssets).length}`);
+
+      console.log('[pixel-perfect] Uploading binary assets...');
+      const assetMapping = await uploadClientAssets(supabaseAdmin, client_id, binaryAssets);
+      console.log(`[pixel-perfect] Uploaded ${Object.keys(assetMapping).length} assets`);
+
+      const mainHtml = sourceFiles['index.html'] || sourceFiles['public/index.html'] || '';
+
+      console.log('[pixel-perfect] Downloading external assets...');
+      const externalMapping = await downloadExternalAssets(supabaseAdmin, client_id, mainHtml);
+      console.log(`[pixel-perfect] External assets: ${Object.keys(externalMapping).length}`);
+
+      const allAssetMappings = { ...assetMapping, ...externalMapping };
+
+      console.log('[pixel-perfect] Extracting config...');
+      const tailwindConfig = extractTailwindConfig(mainHtml);
+      const importMaps = extractImportMap(mainHtml);
+      const googleFonts = extractGoogleFontLinks(mainHtml);
+      const metaTags = extractAllMetaTags(mainHtml);
+      const structuredData = extractJsonLd(mainHtml);
+
+      const buildConfig = {
+        framework: frameworkInfo.type,
+        build_tool: frameworkInfo.buildTool,
+        dependencies: frameworkInfo.dependencies,
+        tailwind_config: tailwindConfig,
+        import_maps: importMaps,
+        google_fonts: googleFonts,
+        meta_tags: metaTags,
+        structured_data: structuredData,
+      };
+
+      console.log('[pixel-perfect] Building HTML bundle...');
+      const rawHtmlBundle = buildPixelPerfectBundle(sourceFiles, allAssetMappings, buildConfig);
+      const htmlSizeKb = Math.round(rawHtmlBundle.length / 1024);
+
+      // Derive slug
+      const { data: existingBrief } = await supabaseAdmin
+        .from('website_briefs')
+        .select('client_slug, business_name')
+        .eq('client_id', client_id)
+        .single();
+
+      const baseSlug = requestedSlug || existingBrief?.client_slug || slugify(existingBrief?.business_name || 'site');
+      const clientSlug = await makeUniqueSlug(supabaseAdmin, baseSlug, client_id);
+
+      // Detect backend features from main HTML
+      const backendFeats = detectBackendFeatures(mainHtml);
+
+      const { error: saveError } = await supabaseAdmin
+        .from('website_briefs')
+        .update({
+          raw_html: rawHtmlBundle,
+          source_files: sourceFiles,
+          asset_mapping: allAssetMappings,
+          build_config: buildConfig,
+          framework_type: frameworkInfo.type,
+          site_type: 'raw_html',
+          client_slug: clientSlug,
+          custom_domain: custom_domain || null,
+          premium_features: Array.isArray(premium_features) ? premium_features : [],
+          generation_status: 'complete',
+          generation_error: null,
+        })
+        .eq('client_id', client_id);
+
+      if (saveError) throw new Error(`Save error: ${saveError.message}`);
+
+      console.log(`[pixel-perfect] Done! client_id=${client_id} slug=${clientSlug} htmlKb=${htmlSizeKb}`);
+
+      return jsonResponse({
+        success: true,
+        client_slug: clientSlug,
+        import_mode: 'pixel_perfect',
+        framework: frameworkInfo.type,
+        assets_uploaded: Object.keys(allAssetMappings).length,
+        source_files: Object.keys(sourceFiles).length,
+        backend_features: backendFeats,
+        html_size_kb: htmlSizeKb,
+        business_name: existingBrief?.business_name || 'Imported Site',
+        exact_clone: true,
+      });
+    }
+
     // ── 1. Extract content ────────────────────────────────────────────────────
     let extractedContent: ExtractedContent;
     let backendFeatures: string[] = [];
