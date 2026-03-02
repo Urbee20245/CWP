@@ -380,7 +380,7 @@ export const AdminService = {
     monthly_cents: number;
     months: number;
     description: string;
-  }) => invokeEdgeFunction('create-test-payment-plan', payload),
+  }) => invokeEdgeFunction('create-payment-plan', payload),
 
   // ── Claude Admin Assistant ──────────────────────────────────────────────────
 
