@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState } from 'react';
 import { Link } from 'react-router-dom';
 import {
   CheckCircle2,
@@ -9,10 +9,6 @@ import {
   Shield,
   Phone,
   Calendar,
-  MessageSquare,
-  Bot,
-  FileText,
-  Star,
   Zap,
   ArrowRight,
   Building2,
@@ -25,9 +21,7 @@ import {
   UtensilsCrossed,
   DollarSign,
   Home,
-  Loader2,
 } from 'lucide-react';
-import { supabase } from '../integrations/supabase/client';
 
 // ─── Industry Data ─────────────────────────────────────────────────────────────
 const INDUSTRY_DATA: Record<
@@ -159,7 +153,7 @@ const SETUP_INCLUDES = [
   'All pages built & configured',
   'Mobile optimized & SEO ready',
   'Domain connection + SSL + Hosting setup',
-  '24-hour delivery guarantee',
+  '7-day delivery guarantee',
 ];
 
 // ─── Pricing Plans ─────────────────────────────────────────────────────────────
@@ -229,137 +223,103 @@ const PLANS = [
   },
 ];
 
-// ─── Fallback Add-Ons (shown if Supabase fetch fails) ─────────────────────────
-const FALLBACK_ADDONS = [
-  {
-    icon: Phone,
-    name: 'AI Phone Receptionist — Inbound',
-    description: 'Answers calls 24/7, qualifies leads, and books appointments — so you never miss a potential customer.',
-    note: 'Included in Growth, Pro & Elite',
-  },
-  {
-    icon: Zap,
-    name: 'AI Phone Receptionist — Outbound',
-    description: 'Automatically follows up with leads and prospects via AI-powered outbound calls.',
-    note: 'Included in Pro & Elite',
-  },
-  {
-    icon: FileText,
-    name: 'Automated Blog Posts',
-    description: 'Fresh, SEO-optimized blog content published on autopilot to keep your site ranking.',
-    note: '2/mo in Growth, 4/mo in Pro, weekly in Elite',
-  },
-  {
-    icon: Calendar,
-    name: 'Cal.com Booking Calendar',
-    description: 'Let clients schedule appointments directly on your site — no back-and-forth emails.',
-    note: 'Included in Starter & up',
-  },
-  {
-    icon: Bot,
-    name: 'AI Chat Agent',
-    description: 'Trained on your business to handle FAQs, capture leads, and guide visitors 24/7.',
-    note: 'Included in Starter & up',
-  },
-  {
-    icon: MessageSquare,
-    name: 'Live Chat Widget',
-    description: 'Real-time messaging from your website visitors, routed directly to you or your team.',
-    note: 'Included from Growth up',
-  },
-  {
-    icon: Sparkles,
-    name: 'AI Business Assistant',
-    description: 'Your AI-powered writing and strategy assistant — draft emails, answer business questions, and more.',
-    note: 'Available as add-on',
-  },
-  {
-    icon: Shield,
-    name: 'Legal Pages Bundle',
-    description: 'Privacy Policy, Terms & Conditions, and Refund Policy — auto-generated for your business.',
-    note: 'Included from Growth up',
-  },
-  {
-    icon: Calendar,
-    name: 'Google Calendar Sync',
-    description: 'Keep Cal.com appointments in sync with your existing Google Calendar automatically.',
-    note: 'Available as add-on',
-  },
-  {
-    icon: Globe,
-    name: 'Client Back Office',
-    description: 'A private branded portal on your domain where clients can manage content and requests.',
-    note: 'Available as add-on',
-  },
-];
-
-// ─── Addon icon mapper (for dynamically fetched add-ons) ──────────────────────
-function getAddonIcon(name: string) {
-  const lower = name.toLowerCase();
-  if (lower.includes('phone') || lower.includes('call')) return Phone;
-  if (lower.includes('blog') || lower.includes('post')) return FileText;
-  if (lower.includes('booking') || lower.includes('calendar') || lower.includes('cal.com') || lower.includes('google calendar')) return Calendar;
-  if (lower.includes('chat') && lower.includes('ai')) return Bot;
-  if (lower.includes('chat') || lower.includes('live')) return MessageSquare;
-  if (lower.includes('legal') || lower.includes('privacy') || lower.includes('terms')) return Shield;
-  if (lower.includes('back office') || lower.includes('portal')) return Globe;
-  if (lower.includes('outbound') || lower.includes('zap')) return Zap;
-  if (lower.includes('assistant') || lower.includes('ai')) return Sparkles;
-  return Star;
-}
+// ─── All Available Add-Ons (with pricing) ─────────────────────────────────────
+const ADDONS = {
+  oneTime: [
+    {
+      name: 'Form Leads Collector',
+      description: 'Capture and collect leads from contact forms. All submissions delivered straight to your dashboard.',
+      price: '$50',
+      billing: 'one-time',
+      icon: '📋',
+    },
+    {
+      name: 'Events Leads Collector',
+      description: 'Create event landing pages, promote your events, and collect leads and RSVPs — all in one place.',
+      price: '$250',
+      billing: 'one-time',
+      icon: '🎟️',
+    },
+    {
+      name: 'Stripe Payment Integration',
+      description: 'Accept online payments through your website. Includes setup for up to 5 products or services.',
+      price: '$250',
+      billing: 'one-time',
+      icon: '💳',
+    },
+    {
+      name: 'Advanced SEO Optimization',
+      description: 'Comprehensive on-page and technical SEO optimization to improve your rankings and drive organic traffic.',
+      price: '$850',
+      billing: 'one-time',
+      icon: '🔍',
+    },
+  ],
+  monthly: [
+    {
+      name: '24/7 AI Phone Receptionist',
+      description: 'AI-powered receptionist that answers calls 24/7, responds to customer questions, and books appointments automatically.',
+      price: '$1,500 setup + $50/mo',
+      billing: 'setup + monthly',
+      icon: '📞',
+    },
+    {
+      name: 'AI Website Chat Assistant',
+      description: 'AI-powered chat assistant trained on your business to answer FAQs, capture leads, and book appointments.',
+      price: '$750 setup + $50/mo',
+      billing: 'setup + monthly',
+      icon: '💬',
+    },
+    {
+      name: 'Missed Call Text-Back Automation',
+      description: 'Automatically sends an instant text when a call is missed — recover lost leads instantly.',
+      price: '$199 setup + $49/mo',
+      billing: 'setup + monthly',
+      icon: '📲',
+    },
+    {
+      name: 'Automated SEO Blog System',
+      description: 'Automatically generates and publishes SEO-optimized articles to increase search visibility and authority.',
+      price: '$1,200 setup + $197/mo',
+      billing: 'setup + monthly',
+      icon: '✍️',
+    },
+    {
+      name: 'Automated Email Marketing System',
+      description: 'Pre-built automated email campaigns to nurture leads, follow up automatically, and drive repeat engagement.',
+      price: '$750 setup + $97/mo',
+      billing: 'setup + monthly',
+      icon: '📧',
+    },
+    {
+      name: 'Content Management & Updates',
+      description: 'Blog posts, podcast uploads, event updates, and media management handled for you monthly.',
+      price: '$250 setup + $50/mo',
+      billing: 'setup + monthly',
+      icon: '🖊️',
+    },
+    {
+      name: 'Professional Business Email Setup',
+      description: 'Custom domain email addresses (you@yourdomain.com) with security config. Includes up to 10 mailboxes.',
+      price: '$149 setup + $29/mo',
+      billing: 'setup + monthly',
+      icon: '📨',
+    },
+  ],
+};
 
 // ─── Main Component ────────────────────────────────────────────────────────────
 const ProSitesPage: React.FC = () => {
   const [selectedIndustry, setSelectedIndustry] = useState<string>('');
-  const [catalogAddons, setCatalogAddons] = useState<{ name: string; description: string; note: string; icon: React.ElementType }[]>([]);
-  const [addonsLoading, setAddonsLoading] = useState(true);
 
   const industryData = selectedIndustry ? INDUSTRY_DATA[selectedIndustry] : null;
   const colors = industryData ? COLOR_MAP[industryData.color] || COLOR_MAP.indigo : COLOR_MAP.indigo;
-
-  // Fetch active, public add-ons from the catalog
-  useEffect(() => {
-    supabase
-      .from('addon_catalog')
-      .select('name, description, billing_type, monthly_price_cents, setup_fee_cents, price_cents')
-      .eq('is_active', true)
-      .eq('is_jet_suite_only', false)
-      .order('sort_order', { ascending: true })
-      .then(({ data, error }) => {
-        if (!error && data && data.length > 0) {
-          setCatalogAddons(
-            data.map((a: any) => {
-              let note = 'Available as add-on';
-              if (a.billing_type === 'subscription' && a.monthly_price_cents) {
-                note = `$${(a.monthly_price_cents / 100).toFixed(0)}/mo`;
-              } else if (a.billing_type === 'one_time' && a.price_cents) {
-                note = `$${(a.price_cents / 100).toFixed(0)} one-time`;
-              } else if (a.billing_type === 'setup_plus_subscription' && a.setup_fee_cents && a.monthly_price_cents) {
-                note = `$${(a.setup_fee_cents / 100).toFixed(0)} setup + $${(a.monthly_price_cents / 100).toFixed(0)}/mo`;
-              }
-              return {
-                name: a.name,
-                description: a.description || '',
-                note,
-                icon: getAddonIcon(a.name),
-              };
-            })
-          );
-        } else {
-          // Fall back to hardcoded list if catalog is empty or has an error
-          setCatalogAddons(FALLBACK_ADDONS);
-        }
-        setAddonsLoading(false);
-      });
-  }, []);
 
   const scrollToPricing = (e: React.MouseEvent) => {
     e.preventDefault();
     const el = document.getElementById('pricing');
     if (el) el.scrollIntoView({ behavior: 'smooth' });
   };
-
-  const displayAddons = catalogAddons.length > 0 ? catalogAddons : FALLBACK_ADDONS;
 
   return (
     <div className="bg-white">
@@ -384,7 +344,7 @@ const ProSitesPage: React.FC = () => {
           <h1 className="text-4xl md:text-6xl font-extrabold text-white leading-tight mb-6">
             Professional Websites Built for Your Industry —{' '}
             <span className="text-transparent bg-clip-text bg-gradient-to-r from-indigo-400 to-cyan-400">
-              Ready in 24 Hours
+              Ready in 7 Days
             </span>
           </h1>
 
@@ -541,7 +501,7 @@ const ProSitesPage: React.FC = () => {
               {
                 step: '02',
                 icon: Clock,
-                title: 'We Build Your Site in 24 Hours',
+                title: 'We Build Your Site in 7 Days',
                 description:
                   'Our AI generates your site, we configure all your add-ons and make sure everything works.',
                 color: 'indigo',
@@ -729,29 +689,59 @@ const ProSitesPage: React.FC = () => {
             </p>
           </div>
 
-          {addonsLoading ? (
-            <div className="flex justify-center items-center py-16">
-              <Loader2 className="w-8 h-8 animate-spin text-indigo-400" />
+          {/* One-Time Add-Ons */}
+          <div className="mb-12">
+            <div className="flex items-center gap-3 mb-6">
+              <span className="px-3 py-1 bg-slate-100 text-slate-600 text-xs font-bold uppercase tracking-widest rounded-full">One-Time</span>
+              <div className="flex-1 h-px bg-slate-100" />
             </div>
-          ) : (
-            <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-5">
-              {displayAddons.map(({ icon: Icon, name, description, note }) => (
+            <div className="grid sm:grid-cols-2 gap-5">
+              {ADDONS.oneTime.map(({ icon, name, description, price }) => (
                 <div
                   key={name}
-                  className="bg-slate-50 border border-slate-100 rounded-2xl p-6 hover:border-indigo-200 hover:bg-indigo-50/30 transition-all group"
+                  className="bg-slate-50 border border-slate-100 rounded-2xl p-6 hover:border-indigo-200 hover:bg-indigo-50/30 transition-all"
                 >
-                  <div className="bg-indigo-100 text-indigo-600 rounded-xl p-2.5 w-fit mb-4 group-hover:bg-indigo-600 group-hover:text-white transition-colors">
-                    <Icon className="w-5 h-5" />
+                  <div className="flex items-start gap-4">
+                    <span className="text-3xl flex-shrink-0">{icon}</span>
+                    <div className="flex-1 min-w-0">
+                      <h3 className="font-bold text-slate-900 mb-1 text-sm">{name}</h3>
+                      <p className="text-slate-500 text-sm mb-3 leading-relaxed">{description}</p>
+                      <span className="inline-block bg-indigo-100 text-indigo-700 text-xs font-bold rounded-full px-3 py-1">
+                        {price}
+                      </span>
+                    </div>
                   </div>
-                  <h3 className="font-bold text-slate-900 mb-1 text-sm">{name}</h3>
-                  <p className="text-slate-500 text-sm mb-3 leading-relaxed">{description}</p>
-                  <span className="inline-block bg-indigo-100 text-indigo-700 text-xs font-semibold rounded-full px-3 py-1">
-                    {note}
-                  </span>
                 </div>
               ))}
             </div>
-          )}
+          </div>
+
+          {/* Monthly Add-Ons */}
+          <div>
+            <div className="flex items-center gap-3 mb-6">
+              <span className="px-3 py-1 bg-indigo-50 text-indigo-600 text-xs font-bold uppercase tracking-widest rounded-full">Setup + Monthly</span>
+              <div className="flex-1 h-px bg-slate-100" />
+            </div>
+            <div className="grid sm:grid-cols-2 gap-5">
+              {ADDONS.monthly.map(({ icon, name, description, price }) => (
+                <div
+                  key={name}
+                  className="bg-slate-50 border border-slate-100 rounded-2xl p-6 hover:border-indigo-200 hover:bg-indigo-50/30 transition-all"
+                >
+                  <div className="flex items-start gap-4">
+                    <span className="text-3xl flex-shrink-0">{icon}</span>
+                    <div className="flex-1 min-w-0">
+                      <h3 className="font-bold text-slate-900 mb-1 text-sm">{name}</h3>
+                      <p className="text-slate-500 text-sm mb-3 leading-relaxed">{description}</p>
+                      <span className="inline-block bg-indigo-100 text-indigo-700 text-xs font-bold rounded-full px-3 py-1">
+                        {price}
+                      </span>
+                    </div>
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
         </div>
       </section>
 
