@@ -366,6 +366,22 @@ export const AdminService = {
     premium_features?: string[];
   }) => invokeEdgeFunction('clone-site-exact', payload),
 
+  // ── Payment Plans ───────────────────────────────────────────────────────────
+
+  /**
+   * Create a custom payment plan for a client:
+   * - Charges setup fee today (immediate Stripe invoice)
+   * - Starts recurring monthly charge after a trial period
+   * - Auto-cancels after `months` billing cycles
+   */
+  createPaymentPlan: async (payload: {
+    client_id: string;
+    setup_fee_cents: number;
+    monthly_cents: number;
+    months: number;
+    description: string;
+  }) => invokeEdgeFunction('create-test-payment-plan', payload),
+
   // ── Claude Admin Assistant ──────────────────────────────────────────────────
 
   /**

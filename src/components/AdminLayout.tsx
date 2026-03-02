@@ -8,7 +8,7 @@ import {
   FileText, Mail as MailIcon, Zap, CalendarCheck, Menu, X, User,
   Phone, Cpu, ChevronDown, ShieldCheck, PhoneCall, Globe, BookOpen,
   LayoutDashboard, Inbox, TrendingUp, Package, Download, FilePlus2,
-  Sparkles,
+  Sparkles, CreditCard,
 } from 'lucide-react';
 
 interface AdminLayoutProps {
@@ -74,6 +74,7 @@ const AdminLayout: React.FC<AdminLayoutProps> = ({ children }) => {
         { name: 'Products', href: '/admin/billing/products', icon: DollarSign },
         { name: 'Add-on Catalog', href: '/admin/addons/catalog', icon: Package },
         { name: 'Proposals', href: '/admin/proposals', icon: FilePlus2 },
+        { name: 'Payment Plans', href: '/admin/billing/payment-plan', icon: CreditCard },
         { name: '✨ Gem Onboarding', href: '/admin/onboarding', icon: Sparkles },
       ],
     },
