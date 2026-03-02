@@ -165,13 +165,16 @@ function addonMonthlyContribution(addon: AddonCatalogItem): number {
 
 function addonPriceLabel(addon: AddonCatalogItem): string {
   if (addon.billing_type === 'one_time') {
-    if (addon.setup_fee_cents && addon.setup_fee_cents > 0) {
-      return `${centsToDisplay(addon.setup_fee_cents)} one-time`;
-    }
-    return 'One-time';
+    if (addon.setup_fee_cents === 0 || addon.setup_fee_cents === null) return 'FREE';
+    return `$${(addon.setup_fee_cents / 100).toFixed(0)} one-time`;
+  }
+  if (addon.billing_type === 'setup_plus_subscription') {
+    const setup = addon.setup_fee_cents ? `$${(addon.setup_fee_cents / 100).toFixed(0)} setup + ` : '';
+    const monthly = addon.monthly_price_cents ? `$${(addon.monthly_price_cents / 100).toFixed(0)}/mo` : '';
+    return setup + monthly;
   }
   if (addon.monthly_price_cents) return `+${centsToDisplay(addon.monthly_price_cents)}/mo`;
-  return '';
+  return 'FREE';
 }
 
 // ─── Progress Bar ──────────────────────────────────────────────────────────────
