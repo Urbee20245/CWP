@@ -1,14 +1,26 @@
 import React, { useEffect, useRef, useCallback, useState } from 'react';
 import { PremiumFeatureId } from '../../types/website';
+
+interface BuildConfig {
+  framework?: 'react' | 'vue' | 'angular' | 'static' | 'unknown';
+  build_tool?: string;
+  tailwind_config?: any;
+  import_maps?: any;
+  google_fonts?: string[];
+}
+
 interface RawHtmlRendererProps {
   rawHtml: string;
+  buildConfig?: BuildConfig;
   premiumFeatures?: PremiumFeatureId[];
   clientId?: string;
   calBookingLink?: string;
   isPreview?: boolean;
 }
+
 const RawHtmlRenderer: React.FC<RawHtmlRendererProps> = ({
   rawHtml,
+  buildConfig,
   premiumFeatures = [],
   clientId,
   calBookingLink,
@@ -77,6 +89,7 @@ const RawHtmlRenderer: React.FC<RawHtmlRendererProps> = ({
       syncHeight();
       const observer = new MutationObserver(syncHeight);
       observer.observe(doc.body, { childList: true, subtree: true, attributes: true });
+      doc.defaultView?.addEventListener('resize', syncHeight);
     } catch (e) {
       console.warn('[RawHtmlRenderer] iframe access error:', e);
     }
@@ -101,6 +114,7 @@ const RawHtmlRenderer: React.FC<RawHtmlRendererProps> = ({
         display: 'block',
         overflow: 'hidden',
       }}
+      sandbox="allow-scripts allow-same-origin allow-forms allow-popups allow-popups-to-escape-sandbox allow-modals"
       allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share"
       scrolling="no"
     />
