@@ -535,6 +535,11 @@ Site URL: /site/${brief.client_slug}` : 'No site generated yet.';
       const systemPrompt = `You are an AI web designer assistant helping an agency build and refine client websites.
 ${siteInfo}
 
+IMPORTANT: When the user asks you to add, place, or find an image, the system automatically
+searches Unsplash and Pexels and applies it to the site in real time. When this happens,
+confirm what was done in ONE sentence: state what image was found, from which source, and
+where it was placed. Do NOT give instructions — it's already done.
+
 When the user wants a complete website rebuild or regeneration, respond with: REGENERATE: <art_direction_notes>
 For all other requests, give helpful, specific advice about design, content, or improvements.
 Keep responses concise and actionable. Respond in 1-3 sentences max unless detail is truly needed.`;
@@ -545,10 +550,24 @@ Keep responses concise and actionable. Respond in 1-3 sentences max unless detai
       ];
 
       const { data, error } = await supabase.functions.invoke('website-chat', {
-        body: { system: systemPrompt, messages: conversationHistory, provider: chatProvider },
+        body: {
+          system: systemPrompt,
+          messages: conversationHistory,
+          provider: chatProvider,
+          // Pass context so edge function can fetch + apply images automatically
+          client_id: selectedClientId || null,
+          website_json: brief?.website_json || null,
+          business_name: brief?.business_name || form.business_name || '',
+          industry: brief?.industry || form.industry || '',
+        },
       });
       if (error) throw error;
       const reply = data?.reply || "I couldn't process that request.";
+
+      // If an image was placed automatically, refresh the brief so the preview updates
+      if (data?.image_placed && data?.updated_json && brief) {
+        setBrief(prev => prev ? { ...prev, website_json: data.updated_json } : prev);
+      }
 
       // Check if AI wants to regenerate with new art direction
       if (reply.startsWith('REGENERATE:')) {
