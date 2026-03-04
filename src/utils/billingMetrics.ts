@@ -6,10 +6,9 @@ export interface SubscriptionRow {
   stripe_subscription_id: string;
   stripe_price_id: string;
   status: string;
+  created_at: string;
   current_period_end: string | null;
   cancel_at_period_end: boolean;
-  cancel_at: string | null;
-  created_at: string;
   monthly_amount_cents: number | null;
   plan_label: string | null;
   clients: { business_name: string; billing_email: string | null } | null;
@@ -18,19 +17,14 @@ export interface SubscriptionRow {
 export interface InvoiceRow {
   id: string;
   client_id: string;
-  stripe_invoice_id: string | null;
+  stripe_invoice_id: string;
   amount_due: number;
   status: string;
-  hosted_invoice_url: string | null;
   created_at: string;
+  hosted_invoice_url: string | null;
   label: string | null;
+  invoice_type: string | null;
   clients: { business_name: string } | null;
-}
-
-interface BillingProduct {
-  stripe_price_id: string;
-  amount_cents: number;
-  billing_type: 'subscription' | 'one_time';
 }
 
 export interface RevenueMetrics {
@@ -56,115 +50,95 @@ export async function fetchBillingMetrics(): Promise<RevenueMetrics> {
   const [
     { data: subscriptionsData, error: subsError },
     { data: invoicesData, error: invoicesError },
-    { data: productsData, error: productsError },
+    { data: productsData },
   ] = await Promise.all([
     supabase
       .from('subscriptions')
-      .select(
-        'id, client_id, stripe_subscription_id, stripe_price_id, status, current_period_end, cancel_at_period_end, cancel_at, created_at, monthly_amount_cents, plan_label, clients(business_name, billing_email)'
-      )
+      .select('id, client_id, stripe_subscription_id, stripe_price_id, status, created_at, current_period_end, cancel_at_period_end, monthly_amount_cents, plan_label, clients(business_name, billing_email)')
       .order('created_at', { ascending: false }),
     supabase
       .from('invoices')
-      .select('id, client_id, stripe_invoice_id, amount_due, status, hosted_invoice_url, created_at, label, clients(business_name)')
-      .order('created_at', { ascending: false }),
+      .select('id, client_id, stripe_invoice_id, amount_due, status, created_at, hosted_invoice_url, label, invoice_type, clients(business_name)')
+      .neq('status', 'retracted')
+      .order('created_at', { ascending: false })
+      .limit(100),
     supabase
       .from('billing_products')
-      .select('stripe_price_id, amount_cents, billing_type'),
+      .select('stripe_price_id, monthly_price_cents, amount_cents, billing_type'),
   ]);
 
-  if (subsError || invoicesError || productsError) {
-    console.error('Error fetching billing data:', subsError || invoicesError || productsError);
-    throw new Error('Failed to fetch billing data.');
-  }
+  if (subsError) throw new Error(`Subscriptions query failed: ${subsError.message}`);
+  if (invoicesError) throw new Error(`Invoices query failed: ${invoicesError.message}`);
 
-  const subscriptions = (subscriptionsData ?? []) as unknown as SubscriptionRow[];
-  const invoices = (invoicesData ?? []) as unknown as InvoiceRow[];
-  const products = (productsData ?? []) as BillingProduct[];
-  const productMap = new Map(products.map(p => [p.stripe_price_id, p]));
+  const subscriptions = (subscriptionsData || []) as SubscriptionRow[];
+  const invoices = (invoicesData || []) as InvoiceRow[];
+
+  // Fallback lookup for old billing_products-based subscriptions
+  const productMap = new Map(
+    (productsData || []).map((p: any) => [p.stripe_price_id, p])
+  );
 
   let mrr = 0;
   let activeSubscriptions = 0;
   let trialingSubscriptions = 0;
   let pendingSubscriptions = 0;
-  let newSubscriptions30Days = 0;
   let canceledSubscriptions30Days = 0;
+  let newSubscriptions30Days = 0;
 
-  for (const sub of subscriptions) {
-    const isActive = sub.status === 'active';
-    const isTrialing = sub.status === 'trialing';
+  subscriptions.forEach(sub => {
+    const product = productMap.get(sub.stripe_price_id) as any;
+    const monthlyAmountCents =
+      sub.monthly_amount_cents ??
+      product?.monthly_price_cents ??
+      product?.amount_cents ??
+      0;
+    const monthlyAmount = monthlyAmountCents / 100;
 
-    if (isActive || isTrialing) {
-      // Prefer monthly_amount_cents on the row; fall back to billing_products
-      let monthlyAmountCents = sub.monthly_amount_cents ?? 0;
-      if (!monthlyAmountCents) {
-        const product = productMap.get(sub.stripe_price_id);
-        if (product && product.billing_type === 'subscription') {
-          monthlyAmountCents = product.amount_cents;
-        }
-      }
-      mrr += monthlyAmountCents / 100;
-
-      if (isActive) activeSubscriptions++;
-      if (isTrialing) trialingSubscriptions++;
-    }
-
-    if (
-      sub.status === 'incomplete' ||
-      sub.status === 'incomplete_expired' ||
-      sub.status === 'past_due'
-    ) {
+    if (sub.status === 'active') {
+      mrr += monthlyAmount;
+      activeSubscriptions++;
+    } else if (sub.status === 'trialing') {
+      mrr += monthlyAmount;
+      trialingSubscriptions++;
+    } else if (['incomplete', 'incomplete_expired', 'past_due'].includes(sub.status)) {
       pendingSubscriptions++;
     }
 
-    if (sub.created_at >= THIRTY_DAYS_AGO) {
-      newSubscriptions30Days++;
-    }
+    if (sub.created_at >= THIRTY_DAYS_AGO) newSubscriptions30Days++;
+    if (sub.status === 'canceled' && sub.created_at >= THIRTY_DAYS_AGO) canceledSubscriptions30Days++;
+  });
 
-    if (sub.status === 'canceled' && sub.created_at >= THIRTY_DAYS_AGO) {
-      canceledSubscriptions30Days++;
-    }
-  }
+  const totalRevenuePaid = invoices
+    .filter(i => i.status === 'paid')
+    .reduce((sum, i) => sum + (i.amount_due || 0) / 100, 0);
 
-  let totalRevenuePaid = 0;
-  let totalRevenueOutstanding = 0;
-  let revenueCollected30Days = 0;
+  const totalRevenueOutstanding = invoices
+    .filter(i => i.status === 'open')
+    .reduce((sum, i) => sum + (i.amount_due || 0) / 100, 0);
 
-  for (const invoice of invoices) {
-    const amountDollars = invoice.amount_due / 100;
-    if (invoice.status === 'paid') {
-      totalRevenuePaid += amountDollars;
-      if (invoice.created_at >= THIRTY_DAYS_AGO) {
-        revenueCollected30Days += amountDollars;
-      }
-    } else if (invoice.status === 'open') {
-      totalRevenueOutstanding += amountDollars;
-    }
-  }
+  const revenueCollected30Days = invoices
+    .filter(i => i.status === 'paid' && i.created_at >= THIRTY_DAYS_AGO)
+    .reduce((sum, i) => sum + (i.amount_due || 0) / 100, 0);
 
-  const totalSubscriptionsAtStart =
-    activeSubscriptions + trialingSubscriptions + canceledSubscriptions30Days;
-  const churnRate =
-    totalSubscriptionsAtStart > 0
-      ? (canceledSubscriptions30Days / totalSubscriptionsAtStart) * 100
-      : 0;
+  const totalActive = activeSubscriptions + trialingSubscriptions;
+  const churnBase = totalActive + canceledSubscriptions30Days;
+  const churnRate = churnBase > 0 ? (canceledSubscriptions30Days / churnBase) * 100 : 0;
 
   const now = new Date().toISOString();
   const upcomingPayments = subscriptions
-    .filter(
-      s =>
-        (s.status === 'active' || s.status === 'trialing') &&
-        s.current_period_end != null &&
-        s.current_period_end >= now &&
-        s.current_period_end <= SIXTY_DAYS_FROM_NOW
+    .filter(s =>
+      (s.status === 'active' || s.status === 'trialing') &&
+      s.current_period_end &&
+      s.current_period_end > now &&
+      s.current_period_end <= SIXTY_DAYS_FROM_NOW
     )
     .sort((a, b) => (a.current_period_end ?? '').localeCompare(b.current_period_end ?? ''));
 
   return {
-    mrr: Math.round(mrr * 100) / 100,
-    totalRevenuePaid: Math.round(totalRevenuePaid * 100) / 100,
-    totalRevenueOutstanding: Math.round(totalRevenueOutstanding * 100) / 100,
-    revenueCollected30Days: Math.round(revenueCollected30Days * 100) / 100,
+    mrr: parseFloat(mrr.toFixed(2)),
+    totalRevenuePaid: parseFloat(totalRevenuePaid.toFixed(2)),
+    totalRevenueOutstanding: parseFloat(totalRevenueOutstanding.toFixed(2)),
+    revenueCollected30Days: parseFloat(revenueCollected30Days.toFixed(2)),
     activeSubscriptions,
     trialingSubscriptions,
     pendingSubscriptions,
@@ -173,6 +147,6 @@ export async function fetchBillingMetrics(): Promise<RevenueMetrics> {
     churnRate: parseFloat(churnRate.toFixed(2)),
     allSubscriptions: subscriptions,
     upcomingPayments,
-    recentInvoices: invoices.slice(0, 50),
+    recentInvoices: invoices,
   };
 }
