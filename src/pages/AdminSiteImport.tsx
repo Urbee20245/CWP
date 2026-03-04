@@ -107,6 +107,27 @@ const TONES = ['Professional', 'Friendly', 'Bold', 'Luxurious'] as const;
 
 type MainTab = 'import' | 'static-upload';
 
+const STATIC_STORAGE_URL = 'https://nvgumhlewbqynrhlkqhx.supabase.co/storage/v1/object/public/static-sites';
+
+function rewriteStaticAssetPaths(html: string, slug: string): string {
+  const base = `${STATIC_STORAGE_URL}/${slug}`;
+  // Rewrite absolute-path assets (/assets/foo.js → full supabase URL)
+  html = html.replace(
+    /(src|href)="(\/(assets|_next|static)[^"]*\.(js|css|png|jpg|jpeg|gif|webp|svg|ico|woff|woff2|ttf|map))"/g,
+    (_, attr, path) => `${attr}="${base}${path}"`
+  );
+  html = html.replace(
+    /(src|href)='(\/(assets|_next|static)[^']*\.(js|css|png|jpg|jpeg|gif|webp|svg|ico|woff|woff2|ttf|map))'/g,
+    (_, attr, path) => `${attr}='${base}${path}'`
+  );
+  // Rewrite modulepreload links
+  html = html.replace(
+    /(rel="modulepreload"[^>]*href=")(\/(assets|_next|static)[^"]+\.js)"/g,
+    (_, pre, path) => `${pre}${base}${path}"`
+  );
+  return html;
+}
+
 const AdminSiteImport: React.FC = () => {
   // ── Main tab ───────────────────────────────────────────────────────────────
   const [mainTab, setMainTab] = useState<MainTab>('import');
@@ -426,14 +447,23 @@ const AdminSiteImport: React.FC = () => {
 
       let uploaded = 0;
       for (const name of files) {
-        const content = await zip.files[name].async('blob');
-        // Strip root folder from path if present (dist/index.html → index.html)
         const cleanPath = name.replace(/^[^/]+\//, '');
         const storagePath = `${clientSlug}/${cleanPath}`;
 
+        let uploadContent: Blob;
+
+        if (cleanPath.endsWith('.html')) {
+          // Rewrite asset paths in HTML files to absolute Supabase Storage URLs
+          const rawHtml = await zip.files[name].async('string');
+          const rewrittenHtml = rewriteStaticAssetPaths(rawHtml, clientSlug);
+          uploadContent = new Blob([rewrittenHtml], { type: 'text/html' });
+        } else {
+          uploadContent = await zip.files[name].async('blob');
+        }
+
         const { error: uploadErr } = await supabase.storage
           .from('static-sites')
-          .upload(storagePath, content, { upsert: true });
+          .upload(storagePath, uploadContent, { upsert: true });
 
         if (uploadErr) throw new Error(`Upload failed for ${cleanPath}: ${uploadErr.message}`);
 

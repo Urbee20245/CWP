@@ -13,6 +13,7 @@ export interface SiteData {
   rawHtml: string | null;
   /** Render mode: null/'cwp_json' = normal, 'raw_html' = iframe clone */
   siteType: string | null;
+  clientSlug: string | null;
 }
 
 export interface UseSiteDataResult {
@@ -46,7 +47,7 @@ export function useSiteData(slug: string | undefined, isPreview = false): UseSit
     (async () => {
       const { data, error } = await supabase
         .from('website_briefs')
-        .select('website_json, is_published, premium_features, client_id, raw_html, site_type')
+        .select('website_json, is_published, premium_features, client_id, raw_html, site_type, client_slug')
         .or(`slug.eq.${slug},client_slug.eq.${slug}`)
         .maybeSingle();
 
@@ -62,9 +63,10 @@ export function useSiteData(slug: string | undefined, isPreview = false): UseSit
         return;
       }
 
-      // Raw HTML clone sites don't need website_json
+      // Raw HTML clone sites and static uploaded sites don't need website_json
       const isRawHtml = (data as any).site_type === 'raw_html';
-      if (!isRawHtml && !data.website_json) {
+      const isStatic = (data as any).site_type === 'static';
+      if (!isRawHtml && !isStatic && !data.website_json) {
         setStatus('not_found');
         return;
       }
@@ -93,6 +95,7 @@ export function useSiteData(slug: string | undefined, isPreview = false): UseSit
         calBookingLink,
         rawHtml: (data as any).raw_html ?? null,
         siteType: (data as any).site_type ?? null,
+        clientSlug: (data as any).client_slug ?? null,
       });
       setStatus('found');
     })();
