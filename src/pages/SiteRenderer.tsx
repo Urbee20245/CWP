@@ -75,6 +75,39 @@ const SiteRenderer: React.FC = () => {
     }
   }, [siteData, currentPageId]);
 
+  // Dynamic font loading: load whatever Google Fonts the cloned site specifies
+  useEffect(() => {
+    if (!siteData) return;
+    const g = siteData.websiteJson.global as any;
+
+    const fontMap: Record<string, string> = {
+      'Playfair Display': 'Playfair+Display:ital,wght@0,400;0,600;0,700;0,800;1,400',
+      'Montserrat':       'Montserrat:wght@400;500;600;700;800',
+      'Raleway':          'Raleway:wght@400;500;600;700;800',
+      'Lato':             'Lato:wght@400;700',
+      'Open Sans':        'Open+Sans:wght@400;500;600;700',
+    };
+
+    const families = ([g.font_heading, g.font_body] as string[])
+      .filter(Boolean)
+      .filter(f => f !== 'Inter' && fontMap[f])
+      .map(f => fontMap[f]);
+
+    if (families.length === 0) return;
+
+    const href = `https://fonts.googleapis.com/css2?${families.map(f => `family=${f}`).join('&')}&display=swap`;
+    const existingLink = document.getElementById('cwp-site-fonts');
+    if (existingLink) existingLink.remove();
+
+    const link = document.createElement('link');
+    link.id = 'cwp-site-fonts';
+    link.rel = 'stylesheet';
+    link.href = href;
+    document.head.appendChild(link);
+
+    return () => { link.remove(); };
+  }, [siteData]);
+
   if (status === 'loading') {
     return (
       <div className="min-h-screen flex items-center justify-center bg-white">

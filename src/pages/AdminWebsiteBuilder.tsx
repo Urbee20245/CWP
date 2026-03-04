@@ -100,6 +100,7 @@ const AdminWebsiteBuilder: React.FC = () => {
   const [rightView, setRightView]   = useState<RightView>('build');
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [expandedPages, setExpandedPages] = useState<Record<string, boolean>>({});
+  const [activePreviewPageSlug, setActivePreviewPageSlug] = useState<string>('');
 
   // Form
   const [form, setForm] = useState({
@@ -235,6 +236,7 @@ const AdminWebsiteBuilder: React.FC = () => {
       if (nb.generation_status === 'complete' && nb.website_json) {
         setPanelState('chat');
         setRightView('build');
+        setActivePreviewPageSlug('');
       } else if (nb.generation_status === 'error') {
         setPanelState('brief-form');
         setGenError(nb.generation_error || 'Generation failed. Please try again.');
@@ -601,6 +603,11 @@ Keep responses concise and actionable. Respond in 1-3 sentences max unless detai
   const isFormValid = form.business_name && form.industry && form.services_offered && form.location;
   const slug = brief?.client_slug || (brief as any)?.slug;
   const previewUrl  = slug ? `/site/${slug}?preview=1` : null;
+  const currentPreviewUrl = slug
+    ? (activePreviewPageSlug
+        ? `/site/${slug}/${activePreviewPageSlug}?preview=1`
+        : `/site/${slug}?preview=1`)
+    : null;
   const hasWebsite  = brief?.generation_status === 'complete' && !!brief.website_json;
   const pageCount   = brief?.website_json?.pages?.length ?? 0;
 
@@ -1493,7 +1500,7 @@ Keep responses concise and actionable. Respond in 1-3 sentences max unless detai
             {/* ── Build View (iframe) ──────────────────────────────────── */}
             {rightView === 'build' && !settingsOpen && (
               <>
-                {hasWebsite && previewUrl ? (
+                {hasWebsite && currentPreviewUrl ? (
                   <div className="flex flex-col h-full p-4 gap-3">
                     {/* Fake browser chrome */}
                     <div className="flex-none flex items-center gap-2 bg-slate-900 border border-slate-800 rounded-t-xl px-4 py-2.5">
@@ -1502,13 +1509,24 @@ Keep responses concise and actionable. Respond in 1-3 sentences max unless detai
                         <span className="w-3 h-3 rounded-full bg-yellow-500/70" />
                         <span className="w-3 h-3 rounded-full bg-green-500/70" />
                       </div>
+                      {/* Page nav: Home button when on a sub-page */}
+                      {activePreviewPageSlug && (
+                        <button
+                          onClick={() => setActivePreviewPageSlug('')}
+                          className="flex-none flex items-center gap-1 text-xs text-indigo-400 hover:text-indigo-200 border border-indigo-800 hover:border-indigo-500 rounded px-2 py-0.5 transition-colors"
+                          title="Back to Home page"
+                        >
+                          <Globe className="w-3 h-3" />
+                          Home
+                        </button>
+                      )}
                       <div className="flex-1 flex items-center bg-slate-800 border border-slate-700 rounded-md px-3 py-1 mx-2 gap-2">
                         <span className="text-xs text-slate-400 truncate font-mono">
-                          {window.location.origin}{previewUrl}
+                          {window.location.origin}{currentPreviewUrl}
                         </span>
                       </div>
                       <a
-                        href={previewUrl}
+                        href={currentPreviewUrl}
                         target="_blank"
                         rel="noreferrer"
                         className="text-slate-500 hover:text-slate-300 transition-colors"
@@ -1517,7 +1535,8 @@ Keep responses concise and actionable. Respond in 1-3 sentences max unless detai
                       </a>
                     </div>
                     <iframe
-                      src={previewUrl}
+                      key={currentPreviewUrl}
+                      src={currentPreviewUrl}
                       className="flex-1 w-full rounded-b-xl border-x border-b border-slate-800 bg-white"
                       title="Site Preview"
                     />
@@ -1546,30 +1565,59 @@ Keep responses concise and actionable. Respond in 1-3 sentences max unless detai
                     </h3>
                     {brief!.website_json!.pages.map((page: any) => {
                       const isExpanded = expandedPages[page.id] ?? false;
+                      const isActivePage = activePreviewPageSlug === (page.slug ?? '');
                       return (
-                        <div key={page.id} className="bg-slate-900 border border-slate-800 rounded-xl overflow-hidden">
-                          <button
-                            className="w-full flex items-center gap-3 px-4 py-3.5 text-left hover:bg-slate-800/50 transition-colors"
-                            onClick={() => setExpandedPages(prev => ({ ...prev, [page.id]: !isExpanded }))}
-                          >
-                            <FileText className="w-4 h-4 text-indigo-400 flex-shrink-0" />
-                            <div className="flex-1 min-w-0">
-                              <div className="flex items-center gap-2 flex-wrap">
-                                <span className="font-medium text-slate-100 text-sm">{page.name}</span>
-                                <span className="text-xs text-slate-500 font-mono">
-                                  {page.slug ? `/${page.slug}` : '/'}
-                                </span>
+                        <div key={page.id} className={`bg-slate-900 border rounded-xl overflow-hidden ${isActivePage ? 'border-indigo-600' : 'border-slate-800'}`}>
+                          <div className="flex items-center gap-2 px-4 py-3.5">
+                            {/* Expand/collapse toggle */}
+                            <button
+                              className="flex items-center gap-3 flex-1 min-w-0 text-left"
+                              onClick={() => setExpandedPages(prev => ({ ...prev, [page.id]: !isExpanded }))}
+                            >
+                              <FileText className={`w-4 h-4 flex-shrink-0 ${isActivePage ? 'text-indigo-400' : 'text-slate-500'}`} />
+                              <div className="flex-1 min-w-0">
+                                <div className="flex items-center gap-2 flex-wrap">
+                                  <span className="font-medium text-slate-100 text-sm">{page.name}</span>
+                                  <span className="text-xs text-slate-500 font-mono">
+                                    {page.slug ? `/${page.slug}` : '/'}
+                                  </span>
+                                  {isActivePage && (
+                                    <span className="text-xs bg-indigo-900/60 border border-indigo-700 text-indigo-300 px-1.5 py-0.5 rounded">viewing</span>
+                                  )}
+                                </div>
+                                <p className="text-xs text-slate-500 truncate mt-0.5">{page.seo?.title}</p>
                               </div>
-                              <p className="text-xs text-slate-500 truncate mt-0.5">{page.seo?.title}</p>
-                            </div>
+                            </button>
+                            {/* Right side: section count + preview button + chevron */}
                             <div className="flex items-center gap-2 flex-shrink-0">
                               <span className="text-xs text-slate-500">{page.sections.length} sections</span>
-                              {isExpanded
-                                ? <ChevronDown className="w-4 h-4 text-slate-500" />
-                                : <ChevronRight className="w-4 h-4 text-slate-500" />
-                              }
+                              {/* Preview this page */}
+                              <button
+                                onClick={() => {
+                                  setActivePreviewPageSlug(page.slug ?? '');
+                                  setRightView('build');
+                                }}
+                                title="Preview this page"
+                                className={`flex items-center gap-1 text-xs px-2 py-1 rounded-lg border transition-colors ${
+                                  isActivePage
+                                    ? 'bg-indigo-600 border-indigo-500 text-white'
+                                    : 'bg-slate-800 border-slate-700 text-slate-400 hover:border-indigo-600 hover:text-indigo-300'
+                                }`}
+                              >
+                                <Eye className="w-3 h-3" />
+                                View
+                              </button>
+                              <button
+                                onClick={() => setExpandedPages(prev => ({ ...prev, [page.id]: !isExpanded }))}
+                                className="text-slate-500 hover:text-slate-300"
+                              >
+                                {isExpanded
+                                  ? <ChevronDown className="w-4 h-4" />
+                                  : <ChevronRight className="w-4 h-4" />
+                                }
+                              </button>
                             </div>
-                          </button>
+                          </div>
 
                           {isExpanded && (
                             <div className="px-4 pb-4 border-t border-slate-800 pt-3 space-y-2">

@@ -90,6 +90,7 @@ const SiteRenderer: React.FC<SiteRendererProps> = ({
       style={
         {
           '--brand-color': g.primary_color,
+          '--secondary-color': (g as any).secondary_color || g.primary_color,
           fontFamily: g.font_body || 'Inter, sans-serif',
         } as React.CSSProperties
       }

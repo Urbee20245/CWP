@@ -94,14 +94,20 @@ menu_section: {heading, categories:[{name, items:[{name, description, price}]}]}
 process: {heading, subtext, steps:[{number, title, description}]}
 features: {heading, subtext, features:[{title, description, icon}]}
 
-DESIGN CLONING RULES:
-- Extract the dominant brand color from the screenshot and use it as primary_color
-- Choose font_heading and font_body that match the typography feel in the screenshot
-- Pick hero variant that matches the layout style seen in the screenshot
-- Mirror the overall design aesthetic (minimal, bold, luxurious, etc.) in all copy and section choices
-- Generate pages: home (required), about, services, contact — plus additional pages if the business type warrants them
-- All copy must be specific to the given business, NOT copied from the screenshot
-- SEO title max 60 chars. Return ONLY JSON.`;
+DESIGN CLONING RULES (MANDATORY — ZERO EXCEPTIONS):
+1. PRIMARY COLOR: Extract the exact dominant hex color visible in the screenshot (buttons, headings, accents). Use it verbatim as primary_color.
+2. SECONDARY COLOR: Always populate secondary_color with the second-most-prominent color (e.g. gold alongside blue). Never leave it empty.
+3. FONTS — critical for visual fidelity:
+   - If screenshot shows serif/editorial headings → font_heading: "Playfair Display"
+   - If screenshot shows geometric bold headings (Montserrat-style) → font_heading: "Montserrat"
+   - If screenshot shows elegant/thin headings → font_heading: "Raleway"
+   - If screenshot shows clean modern sans → font_heading: "Inter"
+   - Body text: if humanist/warm → font_body: "Open Sans" or "Lato". If neutral → "Inter".
+4. LAYOUT: Replicate the visible column structure exactly (3-column cards → three_column_cards, etc.).
+5. HERO: Match the hero layout and background style (dark overlay → background_style: "dark", light → "light").
+6. SECTIONS: Include every visible section from the screenshot. Do not add sections not visible in the screenshot.
+7. COPY: All text must be specific to the given business. Do not copy text from the screenshot.
+8. SEO title max 60 chars. Return ONLY JSON.`;
 
 // ─── Main handler ─────────────────────────────────────────────────────────────
 

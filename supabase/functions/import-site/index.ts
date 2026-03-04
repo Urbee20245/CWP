@@ -1422,20 +1422,32 @@ CONTENT REQUIREMENTS:
 - pricing_cards: { heading, subtext, tiers: [{ name, price, period, description, features, cta_text, highlighted }] }
 - blog_preview: { heading, subtext }
 
-DESIGN PRESERVATION RULES (MANDATORY):
-1. PRIMARY COLOR: Use the EXACT hex from colorPalette.primary[0]. Never substitute or "improve" it.
-2. FONTS: Map detected font families to the closest available CWP font:
-   - Sans-serif (Inter, Roboto, Open Sans, Lato, Nunito, Poppins → "Inter" or "Open Sans")
-   - Display/Decorative (Playfair, Merriweather, Lora, Georgia → "Playfair Display")
-   - Geometric (Montserrat, Futura, Raleway, Oswald → "Montserrat" or "Raleway")
-3. LAYOUT: Match the column count and structure from layoutHints. If source uses 3-column cards, use three_column_cards variant.
-4. SECTIONS: Include EVERY section that exists in the source. Do NOT add sections that don't exist. Do NOT remove sections that do.
-5. CONTENT: Use real text from the source site. Do not fabricate or "improve" copy.
-6. SPACING: Preserve visual hierarchy — if source has large headings, choose variants with prominent headings.
-7. HERO BACKGROUND: If source uses a dark hero, set background_style to "dark". Light source → "light". Gradient → "gradient".
+DESIGN PRESERVATION RULES (MANDATORY — ZERO EXCEPTIONS):
+1. PRIMARY COLOR: Use the EXACT hex from colorPalette.primary[0]. This is NON-NEGOTIABLE. Never substitute, lighten, darken, or "improve" it. If not detected, use colorPalette.all[0].
+2. SECONDARY COLOR: ALWAYS populate secondary_color. Use colorPalette.primary[1] or a distinct accent color from the palette. If only one color exists, repeat it. Never leave secondary_color empty.
+3. FONTS — this is critical for visual fidelity:
+   HEADING fonts (font_heading): pick the closest match:
+   - Serif/editorial (Playfair Display, Georgia, Merriweather, Lora, EB Garamond, Cormorant, Libre Baskerville → "Playfair Display")
+   - Geometric sans (Montserrat, Futura, Poppins, DM Sans, Space Grotesk → "Montserrat")
+   - Stylish/elegant (Raleway, Josefin Sans, Cinzel, Cormorant → "Raleway")
+   - Clean modern sans (Inter, Roboto, Nunito, Source Sans, Outfit → "Inter")
+   BODY fonts (font_body): pick the closest match:
+   - Humanist (Open Sans, Lato, Source Sans, Noto Sans, Mulish → "Open Sans" or "Lato")
+   - Neutral (Inter, Roboto, Nunito → "Inter")
+   If the detected heading font is serif → use "Playfair Display". If geometric → "Montserrat". Default to "Inter" only if truly undetectable.
+4. LAYOUT: Match the column count and structure from layoutHints exactly. 3-column source → three_column_cards. 4-column → four_column_icons.
+5. SECTIONS: Include EVERY section that exists in the source. Do NOT add sections that don't exist. Do NOT remove sections that do.
+6. CONTENT: Use real text from the source site. Do not fabricate or "improve" copy.
+7. SPACING: Preserve visual hierarchy — if source has large headings, choose variants with prominent headings.
+8. HERO BACKGROUND: If source uses a dark hero, set background_style to "dark". Light source → "light". Gradient → "gradient".
 
 CONTENT FIDELITY RULES (MANDATORY — NEVER VIOLATE):
 1. IMAGES: Only use URLs from the "REAL IMAGE URLS" section. If that section is empty, use "". Never invent or guess URLs.
+   * hero_image_url in global: use the first hero/background image URL if available.
+   * logo_url in global: use the logo image URL if available.
+   * background_image_url in sections: use real hero/background URLs.
+   * gallery images: use all gallery URLs provided.
+   * founder_photo_url: use team/person photo URLs if available.
 2. LINKS: Only use hrefs from "REAL LINKS" section. For internal pages use "/about", "/services" etc. Never use "#" as a link.
 3. COPY: Use the EXACT text extracted from the source. Do not rephrase, improve, or summarize.
    * Headings must match the H1/H2 from the source exactly (including capitalization)
@@ -1449,21 +1461,22 @@ CONTENT FIDELITY RULES (MANDATORY — NEVER VIOLATE):
    * Stats bar → section_type: "stats", variant: "four_number_bar"
    * Dark CTA band → section_type: "contact_cta", variant: "dark_band"
    * Two-column about with photo → section_type: "about", variant: "founder_focus"
-6. MULTI-PAGE: Create one page entry per detected route/page. Each page's sections must use content scoped to that page, not content from other pages.
-7. COLORS: The secondary_color field must be populated if a distinct accent color exists (e.g. gold/amber alongside a primary blue — both must be captured).
-8. BACKGROUND IMAGES: If a section uses a dark overlay on an image, set: background_image_url to the real image URL AND background_style to "dark".
+6. PAGES — CRITICAL: Create one page entry for EVERY page detected in the source navigation. The nav links section lists every page that exists. Every nav link = one page in the output. Never collapse or omit pages.
+7. BACKGROUND IMAGES: If a section uses a dark overlay on an image, set: background_image_url to the real image URL AND background_style to "dark".
 
 VALIDATION CHECKLIST (verify before returning JSON):
-✓ primary_color matches colorPalette.primary[0] exactly
-✓ All source nav sections are represented as pages
+✓ primary_color matches colorPalette.primary[0] exactly — not approximated
+✓ secondary_color is populated (never empty — use primary if no distinct accent)
+✓ font_heading reflects detected serif/geometric/sans style (NOT always "Inter")
+✓ font_body reflects detected body font style
+✓ Every nav link from source navigation has a corresponding page entry
+✓ All pages from source are represented — none omitted
 ✓ No extra pages or sections added beyond source
-✓ Font selections reflect source typography
+✓ hero_image_url and logo_url populated from REAL IMAGE URLS if available
 ✓ Phone/email populated from extracted data
 ✓ Hero style (dark/light/gradient) matches source
 ✓ No invented image URLs (check every image field)
 ✓ No "#" placeholder links
-✓ secondary_color populated if source has an accent color
-✓ All pages from source navigation are represented
 ✓ Phone formatted as tel:+1XXXXXXXXXX
 ✓ Email formatted as mailto:email@domain.com`;
 
