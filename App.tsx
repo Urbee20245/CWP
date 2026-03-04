@@ -4,6 +4,7 @@ import Header from './components/Header';
 import Footer from './components/Footer';
 import VoiceAgent from './components/VoiceAgent';
 import SessionProvider from './src/context/SessionProvider';
+import { ThemeProvider } from './src/context/ThemeContext';
 import ProtectedRoute from './src/components/ProtectedRoute';
 import ErrorBoundary from './src/components/ErrorBoundary';
 import GlobalLoading from './src/components/GlobalLoading';
@@ -231,9 +232,11 @@ const App: React.FC = () => {
   return (
     <ErrorBoundary>
       <BrowserRouter>
-        <SessionProvider>
-          <AppContent />
-        </SessionProvider>
+        <ThemeProvider>
+          <SessionProvider>
+            <AppContent />
+          </SessionProvider>
+        </ThemeProvider>
       </BrowserRouter>
     </ErrorBoundary>
   );
