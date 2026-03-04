@@ -142,6 +142,15 @@ const AdminWebsiteBuilder: React.FC = () => {
   const [cloneError, setCloneError] = useState<string | null>(null);
   const cloneFileInputRef = useRef<HTMLInputElement>(null);
 
+  // Re-clone
+  const [showReclonePanel, setShowReclonePanel] = useState(false);
+  const [recloneMode, setRecloneMode] = useState<'url' | 'image'>('url');
+  const [recloneUrl, setRecloneUrl] = useState('');
+  const [recloneImage, setRecloneImage] = useState<File | null>(null);
+  const [recloneImagePreview, setRecloneImagePreview] = useState<string | null>(null);
+  const [recloneError, setRecloneError] = useState<string | null>(null);
+  const [isRecloning, setIsRecloning] = useState(false);
+
   // Publish
   const [isTogglingPublish, setIsTogglingPublish] = useState(false);
 
@@ -392,6 +401,64 @@ const AdminWebsiteBuilder: React.FC = () => {
       setIsGenerating(false);
     }
   }, [selectedClientId, cloneMode, cloneUrl, cloneImage, cloneForm, form, selectedPages, loadBrief]);
+
+  // ── Re-clone ──────────────────────────────────────────────────────────────
+
+  const handleReclone = useCallback(async () => {
+    if (!selectedClientId) return;
+    setRecloneError(null);
+    setIsRecloning(true);
+    setIsGenerating(true);
+    setGeneratingLabel(recloneMode === 'image' ? 'Analysing design & rebuilding...' : 'Scraping & rebuilding site...');
+    setShowReclonePanel(false);
+    setPanelState('generating');
+
+    try {
+      if (recloneMode === 'url') {
+        if (!recloneUrl.trim()) throw new Error('Please enter a domain or URL.');
+        await AdminService.cloneWebsiteFromUrl({
+          client_id: selectedClientId,
+          url: recloneUrl.trim(),
+          tone: form.tone,
+          primary_color: form.primary_color !== '#4F46E5' ? form.primary_color : undefined,
+        });
+      } else {
+        if (!recloneImage) throw new Error('Please upload a screenshot image.');
+        const imageBase64 = await new Promise<string>((resolve, reject) => {
+          const reader = new FileReader();
+          reader.onload = (e) => resolve((e.target?.result as string).split(',')[1]);
+          reader.onerror = reject;
+          reader.readAsDataURL(recloneImage);
+        });
+        await AdminService.cloneWebsiteFromImage({
+          client_id: selectedClientId,
+          image_base64: imageBase64,
+          image_mime_type: recloneImage.type || 'image/jpeg',
+          business_name: brief?.business_name ?? '',
+          industry: brief?.industry ?? '',
+          services_offered: brief?.services_offered ?? '',
+          location: brief?.location ?? '',
+          tone: form.tone,
+          primary_color: form.primary_color,
+          pages_to_generate: Array.from(selectedPages),
+        });
+      }
+
+      const loadedBrief = await loadBrief(selectedClientId);
+      if (loadedBrief?.generation_status === 'complete' && loadedBrief?.website_json) {
+        setPanelState('chat');
+      } else {
+        setRecloneError(loadedBrief?.generation_error || 'Reclone failed. Please try again.');
+        setPanelState('chat');
+      }
+    } catch (err: any) {
+      setRecloneError(err.message || 'Reclone failed. Please try again.');
+      setPanelState('chat');
+    } finally {
+      setIsRecloning(false);
+      setIsGenerating(false);
+    }
+  }, [selectedClientId, recloneMode, recloneUrl, recloneImage, brief, form, selectedPages, loadBrief]);
 
   // ── Publish toggle ────────────────────────────────────────────────────────
 
@@ -1269,9 +1336,101 @@ Keep responses concise and actionable. Respond in 1-3 sentences max unless detai
                   <div ref={chatEndRef} />
                 </div>
 
+                {/* Re-clone panel */}
+                {showReclonePanel && (
+                  <div className="flex-none mx-3 mb-2 bg-slate-900 border border-amber-700/40 rounded-xl p-4 space-y-3">
+                    <div className="flex items-center justify-between">
+                      <p className="text-xs font-semibold text-amber-300 uppercase tracking-wide">Re-clone from reference</p>
+                      <button onClick={() => setShowReclonePanel(false)} className="text-slate-500 hover:text-slate-300">
+                        <X className="w-3.5 h-3.5" />
+                      </button>
+                    </div>
+
+                    {/* Mode toggle */}
+                    <div className="flex gap-1.5">
+                      {(['url', 'image'] as const).map(m => (
+                        <button
+                          key={m}
+                          onClick={() => setRecloneMode(m)}
+                          className={`flex-1 py-1.5 rounded-lg text-xs font-medium transition-colors border ${
+                            recloneMode === m
+                              ? 'bg-amber-600 text-white border-amber-600'
+                              : 'bg-slate-800 text-slate-400 border-slate-700 hover:border-slate-500'
+                          }`}
+                        >
+                          {m === 'url' ? '🌐 Domain / URL' : '📷 Screenshot'}
+                        </button>
+                      ))}
+                    </div>
+
+                    {/* URL mode */}
+                    {recloneMode === 'url' && (
+                      <input
+                        type="text"
+                        value={recloneUrl}
+                        onChange={e => setRecloneUrl(e.target.value)}
+                        placeholder="e.g. https://clientsite.com"
+                        className="w-full bg-slate-800 border border-slate-700 rounded-lg px-3 py-2 text-sm text-slate-200 placeholder-slate-500 focus:outline-none focus:border-amber-500"
+                      />
+                    )}
+
+                    {/* Image mode */}
+                    {recloneMode === 'image' && (
+                      <div
+                        className="border-2 border-dashed border-slate-700 rounded-xl p-3 text-center cursor-pointer hover:border-amber-600 transition-colors"
+                        onClick={() => {
+                          const i = document.createElement('input');
+                          i.type = 'file';
+                          i.accept = 'image/*';
+                          i.onchange = (e) => {
+                            const f = (e.target as HTMLInputElement).files?.[0];
+                            if (f) {
+                              setRecloneImage(f);
+                              const r = new FileReader();
+                              r.onload = (ev) => setRecloneImagePreview(ev.target?.result as string);
+                              r.readAsDataURL(f);
+                            }
+                          };
+                          i.click();
+                        }}
+                      >
+                        {recloneImagePreview ? (
+                          <img src={recloneImagePreview} alt="Preview" className="max-h-28 mx-auto rounded object-contain" />
+                        ) : (
+                          <p className="text-xs text-slate-500">Click to upload screenshot</p>
+                        )}
+                      </div>
+                    )}
+
+                    {recloneError && (
+                      <p className="text-xs text-red-400">{recloneError}</p>
+                    )}
+
+                    <button
+                      onClick={handleReclone}
+                      disabled={isRecloning || (recloneMode === 'url' ? !recloneUrl.trim() : !recloneImage)}
+                      className="w-full py-2 bg-amber-600 hover:bg-amber-500 disabled:opacity-40 disabled:cursor-not-allowed text-white text-sm font-semibold rounded-lg transition-colors flex items-center justify-center gap-2"
+                    >
+                      {isRecloning ? <><Loader2 className="w-3.5 h-3.5 animate-spin" /> Recloning...</> : <><RefreshCw className="w-3.5 h-3.5" /> Rebuild from Reference</>}
+                    </button>
+
+                    <p className="text-xs text-slate-600 text-center">
+                      This overwrites the current site. All existing content will be replaced.
+                    </p>
+                  </div>
+                )}
+
                 {/* Quick prompt chips */}
                 <div className="flex-none px-3 pb-2">
                   <div className="flex gap-1.5 overflow-x-auto pb-1 scrollbar-none">
+                    <button
+                      onClick={() => setShowReclonePanel(v => !v)}
+                      disabled={isChatLoading || isRecloning}
+                      className="flex-none flex items-center gap-1.5 px-3 py-1.5 bg-amber-900/40 border border-amber-700/60 text-amber-300 text-xs rounded-full hover:border-amber-500 hover:text-amber-200 transition-colors disabled:opacity-40 whitespace-nowrap"
+                    >
+                      <RefreshCw className="w-3 h-3" />
+                      Re-clone Page
+                    </button>
                     {QUICK_PROMPTS.map(p => (
                       <button
                         key={p}
