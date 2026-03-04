@@ -9,6 +9,7 @@ export interface SubscriptionRow {
   created_at: string;
   current_period_end: string | null;
   cancel_at_period_end: boolean;
+  cancel_at: string | null;
   monthly_amount_cents: number | null;
   plan_label: string | null;
   clients: { business_name: string; billing_email: string | null } | null;
@@ -54,7 +55,7 @@ export async function fetchBillingMetrics(): Promise<RevenueMetrics> {
   ] = await Promise.all([
     supabase
       .from('subscriptions')
-      .select('id, client_id, stripe_subscription_id, stripe_price_id, status, created_at, current_period_end, cancel_at_period_end, monthly_amount_cents, plan_label, clients(business_name, billing_email)')
+      .select('id, client_id, stripe_subscription_id, stripe_price_id, status, created_at, current_period_end, cancel_at_period_end, cancel_at, monthly_amount_cents, plan_label, clients(business_name, billing_email)')
       .order('created_at', { ascending: false }),
     supabase
       .from('invoices')
