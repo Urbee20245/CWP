@@ -615,9 +615,7 @@ const InvoiceTableRow: React.FC<{ invoice: InvoiceRow }> = ({ invoice }) => (
 
 const SubscriptionTableRow: React.FC<{ sub: SubscriptionRow }> = ({ sub }) => {
   const amountCents = getMonthlyAmountCents(sub);
-  const cancelDisplay = sub.cancel_at
-    ? formatDate(sub.cancel_at)
-    : sub.cancel_at_period_end
+  const cancelDisplay = sub.cancel_at_period_end
     ? `${formatDate(sub.current_period_end)} (period end)`
     : 'Ongoing';
 
