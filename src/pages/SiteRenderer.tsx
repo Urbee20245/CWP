@@ -3,6 +3,7 @@ import { useParams, useSearchParams } from 'react-router-dom';
 import { Loader2, Globe, Clock } from 'lucide-react';
 import SiteRendererComponent from '../components/website-builder/SiteRenderer';
 import RawHtmlRenderer from '../components/website-builder/RawHtmlRenderer';
+import StaticSiteRenderer from '../components/website-builder/StaticSiteRenderer';
 import { useSiteData } from '../hooks/useSiteData';
 
 // ─── Coming Soon ──────────────────────────────────────────────────────────────
@@ -54,13 +55,13 @@ const SiteRenderer: React.FC = () => {
   const currentPageId = (() => {
     if (!siteData) return 'home';
     if (!page) return 'home';
-    const found = siteData.websiteJson.pages.find(p => p.slug === page);
+    const found = siteData.websiteJson?.pages?.find(p => p.slug === page);
     return found ? found.id : 'home';
   })();
 
   // Per-page SEO: update <title> and meta description
   useEffect(() => {
-    if (!siteData) return;
+    if (!siteData || !siteData.websiteJson) return;
     const activePage =
       siteData.websiteJson.pages.find(p => p.id === currentPageId) ??
       siteData.websiteJson.pages[0];
@@ -77,7 +78,7 @@ const SiteRenderer: React.FC = () => {
 
   // Dynamic font loading: load whatever Google Fonts the cloned site specifies
   useEffect(() => {
-    if (!siteData) return;
+    if (!siteData || !siteData.websiteJson) return;
     const g = siteData.websiteJson.global as any;
 
     const fontMap: Record<string, string> = {
@@ -118,6 +119,19 @@ const SiteRenderer: React.FC = () => {
 
   if (status === 'coming_soon') return <ComingSoon />;
   if (status === 'not_found') return <SiteNotFound />;
+
+  // ── Static uploaded site (Vite/React SPA uploaded via "Upload Static Site") ──
+  if (siteData?.siteType === 'static' && siteData.clientSlug) {
+    return (
+      <StaticSiteRenderer
+        clientSlug={siteData.clientSlug}
+        premiumFeatures={siteData.premiumFeatures}
+        clientId={siteData.clientId}
+        calBookingLink={siteData.calBookingLink ?? undefined}
+        isPreview={isPreview}
+      />
+    );
+  }
 
   // ── Raw HTML clone mode ──────────────────────────────────────────────────
   if (siteData?.siteType === 'raw_html' && siteData.rawHtml) {
