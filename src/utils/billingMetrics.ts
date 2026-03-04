@@ -1,15 +1,30 @@
 import { supabase } from '../integrations/supabase/client';
 
-interface Subscription {
-  status: string;
-  created_at: string;
+export interface SubscriptionRow {
+  id: string;
+  client_id: string;
+  stripe_subscription_id: string;
   stripe_price_id: string;
+  status: string;
+  current_period_end: string | null;
+  cancel_at_period_end: boolean;
+  cancel_at: string | null;
+  created_at: string;
+  monthly_amount_cents: number | null;
+  plan_label: string | null;
+  clients: { business_name: string; billing_email: string | null } | null;
 }
 
-interface Invoice {
+export interface InvoiceRow {
+  id: string;
+  client_id: string;
+  stripe_invoice_id: string | null;
   amount_due: number;
   status: string;
+  hosted_invoice_url: string | null;
   created_at: string;
+  label: string | null;
+  clients: { business_name: string } | null;
 }
 
 interface BillingProduct {
@@ -20,26 +35,42 @@ interface BillingProduct {
 
 export interface RevenueMetrics {
   mrr: number;
+  totalRevenuePaid: number;
+  totalRevenueOutstanding: number;
+  revenueCollected30Days: number;
   activeSubscriptions: number;
-  pendingSubscriptions: number; // NEW FIELD
-  newSubscriptions30Days: number;
+  trialingSubscriptions: number;
+  pendingSubscriptions: number;
   canceledSubscriptions30Days: number;
+  newSubscriptions30Days: number;
   churnRate: number;
-  oneTimeRevenue30Days: number;
+  allSubscriptions: SubscriptionRow[];
+  upcomingPayments: SubscriptionRow[];
+  recentInvoices: InvoiceRow[];
 }
 
 const THIRTY_DAYS_AGO = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000).toISOString();
+const SIXTY_DAYS_FROM_NOW = new Date(Date.now() + 60 * 24 * 60 * 60 * 1000).toISOString();
 
 export async function fetchBillingMetrics(): Promise<RevenueMetrics> {
-  // Fetch all necessary data
   const [
     { data: subscriptionsData, error: subsError },
     { data: invoicesData, error: invoicesError },
     { data: productsData, error: productsError },
   ] = await Promise.all([
-    supabase.from('subscriptions').select('status, created_at, stripe_price_id'),
-    supabase.from('invoices').select('amount_due, status, created_at').eq('status', 'paid'),
-    supabase.from('billing_products').select('stripe_price_id, amount_cents, billing_type'),
+    supabase
+      .from('subscriptions')
+      .select(
+        'id, client_id, stripe_subscription_id, stripe_price_id, status, current_period_end, cancel_at_period_end, cancel_at, created_at, monthly_amount_cents, plan_label, clients(business_name, billing_email)'
+      )
+      .order('created_at', { ascending: false }),
+    supabase
+      .from('invoices')
+      .select('id, client_id, stripe_invoice_id, amount_due, status, hosted_invoice_url, created_at, label, clients(business_name)')
+      .order('created_at', { ascending: false }),
+    supabase
+      .from('billing_products')
+      .select('stripe_price_id, amount_cents, billing_type'),
   ]);
 
   if (subsError || invoicesError || productsError) {
@@ -47,67 +78,101 @@ export async function fetchBillingMetrics(): Promise<RevenueMetrics> {
     throw new Error('Failed to fetch billing data.');
   }
 
-  const subscriptions = subscriptionsData as Subscription[];
-  const invoices = invoicesData as Invoice[];
-  const products = productsData as BillingProduct[];
+  const subscriptions = (subscriptionsData ?? []) as unknown as SubscriptionRow[];
+  const invoices = (invoicesData ?? []) as unknown as InvoiceRow[];
+  const products = (productsData ?? []) as BillingProduct[];
   const productMap = new Map(products.map(p => [p.stripe_price_id, p]));
 
   let mrr = 0;
   let activeSubscriptions = 0;
-  let pendingSubscriptions = 0; // Initialize new counter
+  let trialingSubscriptions = 0;
+  let pendingSubscriptions = 0;
   let newSubscriptions30Days = 0;
   let canceledSubscriptions30Days = 0;
-  let oneTimeRevenue30Days = 0;
 
-  // 1. Calculate MRR, Active, and Pending Subscriptions
-  subscriptions.forEach(sub => {
-    const product = productMap.get(sub.stripe_price_id);
-    if (product && product.billing_type === 'subscription') {
-      const monthlyAmount = product.amount_cents / 100;
+  for (const sub of subscriptions) {
+    const isActive = sub.status === 'active';
+    const isTrialing = sub.status === 'trialing';
 
-      if (sub.status === 'active' || sub.status === 'trialing') {
-        mrr += monthlyAmount;
-        activeSubscriptions++;
+    if (isActive || isTrialing) {
+      // Prefer monthly_amount_cents on the row; fall back to billing_products
+      let monthlyAmountCents = sub.monthly_amount_cents ?? 0;
+      if (!monthlyAmountCents) {
+        const product = productMap.get(sub.stripe_price_id);
+        if (product && product.billing_type === 'subscription') {
+          monthlyAmountCents = product.amount_cents;
+        }
       }
-      
-      // Count pending subscriptions (Stripe statuses for incomplete payment flows)
-      if (sub.status === 'incomplete' || sub.status === 'incomplete_expired' || sub.status === 'past_due') {
-          pendingSubscriptions++;
-      }
+      mrr += monthlyAmountCents / 100;
 
-      // New subscriptions (created in last 30 days)
-      if (sub.created_at >= THIRTY_DAYS_AGO) {
-        newSubscriptions30Days++;
-      }
-      
-      // Canceled subscriptions (deleted/canceled in last 30 days - approximation using status change)
-      if (sub.status === 'canceled' && sub.created_at >= THIRTY_DAYS_AGO) {
-        canceledSubscriptions30Days++;
-      }
+      if (isActive) activeSubscriptions++;
+      if (isTrialing) trialingSubscriptions++;
     }
-  });
 
-  // 2. Calculate One-Time Revenue (Paid invoices in last 30 days)
-  invoices.forEach(invoice => {
-    if (invoice.created_at >= THIRTY_DAYS_AGO) {
-      oneTimeRevenue30Days += invoice.amount_due / 100;
+    if (
+      sub.status === 'incomplete' ||
+      sub.status === 'incomplete_expired' ||
+      sub.status === 'past_due'
+    ) {
+      pendingSubscriptions++;
     }
-  });
 
-  // 3. Calculate Churn Rate (Simplified: Canceled / Total Active at start of period)
-  // This is a very simplified calculation for MVP.
-  const totalSubscriptionsAtStart = activeSubscriptions + canceledSubscriptions30Days;
-  const churnRate = totalSubscriptionsAtStart > 0 
-    ? (canceledSubscriptions30Days / totalSubscriptionsAtStart) * 100 
-    : 0;
+    if (sub.created_at >= THIRTY_DAYS_AGO) {
+      newSubscriptions30Days++;
+    }
+
+    if (sub.status === 'canceled' && sub.created_at >= THIRTY_DAYS_AGO) {
+      canceledSubscriptions30Days++;
+    }
+  }
+
+  let totalRevenuePaid = 0;
+  let totalRevenueOutstanding = 0;
+  let revenueCollected30Days = 0;
+
+  for (const invoice of invoices) {
+    const amountDollars = invoice.amount_due / 100;
+    if (invoice.status === 'paid') {
+      totalRevenuePaid += amountDollars;
+      if (invoice.created_at >= THIRTY_DAYS_AGO) {
+        revenueCollected30Days += amountDollars;
+      }
+    } else if (invoice.status === 'open') {
+      totalRevenueOutstanding += amountDollars;
+    }
+  }
+
+  const totalSubscriptionsAtStart =
+    activeSubscriptions + trialingSubscriptions + canceledSubscriptions30Days;
+  const churnRate =
+    totalSubscriptionsAtStart > 0
+      ? (canceledSubscriptions30Days / totalSubscriptionsAtStart) * 100
+      : 0;
+
+  const now = new Date().toISOString();
+  const upcomingPayments = subscriptions
+    .filter(
+      s =>
+        (s.status === 'active' || s.status === 'trialing') &&
+        s.current_period_end != null &&
+        s.current_period_end >= now &&
+        s.current_period_end <= SIXTY_DAYS_FROM_NOW
+    )
+    .sort((a, b) => (a.current_period_end ?? '').localeCompare(b.current_period_end ?? ''));
 
   return {
-    mrr: Math.round(mrr),
+    mrr: Math.round(mrr * 100) / 100,
+    totalRevenuePaid: Math.round(totalRevenuePaid * 100) / 100,
+    totalRevenueOutstanding: Math.round(totalRevenueOutstanding * 100) / 100,
+    revenueCollected30Days: Math.round(revenueCollected30Days * 100) / 100,
     activeSubscriptions,
-    pendingSubscriptions, // Include new metric
-    newSubscriptions30Days,
+    trialingSubscriptions,
+    pendingSubscriptions,
     canceledSubscriptions30Days,
+    newSubscriptions30Days,
     churnRate: parseFloat(churnRate.toFixed(2)),
-    oneTimeRevenue30Days: parseFloat(oneTimeRevenue30Days.toFixed(2)),
+    allSubscriptions: subscriptions,
+    upcomingPayments,
+    recentInvoices: invoices.slice(0, 50),
   };
 }
