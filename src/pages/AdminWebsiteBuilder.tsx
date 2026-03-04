@@ -13,6 +13,7 @@ import { AdminService } from '../services/adminService';
 import {
   WebsiteBrief, GenerationStatus, ALL_PAGE_OPTIONS, PageId,
 } from '../types/website';
+import WebsiteMediaPanel from '../components/WebsiteMediaPanel';
 import { AI_PROVIDER_OPTIONS, DEFAULT_PROVIDER_ID, getProviderOption } from '../constants/aiProviders';
 
 // ─── Types ───────────────────────────────────────────────────────────────────
@@ -32,7 +33,7 @@ interface ChatMessage {
 
 type LeftPanelState = 'type-picker' | 'brief-form' | 'clone' | 'generating' | 'chat';
 type CloneMode = 'url' | 'image';
-type RightView = 'build' | 'pages';
+type RightView = 'build' | 'pages' | 'media';
 
 // ─── Constants ───────────────────────────────────────────────────────────────
 
@@ -662,6 +663,24 @@ Keep responses concise and actionable. Respond in 1-3 sentences max unless detai
 
           {loadingBrief && <Loader2 className="w-4 h-4 animate-spin text-slate-400" />}
 
+          {/* Media tab — available whenever a client is selected */}
+          {selectedClientId && !hasWebsite && (
+            <div className="ml-auto flex items-center">
+              <div className="flex items-center bg-slate-800 border border-slate-700 rounded-lg p-0.5">
+                <button
+                  onClick={() => { setRightView('media'); setSettingsOpen(false); }}
+                  className={`flex items-center gap-1.5 px-3 py-1 rounded-md text-xs font-medium transition-colors ${
+                    rightView === 'media' && !settingsOpen
+                      ? 'bg-indigo-600 text-white'
+                      : 'text-slate-400 hover:text-slate-200'
+                  }`}
+                >
+                  <Image className="w-3.5 h-3.5" /> Media
+                </button>
+              </div>
+            </div>
+          )}
+
           {/* Right side — only shown when site exists */}
           {hasWebsite && (
             <div className="ml-auto flex items-center gap-2">
@@ -703,6 +722,16 @@ Keep responses concise and actionable. Respond in 1-3 sentences max unless detai
                   }`}
                 >
                   <FileText className="w-3.5 h-3.5" /> Pages
+                </button>
+                <button
+                  onClick={() => { setRightView('media'); setSettingsOpen(false); }}
+                  className={`flex items-center gap-1.5 px-3 py-1 rounded-md text-xs font-medium transition-colors ${
+                    rightView === 'media' && !settingsOpen
+                      ? 'bg-indigo-600 text-white'
+                      : 'text-slate-400 hover:text-slate-200'
+                  }`}
+                >
+                  <Image className="w-3.5 h-3.5" /> Media
                 </button>
               </div>
 
@@ -1675,6 +1704,11 @@ Keep responses concise and actionable. Respond in 1-3 sentences max unless detai
                   </div>
                 )}
               </div>
+            )}
+
+            {/* ── Media Library ─────────────────────────────────────── */}
+            {rightView === 'media' && !settingsOpen && (
+              <WebsiteMediaPanel clientId={selectedClientId} />
             )}
 
             {/* ── Settings Panel (overlay) ────────────────────────────── */}
