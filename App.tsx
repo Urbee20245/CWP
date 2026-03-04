@@ -55,6 +55,7 @@ const AdminUserManagement = React.lazy(() => import('./src/pages/AdminUserManage
 const AdminInbox = React.lazy(() => import('./src/pages/AdminInbox'));
 const AdminA2PAutomation = React.lazy(() => import('./src/pages/AdminA2PAutomation'));
 const AdminWebsiteBuilder = React.lazy(() => import('./src/pages/AdminWebsiteBuilder'));
+const AdminWebsiteManager = React.lazy(() => import('./src/pages/AdminWebsiteManager'));
 const AdminBlogManager = React.lazy(() => import('./src/pages/AdminBlogManager'));
 const AdminSiteImport = React.lazy(() => import('./src/pages/AdminSiteImport'));
 const AdminProposalList = React.lazy(() => import('./src/pages/AdminProposalList'));
@@ -164,6 +165,7 @@ const AppContent: React.FC = () => {
             <Route path="addons/catalog" element={<AdminAddonCatalog />} />
             <Route path="a2p-automation" element={<AdminA2PAutomation />} />
             <Route path="website-builder" element={<AdminWebsiteBuilder />} />
+            <Route path="websites" element={<AdminWebsiteManager />} />
             <Route path="site-import" element={<AdminSiteImport />} />
             <Route path="blog-manager" element={<AdminBlogManager />} />
             <Route path="proposals" element={<AdminProposalList />} />

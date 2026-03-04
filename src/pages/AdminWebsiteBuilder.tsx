@@ -610,6 +610,9 @@ Keep responses concise and actionable. Respond in 1-3 sentences max unless detai
     : null;
   const hasWebsite  = brief?.generation_status === 'complete' && !!brief.website_json;
   const pageCount   = brief?.website_json?.pages?.length ?? 0;
+  const isStuckGenerating = brief?.generation_status === 'generating' &&
+    !!brief?.updated_at &&
+    (Date.now() - new Date(brief.updated_at).getTime()) > 10 * 60 * 1000;
 
   // ── Derived panel state ───────────────────────────────────────────────────
 
@@ -1274,8 +1277,30 @@ Keep responses concise and actionable. Respond in 1-3 sentences max unless detai
               </div>
             )}
 
+            {/* ── Stuck generating timeout error ────────────────────────── */}
+            {effectivePanelState === 'generating' && isStuckGenerating && (
+              <div className="mx-4 mt-4 bg-red-50 border border-red-200 rounded-xl p-4 flex items-start gap-3">
+                <AlertTriangle className="w-5 h-5 text-red-500 mt-0.5 flex-shrink-0" />
+                <div>
+                  <p className="font-semibold text-red-800">Generation timed out</p>
+                  <p className="text-sm text-red-600 mt-1">The AI took too long. Please try generating again.</p>
+                  <button
+                    onClick={async () => {
+                      await supabase.from('website_briefs')
+                        .update({ generation_status: 'error', generation_error: 'Generation timed out' })
+                        .eq('client_id', selectedClientId);
+                      await loadBrief(selectedClientId);
+                    }}
+                    className="mt-3 text-sm text-red-700 underline"
+                  >
+                    Dismiss and retry
+                  </button>
+                </div>
+              </div>
+            )}
+
             {/* ── State 3: Generating ───────────────────────────────────── */}
-            {effectivePanelState === 'generating' && (
+            {effectivePanelState === 'generating' && !isStuckGenerating && (
               <div className="flex-1 flex flex-col items-center justify-center text-center p-8 gap-5">
                 <div className="relative">
                   <div className="w-16 h-16 rounded-full border-2 border-slate-700 flex items-center justify-center">
