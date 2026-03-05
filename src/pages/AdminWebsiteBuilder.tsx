@@ -137,6 +137,7 @@ const AdminWebsiteBuilder: React.FC = () => {
   const [chatInput, setChatInput]     = useState('');
   const [isChatLoading, setIsChatLoading] = useState(false);
   const [chatProvider, setChatProvider] = useState(DEFAULT_PROVIDER_ID);
+  const [chatActiveSection, setChatActiveSection] = useState<ProviderSection>('all');
   const chatEndRef                    = useRef<HTMLDivElement>(null);
   const chatInputRef                  = useRef<HTMLTextAreaElement>(null);
 
@@ -1034,7 +1035,14 @@ Keep responses concise and actionable. Respond in 1-3 sentences max unless detai
                     {(() => {
                       const opt = getProviderOption(selectedProvider);
                       return opt ? (
-                        <p className="text-xs text-slate-500 mt-1.5">{opt.description}</p>
+                        <div className="mt-1.5 flex items-center gap-2">
+                          {opt.badge && (
+                            <span className={`text-xs font-semibold px-2 py-0.5 rounded-full ${opt.badgeColor}`}>
+                              {opt.badge}
+                            </span>
+                          )}
+                          <p className="text-xs text-slate-500">{opt.description}</p>
+                        </div>
                       ) : null;
                     })()}
                   </div>
@@ -1448,6 +1456,51 @@ Keep responses concise and actionable. Respond in 1-3 sentences max unless detai
             {/* ── State 4: Chat Mode ────────────────────────────────────── */}
             {effectivePanelState === 'chat' && (
               <div className="flex-1 flex flex-col overflow-hidden">
+                {/* AI Provider selector */}
+                <div className="flex-none px-4 pt-4 pb-3 border-b border-slate-800">
+                  <label className="block text-xs font-medium text-slate-400 mb-2">AI Model</label>
+                  <div className="flex gap-1.5 mb-2 flex-wrap">
+                    {PROVIDER_SECTIONS.map(s => (
+                      <button
+                        key={s.key}
+                        type="button"
+                        onClick={() => setChatActiveSection(s.key)}
+                        className={`px-2.5 py-0.5 rounded-full text-xs font-medium border transition-colors ${
+                          chatActiveSection === s.key
+                            ? 'bg-indigo-600 text-white border-indigo-600'
+                            : 'bg-slate-800 text-slate-400 border-slate-700 hover:border-indigo-400'
+                        }`}
+                      >
+                        {s.label}
+                      </button>
+                    ))}
+                  </div>
+                  <select
+                    value={chatProvider}
+                    onChange={e => setChatProvider(e.target.value)}
+                    className="w-full bg-slate-800 border border-slate-700 text-slate-100 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-1 focus:ring-indigo-500 transition-colors"
+                  >
+                    {getProvidersBySection(chatActiveSection).map(p => (
+                      <option key={p.id} value={p.id}>
+                        {p.label}{p.badge ? ` — ${p.badge}` : ''}
+                      </option>
+                    ))}
+                  </select>
+                  {(() => {
+                    const opt = getProviderOption(chatProvider);
+                    return opt ? (
+                      <div className="mt-1.5 flex items-center gap-2">
+                        {opt.badge && (
+                          <span className={`text-xs font-semibold px-2 py-0.5 rounded-full ${opt.badgeColor}`}>
+                            {opt.badge}
+                          </span>
+                        )}
+                        <p className="text-xs text-slate-500">{opt.description}</p>
+                      </div>
+                    ) : null;
+                  })()}
+                </div>
+
                 {/* Message thread */}
                 <div className="flex-1 overflow-y-auto p-4 space-y-3">
                   {messages.length === 0 && (
@@ -1928,7 +1981,14 @@ Keep responses concise and actionable. Respond in 1-3 sentences max unless detai
                         {(() => {
                           const opt = getProviderOption(selectedProvider);
                           return opt ? (
-                            <p className="text-xs text-slate-500 mt-1">{opt.description}</p>
+                            <div className="mt-1.5 flex items-center gap-2">
+                              {opt.badge && (
+                                <span className={`text-xs font-semibold px-2 py-0.5 rounded-full ${opt.badgeColor}`}>
+                                  {opt.badge}
+                                </span>
+                              )}
+                              <p className="text-xs text-slate-500">{opt.description}</p>
+                            </div>
                           ) : null;
                         })()}
                       </div>
