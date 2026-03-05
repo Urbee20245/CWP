@@ -65,108 +65,85 @@ async function findStockPhoto(query: string): Promise<StockPhoto | null> {
   return await searchPexels(query);
 }
 
-// ─── Detect all image slots from user message ─────────────────────────────────
+// ─── Detect ALL image slots that need photos ──────────────────────────────────
 
 interface ImageSlot {
-  fieldPath: string;       // JSON path in website_json
-  section: string;         // section type for logging
-  searchQuery: string;     // what to search on Pexels/Unsplash
-  pageIdx: number;
-  sectionIdx: number;
+  fieldPath: string;
+  section: string;
+  searchQuery: string;
+  isStyleMarker?: boolean; // true = set a string value, don't fetch a photo
 }
 
-function detectAllImageSlots(
+function detectImageSlots(
   message: string,
   websiteJson: any,
   businessName: string,
   industry: string
 ): { wantsImages: boolean; slots: ImageSlot[] } {
-  const wantsImages = /\b(image|photo|picture|banner|background|visual|stock|unsplash|pexels|add.*img|place.*image|hero image|use.*photo|wealth picture|add.*picture|put.*picture|put.*image|place.*picture|all.*image|image.*section|everywhere)\b/i.test(message);
+  const wantsImages = /\b(image|photo|picture|banner|background|visual|stock|unsplash|pexels|add.*img|place.*image|hero image|use.*photo|wealth picture|add.*picture|put.*picture|put.*image|place.*picture)\b/i.test(message);
   if (!wantsImages) return { wantsImages: false, slots: [] };
 
-  const pages = websiteJson?.pages || [];
-  const slots: ImageSlot[] = [];
-
-  // Determine scope: "all sections" vs specific section
-  const wantsAll = /\ball\b|\beverywhere\b|\beach\b|\bevery section\b|\ball image\b|\ball.*section/i.test(message);
+  const wantsAll = /\ball\b|\beverywhere\b|\beach section\b|\bevery section\b|\ball.*section\b|\ball.*image\b|\ball.*photo\b/i.test(message);
   const wantsHeroOnly = !wantsAll && /\bhero\b|\bbanner\b|\btop\b/i.test(message);
-  const wantsAboutOnly = !wantsAll && /\babout\b|\bfounder\b|\bteam\b/i.test(message);
+  const wantsAboutOnly = !wantsAll && !wantsHeroOnly;
 
-  // Build search context from message
-  const quotedMatch = message.match(/["']([^"']+)["']/);
-  const baseQuery = quotedMatch
-    ? quotedMatch[1]
+  // Build search query from message
+  const quoted = message.match(/["']([^"']+)["']/);
+  const baseQuery = quoted
+    ? quoted[1]
     : message
         .replace(/add|place|put|use|find|get|show|insert|a|an|the|image|photo|picture|stock|background|in|for|section|please|all|every|everywhere|relevant|professional|high.quality/gi, ' ')
         .replace(/\s+/g, ' ')
         .trim()
         .slice(0, 50);
+  const fallback = baseQuery.length >= 6 ? baseQuery : `${industry} ${businessName} professional`;
 
-  const fallbackQuery = baseQuery.length >= 6
-    ? baseQuery
-    : `${industry} ${businessName} professional`;
+  const pages = websiteJson?.pages || [];
+  const slots: ImageSlot[] = [];
 
   pages.forEach((page: any, pi: number) => {
     (page.sections || []).forEach((section: any, si: number) => {
       const type = section.section_type;
       const variant = section.variant || '';
+      const content = section.content || {};
 
-      // hero sections
-      if (type === 'hero') {
-        if (wantsAll || wantsHeroOnly) {
-          const isSplit = variant.includes('split_image');
-          const field = isSplit ? 'image_url' : 'background_image_url';
-          const existing = section.content?.[field];
-          if (!existing || wantsAll) {
-            slots.push({
-              fieldPath: `pages[${pi}].sections[${si}].content.${field}`,
-              section: `hero (${page.id})`,
-              searchQuery: `${fallbackQuery} hero banner professional`,
-              pageIdx: pi,
-              sectionIdx: si,
-            });
-            // Also set background_style for non-split heroes
-            if (!isSplit) {
-              slots.push({
-                fieldPath: `pages[${pi}].sections[${si}].content.background_style`,
-                section: `hero_style`,
-                searchQuery: '',  // style marker, not a photo search
-                pageIdx: pi,
-                sectionIdx: si,
-              });
-            }
-          }
-        }
-      }
-
-      // about sections
-      if (type === 'about') {
-        if (wantsAll || wantsAboutOnly) {
-          const existing = section.content?.image_url;
-          if (!existing || wantsAll) {
+      // HERO sections
+      if (type === 'hero' && (wantsAll || wantsHeroOnly)) {
+        const isSplit = variant === 'split_image_left' || variant === 'split_image_right';
+        if (isSplit) {
+          if (!content.image_url || wantsAll) {
             slots.push({
               fieldPath: `pages[${pi}].sections[${si}].content.image_url`,
-              section: `about (${page.id})`,
-              searchQuery: `${industry} professional advisor consultation`,
-              pageIdx: pi,
-              sectionIdx: si,
+              section: `hero (${page.id})`,
+              searchQuery: `${fallback} professional`,
+            });
+          }
+        } else {
+          if (!content.background_image_url || wantsAll) {
+            slots.push({
+              fieldPath: `pages[${pi}].sections[${si}].content.background_image_url`,
+              section: `hero (${page.id})`,
+              searchQuery: `${fallback} professional`,
+            });
+            slots.push({
+              fieldPath: `pages[${pi}].sections[${si}].content.background_style`,
+              section: `hero_style`,
+              searchQuery: 'dark',
+              isStyleMarker: true,
             });
           }
         }
       }
 
-      // gallery sections
-      if (type === 'gallery' && wantsAll) {
-        const images = section.content?.images || [];
-        images.forEach((_: any, imgIdx: number) => {
+      // ABOUT sections use content.image_url
+      if (type === 'about' && (wantsAll || wantsAboutOnly)) {
+        if (!content.image_url || wantsAll) {
           slots.push({
-            fieldPath: `pages[${pi}].sections[${si}].content.images[${imgIdx}].url`,
-            section: `gallery (${page.id})`,
-            searchQuery: `${fallbackQuery} gallery`,
-            pageIdx: pi,
-            sectionIdx: si,
+            fieldPath: `pages[${pi}].sections[${si}].content.image_url`,
+            section: `about (${page.id})`,
+            searchQuery: `${industry} professional advisor consultation portrait`,
           });
-        });
+        }
       }
     });
   });
@@ -225,48 +202,41 @@ serve(async (req) => {
 
     const userMessage = messages[messages.length - 1]?.content || "";
 
-    // ── Image placement: detect all slots that need images ────────────────────
-    let placedPhotos: { slot: ImageSlot; photo: StockPhoto }[] = [];
+    // ── Detect and place images across ALL matching sections ──────────────────
+    const { wantsImages, slots } = website_json
+      ? detectImageSlots(userMessage, website_json, business_name || '', industry || '')
+      : { wantsImages: false, slots: [] };
+
+    let placedCount = 0;
     let updatedJson: any = website_json ? JSON.parse(JSON.stringify(website_json)) : null;
+    const placedSections: string[] = [];
 
-    if (website_json) {
-      const { wantsImages, slots } = detectAllImageSlots(
-        userMessage, website_json, business_name || '', industry || ''
-      );
-
-      if (wantsImages && slots.length > 0) {
-        const photoSlots = slots.filter(s => s.searchQuery !== '');
-        const styleSlots = slots.filter(s => s.searchQuery === '');
-
-        for (const slot of photoSlots) {
+    if (wantsImages && slots.length > 0 && updatedJson) {
+      for (const slot of slots) {
+        if (slot.isStyleMarker) {
+          updatedJson = setByPath(updatedJson, slot.fieldPath, slot.searchQuery);
+        } else {
           const photo = await findStockPhoto(slot.searchQuery);
-          if (photo && updatedJson) {
+          if (photo) {
             updatedJson = setByPath(updatedJson, slot.fieldPath, photo.url);
-            placedPhotos.push({ slot, photo });
+            placedSections.push(slot.section);
+            placedCount++;
           }
         }
+      }
 
-        // Apply dark style to all non-split hero sections that got images
-        for (const slot of styleSlots) {
-          updatedJson = setByPath(updatedJson, slot.fieldPath, 'dark');
-        }
-
-        // Save to DB if any images were placed
-        if (placedPhotos.length > 0 && client_id) {
-          const supabase = createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE);
-          await supabase
-            .from('website_briefs')
-            .update({ website_json: updatedJson })
-            .eq('client_id', client_id);
-        }
+      if (placedCount > 0 && client_id) {
+        const supabase = createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE);
+        await supabase
+          .from('website_briefs')
+          .update({ website_json: updatedJson })
+          .eq('client_id', client_id);
       }
     }
 
-    const anyImagePlaced = placedPhotos.length > 0;
-
     // ── Step 3b: If no image intent, check for text/style edit intent ────────
     let imageContext = '';
-    if (!anyImagePlaced && website_json && client_id) {
+    if (placedCount === 0 && website_json && client_id) {
       const editIntent = detectEditIntent(userMessage);
       if (editIntent.detected) {
         try {
@@ -316,13 +286,10 @@ No markdown, no explanation, just the updated JSON object.`,
     }
 
     // ── Step 4: Get AI reply ─────────────────────────────────────────────────
-    if (anyImagePlaced) {
-      const summary = placedPhotos.map(({ slot, photo }) =>
-        `• ${slot.section}: ${photo.credit}`
-      ).join('\n');
-      imageContext = `\n\nACTION COMPLETED: Placed ${placedPhotos.length} real stock photo(s) automatically:\n${summary}\nAll sections updated and saved. Confirm in 1-2 sentences what was done.`;
-    } else if (/\b(image|photo|picture)\b/i.test(userMessage)) {
-      imageContext = `\n\nNOTE: No matching image sections found, or photos unavailable. Tell the user to try the Media tab to upload their own images.`;
+    if (placedCount > 0) {
+      imageContext = `\n\nACTION COMPLETED: Placed ${placedCount} real stock photo(s) in: ${placedSections.join(', ')}. Website saved. Confirm in one sentence.`;
+    } else if (wantsImages) {
+      imageContext = `\n\nNOTE: Could not place images (no matching sections found, or stock photo search failed). Tell the user to try the Media tab to upload their own images.`;
     }
 
     const enrichedSystem = (system || "") + imageContext;
@@ -359,15 +326,8 @@ No markdown, no explanation, just the updated JSON object.`,
 
     return jsonResponse({
       reply,
-      image_placed: anyImagePlaced,
-      images_placed_count: placedPhotos.length,
-      photos: placedPhotos.map(({ slot, photo }) => ({
-        section: slot.section,
-        url: photo.url,
-        thumb: photo.thumb,
-        credit: photo.credit,
-        source: photo.source,
-      })),
+      image_placed: placedCount > 0,
+      images_placed_count: placedCount,
       updated_json: updatedJson,
     });
 

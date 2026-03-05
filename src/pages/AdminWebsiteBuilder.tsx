@@ -590,7 +590,7 @@ Keep responses concise and actionable. Respond in 1-3 sentences max unless detai
       if (data?.updated_json && brief) {
         setBrief(prev => prev ? { ...prev, website_json: data.updated_json } : prev);
         // Auto-refresh the preview iframe so changes are visible immediately
-        setTimeout(() => setPreviewKey(k => k + 1), 800);
+        setTimeout(() => setPreviewKey(k => k + 1), 600);
       }
 
       // Check if AI wants to regenerate with new art direction
@@ -1678,7 +1678,7 @@ Keep responses concise and actionable. Respond in 1-3 sentences max unless detai
                       {/* ── REFRESH BUTTON ── */}
                       <button
                         onClick={() => setPreviewKey(k => k + 1)}
-                        className="text-slate-500 hover:text-slate-300 transition-colors p-1 rounded hover:bg-slate-800"
+                        className="text-slate-500 hover:text-slate-300 transition-colors p-1 rounded hover:bg-slate-700"
                         title="Refresh preview"
                       >
                         <RefreshCw className="w-3.5 h-3.5" />
