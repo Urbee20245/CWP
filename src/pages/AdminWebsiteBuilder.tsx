@@ -14,7 +14,7 @@ import {
   WebsiteBrief, GenerationStatus, ALL_PAGE_OPTIONS, PageId,
 } from '../types/website';
 import WebsiteMediaPanel from '../components/WebsiteMediaPanel';
-import { AI_PROVIDER_OPTIONS, DEFAULT_PROVIDER_ID, getProviderOption } from '../constants/aiProviders';
+import { AI_PROVIDER_OPTIONS, DEFAULT_PROVIDER_ID, getProviderOption, PROVIDER_SECTIONS, getProvidersBySection, type ProviderSection } from '../constants/aiProviders';
 
 // ─── Types ───────────────────────────────────────────────────────────────────
 
@@ -192,6 +192,7 @@ const AdminWebsiteBuilder: React.FC = () => {
 
   // AI provider selection
   const [selectedProvider, setSelectedProvider] = useState(DEFAULT_PROVIDER_ID);
+  const [activeSection, setActiveSection] = useState<ProviderSection>('all');
 
   // ── Load clients ─────────────────────────────────────────────────────────
 
@@ -1003,12 +1004,28 @@ Keep responses concise and actionable. Respond in 1-3 sentences max unless detai
                   {/* AI Provider */}
                   <div>
                     <label className="block text-xs font-medium text-slate-300 mb-1.5">AI Provider</label>
+                    <div className="flex gap-2 mb-3 flex-wrap">
+                      {PROVIDER_SECTIONS.map(s => (
+                        <button
+                          key={s.key}
+                          type="button"
+                          onClick={() => setActiveSection(s.key)}
+                          className={`px-3 py-1 rounded-full text-xs font-medium border transition-colors ${
+                            activeSection === s.key
+                              ? 'bg-indigo-600 text-white border-indigo-600'
+                              : 'bg-slate-700 text-slate-300 border-slate-600 hover:border-indigo-400'
+                          }`}
+                        >
+                          {s.label}
+                        </button>
+                      ))}
+                    </div>
                     <select
                       className="w-full bg-slate-800 border border-slate-700 text-slate-100 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-1 focus:ring-indigo-500 transition-colors"
                       value={selectedProvider}
                       onChange={e => setSelectedProvider(e.target.value)}
                     >
-                      {AI_PROVIDER_OPTIONS.map(p => (
+                      {getProvidersBySection(activeSection).map(p => (
                         <option key={p.id} value={p.id}>
                           {p.label}{p.badge ? ` — ${p.badge}` : ''}
                         </option>
@@ -1881,12 +1898,28 @@ Keep responses concise and actionable. Respond in 1-3 sentences max unless detai
                       {/* AI Provider selector for regeneration */}
                       <div>
                         <label className="block text-xs font-medium text-slate-400 mb-1">AI Model for Regeneration</label>
+                        <div className="flex gap-2 mb-3 flex-wrap">
+                          {PROVIDER_SECTIONS.map(s => (
+                            <button
+                              key={s.key}
+                              type="button"
+                              onClick={() => setActiveSection(s.key)}
+                              className={`px-3 py-1 rounded-full text-xs font-medium border transition-colors ${
+                                activeSection === s.key
+                                  ? 'bg-indigo-600 text-white border-indigo-600'
+                                  : 'bg-slate-700 text-slate-300 border-slate-600 hover:border-indigo-400'
+                              }`}
+                            >
+                              {s.label}
+                            </button>
+                          ))}
+                        </div>
                         <select
                           className="w-full bg-slate-800 border border-slate-700 text-slate-100 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-1 focus:ring-indigo-500 transition-colors"
                           value={selectedProvider}
                           onChange={e => setSelectedProvider(e.target.value)}
                         >
-                          {AI_PROVIDER_OPTIONS.map(p => (
+                          {getProvidersBySection(activeSection).map(p => (
                             <option key={p.id} value={p.id}>
                               {p.label}{p.badge ? ` — ${p.badge}` : ''}
                             </option>

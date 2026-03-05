@@ -18,7 +18,7 @@ import {
   PremiumFeatureId, PREMIUM_FEATURE_OPTIONS, PREMIUM_FEATURE_GROUPS,
   PremiumFeatureGroup, GenerationStatus,
 } from '../types/website';
-import { AI_PROVIDER_OPTIONS, DEFAULT_PROVIDER_ID, getProviderOption } from '../constants/aiProviders';
+import { AI_PROVIDER_OPTIONS, DEFAULT_PROVIDER_ID, getProviderOption, PROVIDER_SECTIONS, getProvidersBySection, type ProviderSection } from '../constants/aiProviders';
 import ProvisioningProgress, { useProvisioningSteps } from '../components/ProvisioningProgress';
 
 // ─── Types ─────────────────────────────────────────────────────────────────────
@@ -165,6 +165,7 @@ const AdminSiteImport: React.FC = () => {
   const [primaryColorInput, setPrimaryColorInput] = useState('#4F46E5');
   const [overridePrimaryColor, setOverridePrimaryColor] = useState(false);
   const [selectedProvider, setSelectedProvider] = useState(DEFAULT_PROVIDER_ID);
+  const [activeSection, setActiveSection] = useState<ProviderSection>('all');
   const [selectedPremiumFeatures, setSelectedPremiumFeatures] = useState<Set<PremiumFeatureId>>(new Set());
   const [collapsedFeatureGroups, setCollapsedFeatureGroups] = useState<Record<string, boolean>>({});
 
@@ -941,13 +942,30 @@ const AdminSiteImport: React.FC = () => {
                     <label className="block text-sm font-medium text-slate-700 mb-1">
                       AI Provider
                     </label>
+                    <div className="flex gap-2 mb-3 flex-wrap">
+                      {PROVIDER_SECTIONS.map(s => (
+                        <button
+                          key={s.key}
+                          type="button"
+                          onClick={() => setActiveSection(s.key)}
+                          disabled={step === 'importing'}
+                          className={`px-3 py-1 rounded-full text-sm font-medium border transition-colors ${
+                            activeSection === s.key
+                              ? 'bg-indigo-600 text-white border-indigo-600'
+                              : 'bg-white text-gray-600 border-gray-300 hover:border-indigo-400'
+                          }`}
+                        >
+                          {s.label}
+                        </button>
+                      ))}
+                    </div>
                     <select
                       className="w-full border border-slate-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500"
                       value={selectedProvider}
                       onChange={e => setSelectedProvider(e.target.value)}
                       disabled={step === 'importing'}
                     >
-                      {AI_PROVIDER_OPTIONS.map(p => (
+                      {getProvidersBySection(activeSection).map(p => (
                         <option key={p.id} value={p.id}>
                           {p.label}{p.badge ? ` — ${p.badge}` : ''}
                         </option>
