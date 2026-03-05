@@ -65,77 +65,113 @@ async function findStockPhoto(query: string): Promise<StockPhoto | null> {
   return await searchPexels(query);
 }
 
-// ─── Detect image intent from user message ────────────────────────────────────
+// ─── Detect all image slots from user message ─────────────────────────────────
 
-interface ImageIntent {
-  detected: boolean;
-  section: string;         // "hero" | "about" | "gallery" | "services" | "global"
-  fieldPath: string;       // JSON path into website_json to update
-  searchQuery: string;     // what to search for
+interface ImageSlot {
+  fieldPath: string;       // JSON path in website_json
+  section: string;         // section type for logging
+  searchQuery: string;     // what to search on Pexels/Unsplash
+  pageIdx: number;
+  sectionIdx: number;
 }
 
-function detectImageIntent(
+function detectAllImageSlots(
   message: string,
   websiteJson: any,
   businessName: string,
   industry: string
-): ImageIntent {
-  const m = message.toLowerCase();
+): { wantsImages: boolean; slots: ImageSlot[] } {
+  const wantsImages = /\b(image|photo|picture|banner|background|visual|stock|unsplash|pexels|add.*img|place.*image|hero image|use.*photo|wealth picture|add.*picture|put.*picture|put.*image|place.*picture|all.*image|image.*section|everywhere)\b/i.test(message);
+  if (!wantsImages) return { wantsImages: false, slots: [] };
 
-  // Does the message ask for an image?
-  const wantsImage = /\b(image|photo|picture|banner|background|visual|stock photo|unsplash|pexels|add.*img|place.*image|hero image|use.*photo)\b/i.test(message);
-  if (!wantsImage) return { detected: false, section: '', fieldPath: '', searchQuery: '' };
+  const pages = websiteJson?.pages || [];
+  const slots: ImageSlot[] = [];
 
-  // Determine which section
-  let section = 'hero';
-  let fieldPath = '';
+  // Determine scope: "all sections" vs specific section
+  const wantsAll = /\ball\b|\beverywhere\b|\beach\b|\bevery section\b|\ball image\b|\ball.*section/i.test(message);
+  const wantsHeroOnly = !wantsAll && /\bhero\b|\bbanner\b|\btop\b/i.test(message);
+  const wantsAboutOnly = !wantsAll && /\babout\b|\bfounder\b|\bteam\b/i.test(message);
 
-  if (/\bhero\b|\bbanner\b|\btop.*section\b|\bheader.*image\b/i.test(m)) {
-    section = 'hero';
-    // Find the hero section index in website_json
-    const pages = websiteJson?.pages || [];
-    const homePage = pages.find((p: any) => p.id === 'home' || p.slug === '') || pages[0];
-    const heroIdx = homePage?.sections?.findIndex((s: any) => s.section_type === 'hero') ?? 0;
-    fieldPath = `pages[0].sections[${heroIdx}].content.background_image_url`;
-  } else if (/\babout\b|\bfounder\b|\bteam\b|\bstaff\b/i.test(m)) {
-    section = 'about';
-    const pages = websiteJson?.pages || [];
-    const homePage = pages.find((p: any) => p.id === 'home') || pages[0];
-    const aboutIdx = homePage?.sections?.findIndex((s: any) => s.section_type === 'about') ?? -1;
-    if (aboutIdx >= 0) fieldPath = `pages[0].sections[${aboutIdx}].content.image_url`;
-  } else if (/\bglobal\b|\blogo\b/i.test(m)) {
-    section = 'global';
-    fieldPath = 'global.hero_image_url';
-  }
-
-  if (!fieldPath) {
-    // Default: hero background
-    const pages = websiteJson?.pages || [];
-    const homePage = pages.find((p: any) => p.id === 'home' || p.slug === '') || pages[0];
-    const heroIdx = homePage?.sections?.findIndex((s: any) => s.section_type === 'hero') ?? 0;
-    fieldPath = `pages[0].sections[${Math.max(0, heroIdx)}].content.background_image_url`;
-  }
-
-  // Build search query from message context
-  // Extract quoted keywords if present, otherwise use message + business context
+  // Build search context from message
   const quotedMatch = message.match(/["']([^"']+)["']/);
-  let searchQuery = '';
-  if (quotedMatch) {
-    searchQuery = quotedMatch[1];
-  } else {
-    // Strip common filler words and use the rest as search terms
-    searchQuery = message
-      .replace(/add|place|put|use|find|get|show|insert|a|an|the|image|photo|picture|stock|background|in|for|the|section|please|relevant|professional|high.quality/gi, ' ')
-      .replace(/\s+/g, ' ')
-      .trim()
-      .slice(0, 60);
-    // Append business context if short
-    if (searchQuery.length < 10) {
-      searchQuery = `${industry} ${businessName} professional`;
-    }
-  }
+  const baseQuery = quotedMatch
+    ? quotedMatch[1]
+    : message
+        .replace(/add|place|put|use|find|get|show|insert|a|an|the|image|photo|picture|stock|background|in|for|section|please|all|every|everywhere|relevant|professional|high.quality/gi, ' ')
+        .replace(/\s+/g, ' ')
+        .trim()
+        .slice(0, 50);
 
-  return { detected: true, section, fieldPath, searchQuery };
+  const fallbackQuery = baseQuery.length >= 6
+    ? baseQuery
+    : `${industry} ${businessName} professional`;
+
+  pages.forEach((page: any, pi: number) => {
+    (page.sections || []).forEach((section: any, si: number) => {
+      const type = section.section_type;
+      const variant = section.variant || '';
+
+      // hero sections
+      if (type === 'hero') {
+        if (wantsAll || wantsHeroOnly) {
+          const isSplit = variant.includes('split_image');
+          const field = isSplit ? 'image_url' : 'background_image_url';
+          const existing = section.content?.[field];
+          if (!existing || wantsAll) {
+            slots.push({
+              fieldPath: `pages[${pi}].sections[${si}].content.${field}`,
+              section: `hero (${page.id})`,
+              searchQuery: `${fallbackQuery} hero banner professional`,
+              pageIdx: pi,
+              sectionIdx: si,
+            });
+            // Also set background_style for non-split heroes
+            if (!isSplit) {
+              slots.push({
+                fieldPath: `pages[${pi}].sections[${si}].content.background_style`,
+                section: `hero_style`,
+                searchQuery: '',  // style marker, not a photo search
+                pageIdx: pi,
+                sectionIdx: si,
+              });
+            }
+          }
+        }
+      }
+
+      // about sections
+      if (type === 'about') {
+        if (wantsAll || wantsAboutOnly) {
+          const existing = section.content?.image_url;
+          if (!existing || wantsAll) {
+            slots.push({
+              fieldPath: `pages[${pi}].sections[${si}].content.image_url`,
+              section: `about (${page.id})`,
+              searchQuery: `${industry} professional advisor consultation`,
+              pageIdx: pi,
+              sectionIdx: si,
+            });
+          }
+        }
+      }
+
+      // gallery sections
+      if (type === 'gallery' && wantsAll) {
+        const images = section.content?.images || [];
+        images.forEach((_: any, imgIdx: number) => {
+          slots.push({
+            fieldPath: `pages[${pi}].sections[${si}].content.images[${imgIdx}].url`,
+            section: `gallery (${page.id})`,
+            searchQuery: `${fallbackQuery} gallery`,
+            pageIdx: pi,
+            sectionIdx: si,
+          });
+        });
+      }
+    });
+  });
+
+  return { wantsImages: true, slots };
 }
 
 // ─── Detect text/style edit intent ───────────────────────────────────────────
@@ -189,40 +225,48 @@ serve(async (req) => {
 
     const userMessage = messages[messages.length - 1]?.content || "";
 
-    // ── Step 1: Detect if user wants an image placed ─────────────────────────
-    const imageIntent = website_json
-      ? detectImageIntent(userMessage, website_json, business_name || "", industry || "")
-      : { detected: false, section: '', fieldPath: '', searchQuery: '' };
+    // ── Image placement: detect all slots that need images ────────────────────
+    let placedPhotos: { slot: ImageSlot; photo: StockPhoto }[] = [];
+    let updatedJson: any = website_json ? JSON.parse(JSON.stringify(website_json)) : null;
 
-    let photo: StockPhoto | null = null;
-    let updatedJson: any = null;
+    if (website_json) {
+      const { wantsImages, slots } = detectAllImageSlots(
+        userMessage, website_json, business_name || '', industry || ''
+      );
 
-    if (imageIntent.detected && imageIntent.fieldPath) {
-      // ── Step 2: Fetch the image ───────────────────────────────────────────
-      photo = await findStockPhoto(imageIntent.searchQuery);
+      if (wantsImages && slots.length > 0) {
+        const photoSlots = slots.filter(s => s.searchQuery !== '');
+        const styleSlots = slots.filter(s => s.searchQuery === '');
 
-      if (photo && client_id) {
-        // ── Step 3: Apply it to website_json and save to DB ────────────────
-        updatedJson = setByPath(website_json, imageIntent.fieldPath, photo.url);
-
-        // Also set background_style to "dark" for hero images (for overlay)
-        if (imageIntent.section === 'hero' && imageIntent.fieldPath.includes('background_image_url')) {
-          const stylePath = imageIntent.fieldPath.replace('background_image_url', 'background_style');
-          updatedJson = setByPath(updatedJson, stylePath, 'dark');
+        for (const slot of photoSlots) {
+          const photo = await findStockPhoto(slot.searchQuery);
+          if (photo && updatedJson) {
+            updatedJson = setByPath(updatedJson, slot.fieldPath, photo.url);
+            placedPhotos.push({ slot, photo });
+          }
         }
 
-        // Save to Supabase
-        const supabase = createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE);
-        await supabase
-          .from('website_briefs')
-          .update({ website_json: updatedJson })
-          .eq('client_id', client_id);
+        // Apply dark style to all non-split hero sections that got images
+        for (const slot of styleSlots) {
+          updatedJson = setByPath(updatedJson, slot.fieldPath, 'dark');
+        }
+
+        // Save to DB if any images were placed
+        if (placedPhotos.length > 0 && client_id) {
+          const supabase = createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE);
+          await supabase
+            .from('website_briefs')
+            .update({ website_json: updatedJson })
+            .eq('client_id', client_id);
+        }
       }
     }
 
+    const anyImagePlaced = placedPhotos.length > 0;
+
     // ── Step 3b: If no image intent, check for text/style edit intent ────────
     let imageContext = '';
-    if (!photo && website_json && client_id) {
+    if (!anyImagePlaced && website_json && client_id) {
       const editIntent = detectEditIntent(userMessage);
       if (editIntent.detected) {
         try {
@@ -272,14 +316,13 @@ No markdown, no explanation, just the updated JSON object.`,
     }
 
     // ── Step 4: Get AI reply ─────────────────────────────────────────────────
-    if (photo) {
-      imageContext = `\n\nACTION TAKEN: You found and placed a real stock photo automatically.
-Image URL: ${photo.url}
-Credit: ${photo.credit}
-Applied to: ${imageIntent.section} section background
-The website has been updated in the database.`;
-    } else if (imageIntent.detected) {
-      imageContext = `\n\nNOTE: You tried to find a stock photo for "${imageIntent.searchQuery}" but no results were found. Tell the user and suggest they upload their own image via the Media tab.`;
+    if (anyImagePlaced) {
+      const summary = placedPhotos.map(({ slot, photo }) =>
+        `• ${slot.section}: ${photo.credit}`
+      ).join('\n');
+      imageContext = `\n\nACTION COMPLETED: Placed ${placedPhotos.length} real stock photo(s) automatically:\n${summary}\nAll sections updated and saved. Confirm in 1-2 sentences what was done.`;
+    } else if (/\b(image|photo|picture)\b/i.test(userMessage)) {
+      imageContext = `\n\nNOTE: No matching image sections found, or photos unavailable. Tell the user to try the Media tab to upload their own images.`;
     }
 
     const enrichedSystem = (system || "") + imageContext;
@@ -316,10 +359,16 @@ The website has been updated in the database.`;
 
     return jsonResponse({
       reply,
-      image_placed: !!photo,
-      photo: photo ? { url: photo.url, thumb: photo.thumb, credit: photo.credit, source: photo.source } : null,
+      image_placed: anyImagePlaced,
+      images_placed_count: placedPhotos.length,
+      photos: placedPhotos.map(({ slot, photo }) => ({
+        section: slot.section,
+        url: photo.url,
+        thumb: photo.thumb,
+        credit: photo.credit,
+        source: photo.source,
+      })),
       updated_json: updatedJson,
-      field_path: imageIntent.fieldPath || null,
     });
 
   } catch (error: any) {

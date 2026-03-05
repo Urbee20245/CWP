@@ -6,7 +6,7 @@ import {
   Globe, Loader2, AlertTriangle, CheckCircle, Eye, Copy, EyeOff,
   RefreshCw, Wand2, ChevronDown, FileText, Check, Link, Save, Info, Key,
   Sparkles, Send, ExternalLink, Settings, ToggleLeft, ToggleRight, X,
-  MessageSquare, ChevronRight, Zap, Image, Link2, Upload, Bot,
+  MessageSquare, ChevronRight, Zap, Image, ImageIcon, Link2, Upload, Bot,
 } from 'lucide-react';
 import { supabase } from '../integrations/supabase/client';
 import { AdminService } from '../services/adminService';
@@ -113,6 +113,7 @@ const AdminWebsiteBuilder: React.FC = () => {
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [expandedPages, setExpandedPages] = useState<Record<string, boolean>>({});
   const [activePreviewPageSlug, setActivePreviewPageSlug] = useState<string>('');
+  const [previewKey, setPreviewKey]     = useState(0);
 
   // Form
   const [form, setForm] = useState({
@@ -585,9 +586,11 @@ Keep responses concise and actionable. Respond in 1-3 sentences max unless detai
       if (error) throw error;
       const reply = data?.reply || "I couldn't process that request.";
 
-      // If an image was placed automatically, refresh the brief so the preview updates
-      if (data?.image_placed && data?.updated_json && brief) {
+      // If the AI updated the website JSON, apply it and auto-refresh the preview
+      if (data?.updated_json && brief) {
         setBrief(prev => prev ? { ...prev, website_json: data.updated_json } : prev);
+        // Auto-refresh the preview iframe so changes are visible immediately
+        setTimeout(() => setPreviewKey(k => k + 1), 800);
       }
 
       // Check if AI wants to regenerate with new art direction
@@ -1623,6 +1626,32 @@ Keep responses concise and actionable. Respond in 1-3 sentences max unless detai
               <>
                 {hasWebsite && currentPreviewUrl ? (
                   <div className="flex flex-col h-full p-4 gap-3">
+                    {/* Image quick-action bar above iframe */}
+                    {hasWebsite && brief?.website_json && (
+                      <div className="flex-none flex items-center gap-2 px-4 py-2 bg-slate-950 border-x border-t border-slate-800 rounded-t-lg">
+                        <span className="text-xs text-slate-500">Quick actions:</span>
+                        <button
+                          onClick={() => {
+                            setChatInput('Add professional images to all hero and about sections');
+                            setTimeout(() => handleChatSend('Add professional images to all hero and about sections'), 100);
+                          }}
+                          className="flex items-center gap-1.5 text-xs px-3 py-1.5 rounded-lg bg-indigo-900/50 border border-indigo-700 text-indigo-300 hover:bg-indigo-800/50 transition-colors"
+                        >
+                          <ImageIcon className="w-3 h-3" />
+                          Auto-fill Images
+                        </button>
+                        <button
+                          onClick={() => {
+                            setChatInput('Replace all hero images with new photos');
+                            setTimeout(() => handleChatSend('Replace all hero images with new photos'), 100);
+                          }}
+                          className="flex items-center gap-1.5 text-xs px-3 py-1.5 rounded-lg bg-slate-800 border border-slate-700 text-slate-300 hover:bg-slate-700 transition-colors"
+                        >
+                          <RefreshCw className="w-3 h-3" />
+                          Refresh Images
+                        </button>
+                      </div>
+                    )}
                     {/* Fake browser chrome */}
                     <div className="flex-none flex items-center gap-2 bg-slate-900 border border-slate-800 rounded-t-xl px-4 py-2.5">
                       <div className="flex gap-1.5">
@@ -1646,6 +1675,14 @@ Keep responses concise and actionable. Respond in 1-3 sentences max unless detai
                           {window.location.origin}{currentPreviewUrl}
                         </span>
                       </div>
+                      {/* ── REFRESH BUTTON ── */}
+                      <button
+                        onClick={() => setPreviewKey(k => k + 1)}
+                        className="text-slate-500 hover:text-slate-300 transition-colors p-1 rounded hover:bg-slate-800"
+                        title="Refresh preview"
+                      >
+                        <RefreshCw className="w-3.5 h-3.5" />
+                      </button>
                       <a
                         href={currentPreviewUrl}
                         target="_blank"
@@ -1656,7 +1693,7 @@ Keep responses concise and actionable. Respond in 1-3 sentences max unless detai
                       </a>
                     </div>
                     <iframe
-                      key={currentPreviewUrl}
+                      key={`${currentPreviewUrl}-${previewKey}`}
                       src={currentPreviewUrl}
                       className="flex-1 w-full rounded-b-xl border-x border-b border-slate-800 bg-white"
                       title="Site Preview"
