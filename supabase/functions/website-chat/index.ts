@@ -138,6 +138,26 @@ function detectImageIntent(
   return { detected: true, section, fieldPath, searchQuery };
 }
 
+// ─── Detect text/style edit intent ───────────────────────────────────────────
+
+interface EditIntent {
+  detected: boolean;
+  type: 'text' | 'color' | 'section_add' | 'section_remove' | 'style';
+  instructions: string;
+}
+
+function detectEditIntent(message: string): EditIntent {
+  const isEdit = /\b(change|update|make|set|replace|edit|modify|rewrite|rename|turn|switch|move)\b/i.test(message);
+  if (!isEdit) return { detected: false, type: 'text', instructions: '' };
+
+  if (/\bcolor\b|\btheme\b|\bpalette\b/i.test(message))
+    return { detected: true, type: 'color', instructions: message };
+  if (/\badd.*section\b|\badd.*page\b|\bnew.*section\b/i.test(message))
+    return { detected: true, type: 'section_add', instructions: message };
+
+  return { detected: true, type: 'text', instructions: message };
+}
+
 // ─── Apply image to website_json ──────────────────────────────────────────────
 
 function setByPath(obj: any, path: string, value: any): any {
@@ -200,8 +220,58 @@ serve(async (req) => {
       }
     }
 
-    // ── Step 4: Get AI reply ─────────────────────────────────────────────────
+    // ── Step 3b: If no image intent, check for text/style edit intent ────────
     let imageContext = '';
+    if (!photo && website_json && client_id) {
+      const editIntent = detectEditIntent(userMessage);
+      if (editIntent.detected) {
+        try {
+          const editResponse = await fetch("https://api.anthropic.com/v1/messages", {
+            method: "POST",
+            headers: {
+              "x-api-key": ANTHROPIC_API_KEY,
+              "anthropic-version": "2023-06-01",
+              "content-type": "application/json",
+            },
+            body: JSON.stringify({
+              model: "claude-haiku-4-5",
+              max_tokens: 4096,
+              system: `You are a website editor. The user wants to edit their website.
+Apply the requested change to the website JSON and return ONLY the modified JSON.
+No markdown, no explanation, just the updated JSON object.`,
+              messages: [
+                {
+                  role: "user",
+                  content: `Current website JSON:\n${JSON.stringify(website_json)}\n\nUser request: ${userMessage}\n\nReturn the complete updated website JSON with the change applied.`,
+                },
+              ],
+            }),
+          });
+
+          if (editResponse.ok) {
+            const editData = await editResponse.json();
+            const editText = editData.content?.[0]?.text || "";
+            try {
+              const cleaned = editText.replace(/^```json\s*/i, '').replace(/```\s*$/i, '').trim();
+              updatedJson = JSON.parse(cleaned);
+
+              const supabase = createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE);
+              await supabase.from('website_briefs')
+                .update({ website_json: updatedJson })
+                .eq('client_id', client_id);
+
+              imageContext = `\n\nACTION COMPLETED: The website has been updated based on the user's request. Confirm in ONE sentence what changed.`;
+            } catch (_parseErr) {
+              // JSON parse failed — fall through to normal chat response
+            }
+          }
+        } catch (_editErr) {
+          // Edit attempt failed — fall through to normal chat
+        }
+      }
+    }
+
+    // ── Step 4: Get AI reply ─────────────────────────────────────────────────
     if (photo) {
       imageContext = `\n\nACTION TAKEN: You found and placed a real stock photo automatically.
 Image URL: ${photo.url}

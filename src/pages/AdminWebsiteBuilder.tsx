@@ -65,6 +65,17 @@ const QUICK_PROMPTS = [
 
 const REGEN_REGEX = /regenerat|rebuild|start over|new site|redo/i;
 
+const DESIGN_STYLES = [
+  { value: 'luxury',      label: 'Luxury / Premium',        desc: 'Dark, gold accents, serif fonts' },
+  { value: 'minimal',     label: 'Ultra Minimal',            desc: 'White, clean, lots of space' },
+  { value: 'bold',        label: 'Bold & Dynamic',           desc: 'Strong colors, big type, energetic' },
+  { value: 'warm',        label: 'Warm & Approachable',      desc: 'Earthy tones, friendly, welcoming' },
+  { value: 'corporate',   label: 'Corporate / Professional', desc: 'Navy, grey, trust-focused' },
+  { value: 'playful',     label: 'Playful & Creative',       desc: 'Bright colors, fun, expressive' },
+  { value: 'dark',        label: 'Dark Mode',                desc: 'Dark background, light text' },
+  { value: 'editorial',   label: 'Editorial / Magazine',     desc: 'Typography-forward, content-rich' },
+] as const;
+
 // ─── Helper: normalise brief row to handle old + new column names ─────────────
 
 function normaliseBrief(data: any): WebsiteBrief {
@@ -112,6 +123,7 @@ const AdminWebsiteBuilder: React.FC = () => {
     tone:            'Professional' as typeof TONES[number],
     primary_color:   '#4F46E5',
     art_direction:   '',
+    design_style:    '' as string,
   });
 
   // Pages
@@ -218,6 +230,7 @@ const AdminWebsiteBuilder: React.FC = () => {
         tone:             (nb.tone as typeof TONES[number]) || 'Professional',
         primary_color:    nb.primary_color   || '#4F46E5',
         art_direction:    nb.art_direction   || '',
+        design_style:     '',
       };
       setForm(nextForm);
       setSettingsForm(nextForm);
@@ -304,6 +317,14 @@ const AdminWebsiteBuilder: React.FC = () => {
     setPanelState('generating');
 
     try {
+      const styleNote = f.design_style
+        ? DESIGN_STYLES.find(s => s.value === f.design_style)
+        : null;
+      const fullArtDirection = [
+        styleNote ? `Design Style: ${styleNote.label} — ${styleNote.desc}` : '',
+        f.art_direction,
+      ].filter(Boolean).join('. ');
+
       await AdminService.generateWebsite({
         client_id:        selectedClientId,
         business_name:    f.business_name,
@@ -312,7 +333,7 @@ const AdminWebsiteBuilder: React.FC = () => {
         location:         f.location,
         tone:             f.tone,
         primary_color:    f.primary_color,
-        art_direction:    f.art_direction,
+        art_direction:    fullArtDirection,
         pages_to_generate: Array.from(selectedPages),
         ai_provider:      selectedProvider,
       });
@@ -992,6 +1013,33 @@ Keep responses concise and actionable. Respond in 1-3 sentences max unless detai
                         <p className="text-xs text-slate-500 mt-1.5">{opt.description}</p>
                       ) : null;
                     })()}
+                  </div>
+
+                  {/* Design Style */}
+                  <div>
+                    <label className="block text-xs font-medium text-slate-300 mb-1.5">
+                      Design Style <span className="text-slate-500 font-normal">(optional)</span>
+                    </label>
+                    <div className="grid grid-cols-2 gap-1.5">
+                      {DESIGN_STYLES.map(style => (
+                        <button
+                          key={style.value}
+                          type="button"
+                          onClick={() => setForm(f => ({
+                            ...f,
+                            design_style: f.design_style === style.value ? '' : style.value,
+                          }))}
+                          className={`p-2 rounded-lg border text-left transition-colors ${
+                            form.design_style === style.value
+                              ? 'bg-indigo-600/20 border-indigo-500 text-white'
+                              : 'bg-slate-800 border-slate-700 text-slate-400 hover:border-slate-600 hover:text-slate-300'
+                          }`}
+                        >
+                          <div className="text-xs font-medium leading-tight">{style.label}</div>
+                          <div className="text-[10px] opacity-60 mt-0.5 leading-tight">{style.desc}</div>
+                        </button>
+                      ))}
+                    </div>
                   </div>
 
                   {/* Design Notes */}

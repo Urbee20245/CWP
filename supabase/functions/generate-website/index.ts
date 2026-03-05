@@ -58,53 +58,107 @@ const PAGE_SLUGS: Record<string, string> = {
   blog: 'blog', portfolio: 'portfolio', menu: 'menu', team: 'team',
 };
 
-const SYSTEM_INSTRUCTION = `You are an expert web designer and copywriter. Design a complete MULTI-PAGE website.
-RETURN ONLY valid JSON - no markdown, no code fences, nothing else.
+const SYSTEM_INSTRUCTION = `You are an elite web designer building stunning, unique websites.
+RETURN ONLY valid JSON — no markdown, no code fences, nothing else.
+
+CRITICAL: Every website must look COMPLETELY DIFFERENT. Vary layouts, colors, fonts, spacing.
+Never produce the same design twice. Be bold, creative, specific to the business.
 
 Schema:
 {
-  "global": { "business_name": string, "phone": string, "address": string, "primary_color": string,
-    "font_heading": "Inter"|"Playfair Display"|"Montserrat"|"Raleway",
-    "font_body": "Inter"|"Lato"|"Open Sans", "logo_url": "", "hero_image_url": "" },
-  "pages": [{ "id": string, "name": string, "slug": string,
+  "global": {
+    "business_name": string,
+    "phone": string,
+    "address": string,
+    "primary_color": string,        // Specific hex — not generic purple. Match industry mood.
+    "secondary_color": string,      // Complementary accent color
+    "background_color": string,     // Page background (white, off-white, dark, etc)
+    "text_color": string,           // Main text color
+    "font_heading": "Playfair Display"|"Montserrat"|"Raleway"|"Inter"|"Oswald"|"Merriweather",
+    "font_body": "Inter"|"Lato"|"Open Sans"|"Georgia",
+    "logo_url": "",
+    "hero_image_url": ""
+  },
+  "pages": [{
+    "id": string,
+    "name": string,
+    "slug": string,
     "seo": { "title": string, "meta_description": string, "keywords": string[] },
-    "sections": [{ "section_type": string, "variant": string, "content": object, "editable_fields": string[] }]
+    "sections": [{
+      "section_type": string,
+      "variant": string,
+      "content": object,
+      "style_overrides": {
+        "background": string,
+        "text_color": string,
+        "padding": string
+      },
+      "editable_fields": string[]
+    }]
   }]
 }
 
-SECTION TYPES + VARIANTS:
-hero: centered_cta | split_image_left | bold_statement | minimal_text
-services: three_column_cards | icon_list | accordion | two_column_detailed
-about: left_text_right_stats | centered_story | founder_focus | mission_values
-social_proof: star_testimonials | review_wall | stats_bar
-contact_cta: simple_form | phone_prominent | split_contact | minimal_cta
-faq: accordion_simple | two_column
-stats: four_number_bar | icon_stats
-gallery: masonry_grid | simple_grid
-pricing_cards: three_tier | two_tier | custom_quote
-blog_preview: card_grid | featured_post
-team: card_grid | founder_spotlight
-menu_section: categorized_menu | two_column
-process: numbered_steps | timeline | icon_cards
-features: icon_grid | alternating_blocks
+SECTION TYPES — use all of them creatively:
+hero: centered_cta | split_image_left | split_image_right | bold_statement | minimal_text | video_background | fullscreen
+services: three_column_cards | icon_list | accordion | two_column_detailed | horizontal_scroll | numbered_list
+about: left_text_right_stats | centered_story | founder_focus | mission_values | timeline | split_image
+social_proof: star_testimonials | review_wall | stats_bar | logo_strip | quote_highlight | video_testimonial
+contact_cta: simple_form | phone_prominent | split_contact | minimal_cta | full_width_cta | floating_card
+faq: accordion_simple | two_column | tabbed | searchable
+stats: four_number_bar | icon_stats | large_numbers | animated_counters
+gallery: masonry_grid | simple_grid | carousel | polaroid | before_after
+pricing_cards: three_tier | two_tier | custom_quote | comparison_table | toggle_annual_monthly
+blog_preview: card_grid | featured_post | magazine_layout
+team: card_grid | founder_spotlight | horizontal_scroll | minimal_list
+process: numbered_steps | timeline | icon_cards | horizontal_flow | circular
+features: icon_grid | alternating_blocks | checklist | split_highlight
+newsletter: minimal | full_width | popup_trigger
+awards: logo_wall | card_grid | timeline
 
-CONTENT FIELDS:
-hero: {headline, subheadline, cta_primary_text, cta_primary_link, background_style:"gradient"|"dark"|"light"}
-services: {heading, subtext, services:[{name, description, icon}]} 3-8 items
-about: {heading, body, stat_1_number, stat_1_label, stat_2_number, stat_2_label}
-social_proof: {heading, reviews:[{author, stars, text}]} 2-6 items
-contact_cta: {heading, subtext, phone, email, hours}
-faq: {heading, faqs:[{question, answer}]}
-stats: {stats:[{number, label}]} 3-4 items
-gallery: {heading, subtext}
-pricing_cards: {heading, subtext, tiers:[{name, price, period, description, features:string[], cta_text, highlighted:boolean}]}
+CONTENT — be SPECIFIC and RICH:
+hero: {
+  headline: string (powerful, specific — NOT generic),
+  subheadline: string (specific value prop),
+  cta_primary_text: string,
+  cta_primary_link: string,
+  cta_secondary_text: string,
+  cta_secondary_link: string,
+  background_style: "gradient"|"dark"|"light"|"image"|"video",
+  background_image_url: "",
+  background_gradient: string,
+  badge_text: string,
+  trust_badges: string[]
+}
+services: {heading, subtext, services:[{name, description, icon, price?, highlight?:boolean}]}
+about: {heading, body, image_url:"", stat_1_number, stat_1_label, stat_2_number, stat_2_label, stat_3_number?, stat_3_label?}
+social_proof: {heading, reviews:[{author, role?, stars, text, avatar_initials}], show_rating_summary?:boolean}
+contact_cta: {heading, subtext, phone, email, hours, address, map_embed_url?, form_fields?:string[]}
+faq: {heading, faqs:[{question, answer}]} — minimum 6 FAQs
+stats: {stats:[{number, label, icon?, prefix?, suffix?}]}
+gallery: {heading, subtext, images:[{url:"", caption}]}
+pricing_cards: {heading, subtext, tiers:[{name, price, period, description, features:string[], cta_text, highlighted:boolean, badge?:string}]}
+team: {heading, subtext, members:[{name, role, bio, image_url:"", linkedin_url?}]}
+process: {heading, subtext, steps:[{number, title, description, icon?}]}
+features: {heading, subtext, features:[{title, description, icon, highlight?:boolean}]}
+newsletter: {heading, subtext, button_text, placeholder_text}
 blog_preview: {heading, subtext}
-team: {heading, subtext, members:[{name, role, bio, image_placeholder:"initials"}]}
 menu_section: {heading, categories:[{name, items:[{name, description, price}]}]}
-process: {heading, subtext, steps:[{number, title, description}]}
-features: {heading, subtext, features:[{title, description, icon}]}
 
-All copy must be specific to this exact business. SEO title max 60 chars. Return ONLY JSON.`;
+DESIGN RULES:
+1. Financial/wealth: dark navy + gold. Serif fonts. Luxury feel. (#0a1628 + #c9a84c)
+2. Medical/health: clean white + teal/green. Sans-serif. Trust-focused.
+3. Restaurant/food: warm colors + dark backgrounds. Bold fonts. Appetite appeal.
+4. Church/nonprofit: warm cream + burgundy/navy. Welcoming, community-focused.
+5. Tech/SaaS: dark mode OR ultra-minimal white. Monospace accents. Geometric.
+6. Beauty/salon: blush pink OR deep purple. Elegant serif. Feminine luxury.
+7. Legal: navy + gold. Traditional. Authoritative. Conservative layout.
+8. Real estate: white + charcoal + accent. Photography-forward.
+9. Fitness: dark + neon accents. Bold. Energetic. Action-oriented.
+10. Education: bright, approachable. Blues and greens. Friendly typography.
+
+QUALITY BAR: Every site must look like it was designed by a $10,000 web designer.
+Be opinionated. Make SPECIFIC color choices. Write SPECIFIC copy. Use ALL sections.
+Return ONLY the JSON object.`;
 
 serve(async (req) => {
   const corsResponse = handleCors(req);

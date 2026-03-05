@@ -16,6 +16,10 @@ import ContactFormSection from './sections/ContactFormSection';
 import CalendarSection from './sections/CalendarSection';
 import ChatWidgetSection from './sections/ChatWidgetSection';
 import BlogLatestSection from './sections/BlogLatestSection';
+import ProcessSection from './sections/ProcessSection';
+import FeaturesSection from './sections/FeaturesSection';
+import TeamSection from './sections/TeamSection';
+import NewsletterSection from './sections/NewsletterSection';
 
 interface SiteRendererProps {
   websiteJson: WebsiteJson;
@@ -35,6 +39,7 @@ type SectionComponent = React.FC<{
   content: any;
   global: any;
   variant: string;
+  style_overrides?: any;
   siteSlug?: string;
   customDomain?: boolean;
 }>;
@@ -51,6 +56,15 @@ const SECTION_MAP: Record<SectionType, SectionComponent> = {
   gallery:       GallerySection      as SectionComponent,
   pricing_cards: PricingSection      as SectionComponent,
   blog_preview:  BlogPreviewSection  as SectionComponent,
+  process:       ProcessSection      as SectionComponent,
+  features:      FeaturesSection     as SectionComponent,
+  team:          TeamSection         as SectionComponent,
+  newsletter:    NewsletterSection   as SectionComponent,
+  // pass-through for types without dedicated components
+  menu_section:  (() => null)        as SectionComponent,
+  awards:        (() => null)        as SectionComponent,
+  cta_banner:    (() => null)        as SectionComponent,
+  map_location:  (() => null)        as SectionComponent,
 };
 
 const SiteRenderer: React.FC<SiteRendererProps> = ({
@@ -90,8 +104,10 @@ const SiteRenderer: React.FC<SiteRendererProps> = ({
       style={
         {
           '--brand-color': g.primary_color,
-          '--secondary-color': (g as any).secondary_color || g.primary_color,
+          '--secondary-color': g.secondary_color || g.primary_color,
           fontFamily: g.font_body || 'Inter, sans-serif',
+          backgroundColor: g.background_color || '#ffffff',
+          color: g.text_color || '#0f172a',
         } as React.CSSProperties
       }
     >
@@ -117,6 +133,7 @@ const SiteRenderer: React.FC<SiteRendererProps> = ({
             content={section.content}
             global={g}
             variant={section.variant}
+            style_overrides={section.style_overrides}
             siteSlug={siteSlug}
             customDomain={customDomain}
           />
