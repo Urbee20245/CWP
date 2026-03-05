@@ -12,6 +12,10 @@ export interface WebsiteGlobal {
   font_body: string;
   logo_url?: string;
   hero_image_url?: string;
+  footer_links?: Array<{ label: string; url: string; target?: string }>;
+  service_areas?: string[];
+  staff_login_url?: string;
+  footer_tagline?: string;
 }
 
 export interface WebsiteSeo {
@@ -80,7 +84,14 @@ export type SectionType =
   | 'newsletter'
   | 'awards'
   | 'cta_banner'
-  | 'map_location';
+  | 'map_location'
+  | 'service_areas'
+  | 'footer_links'
+  | 'login_cta'
+  | 'opening_hours'
+  | 'certifications'
+  | 'team_bios'
+  | 'custom_html';
 
 export type GenerationStatus = 'draft' | 'generating' | 'complete' | 'error';
 

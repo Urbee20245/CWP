@@ -20,6 +20,8 @@ import ProcessSection from './sections/ProcessSection';
 import FeaturesSection from './sections/FeaturesSection';
 import TeamSection from './sections/TeamSection';
 import NewsletterSection from './sections/NewsletterSection';
+import ServiceAreasSection from './sections/ServiceAreasSection';
+import UnknownSection from './sections/UnknownSection';
 
 interface SiteRendererProps {
   websiteJson: WebsiteJson;
@@ -44,7 +46,7 @@ type SectionComponent = React.FC<{
   customDomain?: boolean;
 }>;
 
-const SECTION_MAP: Record<SectionType, SectionComponent> = {
+const SECTION_MAP: Partial<Record<SectionType, SectionComponent>> = {
   hero:          HeroSection         as SectionComponent,
   services:      ServicesSection     as SectionComponent,
   about:         AboutSection        as SectionComponent,
@@ -60,11 +62,18 @@ const SECTION_MAP: Record<SectionType, SectionComponent> = {
   features:      FeaturesSection     as SectionComponent,
   team:          TeamSection         as SectionComponent,
   newsletter:    NewsletterSection   as SectionComponent,
-  // pass-through for types without dedicated components
-  menu_section:  (() => null)        as SectionComponent,
-  awards:        (() => null)        as SectionComponent,
-  cta_banner:    (() => null)        as SectionComponent,
-  map_location:  (() => null)        as SectionComponent,
+  service_areas: ServiceAreasSection as SectionComponent,
+  // pass-through types that render via UnknownSection
+  menu_section:  UnknownSection      as SectionComponent,
+  awards:        UnknownSection      as SectionComponent,
+  cta_banner:    UnknownSection      as SectionComponent,
+  map_location:  UnknownSection      as SectionComponent,
+  footer_links:  UnknownSection      as SectionComponent,
+  login_cta:     UnknownSection      as SectionComponent,
+  opening_hours: UnknownSection      as SectionComponent,
+  certifications:UnknownSection      as SectionComponent,
+  team_bios:     UnknownSection      as SectionComponent,
+  custom_html:   UnknownSection      as SectionComponent,
 };
 
 const SiteRenderer: React.FC<SiteRendererProps> = ({
@@ -122,11 +131,9 @@ const SiteRenderer: React.FC<SiteRendererProps> = ({
 
       {/* ── Standard page sections from website_json ── */}
       {activePage?.sections.map((section, i) => {
-        const Component = SECTION_MAP[section.section_type as SectionType];
-        if (!Component) {
-          console.warn(`[SiteRenderer] Unknown section_type: ${section.section_type}`);
-          return null;
-        }
+        // Use the registered component if available, otherwise fall back to
+        // UnknownSection so ANY AI-generated section type renders visually.
+        const Component = SECTION_MAP[section.section_type as SectionType] ?? UnknownSection;
         return (
           <Component
             key={i}

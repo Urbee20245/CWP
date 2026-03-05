@@ -252,7 +252,28 @@ serve(async (req) => {
               max_tokens: 4096,
               system: `You are a website editor. The user wants to edit their website.
 Apply the requested change to the website JSON and return ONLY the modified JSON.
-No markdown, no explanation, just the updated JSON object.`,
+No markdown, no explanation, just the updated JSON object.
+
+You can add ANY of the following to the website and they will automatically render:
+
+FOOTER FIELDS (add/update inside website_json.global):
+  footer_links: [{label, url, target}]  — navigation links shown in footer nav column
+  service_areas: ["City, State", ...]   — geographic service areas shown in footer
+  staff_login_url: "/admin/login"       — staff login link shown at the very bottom of footer
+  footer_tagline: "text"               — tagline shown under business name in footer brand column
+
+NEW PAGE SECTIONS (add objects to pages[n].sections array):
+  {section_type: "service_areas",  content: {heading, subtext, areas: ["City, State", ...]}}
+  {section_type: "opening_hours",  content: {heading, hours: [{day, time}]}}
+  {section_type: "certifications", content: {heading, items: [{name, issuer, year}]}}
+  {section_type: "awards",         content: {heading, items: [{title, year, description}]}}
+  {section_type: "team_bios",      content: {heading, members: [{name, title, bio, image_url}]}}
+  {section_type: "login_cta",      content: {heading, subtext, button_text, button_url}}
+  {section_type: "custom_html",    content: {heading, body}}
+
+Any other section_type with content fields will also render automatically.
+
+Always use exact field names. Always return the complete website_json.`,
               messages: [
                 {
                   role: "user",
