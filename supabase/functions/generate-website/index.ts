@@ -199,7 +199,7 @@ serve(async (req) => {
     // Upsert - mark as generating
     const { error: upsertError } = await db.from('website_briefs').upsert({
       client_id, slug: legacySlug, client_slug, business_name, industry, services_offered, location, tone,
-      primary_color: primary_color || '#4F46E5', art_direction: art_direction || null,
+      primary_color: primary_color || null, art_direction: art_direction || null,
       generation_status: 'generating', generation_error: null,
     }, { onConflict: 'client_id' });
 
@@ -255,7 +255,7 @@ Return ONLY the complete JSON object — no markdown, no explanation.`;
 
     websiteJson.global.phone = websiteJson.global.phone || '';
     websiteJson.global.address = websiteJson.global.address || location;
-    websiteJson.global.primary_color = primary_color || websiteJson.global.primary_color || '#4F46E5';
+
     websiteJson.global.logo_url = '';
     websiteJson.global.hero_image_url = '';
 
