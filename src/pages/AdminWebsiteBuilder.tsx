@@ -345,6 +345,7 @@ const AdminWebsiteBuilder: React.FC = () => {
       const loadedBrief = await loadBrief(selectedClientId);
       if (loadedBrief?.generation_status === 'complete' && loadedBrief?.website_json) {
         setPanelState('chat');
+        setTimeout(() => setPreviewKey(k => k + 1), 300);
       } else {
         const errMsg = loadedBrief?.generation_error || 'Website was not saved. Please try again.';
         setGenError(errMsg);
@@ -418,6 +419,7 @@ const AdminWebsiteBuilder: React.FC = () => {
       const loadedBrief = await loadBrief(selectedClientId);
       if (loadedBrief?.generation_status === 'complete' && loadedBrief?.website_json) {
         setPanelState('chat');
+        setTimeout(() => setPreviewKey(k => k + 1), 300);
       } else {
         const errMsg = loadedBrief?.generation_error || 'Website was not saved. Please try again.';
         setCloneError(errMsg);
@@ -476,6 +478,7 @@ const AdminWebsiteBuilder: React.FC = () => {
       const loadedBrief = await loadBrief(selectedClientId);
       if (loadedBrief?.generation_status === 'complete' && loadedBrief?.website_json) {
         setPanelState('chat');
+        setTimeout(() => setPreviewKey(k => k + 1), 300);
       } else {
         setRecloneError(loadedBrief?.generation_error || 'Reclone failed. Please try again.');
         setPanelState('chat');
@@ -593,10 +596,10 @@ Keep responses concise and actionable. Respond in 1-3 sentences max unless detai
       const reply = data?.reply || "I couldn't process that request.";
 
       // If the AI updated the website JSON, apply it and auto-refresh the preview
-      if (data?.updated_json && brief) {
+      if (data?.updated_json) {
         setBrief(prev => prev ? { ...prev, website_json: data.updated_json } : prev);
         // Auto-refresh the preview iframe so changes are visible immediately
-        setTimeout(() => setPreviewKey(k => k + 1), 600);
+        setTimeout(() => setPreviewKey(k => k + 1), 300);
       }
 
       // Check if AI wants to regenerate with new art direction
