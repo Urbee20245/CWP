@@ -733,9 +733,10 @@ Keep responses concise and actionable. Respond in 1-3 sentences max unless detai
           {/* Right side — only shown when site exists */}
           {hasWebsite && (
             <div className="ml-auto flex items-center gap-2">
-              {/* AI provider badge */}
+              {/* AI provider badge — reflects the currently active model */}
               {(() => {
-                const opt = getProviderOption(brief?.ai_provider || selectedProvider);
+                const activeId = effectivePanelState === 'chat' ? chatProvider : selectedProvider;
+                const opt = getProviderOption(activeId);
                 return opt ? (
                   <span className={`hidden sm:flex items-center gap-1.5 text-xs px-2.5 py-1 rounded-full border font-medium ${opt.badgeColor || 'bg-slate-800 border-slate-700 text-slate-300'}`}>
                     <Sparkles className="w-3 h-3" />
