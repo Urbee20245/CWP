@@ -57,17 +57,24 @@ const AdminLayout: React.FC<AdminLayoutProps> = ({ children }) => {
       icon: Bot,
       collapsible: true,
       items: [
-        { name: 'Claude Assistant', href: '/admin/claude', icon: Bot },
         { name: 'AI Voice', href: '/admin/voice', icon: Phone },
         { name: 'Call Scheduling', href: '/admin/call-scheduling', icon: PhoneCall },
         { name: 'Agent Settings', href: '/admin/agent-settings', icon: Cpu },
-        { name: 'Website Manager', href: '/admin/websites', icon: Layers },
-        { name: 'Website Builder', href: '/admin/website-builder', icon: Globe },
-        { name: 'Site Import', href: '/admin/site-import', icon: Download },
         { name: 'Blog Manager', href: '/admin/blog-manager', icon: BookOpen },
         { name: 'A2P Automation', href: '/admin/a2p-automation', icon: ShieldCheck },
         { name: 'AI Documents', href: '/admin/ai-docs', icon: FileText },
         { name: 'AI Email', href: '/admin/ai-email', icon: MailIcon },
+      ],
+    },
+    {
+      title: 'Websites',
+      icon: Globe,
+      collapsible: true,
+      items: [
+        { name: 'Website Builder', href: '/admin/website-builder', icon: Globe },
+        { name: 'Site Import', href: '/admin/site-import', icon: Download },
+        { name: 'Claude Assistant', href: '/admin/claude', icon: Bot },
+        { name: 'Website Manager', href: '/admin/websites', icon: Layers },
       ],
     },
     {
