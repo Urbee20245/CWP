@@ -5,6 +5,9 @@ export interface WebsiteGlobal {
   phone: string;
   address: string;
   primary_color: string;
+  secondary_color?: string;
+  background_color?: string;
+  text_color?: string;
   font_heading: string;
   font_body: string;
   logo_url?: string;
@@ -17,10 +20,17 @@ export interface WebsiteSeo {
   keywords: string[];
 }
 
+export interface StyleOverrides {
+  background?: string;
+  text_color?: string;
+  padding?: string;
+}
+
 export interface WebsiteSection {
   section_type: SectionType;
   variant: string;
   content: Record<string, any>;
+  style_overrides?: StyleOverrides;
   editable_fields: string[];
 }
 
@@ -67,6 +77,8 @@ export type SectionType =
   | 'menu_section'
   | 'process'
   | 'features'
+  | 'newsletter'
+  | 'awards'
   | 'cta_banner'
   | 'map_location';
 
@@ -102,6 +114,7 @@ export interface WebsiteBrief {
 export interface SectionComponentProps {
   content: Record<string, any>;
   global: WebsiteGlobal;
+  style_overrides?: StyleOverrides;
 }
 
 export interface WebsiteEdit {
