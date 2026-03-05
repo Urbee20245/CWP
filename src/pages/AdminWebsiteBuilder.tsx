@@ -6,7 +6,7 @@ import {
   Globe, Loader2, AlertTriangle, CheckCircle, Eye, Copy, EyeOff,
   RefreshCw, Wand2, ChevronDown, FileText, Check, Link, Save, Info, Key,
   Sparkles, Send, ExternalLink, Settings, ToggleLeft, ToggleRight, X,
-  MessageSquare, ChevronRight, Zap, Image, ImageIcon, Link2, Upload, Bot,
+  MessageSquare, ChevronRight, Zap, Image, ImageIcon, Link2, Upload, Bot, RotateCcw,
 } from 'lucide-react';
 import { supabase } from '../integrations/supabase/client';
 import { AdminService } from '../services/adminService';
@@ -137,6 +137,8 @@ const AdminWebsiteBuilder: React.FC = () => {
   const [chatInput, setChatInput]     = useState('');
   const [isChatLoading, setIsChatLoading] = useState(false);
   const [chatProvider, setChatProvider] = useState(DEFAULT_PROVIDER_ID);
+  const [isUndoing, setIsUndoing] = useState(false);
+  const [undoMessage, setUndoMessage] = useState<string | null>(null);
   const [chatActiveSection, setChatActiveSection] = useState<ProviderSection>('all');
   const chatEndRef                    = useRef<HTMLDivElement>(null);
   const chatInputRef                  = useRef<HTMLTextAreaElement>(null);
@@ -583,6 +585,8 @@ Keep responses concise and actionable. Respond in 1-3 sentences max unless detai
           website_json: brief?.website_json || null,
           business_name: brief?.business_name || form.business_name || '',
           industry: brief?.industry || form.industry || '',
+          services: brief?.services_offered || form.services_offered || '',
+          location: brief?.location || form.location || '',
         },
       });
       if (error) throw error;
@@ -625,6 +629,30 @@ Keep responses concise and actionable. Respond in 1-3 sentences max unless detai
       setIsChatLoading(false);
     }
   }, [chatInput, isChatLoading, messages, brief, form, handleGenerate]);
+
+  const handleUndo = useCallback(async () => {
+    if (!selectedClientId || isUndoing) return;
+    setIsUndoing(true);
+    setUndoMessage(null);
+    try {
+      const { data, error } = await supabase.functions.invoke('undo-website-edit', {
+        body: { client_id: selectedClientId },
+      });
+      if (error || data?.error) {
+        setUndoMessage('❌ ' + (data?.error || error?.message || 'Nothing to undo'));
+      } else {
+        // Restore the JSON in state and refresh preview
+        setBrief(prev => prev ? { ...prev, website_json: data.restored_json } : prev);
+        setTimeout(() => setPreviewKey(k => k + 1), 400);
+        setUndoMessage('↩️ Reverted to previous version');
+      }
+    } catch (err: any) {
+      setUndoMessage('❌ Undo failed: ' + err.message);
+    } finally {
+      setIsUndoing(false);
+      setTimeout(() => setUndoMessage(null), 4000);
+    }
+  }, [selectedClientId, isUndoing]);
 
   // ── Helpers ───────────────────────────────────────────────────────────────
 
@@ -1623,6 +1651,27 @@ Keep responses concise and actionable. Respond in 1-3 sentences max unless detai
                     <p className="text-xs text-slate-600 text-center">
                       This overwrites the current site. All existing content will be replaced.
                     </p>
+                  </div>
+                )}
+
+                {/* Undo last edit */}
+                {brief && (
+                  <div className="flex items-center gap-2 px-3 pt-2">
+                    <button
+                      onClick={handleUndo}
+                      disabled={isUndoing}
+                      className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium bg-slate-800 hover:bg-orange-900/40 text-slate-400 hover:text-orange-300 border border-slate-700 hover:border-orange-700 transition-colors disabled:opacity-50"
+                    >
+                      {isUndoing
+                        ? <><Loader2 className="w-3 h-3 animate-spin" /> Undoing...</>
+                        : <><RotateCcw className="w-3 h-3" /> Undo Last Edit</>
+                      }
+                    </button>
+                    {undoMessage && (
+                      <span className={`text-xs ${undoMessage.startsWith('❌') ? 'text-red-400' : 'text-emerald-400'}`}>
+                        {undoMessage}
+                      </span>
+                    )}
                   </div>
                 )}
 
