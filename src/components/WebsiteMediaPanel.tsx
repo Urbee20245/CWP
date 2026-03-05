@@ -142,6 +142,17 @@ export default function WebsiteMediaPanel({ clientId }: Props) {
         size: file.size,
         createdAt: new Date().toISOString(),
       });
+
+      // Save record to database so the AI and back office can reference it
+      await supabase.from('website_media_assets').insert({
+        client_id: clientId,
+        category: activeCategory,
+        file_name: uniqueName,
+        storage_path: storagePath,
+        public_url: publicUrl,
+        file_size: file.size,
+        mime_type: file.type,
+      });
     }
 
     if (uploaded.length > 0) {
