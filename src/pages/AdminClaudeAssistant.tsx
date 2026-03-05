@@ -14,13 +14,68 @@ import {
 
 // ─── Constants ───────────────────────────────────────────────────────────────
 
-const CLAUDE_MODELS = [
-  { id: 'claude-opus-4-5', label: 'Claude Opus 4.5', badge: 'Most Powerful', badgeColor: 'purple' },
-  { id: 'claude-sonnet-4-5', label: 'Claude Sonnet 4.5', badge: 'Recommended', badgeColor: 'blue' },
-  { id: 'claude-haiku-4-5', label: 'Claude Haiku 4.5', badge: 'Fastest', badgeColor: 'green' },
+interface ClaudeModel {
+  id: string;
+  label: string;
+  description: string;
+  badge?: string;
+  badgeColor?: string;
+  section: 'haiku' | 'sonnet' | 'opus';
+}
+
+const CLAUDE_MODELS: ClaudeModel[] = [
+  {
+    id: 'claude-haiku-4-5-20251001',
+    label: 'Claude Haiku 4.5',
+    description: 'Fastest & most affordable — ideal for quick queries',
+    badge: 'Fastest',
+    badgeColor: 'bg-emerald-100 text-emerald-700',
+    section: 'haiku',
+  },
+  {
+    id: 'claude-sonnet-4-5',
+    label: 'Claude Sonnet 4.5',
+    description: 'Balanced speed and intelligence — great for most tasks',
+    badge: 'Recommended',
+    badgeColor: 'bg-blue-100 text-blue-700',
+    section: 'sonnet',
+  },
+  {
+    id: 'claude-sonnet-4-6',
+    label: 'Claude Sonnet 4.6',
+    description: 'Latest Sonnet — enhanced reasoning and accuracy',
+    badge: 'Latest',
+    badgeColor: 'bg-indigo-100 text-indigo-700',
+    section: 'sonnet',
+  },
+  {
+    id: 'claude-opus-4-5',
+    label: 'Claude Opus 4.5',
+    description: 'Highly capable — excellent for complex code generation',
+    badge: 'Powerful',
+    badgeColor: 'bg-purple-100 text-purple-700',
+    section: 'opus',
+  },
+  {
+    id: 'claude-opus-4-6',
+    label: 'Claude Opus 4.6',
+    description: 'Most powerful Claude — best for demanding tasks',
+    badge: 'Most Powerful',
+    badgeColor: 'bg-violet-100 text-violet-700',
+    section: 'opus',
+  },
+];
+
+const MODEL_SECTIONS = [
+  { key: 'all',    label: 'All' },
+  { key: 'haiku',  label: '⚡ Haiku' },
+  { key: 'sonnet', label: '🎯 Sonnet' },
+  { key: 'opus',   label: '🧠 Opus' },
 ] as const;
 
-type ModelId = typeof CLAUDE_MODELS[number]['id'];
+type ModelSection = typeof MODEL_SECTIONS[number]['key'];
+
+type ModelId = string;
 
 const SUGGESTED_PROMPTS: Record<SessionContext['type'], string[]> = {
   cwp: [
@@ -324,8 +379,14 @@ const AdminClaudeAssistant: React.FC = () => {
   const [loading, setLoading] = useState(false);
   const [sessionContext, setSessionContext] = useState<SessionContext | null>(null);
   const [selectedModel, setSelectedModel] = useState<ModelId>('claude-sonnet-4-5');
+  const [modelSection, setModelSection] = useState<ModelSection>('all');
   const bottomRef = useRef<HTMLDivElement>(null);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
+
+  const filteredModels = modelSection === 'all'
+    ? CLAUDE_MODELS
+    : CLAUDE_MODELS.filter(m => m.section === modelSection);
+  const activeModel = CLAUDE_MODELS.find(m => m.id === selectedModel);
 
   useEffect(() => {
     bottomRef.current?.scrollIntoView({ behavior: 'smooth' });
@@ -537,17 +598,43 @@ const AdminClaudeAssistant: React.FC = () => {
 
           <div className="flex items-center gap-2 flex-shrink-0">
             {/* Model selector */}
-            <select
-              value={selectedModel}
-              onChange={e => setSelectedModel(e.target.value as ModelId)}
-              className="text-xs border border-slate-200 rounded-lg px-2 py-1.5 text-slate-600 bg-white hover:border-slate-300 focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-transparent transition-colors"
-            >
-              {CLAUDE_MODELS.map(m => (
-                <option key={m.id} value={m.id}>
-                  {m.label} ({m.badge})
-                </option>
-              ))}
-            </select>
+            <div className="flex flex-col gap-1">
+              {/* Section tabs */}
+              <div className="flex gap-1">
+                {MODEL_SECTIONS.map(s => (
+                  <button
+                    key={s.key}
+                    type="button"
+                    onClick={() => setModelSection(s.key)}
+                    className={`px-2 py-0.5 rounded-full text-xs font-medium border transition-colors ${
+                      modelSection === s.key
+                        ? 'bg-indigo-600 text-white border-indigo-600'
+                        : 'bg-white text-slate-500 border-slate-200 hover:border-indigo-400'
+                    }`}
+                  >
+                    {s.label}
+                  </button>
+                ))}
+              </div>
+              <div className="flex items-center gap-1.5">
+                <select
+                  value={selectedModel}
+                  onChange={e => setSelectedModel(e.target.value)}
+                  className="text-xs border border-slate-200 rounded-lg px-2 py-1.5 text-slate-600 bg-white hover:border-slate-300 focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-transparent transition-colors"
+                >
+                  {filteredModels.map(m => (
+                    <option key={m.id} value={m.id}>
+                      {m.label}{m.badge ? ` — ${m.badge}` : ''}
+                    </option>
+                  ))}
+                </select>
+                {activeModel?.badge && (
+                  <span className={`text-xs font-semibold px-2 py-0.5 rounded-full ${activeModel.badgeColor}`}>
+                    {activeModel.badge}
+                  </span>
+                )}
+              </div>
+            </div>
 
             {hasMessages && (
               <button

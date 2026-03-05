@@ -12,8 +12,7 @@ export interface SessionContext {
 
 interface Client {
   id: string;
-  name: string;
-  slug: string;
+  business_name: string;
 }
 
 interface SiteContextSelectorProps {
@@ -67,8 +66,8 @@ export const SiteContextSelector: React.FC<SiteContextSelectorProps> = ({ onSele
       setLoadingClients(true);
       supabase
         .from('clients')
-        .select('id, name, slug')
-        .order('name', { ascending: true })
+        .select('id, business_name')
+        .order('business_name', { ascending: true })
         .then(({ data }) => {
           setClients(data ?? []);
           setLoadingClients(false);
@@ -87,8 +86,7 @@ export const SiteContextSelector: React.FC<SiteContextSelectorProps> = ({ onSele
   }, []);
 
   const filteredClients = clients.filter(c =>
-    c.name.toLowerCase().includes(search.toLowerCase()) ||
-    c.slug.toLowerCase().includes(search.toLowerCase())
+    c.business_name.toLowerCase().includes(search.toLowerCase())
   );
 
   const handleOptionClick = (type: 'cwp' | 'client' | 'all_clients') => {
@@ -107,9 +105,8 @@ export const SiteContextSelector: React.FC<SiteContextSelectorProps> = ({ onSele
     setSearch('');
     onSelect({
       type: 'client',
-      label: client.name,
+      label: client.business_name,
       clientId: client.id,
-      clientSlug: client.slug,
     });
   };
 
@@ -167,7 +164,7 @@ export const SiteContextSelector: React.FC<SiteContextSelectorProps> = ({ onSele
               className="w-full flex items-center justify-between px-4 py-3 bg-white border-2 border-emerald-300 rounded-xl text-sm shadow-sm hover:border-emerald-400 transition-colors"
             >
               <span className={selectedClient ? 'text-slate-800' : 'text-slate-400'}>
-                {selectedClient ? selectedClient.name : 'Search for a client…'}
+                {selectedClient ? selectedClient.business_name : 'Search for a client…'}
               </span>
               {loadingClients ? (
                 <Loader2 className="w-4 h-4 text-slate-400 animate-spin" />
@@ -206,10 +203,7 @@ export const SiteContextSelector: React.FC<SiteContextSelectorProps> = ({ onSele
                         onClick={() => handleClientSelect(client)}
                         className="w-full flex items-center justify-between px-4 py-3 text-left hover:bg-emerald-50 transition-colors"
                       >
-                        <div>
-                          <div className="text-sm font-medium text-slate-800">{client.name}</div>
-                          <div className="text-xs text-slate-400 font-mono">{client.slug}</div>
-                        </div>
+                        <div className="text-sm font-medium text-slate-800">{client.business_name}</div>
                       </button>
                     ))
                   )}
