@@ -882,6 +882,14 @@ const AdminSiteImport: React.FC = () => {
                           e.target.value = '';
                         }}
                       />
+                      {zipFile && (
+                        <div className="mt-2 p-3 bg-amber-50 border border-amber-200 rounded-lg text-xs text-amber-800">
+                          <strong>Tip:</strong> If this ZIP contains React/Vue/Next.js source files (.tsx/.jsx), use{' '}
+                          <strong>"Import &amp; Rebuild with AI"</strong> instead. Pixel Perfect requires a compiled{' '}
+                          <code>/dist</code> build. To build: run <code>npm run build</code> in your project, then zip
+                          the <code>/dist</code> folder.
+                        </div>
+                      )}
                       <p className="text-xs text-slate-400 mt-2">
                         Export your site as a ZIP from Hostinger File Manager, GitHub (Download ZIP), or any hosting provider. HTML files inside will be parsed automatically.
                       </p>
