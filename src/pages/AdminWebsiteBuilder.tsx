@@ -602,7 +602,11 @@ Keep responses concise and actionable. Respond in 1-3 sentences max unless detai
           ts: Date.now(),
         }]);
         setIsChatLoading(false);
-        const updatedForm = { ...form, art_direction: newArtDirection };
+        const updatedForm = {
+          ...form,
+          art_direction: newArtDirection,
+          primary_color: brief?.website_json?.global?.primary_color || form.primary_color,
+        };
         setForm(updatedForm);
         await handleGenerate(updatedForm);
         return;
