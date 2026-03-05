@@ -1217,7 +1217,7 @@ async function downloadExternalAssets(
   htmlContent: string,
 ): Promise<Record<string, string>> {
   const mapping: Record<string, string> = {};
-  const urlRegex = /https?:\/\/[^\s"'<>]+\.(png|jpe?g|gif|svg|webp|woff2?|ttf|mp4|webm)/gi;
+  const urlRegex = /https?:\/\/[^\s"'<>]+(?:\.(png|jpe?g|gif|svg|webp|woff2?|ttf|mp4|webm)|amazonaws\.com\/[^\s"'<>]+)/gi;
   const matches = htmlContent.match(urlRegex) || [];
   const uniqueUrls = [...new Set(matches)];
 
@@ -1311,6 +1311,21 @@ function rewriteAllAssetPaths(
         `"${newUrl}"`);
   }
   return updated;
+}
+
+// ─── Pixel-Perfect Import: Detect Built vs Source Project ────────────────────
+
+function isBuiltDistProject(sourceFiles: Record<string, string>): boolean {
+  // A built/dist project has compiled JS/CSS in assets/ or _next/ directories.
+  // A source project has .tsx/.jsx component files that require a build step.
+  const hasTsxComponents = Object.keys(sourceFiles).some(
+    (p) => p.endsWith('.tsx') || p.endsWith('.jsx'),
+  );
+  const hasCompiledAssets = Object.keys(sourceFiles).some(
+    (p) => (p.includes('assets/') || p.includes('_next/')) && (p.endsWith('.js') || p.endsWith('.css')),
+  );
+  // Source project = has tsx/jsx but no compiled asset bundle
+  return hasCompiledAssets || !hasTsxComponents;
 }
 
 // ─── Pixel-Perfect Import: Build Raw HTML Bundle ─────────────────────────────
@@ -1747,6 +1762,7 @@ serve(async (req) => {
         primary_color: primary_color || '#4F46E5',
         generation_status: 'generating',
         generation_error: null,
+        site_type: import_mode === 'pixel_perfect' ? 'raw_html' : 'cwp',
         premium_features: Array.isArray(premium_features) ? premium_features : [],
       },
       { onConflict: 'client_id' },
@@ -1779,6 +1795,16 @@ serve(async (req) => {
       console.log('[pixel-perfect] Extracting source files...');
       const { sourceFiles, binaryAssets } = extractSourceFilesFromZip(unzipped);
       console.log(`[pixel-perfect] sourceFiles=${Object.keys(sourceFiles).length} binaryAssets=${Object.keys(binaryAssets).length}`);
+
+      // Detect if this is raw source code (needs a build step) vs a compiled /dist
+      if (!isBuiltDistProject(sourceFiles)) {
+        return errorResponse(
+          'This ZIP contains React/TypeScript source code, not a compiled build. ' +
+          'Run "npm run build" first and upload the /dist folder for pixel-perfect hosting. ' +
+          'Or use "Import & Rebuild with AI" to convert the content to CWP format.',
+          400,
+        );
+      }
 
       console.log('[pixel-perfect] Uploading binary assets...');
       const assetMapping = await uploadClientAssets(supabaseAdmin, client_id, binaryAssets);
