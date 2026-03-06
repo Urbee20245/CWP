@@ -1,6 +1,6 @@
 import React from 'react';
 import { SectionComponentProps } from '../../../types/website';
-import ReactPlayer from 'react-player/lazy';
+import ReactPlayer from 'react-player';
 
 // ─── Full Width ────────────────────────────────────────────────────────────────
 const VideoFullWidth: React.FC<SectionComponentProps> = ({ content, global: g }) => (
