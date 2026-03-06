@@ -593,13 +593,28 @@ Keep responses concise and actionable. Respond in 1-3 sentences max unless detai
         },
       });
       if (error) throw error;
-      const reply = data?.reply || "I couldn't process that request.";
 
       // If the AI updated the website JSON, apply it and auto-refresh the preview
+      const jsonWasUpdated = !!data?.updated_json &&
+        JSON.stringify(data.updated_json) !== JSON.stringify(brief?.website_json);
       if (data?.updated_json) {
         setBrief(prev => prev ? { ...prev, website_json: data.updated_json } : prev);
         // Auto-refresh the preview iframe so changes are visible immediately
         setTimeout(() => setPreviewKey(k => k + 1), 300);
+      }
+
+      // Some AI providers (e.g. Gemini in JSON mode) may return a JSON string
+      // instead of natural language. Detect this and show a friendly message.
+      const rawReply = data?.reply || '';
+      let reply: string;
+      try {
+        JSON.parse(rawReply);
+        // If we get here, the reply was JSON — convert to human-readable text
+        reply = jsonWasUpdated
+          ? '✅ Done! The changes have been applied and the preview has been refreshed.'
+          : "I reviewed your request. Try describing what you'd like to change — for example, \"remove the contact button\" or \"make the hero dark\".";
+      } catch {
+        reply = rawReply || "I couldn't process that request.";
       }
 
       // Check if AI wants to regenerate with new art direction

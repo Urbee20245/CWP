@@ -160,7 +160,7 @@ interface EditIntent {
 }
 
 function detectEditIntent(message: string): EditIntent {
-  const isEdit = /\b(change|update|make|set|replace|edit|modify|rewrite|rename|turn|switch|move)\b/i.test(message);
+  const isEdit = /\b(change|update|make|set|replace|edit|modify|rewrite|rename|turn|switch|move|remove|delete|add|insert|hide|show|include|exclude|strip|drop|put|place|create|convert|transform|adjust|fix|improve|upgrade|simplify|expand|collapse|enable|disable)\b/i.test(message);
   if (!isEdit) return { detected: false, type: 'text', instructions: '' };
 
   if (/\bcolor\b|\btheme\b|\bpalette\b/i.test(message))

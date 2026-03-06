@@ -361,7 +361,6 @@ export async function callGemini(
       generationConfig: {
         maxOutputTokens: maxTokens,
         temperature: 0.3,
-        responseMimeType: 'application/json',
       },
     }),
     signal: AbortSignal.timeout(120000),
