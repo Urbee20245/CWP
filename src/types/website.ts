@@ -91,7 +91,13 @@ export type SectionType =
   | 'opening_hours'
   | 'certifications'
   | 'team_bios'
-  | 'custom_html';
+  | 'custom_html'
+  | 'video'
+  | 'map_embed'
+  | 'timeline'
+  | 'countdown'
+  | 'logo_grid'
+  | 'before_after';
 
 export type GenerationStatus = 'draft' | 'generating' | 'complete' | 'error';
 

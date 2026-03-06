@@ -21,6 +21,14 @@ import FeaturesSection from './sections/FeaturesSection';
 import TeamSection from './sections/TeamSection';
 import NewsletterSection from './sections/NewsletterSection';
 import ServiceAreasSection from './sections/ServiceAreasSection';
+import VideoSection from './sections/VideoSection';
+import MapSection from './sections/MapSection';
+import TimelineSection from './sections/TimelineSection';
+import CountdownSection from './sections/CountdownSection';
+import LogoGridSection from './sections/LogoGridSection';
+import BeforeAfterSection from './sections/BeforeAfterSection';
+import CTABannerSection from './sections/CTABannerSection';
+import AwardsSection from './sections/AwardsSection';
 import UnknownSection from './sections/UnknownSection';
 
 interface SiteRendererProps {
@@ -63,11 +71,17 @@ const SECTION_MAP: Partial<Record<SectionType, SectionComponent>> = {
   team:          TeamSection         as SectionComponent,
   newsletter:    NewsletterSection   as SectionComponent,
   service_areas: ServiceAreasSection as SectionComponent,
+  video:         VideoSection        as SectionComponent,
+  map_embed:     MapSection          as SectionComponent,
+  map_location:  MapSection          as SectionComponent,
+  timeline:      TimelineSection     as SectionComponent,
+  countdown:     CountdownSection    as SectionComponent,
+  logo_grid:     LogoGridSection     as SectionComponent,
+  before_after:  BeforeAfterSection  as SectionComponent,
+  cta_banner:    CTABannerSection    as SectionComponent,
+  awards:        AwardsSection       as SectionComponent,
   // pass-through types that render via UnknownSection
   menu_section:  UnknownSection      as SectionComponent,
-  awards:        UnknownSection      as SectionComponent,
-  cta_banner:    UnknownSection      as SectionComponent,
-  map_location:  UnknownSection      as SectionComponent,
   footer_links:  UnknownSection      as SectionComponent,
   login_cta:     UnknownSection      as SectionComponent,
   opening_hours: UnknownSection      as SectionComponent,
@@ -139,7 +153,7 @@ const SiteRenderer: React.FC<SiteRendererProps> = ({
             key={i}
             content={section.content}
             global={g}
-            variant={section.variant}
+            variant={section.variant || 'default'}
             style_overrides={section.style_overrides}
             siteSlug={siteSlug}
             customDomain={customDomain}
