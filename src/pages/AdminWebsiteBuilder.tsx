@@ -136,6 +136,7 @@ const AdminWebsiteBuilder: React.FC = () => {
   const [messages, setMessages]       = useState<ChatMessage[]>([]);
   const [chatInput, setChatInput]     = useState('');
   const [isChatLoading, setIsChatLoading] = useState(false);
+  const [chatLoadingLabel, setChatLoadingLabel] = useState('Applying changes...');
   const [chatProvider, setChatProvider] = useState(DEFAULT_PROVIDER_ID);
   const [isUndoing, setIsUndoing] = useState(false);
   const [undoMessage, setUndoMessage] = useState<string | null>(null);
@@ -528,6 +529,15 @@ const AdminWebsiteBuilder: React.FC = () => {
 
   // ── Chat send ─────────────────────────────────────────────────────────────
 
+  // Heuristic: detect questions vs. imperative commands.
+  // Questions → website-chat (conversational reply)
+  // Image requests → website-chat (has Unsplash/Pexels integration)
+  // Everything else → ai-command (reliable execution engine)
+  const isQuestionText = (t: string) =>
+    /^(what|how|why|can|could|would|should|does|do|is|are|will|when|where|which|who)\b/i.test(t.trim());
+  const isImageText = (t: string) =>
+    /\b(image|photo|picture|banner|background.*image|background.*photo|visual|stock photo|unsplash|pexels)\b/i.test(t);
+
   const handleChatSend = useCallback(async (inputOverride?: string) => {
     const text = (inputOverride ?? chatInput).trim();
     if (!text || isChatLoading) return;
@@ -535,9 +545,15 @@ const AdminWebsiteBuilder: React.FC = () => {
     const userMsg: ChatMessage = { id: `${Date.now()}`, role: 'user', content: text, ts: Date.now() };
     setMessages(prev => [...prev, userMsg]);
     setChatInput('');
+    // Set context-aware loading label before starting
+    setChatLoadingLabel(
+      REGEN_REGEX.test(text) ? 'Regenerating website...'
+      : isQuestionText(text) || isImageText(text) ? 'Thinking...'
+      : 'Applying changes...'
+    );
     setIsChatLoading(true);
 
-    // If it's a regeneration request, call handleGenerate directly
+    // ── Full regeneration ──────────────────────────────────────────────────
     if (REGEN_REGEX.test(text)) {
       setMessages(prev => [...prev, {
         id: `${Date.now()}a`,
@@ -550,9 +566,10 @@ const AdminWebsiteBuilder: React.FC = () => {
       return;
     }
 
-    // Otherwise call Supabase edge function
-    try {
-      const siteInfo = brief ? `
+    // ── Questions and image requests → website-chat (existing path) ────────
+    if (isQuestionText(text) || isImageText(text) || !brief?.website_json) {
+      try {
+        const siteInfo = brief ? `
 Current site: "${brief.business_name}" (${brief.industry})
 Location: ${brief.location}
 Services: ${brief.services_offered}
@@ -561,7 +578,7 @@ Color: ${brief.primary_color}
 Pages: ${brief.website_json?.pages?.map((p: any) => p.name).join(', ') || 'none'}
 Site URL: /site/${brief.client_slug}` : 'No site generated yet.';
 
-      const systemPrompt = `You are an AI web designer assistant helping an agency build and refine client websites.
+        const systemPrompt = `You are an AI web designer assistant helping an agency build and refine client websites.
 ${siteInfo}
 
 IMPORTANT: When the user asks you to add, place, or find an image, the system automatically
@@ -573,74 +590,115 @@ When the user wants a complete website rebuild or regeneration, respond with: RE
 For all other requests, give helpful, specific advice about design, content, or improvements.
 Keep responses concise and actionable. Respond in 1-3 sentences max unless detail is truly needed.`;
 
-      const conversationHistory = [
-        ...messages.slice(-8).map(m => ({ role: m.role, content: m.content })),
-        { role: 'user', content: text },
-      ];
+        const conversationHistory = [
+          ...messages.slice(-8).map(m => ({ role: m.role, content: m.content })),
+          { role: 'user', content: text },
+        ];
 
-      const { data, error } = await supabase.functions.invoke('website-chat', {
-        body: {
-          system: systemPrompt,
-          messages: conversationHistory,
-          provider: chatProvider,
-          // Pass context so edge function can fetch + apply images automatically
-          client_id: selectedClientId || null,
-          website_json: brief?.website_json || null,
-          business_name: brief?.business_name || form.business_name || '',
-          industry: brief?.industry || form.industry || '',
-          services: brief?.services_offered || form.services_offered || '',
-          location: brief?.location || form.location || '',
-        },
-      });
-      if (error) throw error;
+        const { data, error } = await supabase.functions.invoke('website-chat', {
+          body: {
+            system: systemPrompt,
+            messages: conversationHistory,
+            provider: chatProvider,
+            client_id: selectedClientId || null,
+            website_json: brief?.website_json || null,
+            business_name: brief?.business_name || form.business_name || '',
+            industry: brief?.industry || form.industry || '',
+            services: brief?.services_offered || form.services_offered || '',
+            location: brief?.location || form.location || '',
+          },
+        });
+        if (error) throw error;
 
-      // If the AI updated the website JSON, apply it and auto-refresh the preview
-      const jsonWasUpdated = !!data?.updated_json &&
-        JSON.stringify(data.updated_json) !== JSON.stringify(brief?.website_json);
-      if (data?.updated_json) {
-        setBrief(prev => prev ? { ...prev, website_json: data.updated_json } : prev);
-        // Auto-refresh the preview iframe so changes are visible immediately
-        setTimeout(() => setPreviewKey(k => k + 1), 300);
-      }
+        // If the AI updated the website JSON, apply it and auto-refresh the preview
+        const jsonWasUpdated = !!data?.updated_json &&
+          JSON.stringify(data.updated_json) !== JSON.stringify(brief?.website_json);
+        if (data?.updated_json) {
+          setBrief(prev => prev ? { ...prev, website_json: data.updated_json } : prev);
+          setTimeout(() => setPreviewKey(k => k + 1), 300);
+        }
 
-      // Some AI providers (e.g. Gemini in JSON mode) may return a JSON string
-      // instead of natural language. Detect this and show a friendly message.
-      const rawReply = data?.reply || '';
-      let reply: string;
-      try {
-        JSON.parse(rawReply);
-        // If we get here, the reply was JSON — convert to human-readable text
-        reply = jsonWasUpdated
-          ? '✅ Done! The changes have been applied and the preview has been refreshed.'
-          : "I reviewed your request. Try describing what you'd like to change — for example, \"remove the contact button\" or \"make the hero dark\".";
-      } catch {
-        reply = rawReply || "I couldn't process that request.";
-      }
+        const rawReply = data?.reply || '';
+        let reply: string;
+        try {
+          JSON.parse(rawReply);
+          reply = jsonWasUpdated
+            ? '✅ Done! The changes have been applied and the preview has been refreshed.'
+            : "I reviewed your request. Try describing what you'd like to change.";
+        } catch {
+          reply = rawReply || "I couldn't process that request.";
+        }
 
-      // Check if AI wants to regenerate with new art direction
-      if (reply.startsWith('REGENERATE:')) {
-        const newArtDirection = reply.replace('REGENERATE:', '').trim();
+        // Check if AI wants to regenerate with new art direction
+        if (reply.startsWith('REGENERATE:')) {
+          const newArtDirection = reply.replace('REGENERATE:', '').trim();
+          setMessages(prev => [...prev, {
+            id: `${Date.now()}b`, role: 'assistant',
+            content: `Regenerating with updated direction: "${newArtDirection}"`,
+            ts: Date.now(),
+          }]);
+          setIsChatLoading(false);
+          const updatedForm = {
+            ...form,
+            art_direction: newArtDirection,
+            primary_color: brief?.website_json?.global?.primary_color || form.primary_color,
+          };
+          setForm(updatedForm);
+          await handleGenerate(updatedForm);
+          return;
+        }
+
+        setMessages(prev => [...prev, { id: `${Date.now()}c`, role: 'assistant', content: reply, ts: Date.now() }]);
+      } catch (err: any) {
         setMessages(prev => [...prev, {
-          id: `${Date.now()}b`, role: 'assistant',
-          content: `Regenerating with updated direction: "${newArtDirection}"`,
+          id: `${Date.now()}e`, role: 'assistant',
+          content: `Error: ${err.message}`,
           ts: Date.now(),
         }]);
+      } finally {
         setIsChatLoading(false);
-        const updatedForm = {
-          ...form,
-          art_direction: newArtDirection,
-          primary_color: brief?.website_json?.global?.primary_color || form.primary_color,
-        };
-        setForm(updatedForm);
-        await handleGenerate(updatedForm);
+      }
+      return;
+    }
+
+    // ── Imperative commands → ai-command (reliable execution engine) ───────
+    // This path ALWAYS executes the change and updates the preview.
+    try {
+      const { data, error } = await supabase.functions.invoke('ai-command', {
+        body: {
+          client_id: selectedClientId,
+          command: text,
+          provider: chatProvider,
+        },
+      });
+
+      if (error) throw error;
+
+      if (!data?.success) {
+        // Execution failed — surface the error and fall back to a helpful chat reply
+        setMessages(prev => [...prev, {
+          id: `${Date.now()}f`, role: 'assistant',
+          content: data?.error
+            ? `I couldn't apply that change: ${data.error}. Try rephrasing your command.`
+            : "I couldn't apply that change. Try rephrasing — for example: \"Add a pricing section to the home page\" or \"Change the hero background to dark.\"",
+          ts: Date.now(),
+        }]);
         return;
       }
 
-      setMessages(prev => [...prev, { id: `${Date.now()}c`, role: 'assistant', content: reply, ts: Date.now() }]);
+      // Apply updated JSON and refresh preview
+      setBrief(prev => prev ? { ...prev, website_json: data.updated_json } : prev);
+      setTimeout(() => setPreviewKey(k => k + 1), 300);
+
+      setMessages(prev => [...prev, {
+        id: `${Date.now()}g`, role: 'assistant',
+        content: `✅ ${data.description || 'Changes applied — preview updated.'}`,
+        ts: Date.now(),
+      }]);
     } catch (err: any) {
       setMessages(prev => [...prev, {
-        id: `${Date.now()}e`, role: 'assistant',
-        content: `Error: ${err.message}`,
+        id: `${Date.now()}h`, role: 'assistant',
+        content: `Error applying changes: ${err.message}`,
         ts: Date.now(),
       }]);
     } finally {
@@ -1581,7 +1639,7 @@ Keep responses concise and actionable. Respond in 1-3 sentences max unless detai
                     <div className="flex justify-start">
                       <div className="bg-slate-800 rounded-2xl rounded-bl-sm px-3.5 py-2.5 flex items-center gap-2">
                         <Loader2 className="w-3.5 h-3.5 text-slate-400 animate-spin" />
-                        <span className="text-sm text-slate-400">Thinking...</span>
+                        <span className="text-sm text-slate-400">{chatLoadingLabel}</span>
                       </div>
                     </div>
                   )}
