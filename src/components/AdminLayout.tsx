@@ -9,7 +9,7 @@ import {
   FileText, Mail as MailIcon, Zap, CalendarCheck, Menu, X, User,
   Phone, Cpu, ChevronDown, ShieldCheck, PhoneCall, Globe, BookOpen,
   LayoutDashboard, Inbox, TrendingUp, Package, Download, FilePlus2,
-  Sparkles, CreditCard, Sun, Moon, Layers,
+  Sparkles, CreditCard, Sun, Moon, Layers, Copy,
 } from 'lucide-react';
 
 interface AdminLayoutProps {
@@ -75,6 +75,7 @@ const AdminLayout: React.FC<AdminLayoutProps> = ({ children }) => {
         { name: 'Site Import', href: '/admin/site-import', icon: Download },
         { name: 'Claude Assistant', href: '/admin/claude', icon: Bot },
         { name: 'Website Manager', href: '/admin/websites', icon: Layers },
+        { name: 'Clone Site', href: '/admin/clone-site', icon: Copy },
       ],
     },
     {
