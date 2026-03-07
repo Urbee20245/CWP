@@ -124,7 +124,7 @@ const SiteRenderer: React.FC = () => {
   if (siteData?.siteType === 'static' && siteData.clientSlug) {
     return (
       <StaticSiteRenderer
-        clientSlug={siteData.clientSlug}
+        clientSlug={siteData.staticDistPath ?? siteData.clientSlug}
         premiumFeatures={siteData.premiumFeatures}
         clientId={siteData.clientId}
         calBookingLink={siteData.calBookingLink ?? undefined}

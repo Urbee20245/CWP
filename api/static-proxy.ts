@@ -62,7 +62,8 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     }
 
     // Proxy to serve-static-site edge function
-    const edgeUrl = `${SUPABASE_URL}/functions/v1/serve-static-site?slug=${brief.client_slug}&path=${encodeURIComponent(filePath)}`;
+    const distPath = brief.static_dist_path || brief.client_slug;
+    const edgeUrl = `${SUPABASE_URL}/functions/v1/serve-static-site?slug=${distPath}&path=${encodeURIComponent(filePath)}`;
 
     const fileRes = await fetch(edgeUrl, {
       headers: {
@@ -73,7 +74,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     if (!fileRes.ok) {
       // For 404s on HTML routes, try serving index.html (SPA fallback)
       const fallbackRes = await fetch(
-        `${SUPABASE_URL}/functions/v1/serve-static-site?slug=${brief.client_slug}&path=${encodeURIComponent('/')}`,
+        `${SUPABASE_URL}/functions/v1/serve-static-site?slug=${distPath}&path=${encodeURIComponent('/')}`,
         { headers: { 'Authorization': `Bearer ${SUPABASE_SERVICE_KEY}` } }
       );
       if (fallbackRes.ok) {

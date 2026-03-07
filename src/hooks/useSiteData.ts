@@ -14,6 +14,7 @@ export interface SiteData {
   /** Render mode: null/'cwp_json' = normal, 'raw_html' = iframe clone */
   siteType: string | null;
   clientSlug: string | null;
+  staticDistPath: string | null;
 }
 
 export interface UseSiteDataResult {
@@ -47,7 +48,7 @@ export function useSiteData(slug: string | undefined, isPreview = false): UseSit
     (async () => {
       const { data, error } = await supabase
         .from('website_briefs')
-        .select('website_json, is_published, premium_features, client_id, raw_html, site_type, client_slug')
+        .select('website_json, is_published, premium_features, client_id, raw_html, site_type, client_slug, static_dist_path')
         .or(`slug.eq.${slug},client_slug.eq.${slug}`)
         .maybeSingle();
 
@@ -96,6 +97,7 @@ export function useSiteData(slug: string | undefined, isPreview = false): UseSit
         rawHtml: (data as any).raw_html ?? null,
         siteType: (data as any).site_type ?? null,
         clientSlug: (data as any).client_slug ?? null,
+        staticDistPath: (data as any).static_dist_path ?? null,
       });
       setStatus('found');
     })();
