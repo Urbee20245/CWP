@@ -30,7 +30,12 @@ const StaticSiteRenderer: React.FC<StaticSiteRendererProps> = ({
         if (!res.ok) throw new Error(`Failed to load site (${res.status})`);
         return res.text();
       })
-      .then(html => setHtmlContent(html))
+      .then(html => {
+        // Inject a <base> tag so relative asset paths resolve to Supabase Storage
+        const baseTag = `<base href="${STATIC_STORAGE_URL}/${clientSlug}/">`;
+        const withBase = html.replace(/<head>/i, `<head>${baseTag}`);
+        setHtmlContent(withBase);
+      })
       .catch(err => setLoadError(err.message));
   }, [clientSlug]);
 
