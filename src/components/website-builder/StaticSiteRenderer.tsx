@@ -31,10 +31,12 @@ const StaticSiteRenderer: React.FC<StaticSiteRendererProps> = ({
         return res.text();
       })
       .then(html => {
-        // Inject a <base> tag so relative asset paths resolve to Supabase Storage
-        const baseTag = `<base href="${STATIC_STORAGE_URL}/${clientSlug}/">`;
-        const withBase = html.replace(/<head>/i, `<head>${baseTag}`);
-        setHtmlContent(withBase);
+        const storageBase = `${STATIC_STORAGE_URL}/${clientSlug}/`;
+        const rewritten = html
+          .replace(/src="\/(?!\/)/g, `src="${storageBase}`)
+          .replace(/href="\/(?!\/)/g, `href="${storageBase}`)
+          .replace(/url\("\/(?!\/)/g, `url("${storageBase}`);
+        setHtmlContent(rewritten);
       })
       .catch(err => setLoadError(err.message));
   }, [clientSlug]);
