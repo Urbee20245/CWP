@@ -1,4 +1,4 @@
-import React, { useRef, useState, useCallback } from 'react';
+import React, { useEffect, useRef, useState, useCallback } from 'react';
 import { PremiumFeatureId } from '../../types/website';
 
 const STATIC_STORAGE_URL = 'https://nvgumhlewbqynrhlkqhx.supabase.co/storage/v1/object/public/static-sites';
@@ -20,12 +20,36 @@ const StaticSiteRenderer: React.FC<StaticSiteRendererProps> = ({
 }) => {
   const iframeRef = useRef<HTMLIFrameElement>(null);
   const [iframeHeight, setIframeHeight] = useState('100vh');
-  const [loaded, setLoaded] = useState(false);
+  const [htmlContent, setHtmlContent] = useState<string | null>(null);
+  const [loadError, setLoadError] = useState<string | null>(null);
 
-  // Point directly at the file in Supabase Storage.
-  // Using src= instead of srcdoc= is critical — browsers block ES module scripts
-  // (type="module") when loaded inside srcdoc iframes due to CSP null-origin rules.
-  const siteUrl = `${STATIC_STORAGE_URL}/${clientSlug}/index.html`;
+  useEffect(() => {
+    const base = `${STATIC_STORAGE_URL}/${clientSlug}`;
+    fetch(`${base}/index.html`)
+      .then(res => {
+        if (!res.ok) throw new Error(`Failed to load site (${res.status})`);
+        return res.text();
+      })
+      .then(html => {
+        // 1. Rewrite absolute paths (/assets/...) to full Supabase Storage URLs.
+        //    Browsers ignore <base> for paths starting with "/" so we must replace directly.
+        let fixed = html
+          .replace(/\bsrc="\/(?!\/)/g,  `src="${base}/`)
+          .replace(/\bhref="\/(?!\/)/g, `href="${base}/`)
+          .replace(/\burl\("\/(?!\/)/g, `url("${base}/`)
+          .replace(/\burl\('\/(?!\/)/g, `url('${base}/`);
+
+        // 2. Strip type="module" from all script tags.
+        //    srcdoc iframes have a null origin — browsers refuse to load external ES modules
+        //    from a null origin regardless of CORS headers. Vite bundles are already fully
+        //    self-contained so they run correctly as classic scripts without the module flag.
+        fixed = fixed.replace(/<script\b([^>]*)\btype="module"([^>]*)>/gi,
+          (_match, before, after) => `<script${before}${after}>`);
+
+        setHtmlContent(fixed);
+      })
+      .catch(err => setLoadError(err.message));
+  }, [clientSlug]);
 
   const syncHeight = useCallback(() => {
     try {
@@ -37,11 +61,9 @@ const StaticSiteRenderer: React.FC<StaticSiteRendererProps> = ({
   }, []);
 
   const handleLoad = useCallback(() => {
-    setLoaded(true);
     try {
       const doc = iframeRef.current?.contentDocument;
       if (!doc) return;
-      // Inject addons
       if (premiumFeatures.includes('cal_com') && calBookingLink) {
         if (!doc.getElementById('cwp-cal-btn')) {
           const btn = doc.createElement('a');
@@ -81,23 +103,40 @@ const StaticSiteRenderer: React.FC<StaticSiteRendererProps> = ({
     } catch (e) { console.warn('[StaticSiteRenderer]', e); }
   }, [premiumFeatures, calBookingLink, clientId, isPreview, syncHeight]);
 
+  useEffect(() => {
+    const handler = (e: MessageEvent) => {
+      if (e.data?.type === 'cwp_resize') setIframeHeight(`${e.data.height}px`);
+    };
+    window.addEventListener('message', handler);
+    return () => window.removeEventListener('message', handler);
+  }, []);
+
+  if (loadError) {
+    return (
+      <div className="min-h-screen flex items-center justify-center">
+        <p className="text-red-500">{loadError}</p>
+      </div>
+    );
+  }
+
+  if (!htmlContent) {
+    return (
+      <div className="min-h-screen flex items-center justify-center bg-white">
+        <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-slate-400" />
+      </div>
+    );
+  }
+
   return (
-    <div style={{ position: 'relative', width: '100%', minHeight: '100vh' }}>
-      {!loaded && (
-        <div className="absolute inset-0 flex items-center justify-center bg-white z-10">
-          <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-slate-400" />
-        </div>
-      )}
-      <iframe
-        ref={iframeRef}
-        src={siteUrl}
-        title="Client Website"
-        onLoad={handleLoad}
-        style={{ width: '100%', height: iframeHeight, border: 'none', display: 'block' }}
-        sandbox="allow-scripts allow-same-origin allow-forms allow-popups allow-popups-to-escape-sandbox allow-modals"
-        scrolling="no"
-      />
-    </div>
+    <iframe
+      ref={iframeRef}
+      srcDoc={htmlContent}
+      title="Client Website"
+      onLoad={handleLoad}
+      style={{ width: '100%', height: iframeHeight, border: 'none', display: 'block' }}
+      sandbox="allow-scripts allow-same-origin allow-forms allow-popups allow-popups-to-escape-sandbox allow-modals"
+      scrolling="no"
+    />
   );
 };
 
