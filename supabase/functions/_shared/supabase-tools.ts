@@ -295,13 +295,15 @@ export async function executeSupabaseTool(
     console.error(`[supabase-tools] Tool ${toolName} failed:`, errMsg);
 
     // Log the error to provisioned resources
-    await supabaseAdmin.from('ai_provisioned_resources').insert({
-      client_id: clientId,
-      resource_type: toolName,
-      resource_name: toolInput.table_name || toolInput.bucket_name || toolInput.description || toolName,
-      details: { error: errMsg, input: toolInput },
-      status: 'error',
-    }).catch(() => { /* ignore secondary failure */ });
+    try {
+      await supabaseAdmin.from('ai_provisioned_resources').insert({
+        client_id: clientId,
+        resource_type: toolName,
+        resource_name: toolInput.table_name || toolInput.bucket_name || toolInput.description || toolName,
+        details: { error: errMsg, input: toolInput },
+        status: 'error',
+      });
+    } catch { /* ignore secondary failure */ }
 
     return {
       result: { success: false, output: '', error: errMsg },
