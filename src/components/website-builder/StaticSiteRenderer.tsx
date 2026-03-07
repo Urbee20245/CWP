@@ -31,12 +31,17 @@ const StaticSiteRenderer: React.FC<StaticSiteRendererProps> = ({
         return res.text();
       })
       .then(html => {
-        const storageBase = `${STATIC_STORAGE_URL}/${clientSlug}/`;
-        const rewritten = html
-          .replace(/src="\/(?!\/)/g, `src="${storageBase}`)
-          .replace(/href="\/(?!\/)/g, `href="${storageBase}`)
-          .replace(/url\("\/(?!\/)/g, `url("${storageBase}`);
-        setHtmlContent(rewritten);
+        const base = `${STATIC_STORAGE_URL}/${clientSlug}`;
+        // Rewrite absolute paths (/assets/...) to full Supabase Storage URLs.
+        // <base> tags do NOT affect paths that start with "/" — only relative paths.
+        // We must do a direct string replacement for src="/" href="/" url("/
+        let fixed = html
+          .replace(/\bsrc="\/(?!\/)/g, `src="${base}/`)
+          .replace(/\bhref="\/(?!\/)/g, `href="${base}/`)
+          .replace(/\burl\("\/(?!\/)/g, `url("${base}/`)
+          .replace(/\burl\('\/(?!\/)/g, `url('${base}/`)
+          .replace(/from "\//g, `from "${base}/`);
+        setHtmlContent(fixed);
       })
       .catch(err => setLoadError(err.message));
   }, [clientSlug]);
