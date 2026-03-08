@@ -180,7 +180,7 @@ const AdminClientDetail: React.FC = () => {
   const { user, profile: adminProfile } = useAuth();
   const [client, setClient] = useState<Client | null>(null);
   const [isLoading, setIsLoading] = useState(true);
-  const [activeTab, setActiveTab] = useState<'projects' | 'billing' | 'reminders' | 'addons' | 'sms' | 'website' | 'connections'>('billing'); // Default to billing
+  const [activeTab, setActiveTab] = useState<'projects' | 'billing' | 'reminders' | 'addons' | 'sms' | 'domain-creds' | 'website' | 'connections'>('billing'); // Default to billing
   const [fetchError, setFetchError] = useState<string | null>(null); // New state for fetch errors
 
   // Dialog State
@@ -1159,7 +1159,8 @@ const AdminClientDetail: React.FC = () => {
             { id: 'billing', label: 'Billing' },
             { id: 'addons', label: 'Add-on Requests' },
             { id: 'sms', label: 'SMS Inbox' },
-            { id: 'website', label: '🔑 Domain Creds' },
+            { id: 'domain-creds', label: '🔑 Domain Creds' },
+            { id: 'website', label: '🌐 Website' },
             { id: 'connections', label: '🔌 Connections' },
           ].map(tab => (
             <button
@@ -1610,6 +1611,11 @@ const AdminClientDetail: React.FC = () => {
                   </button>
                 </div>
               </div>
+              </div>
+            )}
+
+            {activeTab === 'domain-creds' && (
+              <div className="space-y-6">
               <div className="bg-white p-6 rounded-xl shadow-lg border border-slate-100">
                 <h2 className="text-xl font-bold mb-2 flex items-center gap-2 text-slate-900 border-b border-slate-100 pb-4">
                   <Key className="w-5 h-5 text-indigo-500" /> Domain Registrar Credentials
