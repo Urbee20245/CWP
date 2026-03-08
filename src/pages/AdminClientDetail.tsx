@@ -3,7 +3,7 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import { useParams, Link, useNavigate } from 'react-router-dom';
 import { supabase } from '../integrations/supabase/client';
-import { Loader2, Briefcase, FileText, DollarSign, Plus, CreditCard, Zap, ExternalLink, ShieldCheck, Lock, Trash2, Send, AlertCircle, MessageSquare, Phone, CheckCircle2, Pause, Play, Clock, Download, Edit, Bell, BellOff, Users, Percent, Calendar, X, AlertTriangle, Eye, XCircle, Key, Globe, Copy, CheckSquare, Tag, ToggleRight } from 'lucide-react';
+import { Loader2, Briefcase, FileText, DollarSign, Plus, CreditCard, Zap, ExternalLink, ShieldCheck, Lock, Trash2, Send, AlertCircle, MessageSquare, Phone, CheckCircle2, Pause, Play, Clock, Download, Edit, Bell, BellOff, Users, Percent, Calendar, X, AlertTriangle, Eye, XCircle, Key, Globe, Copy, CheckSquare, Tag, ToggleRight, Github, GitBranch, Rocket, RefreshCw } from 'lucide-react';
 import { useClientFeatureFlags } from '../hooks/useClientFeatureFlags';
 import { ClientProposal } from '../types/proposals';
 import AdminLayout from '../components/AdminLayout';
@@ -215,6 +215,15 @@ const AdminClientDetail: React.FC = () => {
   const [newReminderDate, setNewReminderDate] = useState('');
   const [saveError, setSaveError] = useState<string | null>(null); // ADDED missing state
 
+  // GitHub Integration state
+  const [githubRepoUrl, setGithubRepoUrl] = useState('');
+  const [githubConnecting, setGithubConnecting] = useState(false);
+  const [githubDeploying, setGithubDeploying] = useState(false);
+  const [githubMessage, setGithubMessage] = useState<{ type: 'success' | 'error', text: string } | null>(null);
+  const [deployStatus, setDeployStatus] = useState<string>('idle');
+  const [lastDeployed, setLastDeployed] = useState<string | null>(null);
+  const [githubConnected, setGithubConnected] = useState(false);
+
   // Feature flags state
   const { flags, loading: flagsLoading } = useClientFeatureFlags(id);
   const [localFlags, setLocalFlags] = useState(flags);
@@ -338,6 +347,21 @@ const AdminClientDetail: React.FC = () => {
       .maybeSingle();
     setDomainCreds(credsData || null);
 
+    // Load GitHub state
+    setGithubRepoUrl((clientData as any).github_repo_url || '');
+    setGithubConnected((clientData as any).github_connected || false);
+
+    // Load deploy status from website_briefs
+    const { data: briefData } = await supabase
+      .from('website_briefs')
+      .select('deploy_status, last_deployed_at')
+      .eq('client_id', id)
+      .single();
+    if (briefData) {
+      setDeployStatus((briefData as any).deploy_status || 'idle');
+      setLastDeployed((briefData as any).last_deployed_at);
+    }
+
     setIsLoading(false);
   }, [id]);
 
@@ -362,6 +386,59 @@ const AdminClientDetail: React.FC = () => {
 
   // Sync localFlags when feature flags load
   useEffect(() => { setLocalFlags(flags); }, [flags]);
+
+  const parseRepoUrl = (url: string) => {
+    const match = url.replace(/\.git$/, '').match(/github\.com\/([^/]+)\/([^/]+)/);
+    return match ? { owner: match[1], name: match[2] } : null;
+  };
+
+  const handleConnectGithub = async () => {
+    const parsed = parseRepoUrl(githubRepoUrl);
+    if (!parsed) {
+      setGithubMessage({ type: 'error', text: 'Invalid GitHub URL. Use: https://github.com/owner/repo' });
+      return;
+    }
+    setGithubConnecting(true);
+    setGithubMessage(null);
+    try {
+      await supabase.from('clients').update({
+        github_repo_url: githubRepoUrl,
+        github_repo_owner: parsed.owner,
+        github_repo_name: parsed.name,
+      }).eq('id', id);
+
+      const { data, error } = await supabase.functions.invoke('trigger-github-deploy', {
+        body: { client_id: id, action: 'setup' },
+      });
+      if (error) throw error;
+      if (!data?.success) throw new Error(data?.error || 'Setup failed');
+      setGithubConnected(true);
+      setGithubMessage({ type: 'success', text: 'GitHub connected! Action installed. Push to main to auto-deploy.' });
+    } catch (err: any) {
+      setGithubMessage({ type: 'error', text: err.message || 'Connection failed' });
+    } finally {
+      setGithubConnecting(false);
+    }
+  };
+
+  const handleDeployNow = async () => {
+    setGithubDeploying(true);
+    setGithubMessage(null);
+    setDeployStatus('deploying');
+    try {
+      const { data, error } = await supabase.functions.invoke('trigger-github-deploy', {
+        body: { client_id: id, action: 'deploy' },
+      });
+      if (error) throw error;
+      if (!data?.success) throw new Error(data?.error || 'Deploy failed');
+      setGithubMessage({ type: 'success', text: 'Deploy triggered! GitHub Action is running.' });
+    } catch (err: any) {
+      setDeployStatus('error');
+      setGithubMessage({ type: 'error', text: err.message || 'Deploy failed' });
+    } finally {
+      setGithubDeploying(false);
+    }
+  };
 
   const handleSaveFlags = async () => {
     setSavingFlags(true);
@@ -1413,6 +1490,80 @@ const AdminClientDetail: React.FC = () => {
 
             {activeTab === 'website' && (
               <div className="space-y-6">
+              {/* GitHub Integration Panel */}
+              <div className="bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden">
+                <div className="px-6 py-4 border-b border-slate-100 flex items-center gap-2">
+                  <Github className="w-5 h-5 text-slate-700" />
+                  <h2 className="font-semibold text-slate-900">GitHub Integration</h2>
+                  {githubConnected && (
+                    <span className="ml-auto text-xs bg-emerald-100 text-emerald-700 font-semibold px-2 py-1 rounded-full flex items-center gap-1">
+                      <CheckCircle2 className="w-3 h-3" /> Connected
+                    </span>
+                  )}
+                </div>
+                <div className="p-6 space-y-4">
+                  <p className="text-sm text-slate-500">
+                    Link a GitHub repo to this client. CWP will install an auto-deploy Action — every push to <code className="bg-slate-100 px-1 rounded">main</code> deploys the site automatically.
+                  </p>
+
+                  <div className="space-y-2">
+                    <label className="block text-sm font-medium text-slate-700">GitHub Repo URL</label>
+                    <div className="flex gap-2">
+                      <input
+                        type="url"
+                        value={githubRepoUrl}
+                        onChange={e => setGithubRepoUrl(e.target.value)}
+                        placeholder="https://github.com/yourname/client-repo"
+                        className="flex-1 border border-slate-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                      />
+                      <button
+                        onClick={handleConnectGithub}
+                        disabled={githubConnecting || !githubRepoUrl.trim()}
+                        className="px-4 py-2 bg-slate-900 text-white text-sm font-semibold rounded-lg hover:bg-slate-700 disabled:opacity-50 transition-colors whitespace-nowrap flex items-center gap-2"
+                      >
+                        {githubConnecting ? <><RefreshCw className="w-4 h-4 animate-spin" /> Connecting...</> : <><GitBranch className="w-4 h-4" /> {githubConnected ? 'Reconnect' : 'Connect'}</>}
+                      </button>
+                    </div>
+                  </div>
+
+                  {githubConnected && (
+                    <div className="flex items-center justify-between p-4 bg-slate-50 rounded-xl border border-slate-200">
+                      <div>
+                        <p className="text-sm font-medium text-slate-800">Deploy Status</p>
+                        <p className="text-xs text-slate-400 mt-0.5">
+                          {deployStatus === 'deploying' && '⏳ Deploying...'}
+                          {deployStatus === 'success' && `✅ Last deployed ${lastDeployed ? new Date(lastDeployed).toLocaleDateString() : ''}`}
+                          {deployStatus === 'error' && '❌ Last deploy failed'}
+                          {deployStatus === 'idle' && 'Not yet deployed'}
+                        </p>
+                      </div>
+                      <button
+                        onClick={handleDeployNow}
+                        disabled={githubDeploying || deployStatus === 'deploying'}
+                        className="flex items-center gap-2 px-4 py-2 bg-indigo-600 text-white text-sm font-semibold rounded-lg hover:bg-indigo-700 disabled:opacity-50 transition-colors"
+                      >
+                        {githubDeploying || deployStatus === 'deploying'
+                          ? <><RefreshCw className="w-4 h-4 animate-spin" /> Deploying...</>
+                          : <><Rocket className="w-4 h-4" /> Deploy Now</>}
+                      </button>
+                    </div>
+                  )}
+
+                  {githubMessage && (
+                    <div className={`flex items-start gap-2 p-3 rounded-xl text-sm ${
+                      githubMessage.type === 'success'
+                        ? 'bg-emerald-50 border border-emerald-200 text-emerald-700'
+                        : 'bg-red-50 border border-red-200 text-red-600'
+                    }`}>
+                      {githubMessage.type === 'success'
+                        ? <CheckCircle2 className="w-4 h-4 flex-shrink-0 mt-0.5" />
+                        : <AlertCircle className="w-4 h-4 flex-shrink-0 mt-0.5" />}
+                      {githubMessage.text}
+                    </div>
+                  )}
+                </div>
+              </div>
+
               <div className="bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden">
                 <div className="px-6 py-4 border-b border-slate-100 flex items-center justify-between">
                   <div className="flex items-center gap-2">
