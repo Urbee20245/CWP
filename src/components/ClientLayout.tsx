@@ -8,8 +8,9 @@ import {
   DollarSign, LogOut, User, CalendarCheck,
   Sparkles, Menu, X, HelpCircle, Settings, ClipboardList, Globe,
   LayoutDashboard, ChevronRight, ShieldAlert, FileCheck, PlusCircle,
-  Sun, Moon,
+  Sun, Moon, Zap,
 } from 'lucide-react';
+import { useClientFeatureFlags } from '../hooks/useClientFeatureFlags';
 
 const IMPERSONATION_KEY = 'cwp_admin_view';
 const IMPERSONATION_NAME_KEY = 'cwp_admin_name';
@@ -33,6 +34,7 @@ interface NavSection {
 const ClientLayout: React.FC<ClientLayoutProps> = ({ children }) => {
   const { profile, signOut } = useAuth();
   const { theme, toggleTheme } = useTheme();
+  const { flags } = useClientFeatureFlags();
   const location = useLocation();
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
   const [isAdminView, setIsAdminView] = useState(false);
@@ -63,27 +65,28 @@ const ClientLayout: React.FC<ClientLayoutProps> = ({ children }) => {
 
   const navSections: NavSection[] = [
     {
-      title: 'My Portal',
+      title: 'Main',
       items: [
         { name: 'Dashboard', href: '/client/dashboard', icon: LayoutDashboard, description: 'Overview & projects' },
-        { name: 'New Request', href: '/client/new-request', icon: PlusCircle, description: 'Request new services' },
-        { name: 'My Website', href: '/client/website', icon: Globe, description: 'Manage your site' },
-        { name: 'Leads', href: '/client/leads', icon: ClipboardList, description: 'Lead management' },
-        { name: 'Billing', href: '/client/billing', icon: DollarSign, description: 'Invoices & payments' },
-        { name: 'My Proposal', href: '/client/proposals', icon: FileCheck, description: 'View your service proposal' },
+        ...(flags.new_request ? [{ name: 'New Request', href: '/client/new-request', icon: PlusCircle, description: 'Request new services' }] : []),
+        ...(flags.website_editor ? [{ name: 'My Website', href: '/client/website', icon: Globe, description: 'Manage your site' }] : []),
+        ...(flags.leads_visible ? [{ name: 'Leads', href: '/client/leads', icon: ClipboardList, description: 'Lead management' }] : []),
+        ...(flags.billing_visible ? [{ name: 'Billing', href: '/client/billing', icon: DollarSign, description: 'Invoices & payments' }] : []),
+        ...(flags.proposals ? [{ name: 'My Proposal', href: '/client/proposals', icon: FileCheck, description: 'View your service proposal' }] : []),
+        ...(flags.jetsuite ? [{ name: 'JetSuite', href: '/client/jetsuite', icon: Zap, description: 'JetSuite tools' }] : []),
       ],
     },
     {
-      title: 'With Your Team',
+      title: 'Schedule',
       items: [
-        { name: 'Book Appointment', href: '/client/appointments', icon: CalendarCheck, description: 'Schedule a call with admin' },
+        ...(flags.appointments ? [{ name: 'Book Appointment', href: '/client/appointments', icon: CalendarCheck, description: 'Schedule a call with admin' }] : []),
       ],
     },
     {
       title: 'Account',
       items: [
         { name: 'My Profile', href: '/client/profile', icon: User, description: 'Profile settings' },
-        { name: 'Connections', href: '/client/settings', icon: Settings, description: 'Integrations & config' },
+        ...(flags.integrations ? [{ name: 'Connections', href: '/client/settings', icon: Settings, description: 'Integrations & config' }] : []),
         { name: 'Help & Guides', href: '/client/help', icon: HelpCircle, description: 'Support resources' },
       ],
     },
@@ -197,25 +200,27 @@ const ClientLayout: React.FC<ClientLayoutProps> = ({ children }) => {
       </nav>
 
       {/* JetSuite Promo */}
-      <div className="px-3 pb-3">
-        <Link
-          to="/client/jetsuite"
-          onClick={onNavClick}
-          className={`flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm font-semibold transition-all border ${
-            isActiveLink('/client/jetsuite')
-              ? 'bg-indigo-600 text-white border-indigo-600 shadow-sm'
-              : isDark
-                ? 'bg-indigo-900/30 text-indigo-300 border-indigo-800/50 hover:bg-indigo-900/50'
-                : 'bg-gradient-to-r from-indigo-50 to-violet-50 text-indigo-700 border-indigo-200 hover:from-indigo-100 hover:to-violet-100'
-          }`}
-        >
-          <Sparkles className="w-4 h-4 flex-shrink-0" />
-          <span>JetSuite Tools</span>
-          {!isActiveLink('/client/jetsuite') && (
-            <span className="ml-auto text-[10px] font-bold bg-indigo-600 text-white px-1.5 py-0.5 rounded-full">PRO</span>
-          )}
-        </Link>
-      </div>
+      {flags.jetsuite && (
+        <div className="px-3 pb-3">
+          <Link
+            to="/client/jetsuite"
+            onClick={onNavClick}
+            className={`flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm font-semibold transition-all border ${
+              isActiveLink('/client/jetsuite')
+                ? 'bg-indigo-600 text-white border-indigo-600 shadow-sm'
+                : isDark
+                  ? 'bg-indigo-900/30 text-indigo-300 border-indigo-800/50 hover:bg-indigo-900/50'
+                  : 'bg-gradient-to-r from-indigo-50 to-violet-50 text-indigo-700 border-indigo-200 hover:from-indigo-100 hover:to-violet-100'
+            }`}
+          >
+            <Sparkles className="w-4 h-4 flex-shrink-0" />
+            <span>JetSuite Tools</span>
+            {!isActiveLink('/client/jetsuite') && (
+              <span className="ml-auto text-[10px] font-bold bg-indigo-600 text-white px-1.5 py-0.5 rounded-full">PRO</span>
+            )}
+          </Link>
+        </div>
+      )}
 
       {/* Theme Toggle + Sign Out */}
       <div className={`p-3 border-t space-y-1 ${isDark ? 'border-slate-700' : 'border-slate-100'}`}>
