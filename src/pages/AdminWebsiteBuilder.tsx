@@ -6,7 +6,7 @@ import {
   Globe, Loader2, AlertTriangle, CheckCircle, Eye, Copy, EyeOff,
   RefreshCw, Wand2, ChevronDown, FileText, Check, Link, Save, Info, Key,
   Sparkles, Send, ExternalLink, Settings, ToggleLeft, ToggleRight, X,
-  MessageSquare, ChevronRight, Zap, Image, ImageIcon, Link2, Upload, Bot, RotateCcw, Code,
+  MessageSquare, ChevronRight, Zap, Image, ImageIcon, Link2, Upload, Bot, RotateCcw,
 } from 'lucide-react';
 import { supabase } from '../integrations/supabase/client';
 import { AdminService } from '../services/adminService';
@@ -105,6 +105,10 @@ const AdminWebsiteBuilder: React.FC = () => {
   const [isGenerating, setIsGenerating] = useState(false);
   const [genError, setGenError]     = useState<string | null>(null);
 
+  // HTML mode
+  const [generationMode, setGenerationMode] = useState<'json' | 'html'>('html');
+  const [rawHtml, setRawHtml]               = useState<string | null>(null);
+
   // Left panel state machine
   const [panelState, setPanelState] = useState<LeftPanelState>('type-picker');
 
@@ -198,11 +202,6 @@ const AdminWebsiteBuilder: React.FC = () => {
   const [selectedProvider, setSelectedProvider] = useState(DEFAULT_PROVIDER_ID);
   const [activeSection, setActiveSection] = useState<ProviderSection>('all');
 
-  // HTML mode
-  const [generationMode, setGenerationMode] = useState<'json' | 'html'>('html');
-  const [rawHtml, setRawHtml] = useState<string | null>(null);
-  const [showCodeView, setShowCodeView] = useState(false);
-
   // ── Load clients ─────────────────────────────────────────────────────────
 
   useEffect(() => {
@@ -257,17 +256,8 @@ const AdminWebsiteBuilder: React.FC = () => {
         setSelectedProvider(nb.ai_provider);
       }
 
-      // Restore HTML mode state
-      if (nb.site_type === 'raw_html' && nb.raw_html) {
-        setRawHtml(nb.raw_html);
-        setGenerationMode('html');
-      } else if (nb.site_type !== 'raw_html') {
-        setRawHtml(null);
-        setGenerationMode('json');
-      }
-
       // Determine panel state from brief
-      if (nb.generation_status === 'complete' && (nb.website_json || (nb.site_type === 'raw_html' && nb.raw_html))) {
+      if (nb.generation_status === 'complete' && nb.website_json) {
         setPanelState('chat');
         setRightView('build');
         setActivePreviewPageSlug('');
@@ -321,17 +311,6 @@ const AdminWebsiteBuilder: React.FC = () => {
     if (selectedClientId) loadBrief(selectedClientId);
   }, [selectedClientId, loadBrief]);
 
-  // ── Detect HTML mode from loaded brief ────────────────────────────────────
-  useEffect(() => {
-    if (brief?.site_type === 'raw_html' && brief?.raw_html) {
-      setRawHtml(brief.raw_html);
-      setGenerationMode('html');
-      if (brief.generation_status === 'complete') {
-        setPanelState('chat');
-      }
-    }
-  }, [brief?.site_type, brief?.raw_html, brief?.generation_status]);
-
   // ── Auto-scroll chat ──────────────────────────────────────────────────────
 
   useEffect(() => {
@@ -357,26 +336,51 @@ const AdminWebsiteBuilder: React.FC = () => {
         f.art_direction,
       ].filter(Boolean).join('. ');
 
-      await AdminService.generateWebsite({
-        client_id:        selectedClientId,
-        business_name:    f.business_name,
-        industry:         f.industry,
-        services_offered: f.services_offered,
-        location:         f.location,
-        tone:             f.tone,
-        primary_color:    f.primary_color,
-        art_direction:    fullArtDirection,
-        pages_to_generate: Array.from(selectedPages),
-        ai_provider:      selectedProvider,
-      });
-      const loadedBrief = await loadBrief(selectedClientId);
-      if (loadedBrief?.generation_status === 'complete' && loadedBrief?.website_json) {
+      if (generationMode === 'html') {
+        // ── HTML Mode: call generate-website-html edge function ──
+        const { data, error } = await supabase.functions.invoke('generate-website-html', {
+          body: {
+            client_id:    selectedClientId,
+            business_name: f.business_name,
+            industry:     f.industry,
+            services:     f.services_offered,
+            location:     f.location,
+            phone:        brief?.phone || '',
+            email:        brief?.email || '',
+            tone:         f.tone,
+            primary_color: f.primary_color,
+            art_direction: fullArtDirection,
+            provider:     'claude-sonnet',
+          },
+        });
+        if (error) throw error;
+        if (!data?.success) throw new Error(data?.error || 'Generation failed');
+        setRawHtml(data.raw_html);
         setPanelState('chat');
         setTimeout(() => setPreviewKey(k => k + 1), 300);
       } else {
-        const errMsg = loadedBrief?.generation_error || 'Website was not saved. Please try again.';
-        setGenError(errMsg);
-        setPanelState('brief-form');
+        // ── JSON Mode: existing flow ──
+        await AdminService.generateWebsite({
+          client_id:        selectedClientId,
+          business_name:    f.business_name,
+          industry:         f.industry,
+          services_offered: f.services_offered,
+          location:         f.location,
+          tone:             f.tone,
+          primary_color:    f.primary_color,
+          art_direction:    fullArtDirection,
+          pages_to_generate: Array.from(selectedPages),
+          ai_provider:      selectedProvider,
+        });
+        const loadedBrief = await loadBrief(selectedClientId);
+        if (loadedBrief?.generation_status === 'complete' && loadedBrief?.website_json) {
+          setPanelState('chat');
+          setTimeout(() => setPreviewKey(k => k + 1), 300);
+        } else {
+          const errMsg = loadedBrief?.generation_error || 'Website was not saved. Please try again.';
+          setGenError(errMsg);
+          setPanelState('brief-form');
+        }
       }
     } catch (err: any) {
       setGenError(err.message || 'Generation failed. Please try again.');
@@ -384,69 +388,7 @@ const AdminWebsiteBuilder: React.FC = () => {
     } finally {
       setIsGenerating(false);
     }
-  }, [selectedClientId, form, selectedPages, loadBrief]);
-
-  // ── HTML Mode: Generate ──────────────────────────────────────────────────
-
-  const handleGenerateHtml = useCallback(async () => {
-    if (!selectedClientId) return;
-    setIsGenerating(true);
-    setGenError(null);
-    setGeneratingLabel('Building your website...');
-    setPanelState('generating');
-
-    try {
-      const styleNote = form.design_style
-        ? DESIGN_STYLES.find(s => s.value === form.design_style)
-        : null;
-      const fullArtDirection = [
-        styleNote ? `Design Style: ${styleNote.label} — ${styleNote.desc}` : '',
-        form.art_direction,
-      ].filter(Boolean).join('. ');
-
-      const { data, error } = await supabase.functions.invoke('generate-website-html', {
-        body: {
-          client_id: selectedClientId,
-          business_name: form.business_name,
-          industry: form.industry,
-          services: form.services_offered,
-          location: form.location,
-          tone: form.tone,
-          primary_color: form.primary_color,
-          art_direction: fullArtDirection,
-          provider: selectedProvider,
-        },
-      });
-
-      if (error) throw error;
-
-      if (!data?.success || !data?.raw_html) {
-        throw new Error(data?.error || 'Generation failed. Please try again.');
-      }
-
-      setRawHtml(data.raw_html);
-      setBrief(prev => prev ? { ...prev, raw_html: data.raw_html, site_type: 'raw_html', generation_status: 'complete' } : prev);
-      setPanelState('chat');
-    } catch (err: any) {
-      setGenError(err.message || 'Generation failed. Please try again.');
-      setPanelState('brief-form');
-    } finally {
-      setIsGenerating(false);
-    }
-  }, [selectedClientId, form, selectedProvider]);
-
-  // ── HTML Mode: Chat command ───────────────────────────────────────────────
-
-  const handleHtmlCommand = useCallback(async (command: string) => {
-    const { data, error } = await supabase.functions.invoke('edit-website-html', {
-      body: { client_id: selectedClientId, command, provider: chatProvider },
-    });
-    if (error) throw error;
-    if (!data?.success) throw new Error(data?.error || 'Edit failed.');
-    setRawHtml(data.raw_html);
-    setBrief(prev => prev ? { ...prev, raw_html: data.raw_html } : prev);
-    return data.description as string;
-  }, [selectedClientId, chatProvider]);
+  }, [selectedClientId, form, selectedPages, loadBrief, generationMode, brief]);
 
   // ── Clone ─────────────────────────────────────────────────────────────────
 
@@ -641,27 +583,6 @@ const AdminWebsiteBuilder: React.FC = () => {
     );
     setIsChatLoading(true);
 
-    // ── HTML mode: route all commands to edit-website-html ─────────────────
-    if (generationMode === 'html') {
-      try {
-        const description = await handleHtmlCommand(text);
-        setMessages(prev => [...prev, {
-          id: `${Date.now()}g`, role: 'assistant',
-          content: `✅ ${description || 'Changes applied — preview updated.'}`,
-          ts: Date.now(),
-        }]);
-      } catch (err: any) {
-        setMessages(prev => [...prev, {
-          id: `${Date.now()}h`, role: 'assistant',
-          content: `Error applying changes: ${err.message}`,
-          ts: Date.now(),
-        }]);
-      } finally {
-        setIsChatLoading(false);
-      }
-      return;
-    }
-
     // ── Full regeneration ──────────────────────────────────────────────────
     if (REGEN_REGEX.test(text)) {
       setMessages(prev => [...prev, {
@@ -813,7 +734,7 @@ Keep responses concise and actionable. Respond in 1-3 sentences max unless detai
     } finally {
       setIsChatLoading(false);
     }
-  }, [chatInput, isChatLoading, messages, brief, form, handleGenerate, generationMode, handleHtmlCommand]);
+  }, [chatInput, isChatLoading, messages, brief, form, handleGenerate]);
 
   const handleUndo = useCallback(async () => {
     if (!selectedClientId || isUndoing) return;
@@ -871,8 +792,7 @@ Keep responses concise and actionable. Respond in 1-3 sentences max unless detai
         ? `/site/${slug}/${activePreviewPageSlug}?preview=1`
         : `/site/${slug}?preview=1`)
     : null;
-  const hasWebsite  = (brief?.generation_status === 'complete' && !!brief.website_json)
-    || (generationMode === 'html' && !!rawHtml);
+  const hasWebsite  = brief?.generation_status === 'complete' && !!brief.website_json;
   const pageCount   = brief?.website_json?.pages?.length ?? 0;
   const isStuckGenerating = brief?.generation_status === 'generating' &&
     !!brief?.updated_at &&
@@ -1121,32 +1041,6 @@ Keep responses concise and actionable. Respond in 1-3 sentences max unless detai
                     <p className="text-slate-400 text-xs mt-0.5">Tell the AI about this business</p>
                   </div>
 
-                  {/* Generation Mode Toggle */}
-                  <div className="flex gap-2">
-                    <button
-                      type="button"
-                      onClick={() => setGenerationMode('json')}
-                      className={`flex-1 flex items-center justify-center gap-1.5 px-3 py-2 rounded-lg text-xs font-medium border transition-colors ${
-                        generationMode === 'json'
-                          ? 'bg-slate-700 border-slate-500 text-slate-200'
-                          : 'bg-slate-800 border-slate-700 text-slate-500 hover:text-slate-300 hover:border-slate-600'
-                      }`}
-                    >
-                      <FileText className="w-3.5 h-3.5" /> JSON Builder
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => setGenerationMode('html')}
-                      className={`flex-1 flex items-center justify-center gap-1.5 px-3 py-2 rounded-lg text-xs font-medium border transition-colors ${
-                        generationMode === 'html'
-                          ? 'bg-indigo-600 border-indigo-500 text-white'
-                          : 'bg-slate-800 border-slate-700 text-slate-500 hover:text-slate-300 hover:border-slate-600'
-                      }`}
-                    >
-                      <Sparkles className="w-3.5 h-3.5" /> HTML Mode ✨
-                    </button>
-                  </div>
-
                   {genError && (
                     <div className="flex items-start gap-2 p-3 bg-red-950/50 border border-red-800 rounded-xl text-xs text-red-400">
                       <AlertTriangle className="w-4 h-4 flex-shrink-0 mt-0.5" />
@@ -1359,25 +1253,31 @@ Keep responses concise and actionable. Respond in 1-3 sentences max unless detai
 
                 {/* Generate button — sticky at bottom */}
                 <div className="flex-none p-4 border-t border-slate-800 bg-slate-900">
-                  {generationMode === 'html' ? (
+                  {/* Mode toggle */}
+                  <div className="flex gap-1 mb-3 p-1 bg-slate-800 rounded-lg">
                     <button
-                      onClick={handleGenerateHtml}
-                      disabled={!isFormValid || isGenerating || !selectedClientId}
-                      className="w-full flex items-center justify-center gap-2 px-4 py-3 bg-indigo-600 hover:bg-indigo-500 disabled:opacity-40 disabled:cursor-not-allowed text-white font-semibold rounded-xl transition-colors text-sm"
+                      type="button"
+                      onClick={() => setGenerationMode('html')}
+                      className={`flex-1 py-1.5 text-xs font-semibold rounded-md transition-colors ${generationMode === 'html' ? 'bg-indigo-600 text-white' : 'text-slate-400 hover:text-slate-200'}`}
                     >
-                      <Sparkles className="w-4 h-4" />
-                      ✨ Generate Website
+                      ✦ HTML Mode
                     </button>
-                  ) : (
                     <button
-                      onClick={() => handleGenerate()}
-                      disabled={!isFormValid || isGenerating || !selectedClientId}
-                      className="w-full flex items-center justify-center gap-2 px-4 py-3 bg-indigo-600 hover:bg-indigo-500 disabled:opacity-40 disabled:cursor-not-allowed text-white font-semibold rounded-xl transition-colors text-sm"
+                      type="button"
+                      onClick={() => setGenerationMode('json')}
+                      className={`flex-1 py-1.5 text-xs font-semibold rounded-md transition-colors ${generationMode === 'json' ? 'bg-indigo-600 text-white' : 'text-slate-400 hover:text-slate-200'}`}
                     >
-                      <Wand2 className="w-4 h-4" />
-                      Generate Website ({selectedPages.size} page{selectedPages.size !== 1 ? 's' : ''})
+                      JSON Mode
                     </button>
-                  )}
+                  </div>
+                  <button
+                    onClick={() => handleGenerate()}
+                    disabled={!isFormValid || isGenerating || !selectedClientId}
+                    className="w-full flex items-center justify-center gap-2 px-4 py-3 bg-indigo-600 hover:bg-indigo-500 disabled:opacity-40 disabled:cursor-not-allowed text-white font-semibold rounded-xl transition-colors text-sm"
+                  >
+                    <Wand2 className="w-4 h-4" />
+                    {generationMode === 'html' ? 'Generate (HTML)' : `Generate Website (${selectedPages.size} page${selectedPages.size !== 1 ? 's' : ''})`}
+                  </button>
                 </div>
               </div>
             )}
@@ -1708,27 +1608,8 @@ Keep responses concise and actionable. Respond in 1-3 sentences max unless detai
             {/* ── State 4: Chat Mode ────────────────────────────────────── */}
             {effectivePanelState === 'chat' && (
               <div className="flex-1 flex flex-col overflow-hidden">
-                {/* Mode badge + AI Provider selector */}
+                {/* AI Provider selector */}
                 <div className="flex-none px-4 pt-4 pb-3 border-b border-slate-800">
-                  {/* Mode indicator */}
-                  <div className="flex items-center gap-2 mb-3">
-                    <span className={`flex items-center gap-1.5 text-xs px-2.5 py-1 rounded-full border font-medium ${
-                      generationMode === 'html'
-                        ? 'bg-indigo-900/50 border-indigo-700 text-indigo-300'
-                        : 'bg-slate-800 border-slate-700 text-slate-400'
-                    }`}>
-                      {generationMode === 'html' ? <><Sparkles className="w-3 h-3" /> HTML Mode</> : <><FileText className="w-3 h-3" /> JSON Mode</>}
-                    </span>
-                    <button
-                      onClick={() => {
-                        setGenerationMode(m => m === 'html' ? 'json' : 'html');
-                        setPanelState('brief-form');
-                      }}
-                      className="text-xs text-slate-500 hover:text-slate-300 transition-colors"
-                    >
-                      Switch mode
-                    </button>
-                  </div>
                   <label className="block text-xs font-medium text-slate-400 mb-2">AI Model</label>
                   <div className="flex gap-1.5 mb-2 flex-wrap">
                     {PROVIDER_SECTIONS.map(s => (
@@ -1990,161 +1871,92 @@ Keep responses concise and actionable. Respond in 1-3 sentences max unless detai
             {/* ── Build View (iframe) ──────────────────────────────────── */}
             {rightView === 'build' && !settingsOpen && (
               <>
-                {/* ── HTML Mode Preview ── */}
-                {generationMode === 'html' && rawHtml ? (
+                {hasWebsite && currentPreviewUrl ? (
                   <div className="flex flex-col h-full p-4 gap-3">
-                    {/* Browser chrome */}
+                    {/* Image quick-action bar above iframe */}
+                    {hasWebsite && brief?.website_json && (
+                      <div className="flex-none flex items-center gap-2 px-4 py-2 bg-slate-950 border-x border-t border-slate-800 rounded-t-lg">
+                        <span className="text-xs text-slate-500">Quick actions:</span>
+                        <button
+                          onClick={() => {
+                            setChatInput('Add professional images to all hero and about sections');
+                            setTimeout(() => handleChatSend('Add professional images to all hero and about sections'), 100);
+                          }}
+                          className="flex items-center gap-1.5 text-xs px-3 py-1.5 rounded-lg bg-indigo-900/50 border border-indigo-700 text-indigo-300 hover:bg-indigo-800/50 transition-colors"
+                        >
+                          <ImageIcon className="w-3 h-3" />
+                          Auto-fill Images
+                        </button>
+                        <button
+                          onClick={() => {
+                            setChatInput('Replace all hero images with new photos');
+                            setTimeout(() => handleChatSend('Replace all hero images with new photos'), 100);
+                          }}
+                          className="flex items-center gap-1.5 text-xs px-3 py-1.5 rounded-lg bg-slate-800 border border-slate-700 text-slate-300 hover:bg-slate-700 transition-colors"
+                        >
+                          <RefreshCw className="w-3 h-3" />
+                          Refresh Images
+                        </button>
+                      </div>
+                    )}
+                    {/* Fake browser chrome */}
                     <div className="flex-none flex items-center gap-2 bg-slate-900 border border-slate-800 rounded-t-xl px-4 py-2.5">
                       <div className="flex gap-1.5">
                         <span className="w-3 h-3 rounded-full bg-red-500/70" />
                         <span className="w-3 h-3 rounded-full bg-yellow-500/70" />
                         <span className="w-3 h-3 rounded-full bg-green-500/70" />
                       </div>
+                      {/* Page nav: Home button when on a sub-page */}
+                      {activePreviewPageSlug && (
+                        <button
+                          onClick={() => setActivePreviewPageSlug('')}
+                          className="flex-none flex items-center gap-1 text-xs text-indigo-400 hover:text-indigo-200 border border-indigo-800 hover:border-indigo-500 rounded px-2 py-0.5 transition-colors"
+                          title="Back to Home page"
+                        >
+                          <Globe className="w-3 h-3" />
+                          Home
+                        </button>
+                      )}
                       <div className="flex-1 flex items-center bg-slate-800 border border-slate-700 rounded-md px-3 py-1 mx-2 gap-2">
                         <span className="text-xs text-slate-400 truncate font-mono">
-                          {slug ? `${window.location.origin}/site/${slug}` : 'HTML Preview'}
+                          {window.location.origin}{currentPreviewUrl}
                         </span>
                       </div>
-                      {/* Code view toggle */}
+                      {/* ── REFRESH BUTTON ── */}
                       <button
-                        onClick={() => setShowCodeView(v => !v)}
-                        title={showCodeView ? 'Show preview' : 'View HTML code'}
-                        className={`flex items-center gap-1 text-xs px-2 py-1 rounded border transition-colors ${
-                          showCodeView
-                            ? 'bg-indigo-700 border-indigo-500 text-white'
-                            : 'border-slate-700 text-slate-400 hover:text-slate-200 hover:border-slate-500'
-                        }`}
+                        onClick={() => setPreviewKey(k => k + 1)}
+                        className="text-slate-500 hover:text-slate-300 transition-colors p-1 rounded hover:bg-slate-700"
+                        title="Refresh preview"
                       >
-                        <Code className="w-3 h-3" />
-                        {showCodeView ? 'Preview' : 'Code'}
+                        <RefreshCw className="w-3.5 h-3.5" />
                       </button>
-                      {previewUrl && (
-                        <a
-                          href={previewUrl}
-                          target="_blank"
-                          rel="noreferrer"
-                          className="text-slate-500 hover:text-slate-300 transition-colors"
-                        >
-                          <ExternalLink className="w-3.5 h-3.5" />
-                        </a>
-                      )}
+                      <a
+                        href={currentPreviewUrl}
+                        target="_blank"
+                        rel="noreferrer"
+                        className="text-slate-500 hover:text-slate-300 transition-colors"
+                      >
+                        <ExternalLink className="w-3.5 h-3.5" />
+                      </a>
                     </div>
-                    {showCodeView ? (
-                      <div className="flex-1 overflow-auto rounded-b-xl border-x border-b border-slate-800 bg-slate-900">
-                        <pre className="p-4 text-xs text-slate-300 font-mono whitespace-pre-wrap break-all leading-relaxed">
-                          <code>{rawHtml}</code>
-                        </pre>
-                      </div>
-                    ) : (
-                      <iframe
-                        srcDoc={rawHtml}
-                        style={{ width: '100%', flex: 1, border: 'none' }}
-                        className="rounded-b-xl border-x border-b border-slate-800 bg-white"
-                        title="Site Preview"
-                        sandbox="allow-scripts allow-same-origin"
-                      />
-                    )}
-                  </div>
-                ) : generationMode === 'html' ? (
-                  <div className="flex flex-col items-center justify-center h-full text-center gap-4 p-8">
-                    <div className="w-16 h-16 rounded-2xl bg-slate-900 border border-slate-800 flex items-center justify-center">
-                      <Sparkles className="w-8 h-8 text-slate-700" />
-                    </div>
-                    <div>
-                      <p className="text-slate-400 text-sm font-medium">HTML Mode</p>
-                      <p className="text-slate-600 text-xs mt-1">Fill in the brief and click ✨ Generate Website</p>
-                    </div>
+                    <iframe
+                      key={`${currentPreviewUrl}-${previewKey}`}
+                      src={rawHtml ? undefined : currentPreviewUrl}
+                      srcDoc={rawHtml || undefined}
+                      className="flex-1 w-full rounded-b-xl border-x border-b border-slate-800 bg-white"
+                      title="Site Preview"
+                    />
                   </div>
                 ) : (
-                  /* ── JSON Mode Preview ── */
-                  <>
-                    {hasWebsite && currentPreviewUrl ? (
-                      <div className="flex flex-col h-full p-4 gap-3">
-                        {/* Image quick-action bar above iframe */}
-                        {hasWebsite && brief?.website_json && (
-                          <div className="flex-none flex items-center gap-2 px-4 py-2 bg-slate-950 border-x border-t border-slate-800 rounded-t-lg">
-                            <span className="text-xs text-slate-500">Quick actions:</span>
-                            <button
-                              onClick={() => {
-                                setChatInput('Add professional images to all hero and about sections');
-                                setTimeout(() => handleChatSend('Add professional images to all hero and about sections'), 100);
-                              }}
-                              className="flex items-center gap-1.5 text-xs px-3 py-1.5 rounded-lg bg-indigo-900/50 border border-indigo-700 text-indigo-300 hover:bg-indigo-800/50 transition-colors"
-                            >
-                              <ImageIcon className="w-3 h-3" />
-                              Auto-fill Images
-                            </button>
-                            <button
-                              onClick={() => {
-                                setChatInput('Replace all hero images with new photos');
-                                setTimeout(() => handleChatSend('Replace all hero images with new photos'), 100);
-                              }}
-                              className="flex items-center gap-1.5 text-xs px-3 py-1.5 rounded-lg bg-slate-800 border border-slate-700 text-slate-300 hover:bg-slate-700 transition-colors"
-                            >
-                              <RefreshCw className="w-3 h-3" />
-                              Refresh Images
-                            </button>
-                          </div>
-                        )}
-                        {/* Fake browser chrome */}
-                        <div className="flex-none flex items-center gap-2 bg-slate-900 border border-slate-800 rounded-t-xl px-4 py-2.5">
-                          <div className="flex gap-1.5">
-                            <span className="w-3 h-3 rounded-full bg-red-500/70" />
-                            <span className="w-3 h-3 rounded-full bg-yellow-500/70" />
-                            <span className="w-3 h-3 rounded-full bg-green-500/70" />
-                          </div>
-                          {/* Page nav: Home button when on a sub-page */}
-                          {activePreviewPageSlug && (
-                            <button
-                              onClick={() => setActivePreviewPageSlug('')}
-                              className="flex-none flex items-center gap-1 text-xs text-indigo-400 hover:text-indigo-200 border border-indigo-800 hover:border-indigo-500 rounded px-2 py-0.5 transition-colors"
-                              title="Back to Home page"
-                            >
-                              <Globe className="w-3 h-3" />
-                              Home
-                            </button>
-                          )}
-                          <div className="flex-1 flex items-center bg-slate-800 border border-slate-700 rounded-md px-3 py-1 mx-2 gap-2">
-                            <span className="text-xs text-slate-400 truncate font-mono">
-                              {window.location.origin}{currentPreviewUrl}
-                            </span>
-                          </div>
-                          {/* ── REFRESH BUTTON ── */}
-                          <button
-                            onClick={() => setPreviewKey(k => k + 1)}
-                            className="text-slate-500 hover:text-slate-300 transition-colors p-1 rounded hover:bg-slate-700"
-                            title="Refresh preview"
-                          >
-                            <RefreshCw className="w-3.5 h-3.5" />
-                          </button>
-                          <a
-                            href={currentPreviewUrl}
-                            target="_blank"
-                            rel="noreferrer"
-                            className="text-slate-500 hover:text-slate-300 transition-colors"
-                          >
-                            <ExternalLink className="w-3.5 h-3.5" />
-                          </a>
-                        </div>
-                        <iframe
-                          key={`${currentPreviewUrl}-${previewKey}`}
-                          src={currentPreviewUrl}
-                          className="flex-1 w-full rounded-b-xl border-x border-b border-slate-800 bg-white"
-                          title="Site Preview"
-                        />
-                      </div>
-                    ) : (
-                      <div className="flex flex-col items-center justify-center h-full text-center gap-4 p-8">
-                        <div className="w-16 h-16 rounded-2xl bg-slate-900 border border-slate-800 flex items-center justify-center">
-                          <Globe className="w-8 h-8 text-slate-700" />
-                        </div>
-                        <div>
-                          <p className="text-slate-400 text-sm font-medium">No site yet</p>
-                          <p className="text-slate-600 text-xs mt-1">Fill in the brief and click Generate</p>
-                        </div>
-                      </div>
-                    )}
-                  </>
+                  <div className="flex flex-col items-center justify-center h-full text-center gap-4 p-8">
+                    <div className="w-16 h-16 rounded-2xl bg-slate-900 border border-slate-800 flex items-center justify-center">
+                      <Globe className="w-8 h-8 text-slate-700" />
+                    </div>
+                    <div>
+                      <p className="text-slate-400 text-sm font-medium">No site yet</p>
+                      <p className="text-slate-600 text-xs mt-1">Fill in the brief and click Generate</p>
+                    </div>
+                  </div>
                 )}
               </>
             )}
@@ -2549,4 +2361,3 @@ Keep responses concise and actionable. Respond in 1-3 sentences max unless detai
 };
 
 export default AdminWebsiteBuilder;
-
