@@ -3,7 +3,8 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import { useParams, Link, useNavigate } from 'react-router-dom';
 import { supabase } from '../integrations/supabase/client';
-import { Loader2, Briefcase, FileText, DollarSign, Plus, CreditCard, Zap, ExternalLink, ShieldCheck, Lock, Trash2, Send, AlertCircle, MessageSquare, Phone, CheckCircle2, Pause, Play, Clock, Download, Edit, Bell, BellOff, Users, Percent, Calendar, X, AlertTriangle, Eye, XCircle, Key, Globe, Copy, CheckSquare, Tag } from 'lucide-react';
+import { Loader2, Briefcase, FileText, DollarSign, Plus, CreditCard, Zap, ExternalLink, ShieldCheck, Lock, Trash2, Send, AlertCircle, MessageSquare, Phone, CheckCircle2, Pause, Play, Clock, Download, Edit, Bell, BellOff, Users, Percent, Calendar, X, AlertTriangle, Eye, XCircle, Key, Globe, Copy, CheckSquare, Tag, ToggleRight } from 'lucide-react';
+import { useClientFeatureFlags } from '../hooks/useClientFeatureFlags';
 import { ClientProposal } from '../types/proposals';
 import AdminLayout from '../components/AdminLayout';
 import { Profile } from '../types/auth';
@@ -214,6 +215,12 @@ const AdminClientDetail: React.FC = () => {
   const [newReminderDate, setNewReminderDate] = useState('');
   const [saveError, setSaveError] = useState<string | null>(null); // ADDED missing state
 
+  // Feature flags state
+  const { flags, loading: flagsLoading } = useClientFeatureFlags(id);
+  const [localFlags, setLocalFlags] = useState(flags);
+  const [savingFlags, setSavingFlags] = useState(false);
+  const [flagsSaved, setFlagsSaved] = useState(false);
+
   // Domain credentials state
   const [domainCreds, setDomainCreds] = useState<{
     registrar_name: string | null;
@@ -352,6 +359,18 @@ const AdminClientDetail: React.FC = () => {
     fetchClientData();
     fetchProducts();
   }, [id, fetchClientData]);
+
+  // Sync localFlags when feature flags load
+  useEffect(() => { setLocalFlags(flags); }, [flags]);
+
+  const handleSaveFlags = async () => {
+    setSavingFlags(true);
+    const { error } = await supabase
+      .from('client_feature_flags')
+      .upsert({ client_id: id, ...localFlags }, { onConflict: 'client_id' });
+    if (!error) { setFlagsSaved(true); setTimeout(() => setFlagsSaved(false), 2500); }
+    setSavingFlags(false);
+  };
 
   const handleServiceStatusUpdate = async (newStatus: ClientServiceStatus) => {
     if (!client) return;
@@ -1393,6 +1412,53 @@ const AdminClientDetail: React.FC = () => {
             )}
 
             {activeTab === 'website' && (
+              <div className="space-y-6">
+              <div className="bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden">
+                <div className="px-6 py-4 border-b border-slate-100 flex items-center justify-between">
+                  <div className="flex items-center gap-2">
+                    <ToggleRight className="w-5 h-5 text-indigo-500" />
+                    <h2 className="font-semibold text-slate-900">Portal Access</h2>
+                  </div>
+                  <p className="text-xs text-slate-400">Control what this client sees in their portal</p>
+                </div>
+                <div className="p-6 space-y-3">
+                  {[
+                    { key: 'website_editor',  label: 'Website Editor',   desc: 'Edit site content & domain creds' },
+                    { key: 'leads_visible',   label: 'Leads',            desc: 'View contact form submissions' },
+                    { key: 'billing_visible', label: 'Billing',          desc: 'View invoices & balance owed' },
+                    { key: 'integrations',    label: 'Integrations',     desc: 'Twilio, Cal.com, Retell toggles' },
+                    { key: 'appointments',    label: 'Appointments',     desc: 'Book calls with you' },
+                    { key: 'proposals',       label: 'Proposals',        desc: 'View service proposals' },
+                    { key: 'new_request',     label: 'New Request',      desc: 'Submit new work requests' },
+                    { key: 'jetsuite',        label: 'JetSuite',         desc: 'JetSuite AI tools' },
+                  ].map(({ key, label, desc }) => (
+                    <div key={key} className="flex items-center justify-between py-2 border-b border-slate-50 last:border-0">
+                      <div>
+                        <p className="text-sm font-medium text-slate-800">{label}</p>
+                        <p className="text-xs text-slate-400">{desc}</p>
+                      </div>
+                      <button
+                        type="button"
+                        onClick={() => setLocalFlags(f => ({ ...f, [key]: !f[key as keyof typeof f] }))}
+                        className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors ${
+                          localFlags[key as keyof typeof localFlags] ? 'bg-indigo-600' : 'bg-slate-200'
+                        }`}
+                      >
+                        <span className={`inline-block h-4 w-4 transform rounded-full bg-white shadow transition-transform ${
+                          localFlags[key as keyof typeof localFlags] ? 'translate-x-6' : 'translate-x-1'
+                        }`} />
+                      </button>
+                    </div>
+                  ))}
+                  <button
+                    onClick={handleSaveFlags}
+                    disabled={savingFlags}
+                    className="mt-2 w-full flex items-center justify-center gap-2 px-4 py-2.5 bg-indigo-600 text-white text-sm font-semibold rounded-xl hover:bg-indigo-700 disabled:opacity-60 transition-colors"
+                  >
+                    {savingFlags ? 'Saving...' : flagsSaved ? '✓ Saved' : 'Save Access Settings'}
+                  </button>
+                </div>
+              </div>
               <div className="bg-white p-6 rounded-xl shadow-lg border border-slate-100">
                 <h2 className="text-xl font-bold mb-2 flex items-center gap-2 text-slate-900 border-b border-slate-100 pb-4">
                   <Key className="w-5 h-5 text-indigo-500" /> Domain Registrar Credentials
@@ -1469,6 +1535,7 @@ const AdminClientDetail: React.FC = () => {
                     <p className="text-slate-400 text-sm mt-1">The client hasn't filled in their domain registrar info yet.</p>
                   </div>
                 )}
+              </div>
               </div>
             )}
 

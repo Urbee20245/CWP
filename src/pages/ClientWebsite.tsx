@@ -185,6 +185,8 @@ const ClientWebsite: React.FC = () => {
   };
 
   const previewUrl = brief?.client_slug ? `/site/${brief.client_slug}` : null;
+  const isHtmlSite = brief?.site_type === 'raw_html';
+  const hasAnySite = brief?.generation_status === 'complete' && (brief?.website_json || brief?.raw_html);
 
   return (
     <ClientLayout>
@@ -227,8 +229,28 @@ const ClientWebsite: React.FC = () => {
             <p className="font-semibold text-red-800">There was an issue building your website</p>
             <p className="text-red-500 text-sm mt-1">Please contact your account team for assistance.</p>
           </div>
-        ) : brief.generation_status === 'complete' && brief.website_json ? (
+        ) : hasAnySite ? (
           <>
+            {isHtmlSite ? (
+              <div className="bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden mb-6">
+                <div className="px-6 py-4 border-b border-slate-100 flex items-center justify-between">
+                  <h2 className="font-semibold text-slate-900">Your Website</h2>
+                  <span className="text-xs bg-emerald-100 text-emerald-700 font-semibold px-2 py-1 rounded-full">● Live</span>
+                </div>
+                <div className="p-6 space-y-4">
+                  {previewUrl && (
+                    <a href={previewUrl} target="_blank" rel="noreferrer"
+                      className="flex items-center gap-2 px-4 py-2.5 bg-indigo-600 text-white text-sm font-semibold rounded-xl hover:bg-indigo-700 transition-colors w-fit">
+                      <Eye className="w-4 h-4" /> View My Website <ExternalLink className="w-3 h-3" />
+                    </a>
+                  )}
+                  <p className="text-sm text-slate-500">
+                    To request changes to your website, use the <strong>New Request</strong> feature or contact your account manager.
+                  </p>
+                </div>
+              </div>
+            ) : (
+            <>
             <div className="flex items-center gap-3 mb-6">
               <span className={`inline-flex items-center px-3 py-1 rounded-full text-xs font-semibold ${brief.is_published ? 'bg-emerald-100 text-emerald-700' : 'bg-slate-100 text-slate-500'}`}>
                 {brief.is_published ? '● Live' : '● Draft'}
@@ -342,6 +364,8 @@ const ClientWebsite: React.FC = () => {
                 {saveError && <p className="text-red-500 text-sm text-center mt-2">{saveError}</p>}
               </div>
             </div>
+            </>
+            )}
           </>
         ) : null}
 
