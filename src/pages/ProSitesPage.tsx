@@ -384,7 +384,7 @@ const ProSitesPage: React.FC = () => {
               to="/pro-sites/checkout"
               className="bg-indigo-600 hover:bg-indigo-500 text-white font-bold px-8 py-4 rounded-full text-base transition-all shadow-lg shadow-indigo-900/40 active:scale-95 flex items-center justify-center gap-2"
             >
-              Get Started — $497 Setup
+              Get Started — $697 Setup
               <ArrowRight className="w-4 h-4" />
             </Link>
             <a
@@ -510,7 +510,7 @@ const ProSitesPage: React.FC = () => {
                       className={`block w-full text-center text-white font-bold px-6 py-4 rounded-2xl text-sm transition-all shadow-md active:scale-95 ${colors.btn}`}
                     >
                       Get This Website
-                      <span className="block text-xs font-normal mt-0.5 opacity-80">$497 Setup</span>
+                      <span className="block text-xs font-normal mt-0.5 opacity-80">$697 Setup</span>
                     </Link>
                   )}
                 </div>
@@ -543,7 +543,7 @@ const ProSitesPage: React.FC = () => {
               {
                 step: '01',
                 icon: DollarSign,
-                title: 'Pay the $497 Setup Fee',
+                title: 'Pay the $697 Setup Fee',
                 description:
                   'Fill out a quick form with your business info. We handle everything else.',
                 color: 'indigo',
@@ -593,11 +593,11 @@ const ProSitesPage: React.FC = () => {
               Choose Your Plan
             </h2>
             <p className="text-slate-500 text-lg max-w-2xl mx-auto">
-              Every plan starts with a one-time $497 setup. Then choose the monthly plan that fits — each one comes with featured add-ons pre-configured. Or customize your build with any add-on below.
+              Every plan starts with a one-time $697 setup. Then choose the monthly plan that fits — each one comes with featured add-ons pre-configured. Or customize your build with any add-on below.
             </p>
           </div>
 
-          {/* $497 Setup — What's Included Banner */}
+          {/* $697 Setup — What's Included Banner */}
           <div className="bg-gradient-to-br from-indigo-900 to-slate-900 rounded-3xl p-8 mb-10 border border-indigo-700/40 shadow-xl">
             <div className="flex flex-col md:flex-row md:items-center gap-6">
               <div className="flex-1">
@@ -607,7 +607,7 @@ const ProSitesPage: React.FC = () => {
                   </div>
                   <div>
                     <p className="text-indigo-300 text-xs font-bold uppercase tracking-widest">One-Time Setup Fee</p>
-                    <p className="text-white text-3xl font-black leading-none">$497</p>
+                    <p className="text-white text-3xl font-black leading-none">$697</p>
                   </div>
                 </div>
                 <p className="text-slate-300 text-sm mb-5 leading-relaxed">
@@ -634,7 +634,7 @@ const ProSitesPage: React.FC = () => {
                   to="/pro-sites/checkout"
                   className="block w-full text-center bg-indigo-600 hover:bg-indigo-500 text-white font-bold py-3 rounded-xl text-sm transition-all active:scale-95"
                 >
-                  Get Started — $497
+                  Get Started — $697
                 </Link>
               </div>
             </div>
@@ -666,7 +666,7 @@ const ProSitesPage: React.FC = () => {
                     <span className="text-4xl font-black text-slate-900">{plan.price}</span>
                     <span className="text-slate-400 text-sm mb-1.5">/mo</span>
                   </div>
-                  <p className="text-xs text-slate-400 mt-1">After $497 one-time setup</p>
+                  <p className="text-xs text-slate-400 mt-1">After $697 one-time setup</p>
                 </div>
 
                 <ul className="space-y-2.5 flex-1 mb-4">
@@ -830,7 +830,7 @@ const ProSitesPage: React.FC = () => {
               to="/pro-sites/checkout"
               className="bg-indigo-600 hover:bg-indigo-500 text-white font-bold px-8 py-4 rounded-full text-base transition-all shadow-lg shadow-indigo-900/40 active:scale-95 flex items-center justify-center gap-2"
             >
-              Get Started — $497 Setup
+              Get Started — $697 Setup
               <ArrowRight className="w-4 h-4" />
             </Link>
             <a
